@@ -1,0 +1,48 @@
+services:
+  app:
+    container_name: tamiyo
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    ports:
+      - "8080:8080"
+    environment:
+      PGUSER: login
+      PGPASSWORD: password
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: tamiyo_db
+    depends_on:
+      - db
+    networks:
+      - tamiyo-net
+    develop:
+      watch:
+        - action: sync
+          path: ./
+          target: /app
+          ignore:
+            - tmp/
+
+  db:
+    image: postgres:16
+    container_name: tamiyo-db
+    environment:
+      POSTGRES_USER: login
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: tamiyo_db
+    volumes:
+      - tamiyo-db-data:/var/lib/postgresql/data
+      - ./_devops/database/createDatabaseTables.sql:/docker-entrypoint-initdb.d/1-schema.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - tamiyo-net
+
+volumes:
+  tamiyo-db-data:
+
+networks:
+  tamiyo-net:
+    driver: bridge
