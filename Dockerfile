@@ -8,7 +8,7 @@ WORKDIR /app
 RUN go install github.com/air-verse/air@latest
 
 # Copier les fichiers de modules en premier
-COPY go.mod ./
+COPY go.mod go.sum ./
 RUN go mod download
 
 # Copier les fichiers source Go et la config air
@@ -21,7 +21,7 @@ CMD ["air", "-c", ".air.toml"]
 FROM golang:1.26.5 AS build-stage
 WORKDIR /app
 
-COPY go.mod ./
+COPY go.mod go.sum ./
 RUN go mod download
 
 COPY *.go ./
