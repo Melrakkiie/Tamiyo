@@ -12,7 +12,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 # Copier les fichiers source Go et la config air
-COPY *.go .air.toml ./
+COPY . .
 
 EXPOSE 8080
 CMD ["air", "-c", ".air.toml"]
@@ -24,7 +24,7 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
-COPY *.go ./
+COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -buildvcs=false -o tamiyo
 
