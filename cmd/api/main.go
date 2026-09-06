@@ -35,7 +35,7 @@ func main() {
 	}
 	defer db.Close()
 
-	// Composition root : câblage des couches (infrastructure -> application -> interface)
+	// infrastructure -> application -> interface
 	cardRepo := card.NewPostgresRepository(db)
 	cardService := card.NewService(cardRepo)
 	cardHandler := card.NewHandler(cardService)

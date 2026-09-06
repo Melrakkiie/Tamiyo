@@ -17,8 +17,7 @@ type Card struct {
 	Added           time.Time
 }
 
-// Repository définit le contrat de persistence attendu par le domaine.
-// L'implémentation concrète (Postgres, mémoire, etc.) vit dans la couche infrastructure.
 type Repository interface {
 	FindAll(ctx context.Context) ([]Card, error)
+	Create(ctx context.Context, c Card) (Card, error)
 }

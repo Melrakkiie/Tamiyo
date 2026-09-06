@@ -29,17 +29,37 @@ func toResponse(c Card) cardResponse {
 		Foil:            c.Foil,
 		BinderName:      c.BinderName,
 		BinderType:      c.BinderType,
-		Added:           c.Added.Format("2006-01-02T15:04:05Z07:00"),
+		Added:           c.Added.Format("2006-01-02 15:04:05"),
 	}
 }
 
-// cardService décrit ce dont le handler a besoin — permet de mocker facilement en test,
-// sans dépendre de l'implémentation concrète du Service.
-type cardService interface {
-	GetAllCards(ctx context.Context) ([]Card, error)
+type createCardRequest struct {
+	Name            string `json:"name" binding:"required"`
+	ScryfallID      string `json:"scryfall_id" binding:"required,uuid"`
+	SetCode         string `json:"set_code" binding:"required"`
+	CollectorNumber int    `json:"collector_number" binding:"required,gt=0"`
+	Foil            bool   `json:"foil"`
+	BinderName      string `json:"binder_name" binding:"required"`
+	BinderType      string `json:"binder_type" binding:"required"`
 }
 
-// Handler expose les endpoints HTTP liés aux cartes.
+func (r createCardRequest) toDomain() Card {
+	return Card{
+		Name:            r.Name,
+		ScryfallID:      r.ScryfallID,
+		SetCode:         r.SetCode,
+		CollectorNumber: r.CollectorNumber,
+		Foil:            r.Foil,
+		BinderName:      r.BinderName,
+		BinderType:      r.BinderType,
+	}
+}
+
+type cardService interface {
+	GetAllCards(ctx context.Context) ([]Card, error)
+	CreateCard(ctx context.Context, c Card) (Card, error)
+}
+
 type Handler struct {
 	service cardService
 }
@@ -48,15 +68,15 @@ func NewHandler(service cardService) *Handler {
 	return &Handler{service: service}
 }
 
-// RegisterRoutes attache les routes cartes au router Gin.
 func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/cards", h.getCards)
+	router.POST("/cards", h.createCard)
 }
 
-func (h *Handler) getCards(c *gin.Context) {
-	cards, err := h.service.GetAllCards(c.Request.Context())
+func (h *Handler) getCards(ctx *gin.Context) {
+	cards, err := h.service.GetAllCards(ctx.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -65,5 +85,23 @@ func (h *Handler) getCards(c *gin.Context) {
 		response = append(response, toResponse(cd))
 	}
 
-	c.IndentedJSON(http.StatusOK, response)
+	ctx.IndentedJSON(http.StatusOK, response)
+}
+
+func (h *Handler) createCard(c *gin.Context) {
+	var req createCardRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	newCard := req.toDomain()
+
+	created, err := h.service.CreateCard(c.Request.Context(), newCard)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.IndentedJSON(http.StatusCreated, toResponse(created))
 }

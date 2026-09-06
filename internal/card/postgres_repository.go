@@ -8,19 +8,18 @@ import (
 )
 
 type cardRow struct {
-	ID              int    `db:"id"`
-	Name            string `db:"name"`
-	ScryfallID      string `db:"scryfall_id"`
-	SetCode         string `db:"set_code"`
-	CollectorNumber int    `db:"collector_number"`
-	Foil            bool   `db:"foil"`
-	BinderName      string `db:"binder_name"`
-	BinderType      string `db:"binder_type"`
-	Added           string `db:"added"`
+	ID              int       `db:"id"`
+	Name            string    `db:"name"`
+	ScryfallID      string    `db:"scryfall_id"`
+	SetCode         string    `db:"set_code"`
+	CollectorNumber int       `db:"collector_number"`
+	Foil            bool      `db:"foil"`
+	BinderName      string    `db:"binder_name"`
+	BinderType      string    `db:"binder_type"`
+	Added           time.Time `db:"added"`
 }
 
 func (r cardRow) toDomain() Card {
-	added, _ := time.Parse("2006-01-02 15:04:05", r.Added)
 	return Card{
 		ID:              r.ID,
 		Name:            r.Name,
@@ -30,11 +29,23 @@ func (r cardRow) toDomain() Card {
 		Foil:            r.Foil,
 		BinderName:      r.BinderName,
 		BinderType:      r.BinderType,
-		Added:           added,
+		Added:           r.Added,
 	}
 }
 
-// PostgresRepository implémente card.Repository pour Postgres.
+func toCardRow(c Card) cardRow {
+	return cardRow{
+		Name:            c.Name,
+		ScryfallID:      c.ScryfallID,
+		SetCode:         c.SetCode,
+		CollectorNumber: c.CollectorNumber,
+		Foil:            c.Foil,
+		BinderName:      c.BinderName,
+		BinderType:      c.BinderType,
+		Added:           c.Added,
+	}
+}
+
 type PostgresRepository struct {
 	db *sqlx.DB
 }
@@ -61,4 +72,27 @@ func (r *PostgresRepository) FindAll(ctx context.Context) ([]Card, error) {
 	}
 
 	return cards, nil
+}
+
+func (r *PostgresRepository) Create(ctx context.Context, c Card) (Card, error) {
+	row := toCardRow(c)
+	query := `
+    	INSERT INTO tamiyo.cards (name, scryfall_id, set_code, collector_number, foil, binder_name, binder_type, added)
+     	VALUES (:name, :scryfall_id, :set_code, :collector_number, :foil, :binder_name, :binder_type, :added)
+      	RETURNING id
+	`
+
+	stmt, err := r.db.PrepareNamedContext(ctx, query)
+	if err != nil {
+		return Card{}, err
+	}
+	defer stmt.Close()
+
+	var id int
+	if err := stmt.GetContext(ctx, &id, row); err != nil {
+		return Card{}, err
+	}
+
+	c.ID = id
+	return c, nil
 }
