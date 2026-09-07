@@ -56,7 +56,7 @@ func (r createCardRequest) toDomain() Card {
 }
 
 type cardService interface {
-	GetAllCards(ctx context.Context) ([]Card, error)
+	GetAllCards(ctx context.Context, binderName string) ([]Card, error)
 	CreateCard(ctx context.Context, c Card) (Card, error)
 }
 
@@ -74,7 +74,9 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 }
 
 func (h *Handler) getCards(ctx *gin.Context) {
-	cards, err := h.service.GetAllCards(ctx.Request.Context())
+	binderName := ctx.Query("binder_name")
+
+	cards, err := h.service.GetAllCards(ctx.Request.Context(), binderName)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

@@ -18,6 +18,6 @@ type Card struct {
 }
 
 type Repository interface {
-	FindAll(ctx context.Context) ([]Card, error)
+	FindAll(ctx context.Context, binderName string) ([]Card, error)
 	Create(ctx context.Context, c Card) (Card, error)
 }

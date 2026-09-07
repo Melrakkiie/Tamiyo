@@ -13,8 +13,8 @@ func NewService(repo Repository) *Service {
 	return &Service{repo: repo}
 }
 
-func (s *Service) GetAllCards(ctx context.Context) ([]Card, error) {
-	return s.repo.FindAll(ctx)
+func (s *Service) GetAllCards(ctx context.Context, binderName string) ([]Card, error) {
+	return s.repo.FindAll(ctx, binderName)
 }
 
 func (s *Service) CreateCard(ctx context.Context, c Card) (Card, error) {

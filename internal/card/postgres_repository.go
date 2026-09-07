@@ -54,15 +54,20 @@ func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
 	return &PostgresRepository{db: db}
 }
 
-func (r *PostgresRepository) FindAll(ctx context.Context) ([]Card, error) {
-	var rows []cardRow
-
+func (r *PostgresRepository) FindAll(ctx context.Context, binderName string) ([]Card, error) {
 	query := `
 		SELECT id, name, scryfall_id, set_code, collector_number, foil, binder_name, binder_type, added
 		FROM tamiyo.cards
 	`
+	args := []interface{}{}
 
-	if err := r.db.SelectContext(ctx, &rows, query); err != nil {
+	if binderName != "" {
+		query += ` WHERE binder_name = $1`
+		args = append(args, binderName)
+	}
+
+	var rows []cardRow
+	if err := r.db.SelectContext(ctx, &rows, query, args...); err != nil {
 		return nil, err
 	}
 
