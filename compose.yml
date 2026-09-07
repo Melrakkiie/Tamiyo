@@ -34,7 +34,7 @@ services:
       POSTGRES_DB: tamiyo_db
     volumes:
       - tamiyo-db-data:/var/lib/postgresql/data
-      - ./_devops/database/createDatabaseTables.sql:/docker-entrypoint-initdb.d/1-schema.sql
+      - ./_devops/database/createDatabaseTables.sql:/docker-entrypoint-initdb.d/1-schema.sql:z
     ports:
       - "5432:5432"
     networks:

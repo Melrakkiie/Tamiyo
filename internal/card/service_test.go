@@ -13,14 +13,14 @@ import (
 type fakeRepository struct {
 	cards      []Card
 	findAllErr error
-	binderName string
+	storageID  *int
 
 	createdCard Card
 	createErr   error
 }
 
-func (f *fakeRepository) FindAll(ctx context.Context, binderName string) ([]Card, error) {
-	f.binderName = binderName
+func (f *fakeRepository) FindAll(ctx context.Context, storageID *int) ([]Card, error) {
+	f.storageID = storageID
 	return f.cards, f.findAllErr
 }
 
@@ -41,27 +41,28 @@ func TestService_GetAllCards_ReturnsCardsFromRepository(t *testing.T) {
 	repo := &fakeRepository{cards: expected}
 	service := NewService(repo)
 
-	result, err := service.GetAllCards(context.Background(), "")
+	result, err := service.GetAllCards(context.Background(), nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, expected, result)
 }
 
-func TestService_GetAllCards_PassesBinderNameToRepository(t *testing.T) {
+func TestService_GetAllCards_PassesStorageIDToRepository(t *testing.T) {
 	repo := &fakeRepository{}
 	service := NewService(repo)
 
-	_, err := service.GetAllCards(context.Background(), "Vintage Collection")
+	testID := 1
+	_, err := service.GetAllCards(context.Background(), &testID)
 
 	require.NoError(t, err)
-	assert.Equal(t, "Vintage Collection", repo.binderName)
+	assert.Equal(t, testID, *(repo.storageID))
 }
 
 func TestService_GetAllCards_PropagatesRepositoryError(t *testing.T) {
 	repo := &fakeRepository{findAllErr: errors.New("connection lost")}
 	service := NewService(repo)
 
-	result, err := service.GetAllCards(context.Background(), "")
+	result, err := service.GetAllCards(context.Background(), nil)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)

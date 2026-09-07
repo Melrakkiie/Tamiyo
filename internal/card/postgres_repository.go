@@ -14,8 +14,7 @@ type cardRow struct {
 	SetCode         string    `db:"set_code"`
 	CollectorNumber int       `db:"collector_number"`
 	Foil            bool      `db:"foil"`
-	BinderName      string    `db:"binder_name"`
-	BinderType      string    `db:"binder_type"`
+	StorageID       int       `db:"storage_id"`
 	Added           time.Time `db:"added"`
 }
 
@@ -27,8 +26,7 @@ func (r cardRow) toDomain() Card {
 		SetCode:         r.SetCode,
 		CollectorNumber: r.CollectorNumber,
 		Foil:            r.Foil,
-		BinderName:      r.BinderName,
-		BinderType:      r.BinderType,
+		StorageID:       r.StorageID,
 		Added:           r.Added,
 	}
 }
@@ -40,8 +38,7 @@ func toCardRow(c Card) cardRow {
 		SetCode:         c.SetCode,
 		CollectorNumber: c.CollectorNumber,
 		Foil:            c.Foil,
-		BinderName:      c.BinderName,
-		BinderType:      c.BinderType,
+		StorageID:       c.StorageID,
 		Added:           c.Added,
 	}
 }
@@ -54,16 +51,16 @@ func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
 	return &PostgresRepository{db: db}
 }
 
-func (r *PostgresRepository) FindAll(ctx context.Context, binderName string) ([]Card, error) {
+func (r *PostgresRepository) FindAll(ctx context.Context, storageID *int) ([]Card, error) {
 	query := `
-		SELECT id, name, scryfall_id, set_code, collector_number, foil, binder_name, binder_type, added
+		SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, added
 		FROM tamiyo.cards
 	`
 	args := []interface{}{}
 
-	if binderName != "" {
-		query += ` WHERE binder_name = $1`
-		args = append(args, binderName)
+	if storageID != nil {
+		query += ` WHERE storage_id = $1`
+		args = append(args, *storageID)
 	}
 
 	var rows []cardRow
@@ -78,12 +75,11 @@ func (r *PostgresRepository) FindAll(ctx context.Context, binderName string) ([]
 
 	return cards, nil
 }
-
 func (r *PostgresRepository) Create(ctx context.Context, c Card) (Card, error) {
 	row := toCardRow(c)
 	query := `
-    	INSERT INTO tamiyo.cards (name, scryfall_id, set_code, collector_number, foil, binder_name, binder_type, added)
-     	VALUES (:name, :scryfall_id, :set_code, :collector_number, :foil, :binder_name, :binder_type, :added)
+    	INSERT INTO tamiyo.cards (name, scryfall_id, set_code, collector_number, foil, storage_id, added)
+     	VALUES (:name, :scryfall_id, :set_code, :collector_number, :foil, :storage_id, :added)
       	RETURNING id
 	`
 

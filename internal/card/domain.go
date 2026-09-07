@@ -12,12 +12,11 @@ type Card struct {
 	SetCode         string
 	CollectorNumber int
 	Foil            bool
-	BinderName      string
-	BinderType      string
+	StorageID       int
 	Added           time.Time
 }
 
 type Repository interface {
-	FindAll(ctx context.Context, binderName string) ([]Card, error)
+	FindAll(ctx context.Context, storageID *int) ([]Card, error)
 	Create(ctx context.Context, c Card) (Card, error)
 }

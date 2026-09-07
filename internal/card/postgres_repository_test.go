@@ -65,14 +65,26 @@ func schemaFilePath(t *testing.T) string {
 	return filepath.Join(root, "_devops", "database", "createDatabaseTables.sql")
 }
 
+func seedStorages(t *testing.T, db *sqlx.DB) {
+	t.Helper()
+
+	_, err := db.Exec(`
+		INSERT INTO tamiyo.storage (name, type, added)
+		VALUES
+		    ('Vintage Collection', 'binder', '2024-01-15 10:30:00'),
+		    ('Red Deck Wins', 'deckbox', '2024-02-20 14:45:00');
+	`)
+	require.NoError(t, err)
+}
+
 func seedCards(t *testing.T, db *sqlx.DB, cards []Card) {
 	t.Helper()
 
 	for _, c := range cards {
 		_, err := db.Exec(`
-			INSERT INTO tamiyo.cards (name, scryfall_id, set_code, collector_number, foil, binder_name, binder_type, added)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		`, c.Name, c.ScryfallID, c.SetCode, c.CollectorNumber, c.Foil, c.BinderName, c.BinderType, c.Added)
+			INSERT INTO tamiyo.cards (name, scryfall_id, set_code, collector_number, foil, storage_id, added)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`, c.Name, c.ScryfallID, c.SetCode, c.CollectorNumber, c.Foil, c.StorageID, c.Added)
 		require.NoError(t, err)
 	}
 }
@@ -80,43 +92,47 @@ func seedCards(t *testing.T, db *sqlx.DB, cards []Card) {
 func TestPostgresRepository_FindAll_ReturnsAllCardsWhenNoFilter(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewPostgresRepository(db)
+	seedStorages(t, db)
 
 	seedCards(t, db, []Card{
-		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, BinderName: "Vintage Collection", BinderType: "binder", Added: time.Now()},
-		{Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: 129, Foil: true, BinderName: "Red Deck Wins", BinderType: "deckbox", Added: time.Now()},
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: 1, Added: time.Now()},
+		{Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: 129, Foil: true, StorageID: 2, Added: time.Now()},
 	})
 
-	result, err := repo.FindAll(context.Background(), "")
+	result, err := repo.FindAll(context.Background(), nil)
 
 	require.NoError(t, err)
 	assert.Len(t, result, 2)
 }
 
-func TestPostgresRepository_FindAll_FiltersByBinderName(t *testing.T) {
+func TestPostgresRepository_FindAll_FiltersByStorageID(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewPostgresRepository(db)
+	seedStorages(t, db)
 
 	seedCards(t, db, []Card{
-		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, BinderName: "Vintage Collection", BinderType: "binder", Added: time.Now()},
-		{Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: 129, Foil: true, BinderName: "Red Deck Wins", BinderType: "deckbox", Added: time.Now()},
-	})
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: 1, Added: time.Now()},
+		{Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: 129, Foil: true, StorageID: 2, Added: time.Now()}})
 
-	result, err := repo.FindAll(context.Background(), "Vintage Collection")
+	testID := 1
+	result, err := repo.FindAll(context.Background(), &testID)
 
 	require.NoError(t, err)
 	require.Len(t, result, 1)
 	assert.Equal(t, "Black Lotus", result[0].Name)
 }
 
-func TestPostgresRepository_FindAll_ReturnsEmptySliceWhenNoBinderMatches(t *testing.T) {
+func TestPostgresRepository_FindAll_ReturnsEmptySliceWhenNoStorageMatches(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewPostgresRepository(db)
+	seedStorages(t, db)
 
 	seedCards(t, db, []Card{
-		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, BinderName: "Vintage Collection", BinderType: "binder", Added: time.Now()},
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: 1, Added: time.Now()},
 	})
 
-	result, err := repo.FindAll(context.Background(), "Nonexistent Binder")
+	testID := 67
+	result, err := repo.FindAll(context.Background(), &testID)
 
 	require.NoError(t, err)
 	assert.Empty(t, result)
@@ -125,6 +141,7 @@ func TestPostgresRepository_FindAll_ReturnsEmptySliceWhenNoBinderMatches(t *test
 func TestPostgresRepository_Create_InsertsAndReturnsCardWithID(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewPostgresRepository(db)
+	seedStorages(t, db)
 
 	newCard := Card{
 		Name:            "Sol Ring",
@@ -132,9 +149,8 @@ func TestPostgresRepository_Create_InsertsAndReturnsCardWithID(t *testing.T) {
 		SetCode:         "cmr",
 		CollectorNumber: 322,
 		Foil:            false,
-		BinderName:      "Commander Staples",
-		BinderType:      "binder",
-		Added:           time.Now().Truncate(time.Second), // Postgres timestamp n'a pas la précision nanoseconde
+		StorageID:       1,
+		Added:           time.Now().Truncate(time.Second),
 	}
 
 	created, err := repo.Create(context.Background(), newCard)
@@ -143,7 +159,8 @@ func TestPostgresRepository_Create_InsertsAndReturnsCardWithID(t *testing.T) {
 	assert.NotZero(t, created.ID)
 	assert.Equal(t, "Sol Ring", created.Name)
 
-	all, err := repo.FindAll(context.Background(), "Commander Staples")
+	testID := 1
+	all, err := repo.FindAll(context.Background(), &testID)
 	require.NoError(t, err)
 	require.Len(t, all, 1)
 	assert.Equal(t, created.ID, all[0].ID)
@@ -152,6 +169,7 @@ func TestPostgresRepository_Create_InsertsAndReturnsCardWithID(t *testing.T) {
 func TestPostgresRepository_Create_PreservesAddedTimestamp(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewPostgresRepository(db)
+	seedStorages(t, db)
 
 	expectedAdded := time.Now().Truncate(time.Second)
 	newCard := Card{
@@ -160,8 +178,7 @@ func TestPostgresRepository_Create_PreservesAddedTimestamp(t *testing.T) {
 		SetCode:         "mm3",
 		CollectorNumber: 156,
 		Foil:            true,
-		BinderName:      "Modern Staples",
-		BinderType:      "box",
+		StorageID:       1,
 		Added:           expectedAdded,
 	}
 
@@ -174,6 +191,7 @@ func TestPostgresRepository_Create_PreservesAddedTimestamp(t *testing.T) {
 func TestPostgresRepository_Create_ReturnsErrorOnInvalidScryfallID(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewPostgresRepository(db)
+	seedStorages(t, db)
 
 	invalidCard := Card{
 		Name:            "Bad Card",
@@ -181,8 +199,7 @@ func TestPostgresRepository_Create_ReturnsErrorOnInvalidScryfallID(t *testing.T)
 		SetCode:         "test",
 		CollectorNumber: 1,
 		Foil:            false,
-		BinderName:      "Test Binder",
-		BinderType:      "binder",
+		StorageID:       1,
 		Added:           time.Now(),
 	}
 

@@ -15,15 +15,15 @@ import (
 )
 
 type fakeService struct {
-	cards      []Card
-	getAllErr  error
-	binderName string
+	cards     []Card
+	getAllErr error
+	storageID *int
 
 	createErr error
 }
 
-func (f *fakeService) GetAllCards(ctx context.Context, binderName string) ([]Card, error) {
-	f.binderName = binderName
+func (f *fakeService) GetAllCards(ctx context.Context, storageID *int) ([]Card, error) {
+	f.storageID = storageID
 	return f.cards, f.getAllErr
 }
 
@@ -64,16 +64,27 @@ func TestHandler_GetCards_ReturnsCardsAsJSON(t *testing.T) {
 	assert.Equal(t, "lea", response[0].SetCode)
 }
 
-func TestHandler_GetCards_PassesBinderNameQueryParamToService(t *testing.T) {
+func TestHandler_GetCards_PassesStorageIDQueryParamToService(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodGet, "/cards?binder_name=Vintage+Collection", nil)
+	req := httptest.NewRequest(http.MethodGet, "/cards?storage_id=1", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "Vintage Collection", service.binderName)
+	assert.Equal(t, 1, *(service.storageID))
+}
+
+func TestHandler_GetCards_ReturnsErrorInvalidStorageID(t *testing.T) {
+	service := &fakeService{getAllErr: errors.New("storage_id must be a valid integer")}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/cards?storage_id=invalid_storage_id", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 func TestHandler_GetCards_ReturnsErrorOnServiceFailure(t *testing.T) {
@@ -97,8 +108,7 @@ func TestHandler_CreateCard_ReturnsCreatedCard(t *testing.T) {
 		"set_code": "mh2",
 		"collector_number": 267,
 		"foil": false,
-		"binder_name": "Blue Control",
-		"binder_type": "deckbox"
+		"storage_id": 1
 	}`
 
 	req := httptest.NewRequest(http.MethodPost, "/cards", bytes.NewBufferString(body))
@@ -117,8 +127,7 @@ func TestHandler_CreateCard_ReturnsCreatedCard(t *testing.T) {
 	assert.Equal(t, "mh2", response.SetCode)
 	assert.Equal(t, 267, response.CollectorNumber)
 	assert.Equal(t, false, response.Foil)
-	assert.Equal(t, "Blue Control", response.BinderName)
-	assert.Equal(t, "deckbox", response.BinderType)
+	assert.Equal(t, 1, response.StorageID)
 }
 
 func TestHandler_CreateCard_ReturnsBadRequestOnMissingRequiredField(t *testing.T) {
@@ -131,8 +140,7 @@ func TestHandler_CreateCard_ReturnsBadRequestOnMissingRequiredField(t *testing.T
 		"set_code": "mh2",
 		"collector_number": 267,
 		"foil": false,
-		"binder_name": "Blue Control",
-		"binder_type": "deckbox"
+		"storage_id": 1
 	}`
 
 	req := httptest.NewRequest(http.MethodPost, "/cards", bytes.NewBufferString(body))
@@ -153,8 +161,7 @@ func TestHandler_CreateCard_ReturnsBadRequestOnInvalidScryfallID(t *testing.T) {
 		"set_code": "mh2",
 		"collector_number": 267,
 		"foil": false,
-		"binder_name": "Blue Control",
-		"binder_type": "deckbox"
+		"storage_id": 1
 	}`
 
 	req := httptest.NewRequest(http.MethodPost, "/cards", bytes.NewBufferString(body))
@@ -175,8 +182,7 @@ func TestHandler_CreateCard_ReturnsBadRequestOnInvalidCollectorNumber(t *testing
 		"set_code": "mh2",
 		"collector_number": 0,
 		"foil": false,
-		"binder_name": "Blue Control",
-		"binder_type": "deckbox"
+		"storage_id": 1
 	}`
 
 	req := httptest.NewRequest(http.MethodPost, "/cards", bytes.NewBufferString(body))
@@ -197,8 +203,7 @@ func TestHandler_CreateCard_ReturnsErrorOnServiceFailure(t *testing.T) {
 		"set_code": "mh2",
 		"collector_number": 267,
 		"foil": false,
-		"binder_name": "Blue Control",
-		"binder_type": "deckbox"
+		"storage_id": 1
 	}`
 
 	req := httptest.NewRequest(http.MethodPost, "/cards", bytes.NewBufferString(body))

@@ -3,6 +3,7 @@ package card
 import (
 	"context"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,8 +15,7 @@ type cardResponse struct {
 	SetCode         string `json:"set_code"`
 	CollectorNumber int    `json:"collector_number"`
 	Foil            bool   `json:"foil"`
-	BinderName      string `json:"binder_name"`
-	BinderType      string `json:"binder_type"`
+	StorageID       int    `json:"storage_id"`
 	Added           string `json:"added"`
 }
 
@@ -27,8 +27,7 @@ func toResponse(c Card) cardResponse {
 		SetCode:         c.SetCode,
 		CollectorNumber: c.CollectorNumber,
 		Foil:            c.Foil,
-		BinderName:      c.BinderName,
-		BinderType:      c.BinderType,
+		StorageID:       c.StorageID,
 		Added:           c.Added.Format("2006-01-02 15:04:05"),
 	}
 }
@@ -39,8 +38,7 @@ type createCardRequest struct {
 	SetCode         string `json:"set_code" binding:"required"`
 	CollectorNumber int    `json:"collector_number" binding:"required,gt=0"`
 	Foil            bool   `json:"foil"`
-	BinderName      string `json:"binder_name" binding:"required"`
-	BinderType      string `json:"binder_type" binding:"required"`
+	StorageID       int    `json:"storage_id"`
 }
 
 func (r createCardRequest) toDomain() Card {
@@ -50,13 +48,12 @@ func (r createCardRequest) toDomain() Card {
 		SetCode:         r.SetCode,
 		CollectorNumber: r.CollectorNumber,
 		Foil:            r.Foil,
-		BinderName:      r.BinderName,
-		BinderType:      r.BinderType,
+		StorageID:       r.StorageID,
 	}
 }
 
 type cardService interface {
-	GetAllCards(ctx context.Context, binderName string) ([]Card, error)
+	GetAllCards(ctx context.Context, StorageID *int) ([]Card, error)
 	CreateCard(ctx context.Context, c Card) (Card, error)
 }
 
@@ -74,9 +71,18 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 }
 
 func (h *Handler) getCards(ctx *gin.Context) {
-	binderName := ctx.Query("binder_name")
+	var storageID *int
 
-	cards, err := h.service.GetAllCards(ctx.Request.Context(), binderName)
+	if raw := ctx.Query("storage_id"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "storage_id must be a valid integer"})
+			return
+		}
+		storageID = &parsed
+	}
+
+	cards, err := h.service.GetAllCards(ctx.Request.Context(), storageID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -86,24 +92,22 @@ func (h *Handler) getCards(ctx *gin.Context) {
 	for _, cd := range cards {
 		response = append(response, toResponse(cd))
 	}
-
 	ctx.IndentedJSON(http.StatusOK, response)
 }
-
-func (h *Handler) createCard(c *gin.Context) {
+func (h *Handler) createCard(ctx *gin.Context) {
 	var req createCardRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	newCard := req.toDomain()
 
-	created, err := h.service.CreateCard(c.Request.Context(), newCard)
+	created, err := h.service.CreateCard(ctx.Request.Context(), newCard)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.IndentedJSON(http.StatusCreated, toResponse(created))
+	ctx.IndentedJSON(http.StatusCreated, toResponse(created))
 }

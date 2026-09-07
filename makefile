@@ -19,3 +19,7 @@ coverage-all:
 	TESTCONTAINERS_RYUK_DISABLED=true go test ./internal/... -tags=integration -coverprofile=coverage.out
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Rapport généré (unitaire + intégration) : coverage.html"
+
+db-reset:
+	docker compose down -v
+	docker compose up --build
