@@ -14,7 +14,7 @@ type cardRow struct {
 	SetCode         string    `db:"set_code"`
 	CollectorNumber int       `db:"collector_number"`
 	Foil            bool      `db:"foil"`
-	StorageID       int       `db:"storage_id"`
+	StorageID       *int      `db:"storage_id"`
 	Added           time.Time `db:"added"`
 }
 

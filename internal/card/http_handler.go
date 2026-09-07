@@ -15,7 +15,7 @@ type cardResponse struct {
 	SetCode         string `json:"set_code"`
 	CollectorNumber int    `json:"collector_number"`
 	Foil            bool   `json:"foil"`
-	StorageID       int    `json:"storage_id"`
+	StorageID       *int   `json:"storage_id"`
 	Added           string `json:"added"`
 }
 
@@ -38,7 +38,7 @@ type createCardRequest struct {
 	SetCode         string `json:"set_code" binding:"required"`
 	CollectorNumber int    `json:"collector_number" binding:"required,gt=0"`
 	Foil            bool   `json:"foil"`
-	StorageID       int    `json:"storage_id"`
+	StorageID       *int   `json:"storage_id" binding:"omitempty,gt=0"`
 }
 
 func (r createCardRequest) toDomain() Card {

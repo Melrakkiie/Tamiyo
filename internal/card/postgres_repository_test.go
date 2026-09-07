@@ -94,9 +94,10 @@ func TestPostgresRepository_FindAll_ReturnsAllCardsWhenNoFilter(t *testing.T) {
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db)
 
+	testID1, testID2 := 1, 2
 	seedCards(t, db, []Card{
-		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: 1, Added: time.Now()},
-		{Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: 129, Foil: true, StorageID: 2, Added: time.Now()},
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: &testID1, Added: time.Now()},
+		{Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: 129, Foil: true, StorageID: &testID2, Added: time.Now()},
 	})
 
 	result, err := repo.FindAll(context.Background(), nil)
@@ -110,9 +111,10 @@ func TestPostgresRepository_FindAll_FiltersByStorageID(t *testing.T) {
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db)
 
+	testID1, testID2 := 1, 2
 	seedCards(t, db, []Card{
-		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: 1, Added: time.Now()},
-		{Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: 129, Foil: true, StorageID: 2, Added: time.Now()}})
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: &testID1, Added: time.Now()},
+		{Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: 129, Foil: true, StorageID: &testID2, Added: time.Now()}})
 
 	testID := 1
 	result, err := repo.FindAll(context.Background(), &testID)
@@ -127,12 +129,13 @@ func TestPostgresRepository_FindAll_ReturnsEmptySliceWhenNoStorageMatches(t *tes
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db)
 
+	testID := 1
 	seedCards(t, db, []Card{
-		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: 1, Added: time.Now()},
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: &testID, Added: time.Now()},
 	})
 
-	testID := 67
-	result, err := repo.FindAll(context.Background(), &testID)
+	unknownTestID := 67
+	result, err := repo.FindAll(context.Background(), &unknownTestID)
 
 	require.NoError(t, err)
 	assert.Empty(t, result)
@@ -143,13 +146,14 @@ func TestPostgresRepository_Create_InsertsAndReturnsCardWithID(t *testing.T) {
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db)
 
+	testID := 1
 	newCard := Card{
 		Name:            "Sol Ring",
 		ScryfallID:      "f2c8b1a0-1e2d-4c3b-9a8f-7e6d5c4b3a2f",
 		SetCode:         "cmr",
 		CollectorNumber: 322,
 		Foil:            false,
-		StorageID:       1,
+		StorageID:       &testID,
 		Added:           time.Now().Truncate(time.Second),
 	}
 
@@ -159,8 +163,33 @@ func TestPostgresRepository_Create_InsertsAndReturnsCardWithID(t *testing.T) {
 	assert.NotZero(t, created.ID)
 	assert.Equal(t, "Sol Ring", created.Name)
 
-	testID := 1
 	all, err := repo.FindAll(context.Background(), &testID)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	assert.Equal(t, created.ID, all[0].ID)
+}
+
+func TestPostgresRepository_Create_InsertsAndReturnsCardWithID_NoStorageID(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db)
+
+	newCard := Card{
+		Name:            "Sol Ring",
+		ScryfallID:      "f2c8b1a0-1e2d-4c3b-9a8f-7e6d5c4b3a2f",
+		SetCode:         "cmr",
+		CollectorNumber: 322,
+		Foil:            false,
+		Added:           time.Now().Truncate(time.Second),
+	}
+
+	created, err := repo.Create(context.Background(), newCard)
+
+	require.NoError(t, err)
+	assert.NotZero(t, created.ID)
+	assert.Equal(t, "Sol Ring", created.Name)
+
+	all, err := repo.FindAll(context.Background(), nil)
 	require.NoError(t, err)
 	require.Len(t, all, 1)
 	assert.Equal(t, created.ID, all[0].ID)
@@ -172,13 +201,14 @@ func TestPostgresRepository_Create_PreservesAddedTimestamp(t *testing.T) {
 	seedStorages(t, db)
 
 	expectedAdded := time.Now().Truncate(time.Second)
+	testID := 1
 	newCard := Card{
 		Name:            "Tarmogoyf",
 		ScryfallID:      "3a1b2c3d-4e5f-6789-0abc-def123456789",
 		SetCode:         "mm3",
 		CollectorNumber: 156,
 		Foil:            true,
-		StorageID:       1,
+		StorageID:       &testID,
 		Added:           expectedAdded,
 	}
 
@@ -193,13 +223,14 @@ func TestPostgresRepository_Create_ReturnsErrorOnInvalidScryfallID(t *testing.T)
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db)
 
+	testID := 1
 	invalidCard := Card{
 		Name:            "Bad Card",
 		ScryfallID:      "not-a-uuid",
 		SetCode:         "test",
 		CollectorNumber: 1,
 		Foil:            false,
-		StorageID:       1,
+		StorageID:       &testID,
 		Added:           time.Now(),
 	}
 

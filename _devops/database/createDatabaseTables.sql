@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS tamiyo.cards
     set_code         text      NOT NULL,
     collector_number int       NOT NULL,
     foil             bool      NOT NULL,
-    storage_id       int       NOT NULL,
+    storage_id       int               ,
     added            timestamp NOT NULL,
     FOREIGN KEY (storage_id) REFERENCES tamiyo.storage(id)
 );

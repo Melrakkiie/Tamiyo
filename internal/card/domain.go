@@ -12,7 +12,7 @@ type Card struct {
 	SetCode         string
 	CollectorNumber int
 	Foil            bool
-	StorageID       int
+	StorageID       *int
 	Added           time.Time
 }
 

@@ -73,7 +73,7 @@ func TestHandler_GetCards_PassesStorageIDQueryParamToService(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, 1, *(service.storageID))
+	assert.Equal(t, 1, *service.storageID)
 }
 
 func TestHandler_GetCards_ReturnsErrorInvalidStorageID(t *testing.T) {
@@ -127,7 +127,32 @@ func TestHandler_CreateCard_ReturnsCreatedCard(t *testing.T) {
 	assert.Equal(t, "mh2", response.SetCode)
 	assert.Equal(t, 267, response.CollectorNumber)
 	assert.Equal(t, false, response.Foil)
-	assert.Equal(t, 1, response.StorageID)
+	assert.Equal(t, 1, *response.StorageID)
+}
+
+func TestHandler_CreateCard_AllowsNilStorageID(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	body := `{
+		"name": "Counterspell",
+		"scryfall_id": "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f",
+		"set_code": "mh2",
+		"collector_number": 267,
+		"foil": false
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/cards", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	var response cardResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Nil(t, response.StorageID)
 }
 
 func TestHandler_CreateCard_ReturnsBadRequestOnMissingRequiredField(t *testing.T) {
