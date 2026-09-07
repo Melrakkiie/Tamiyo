@@ -13,12 +13,14 @@ import (
 type fakeRepository struct {
 	cards      []Card
 	findAllErr error
+	binderName string
 
 	createdCard Card
 	createErr   error
 }
 
-func (f *fakeRepository) FindAll(ctx context.Context) ([]Card, error) {
+func (f *fakeRepository) FindAll(ctx context.Context, binderName string) ([]Card, error) {
+	f.binderName = binderName
 	return f.cards, f.findAllErr
 }
 
@@ -39,17 +41,27 @@ func TestService_GetAllCards_ReturnsCardsFromRepository(t *testing.T) {
 	repo := &fakeRepository{cards: expected}
 	service := NewService(repo)
 
-	result, err := service.GetAllCards(context.Background())
+	result, err := service.GetAllCards(context.Background(), "")
 
 	require.NoError(t, err)
 	assert.Equal(t, expected, result)
+}
+
+func TestService_GetAllCards_PassesBinderNameToRepository(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	_, err := service.GetAllCards(context.Background(), "Vintage Collection")
+
+	require.NoError(t, err)
+	assert.Equal(t, "Vintage Collection", repo.binderName)
 }
 
 func TestService_GetAllCards_PropagatesRepositoryError(t *testing.T) {
 	repo := &fakeRepository{findAllErr: errors.New("connection lost")}
 	service := NewService(repo)
 
-	result, err := service.GetAllCards(context.Background())
+	result, err := service.GetAllCards(context.Background(), "")
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -64,8 +76,8 @@ func TestService_CreateCard_SetsAddedToCurrentTime(t *testing.T) {
 	after := time.Now()
 
 	require.NoError(t, err)
-	assert.False(t, repo.createdCard.Added.Before(before), "Added devrait être postérieur ou égal à 'before'")
-	assert.False(t, repo.createdCard.Added.After(after), "Added devrait être antérieur ou égal à 'after'")
+	assert.False(t, repo.createdCard.Added.Before(before))
+	assert.False(t, repo.createdCard.Added.After(after))
 }
 
 func TestService_CreateCard_ReturnsCardFromRepository(t *testing.T) {

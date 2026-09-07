@@ -15,14 +15,15 @@ import (
 )
 
 type fakeService struct {
-	cards     []Card
-	getAllErr error
+	cards      []Card
+	getAllErr  error
+	binderName string
 
-	createdCard Card
-	createErr   error
+	createErr error
 }
 
-func (f *fakeService) GetAllCards(ctx context.Context) ([]Card, error) {
+func (f *fakeService) GetAllCards(ctx context.Context, binderName string) ([]Card, error) {
+	f.binderName = binderName
 	return f.cards, f.getAllErr
 }
 
@@ -61,6 +62,18 @@ func TestHandler_GetCards_ReturnsCardsAsJSON(t *testing.T) {
 	require.Len(t, response, 1)
 	assert.Equal(t, "Black Lotus", response[0].Name)
 	assert.Equal(t, "lea", response[0].SetCode)
+}
+
+func TestHandler_GetCards_PassesBinderNameQueryParamToService(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/cards?binder_name=Vintage+Collection", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "Vintage Collection", service.binderName)
 }
 
 func TestHandler_GetCards_ReturnsErrorOnServiceFailure(t *testing.T) {
