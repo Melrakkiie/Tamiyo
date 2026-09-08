@@ -6,10 +6,11 @@ import (
 )
 
 type Storage struct {
-	ID    int
-	Name  string
-	Type  string
-	Added time.Time
+	ID        int
+	Name      string
+	Type      string
+	CardCount int
+	Added     time.Time
 }
 
 type Repository interface {

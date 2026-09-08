@@ -8,18 +8,20 @@ import (
 )
 
 type storageResponse struct {
-	ID    int    `json:"id"`
-	Name  string `json:"name"`
-	Type  string `json:"type"`
-	Added string `json:"added"`
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	Type      string `json:"type"`
+	CardCount int    `json:"card_count"`
+	Added     string `json:"added"`
 }
 
 func toResponse(s Storage) storageResponse {
 	return storageResponse{
-		ID:    s.ID,
-		Name:  s.Name,
-		Type:  s.Type,
-		Added: s.Added.Format("2006-01-02 15:04:05"),
+		ID:        s.ID,
+		Name:      s.Name,
+		Type:      s.Type,
+		CardCount: s.CardCount,
+		Added:     s.Added.Format("2006-01-02 15:04:05"),
 	}
 }
 

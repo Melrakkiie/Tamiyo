@@ -8,18 +8,20 @@ import (
 )
 
 type storageRow struct {
-	ID    int       `db:"id"`
-	Name  string    `db:"name"`
-	Type  string    `db:"type"`
-	Added time.Time `db:"added"`
+	ID        int       `db:"id"`
+	Name      string    `db:"name"`
+	Type      string    `db:"type"`
+	CardCount int       `db:"card_count"`
+	Added     time.Time `db:"added"`
 }
 
 func (r storageRow) toDomain() Storage {
 	return Storage{
-		ID:    r.ID,
-		Name:  r.Name,
-		Type:  r.Type,
-		Added: r.Added,
+		ID:        r.ID,
+		Name:      r.Name,
+		Type:      r.Type,
+		CardCount: r.CardCount,
+		Added:     r.Added,
 	}
 }
 
@@ -33,8 +35,16 @@ func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
 
 func (r *PostgresRepository) FindAll(ctx context.Context) ([]Storage, error) {
 	query := `
-		SELECT id, name, type, added
+		SELECT
+		    tamiyo.storage.id AS id,
+		    tamiyo.storage.name AS name,
+		    tamiyo.storage.type AS type,
+		    tamiyo.storage.added AS added,
+		    COUNT(tamiyo.cards.id) AS card_count
 		FROM tamiyo.storage
+		LEFT JOIN tamiyo.cards ON tamiyo.storage.id = tamiyo.cards.storage_id
+		GROUP BY tamiyo.storage.id, tamiyo.storage.name, tamiyo.storage.type, tamiyo.storage.added
+		ORDER BY tamiyo.storage.added DESC
 	`
 
 	var rows []storageRow
