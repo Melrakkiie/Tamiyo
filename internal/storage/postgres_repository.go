@@ -25,6 +25,14 @@ func (r storageRow) toDomain() Storage {
 	}
 }
 
+func toStorageRow(storage Storage) storageRow {
+	return storageRow{
+		Name:  storage.Name,
+		Type:  storage.Type,
+		Added: storage.Added,
+	}
+}
+
 type PostgresRepository struct {
 	db *sqlx.DB
 }
@@ -58,4 +66,27 @@ func (r *PostgresRepository) FindAll(ctx context.Context) ([]Storage, error) {
 	}
 
 	return storages, nil
+}
+
+func (r *PostgresRepository) Create(ctx context.Context, storage Storage) (Storage, error) {
+	row := toStorageRow(storage)
+	query := `
+    	INSERT INTO tamiyo.storage (name, type, added)
+     	VALUES (:name, :type, :added)
+      	RETURNING id
+	`
+
+	stmt, err := r.db.PrepareNamedContext(ctx, query)
+	if err != nil {
+		return Storage{}, err
+	}
+	defer stmt.Close()
+
+	var id int
+	if err := stmt.GetContext(ctx, &id, row); err != nil {
+		return Storage{}, err
+	}
+
+	storage.ID = id
+	return storage, nil
 }

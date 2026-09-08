@@ -75,6 +75,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, storageID *int) ([]Car
 
 	return cards, nil
 }
+
 func (r *PostgresRepository) Create(ctx context.Context, c Card) (Card, error) {
 	row := toCardRow(c)
 	query := `

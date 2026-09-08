@@ -25,8 +25,21 @@ func toResponse(s Storage) storageResponse {
 	}
 }
 
+type createStorageRequest struct {
+	Name string `json:"name" binding:"required"`
+	Type string `json:"type" binding:"required"`
+}
+
+func (r createStorageRequest) toDomain() Storage {
+	return Storage{
+		Name: r.Name,
+		Type: r.Type,
+	}
+}
+
 type storageService interface {
 	GetAllStorages(ctx context.Context) ([]Storage, error)
+	CreateStorage(ctx context.Context, storage Storage) (Storage, error)
 }
 
 type Handler struct {
@@ -39,6 +52,7 @@ func NewHandler(service storageService) *Handler {
 
 func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/storage", h.getStorages)
+	router.POST("/storage", h.createStorage)
 }
 
 func (h *Handler) getStorages(ctx *gin.Context) {
@@ -53,4 +67,22 @@ func (h *Handler) getStorages(ctx *gin.Context) {
 		response = append(response, toResponse(cd))
 	}
 	ctx.IndentedJSON(http.StatusOK, response)
+}
+
+func (h *Handler) createStorage(ctx *gin.Context) {
+	var req createStorageRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	newStorage := req.toDomain()
+
+	created, err := h.service.CreateStorage(ctx.Request.Context(), newStorage)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.IndentedJSON(http.StatusCreated, toResponse(created))
 }

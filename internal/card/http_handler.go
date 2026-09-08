@@ -94,6 +94,7 @@ func (h *Handler) getCards(ctx *gin.Context) {
 	}
 	ctx.IndentedJSON(http.StatusOK, response)
 }
+
 func (h *Handler) createCard(ctx *gin.Context) {
 	var req createCardRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {

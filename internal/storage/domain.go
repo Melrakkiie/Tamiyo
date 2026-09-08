@@ -15,4 +15,5 @@ type Storage struct {
 
 type Repository interface {
 	FindAll(ctx context.Context) ([]Storage, error)
+	Create(ctx context.Context, storage Storage) (Storage, error)
 }
