@@ -165,3 +165,71 @@ func TestPostgresRepository_Create_GeneratesAddedAndUpdatedTimestamps(t *testing
 	assert.WithinRange(t, created.Added, before, after)
 	assert.WithinRange(t, created.Updated, before, after)
 }
+
+func TestPostgresRepository_FindByID_ReturnsStorage(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db)
+
+	result, err := repo.FindByID(context.Background(), 1)
+
+	require.NoError(t, err)
+	assert.Equal(t, "Vintage Collection", result.Name)
+}
+
+func TestPostgresRepository_FindByID_ReturnsErrNotFoundWhenMissing(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	_, err := repo.FindByID(context.Background(), 999)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestPostgresRepository_Update_UpdatesAndReturnsStorage(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db)
+
+	existing, err := repo.FindByID(context.Background(), 1)
+	require.NoError(t, err)
+
+	existing.Name = "Renamed Collection"
+	updated, err := repo.Update(context.Background(), existing)
+
+	require.NoError(t, err)
+	assert.Equal(t, "Renamed Collection", updated.Name)
+	assert.Equal(t, "binder", updated.Type)
+
+	refetched, err := repo.FindByID(context.Background(), 1)
+	require.NoError(t, err)
+	assert.Equal(t, "Renamed Collection", refetched.Name)
+}
+
+func TestPostgresRepository_Update_ReturnsErrNotFoundWhenStorageDoesNotExist(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	nonExistent := Storage{ID: 999, Name: "Ghost", Type: "binder"}
+
+	_, err := repo.Update(context.Background(), nonExistent)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestPostgresRepository_Update_RefreshesUpdatedTimestamp(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db)
+
+	existing, err := repo.FindByID(context.Background(), 1)
+	require.NoError(t, err)
+
+	time.Sleep(10 * time.Millisecond)
+
+	existing.Name = "Renamed"
+	updated, err := repo.Update(context.Background(), existing)
+
+	require.NoError(t, err)
+	assert.True(t, updated.Updated.After(existing.Updated))
+}
