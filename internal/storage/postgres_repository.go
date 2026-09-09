@@ -2,6 +2,8 @@ package storage
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -29,6 +31,7 @@ func (r storageRow) toDomain() Storage {
 
 func toStorageRow(storage Storage) storageRow {
 	return storageRow{
+		ID:   storage.ID,
 		Name: storage.Name,
 		Type: storage.Type,
 	}
@@ -70,6 +73,24 @@ func (r *PostgresRepository) FindAll(ctx context.Context) ([]Storage, error) {
 	return storages, nil
 }
 
+func (r *PostgresRepository) FindByID(ctx context.Context, id int) (Storage, error) {
+	query := `
+		SELECT id, name, type, added, updated
+		FROM tamiyo.storage
+		WHERE id = $1
+	`
+
+	var row storageRow
+	if err := r.db.GetContext(ctx, &row, query, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Storage{}, ErrNotFound
+		}
+		return Storage{}, err
+	}
+
+	return row.toDomain(), nil
+}
+
 func (r *PostgresRepository) Create(ctx context.Context, storage Storage) (Storage, error) {
 	row := toStorageRow(storage)
 	query := `
@@ -89,4 +110,30 @@ func (r *PostgresRepository) Create(ctx context.Context, storage Storage) (Stora
 	}
 
 	return created.toDomain(), nil
+}
+
+func (r *PostgresRepository) Update(ctx context.Context, s Storage) (Storage, error) {
+	row := toStorageRow(s)
+	query := `
+		UPDATE tamiyo.storage
+		SET name = :name, type = :type
+		WHERE id = :id
+		RETURNING id, name, type, added, updated
+	`
+
+	stmt, err := r.db.PrepareNamedContext(ctx, query)
+	if err != nil {
+		return Storage{}, err
+	}
+	defer stmt.Close()
+
+	var updated storageRow
+	if err := stmt.GetContext(ctx, &updated, row); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Storage{}, ErrNotFound
+		}
+		return Storage{}, err
+	}
+
+	return updated.toDomain(), nil
 }

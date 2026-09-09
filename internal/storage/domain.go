@@ -2,8 +2,11 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+var ErrNotFound = errors.New("storage not found")
 
 type Storage struct {
 	ID        int
@@ -16,5 +19,7 @@ type Storage struct {
 
 type Repository interface {
 	FindAll(ctx context.Context) ([]Storage, error)
+	FindByID(ctx context.Context, id int) (Storage, error)
 	Create(ctx context.Context, storage Storage) (Storage, error)
+	Update(ctx context.Context, storage Storage) (Storage, error)
 }

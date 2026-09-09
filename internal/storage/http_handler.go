@@ -2,7 +2,9 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -39,9 +41,26 @@ func (r createStorageRequest) toDomain() Storage {
 	}
 }
 
+type updateStorageRequest struct {
+	Name *string `json:"name" binding:"omitempty"`
+	Type *string `json:"type" binding:"omitempty"`
+}
+
+func (r updateStorageRequest) applyTo(s Storage) Storage {
+	if r.Name != nil {
+		s.Name = *r.Name
+	}
+	if r.Type != nil {
+		s.Type = *r.Type
+	}
+	return s
+}
+
 type storageService interface {
 	GetAllStorages(ctx context.Context) ([]Storage, error)
+	GetStorage(ctx context.Context, id int) (Storage, error)
 	CreateStorage(ctx context.Context, storage Storage) (Storage, error)
+	UpdateStorage(ctx context.Context, id int, req updateStorageRequest) (Storage, error)
 }
 
 type Handler struct {
@@ -54,7 +73,9 @@ func NewHandler(service storageService) *Handler {
 
 func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/storage", h.getStorages)
+	router.GET("/storage/:id", h.getStorage)
 	router.POST("/storage", h.createStorage)
+	router.PATCH("/storage/:id", h.updateStorage)
 }
 
 func (h *Handler) getStorages(ctx *gin.Context) {
@@ -69,6 +90,26 @@ func (h *Handler) getStorages(ctx *gin.Context) {
 		response = append(response, toResponse(cd))
 	}
 	ctx.IndentedJSON(http.StatusOK, response)
+}
+
+func (h *Handler) getStorage(ctx *gin.Context) {
+	id, err := strconv.Atoi(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	storage, err := h.service.GetStorage(ctx.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "storage not found"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.IndentedJSON(http.StatusCreated, toResponse(storage))
 }
 
 func (h *Handler) createStorage(ctx *gin.Context) {
@@ -87,4 +128,30 @@ func (h *Handler) createStorage(ctx *gin.Context) {
 	}
 
 	ctx.IndentedJSON(http.StatusCreated, toResponse(created))
+}
+
+func (h *Handler) updateStorage(ctx *gin.Context) {
+	id, err := strconv.Atoi(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	var req updateStorageRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	updated, err := h.service.UpdateStorage(ctx.Request.Context(), id, req)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "storage not found"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.IndentedJSON(http.StatusOK, toResponse(updated))
 }
