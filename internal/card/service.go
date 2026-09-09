@@ -2,7 +2,6 @@ package card
 
 import (
 	"context"
-	"time"
 )
 
 type Service struct {
@@ -18,6 +17,5 @@ func (s *Service) GetAllCards(ctx context.Context, storageID *int) ([]Card, erro
 }
 
 func (s *Service) CreateCard(ctx context.Context, c Card) (Card, error) {
-	c.Added = time.Now()
 	return s.repo.Create(ctx, c)
 }

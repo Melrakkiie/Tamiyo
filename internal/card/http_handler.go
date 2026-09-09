@@ -17,6 +17,7 @@ type cardResponse struct {
 	Foil            bool   `json:"foil"`
 	StorageID       *int   `json:"storage_id"`
 	Added           string `json:"added"`
+	Updated         string `json:"updated"`
 }
 
 func toResponse(c Card) cardResponse {
@@ -29,6 +30,7 @@ func toResponse(c Card) cardResponse {
 		Foil:            c.Foil,
 		StorageID:       c.StorageID,
 		Added:           c.Added.Format("2006-01-02 15:04:05"),
+		Updated:         c.Updated.Format("2006-01-02 15:04:05"),
 	}
 }
 

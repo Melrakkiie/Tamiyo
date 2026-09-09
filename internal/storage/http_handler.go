@@ -13,6 +13,7 @@ type storageResponse struct {
 	Type      string `json:"type"`
 	CardCount int    `json:"card_count"`
 	Added     string `json:"added"`
+	Updated   string `json:"updated"`
 }
 
 func toResponse(s Storage) storageResponse {
@@ -22,6 +23,7 @@ func toResponse(s Storage) storageResponse {
 		Type:      s.Type,
 		CardCount: s.CardCount,
 		Added:     s.Added.Format("2006-01-02 15:04:05"),
+		Updated:   s.Updated.Format("2006-01-02 15:04:05"),
 	}
 }
 

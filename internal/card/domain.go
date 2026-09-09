@@ -14,6 +14,7 @@ type Card struct {
 	Foil            bool
 	StorageID       *int
 	Added           time.Time
+	Updated         time.Time
 }
 
 type Repository interface {

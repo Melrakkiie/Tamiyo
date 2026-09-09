@@ -16,6 +16,7 @@ type cardRow struct {
 	Foil            bool      `db:"foil"`
 	StorageID       *int      `db:"storage_id"`
 	Added           time.Time `db:"added"`
+	Updated         time.Time `db:"updated"`
 }
 
 func (r cardRow) toDomain() Card {
@@ -28,6 +29,7 @@ func (r cardRow) toDomain() Card {
 		Foil:            r.Foil,
 		StorageID:       r.StorageID,
 		Added:           r.Added,
+		Updated:         r.Updated,
 	}
 }
 
@@ -39,7 +41,6 @@ func toCardRow(c Card) cardRow {
 		CollectorNumber: c.CollectorNumber,
 		Foil:            c.Foil,
 		StorageID:       c.StorageID,
-		Added:           c.Added,
 	}
 }
 
@@ -53,8 +54,8 @@ func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
 
 func (r *PostgresRepository) FindAll(ctx context.Context, storageID *int) ([]Card, error) {
 	query := `
-		SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, added
-		FROM tamiyo.cards
+    SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, added, updated
+    FROM tamiyo.cards
 	`
 	args := []interface{}{}
 
@@ -62,6 +63,8 @@ func (r *PostgresRepository) FindAll(ctx context.Context, storageID *int) ([]Car
 		query += ` WHERE storage_id = $1`
 		args = append(args, *storageID)
 	}
+
+	query += ` ORDER BY updated DESC`
 
 	var rows []cardRow
 	if err := r.db.SelectContext(ctx, &rows, query, args...); err != nil {
@@ -79,9 +82,9 @@ func (r *PostgresRepository) FindAll(ctx context.Context, storageID *int) ([]Car
 func (r *PostgresRepository) Create(ctx context.Context, c Card) (Card, error) {
 	row := toCardRow(c)
 	query := `
-    	INSERT INTO tamiyo.cards (name, scryfall_id, set_code, collector_number, foil, storage_id, added)
-     	VALUES (:name, :scryfall_id, :set_code, :collector_number, :foil, :storage_id, :added)
-      	RETURNING id
+    	INSERT INTO tamiyo.cards (name, scryfall_id, set_code, collector_number, foil, storage_id)
+     	VALUES (:name, :scryfall_id, :set_code, :collector_number, :foil, :storage_id)
+      	RETURNING id, name, scryfall_id, set_code, collector_number, foil, storage_id, added, updated
 	`
 
 	stmt, err := r.db.PrepareNamedContext(ctx, query)
@@ -90,11 +93,10 @@ func (r *PostgresRepository) Create(ctx context.Context, c Card) (Card, error) {
 	}
 	defer stmt.Close()
 
-	var id int
-	if err := stmt.GetContext(ctx, &id, row); err != nil {
+	var created cardRow
+	if err := stmt.GetContext(ctx, &created, row); err != nil {
 		return Card{}, err
 	}
 
-	c.ID = id
-	return c, nil
+	return created.toDomain(), nil
 }

@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"time"
 )
 
 type Service struct {
@@ -18,6 +17,5 @@ func (s *Service) GetAllStorages(ctx context.Context) ([]Storage, error) {
 }
 
 func (s *Service) CreateStorage(ctx context.Context, storage Storage) (Storage, error) {
-	storage.Added = time.Now()
 	return s.repo.Create(ctx, storage)
 }

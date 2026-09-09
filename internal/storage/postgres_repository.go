@@ -13,6 +13,7 @@ type storageRow struct {
 	Type      string    `db:"type"`
 	CardCount int       `db:"card_count"`
 	Added     time.Time `db:"added"`
+	Updated   time.Time `db:"updated"`
 }
 
 func (r storageRow) toDomain() Storage {
@@ -22,14 +23,14 @@ func (r storageRow) toDomain() Storage {
 		Type:      r.Type,
 		CardCount: r.CardCount,
 		Added:     r.Added,
+		Updated:   r.Updated,
 	}
 }
 
 func toStorageRow(storage Storage) storageRow {
 	return storageRow{
-		Name:  storage.Name,
-		Type:  storage.Type,
-		Added: storage.Added,
+		Name: storage.Name,
+		Type: storage.Type,
 	}
 }
 
@@ -48,11 +49,12 @@ func (r *PostgresRepository) FindAll(ctx context.Context) ([]Storage, error) {
 		    tamiyo.storage.name AS name,
 		    tamiyo.storage.type AS type,
 		    tamiyo.storage.added AS added,
+			tamiyo.storage.updated as updated,
 		    COUNT(tamiyo.cards.id) AS card_count
 		FROM tamiyo.storage
 		LEFT JOIN tamiyo.cards ON tamiyo.storage.id = tamiyo.cards.storage_id
-		GROUP BY tamiyo.storage.id, tamiyo.storage.name, tamiyo.storage.type, tamiyo.storage.added
-		ORDER BY tamiyo.storage.added DESC
+		GROUP BY tamiyo.storage.id, tamiyo.storage.name, tamiyo.storage.type, tamiyo.storage.added, tamiyo.storage.updated
+		ORDER BY tamiyo.storage.updated DESC
 	`
 
 	var rows []storageRow
@@ -71,22 +73,20 @@ func (r *PostgresRepository) FindAll(ctx context.Context) ([]Storage, error) {
 func (r *PostgresRepository) Create(ctx context.Context, storage Storage) (Storage, error) {
 	row := toStorageRow(storage)
 	query := `
-    	INSERT INTO tamiyo.storage (name, type, added)
-     	VALUES (:name, :type, :added)
-      	RETURNING id
+    	INSERT INTO tamiyo.storage (name, type)
+     	VALUES (:name, :type)
+      	RETURNING id, name, type, added, updated
 	`
-
 	stmt, err := r.db.PrepareNamedContext(ctx, query)
 	if err != nil {
 		return Storage{}, err
 	}
 	defer stmt.Close()
 
-	var id int
-	if err := stmt.GetContext(ctx, &id, row); err != nil {
+	var created storageRow
+	if err := stmt.GetContext(ctx, &created, row); err != nil {
 		return Storage{}, err
 	}
 
-	storage.ID = id
-	return storage, nil
+	return created.toDomain(), nil
 }

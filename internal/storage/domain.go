@@ -11,6 +11,7 @@ type Storage struct {
 	Type      string
 	CardCount int
 	Added     time.Time
+	Updated   time.Time
 }
 
 type Repository interface {
