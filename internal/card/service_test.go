@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -55,7 +54,8 @@ func TestService_GetAllCards_PassesStorageIDToRepository(t *testing.T) {
 	_, err := service.GetAllCards(context.Background(), &testID)
 
 	require.NoError(t, err)
-	assert.Equal(t, testID, *(repo.storageID))
+	require.NotNil(t, repo.storageID)
+	assert.Equal(t, testID, *repo.storageID)
 }
 
 func TestService_GetAllCards_PropagatesRepositoryError(t *testing.T) {
@@ -68,17 +68,24 @@ func TestService_GetAllCards_PropagatesRepositoryError(t *testing.T) {
 	assert.Nil(t, result)
 }
 
-func TestService_CreateCard_SetsAddedToCurrentTime(t *testing.T) {
+func TestService_CreateCard_PassesCardUnchangedToRepository(t *testing.T) {
 	repo := &fakeRepository{}
 	service := NewService(repo)
 
-	before := time.Now()
-	_, err := service.CreateCard(context.Background(), Card{Name: "Sol Ring"})
-	after := time.Now()
+	storageID := 2
+	input := Card{
+		Name:            "Sol Ring",
+		ScryfallID:      "f2c8b1a0-1e2d-4c3b-9a8f-7e6d5c4b3a2f",
+		SetCode:         "cmr",
+		CollectorNumber: 322,
+		Foil:            false,
+		StorageID:       &storageID,
+	}
+
+	_, err := service.CreateCard(context.Background(), input)
 
 	require.NoError(t, err)
-	assert.False(t, repo.createdCard.Added.Before(before))
-	assert.False(t, repo.createdCard.Added.After(after))
+	assert.Equal(t, input, repo.createdCard)
 }
 
 func TestService_CreateCard_ReturnsCardFromRepository(t *testing.T) {

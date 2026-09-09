@@ -73,11 +73,12 @@ func TestHandler_GetCards_PassesStorageIDQueryParamToService(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, service.storageID)
 	assert.Equal(t, 1, *service.storageID)
 }
 
 func TestHandler_GetCards_ReturnsErrorInvalidStorageID(t *testing.T) {
-	service := &fakeService{getAllErr: errors.New("storage_id must be a valid integer")}
+	service := &fakeService{}
 	router := setupRouter(service)
 
 	req := httptest.NewRequest(http.MethodGet, "/cards?storage_id=invalid_storage_id", nil)
@@ -127,6 +128,7 @@ func TestHandler_CreateCard_ReturnsCreatedCard(t *testing.T) {
 	assert.Equal(t, "mh2", response.SetCode)
 	assert.Equal(t, 267, response.CollectorNumber)
 	assert.Equal(t, false, response.Foil)
+	require.NotNil(t, response.StorageID)
 	assert.Equal(t, 1, *response.StorageID)
 }
 
