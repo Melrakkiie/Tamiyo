@@ -34,3 +34,7 @@ func (s *Service) UpdateStorage(ctx context.Context, id int, req updateStorageRe
 
 	return s.repo.Update(ctx, updated)
 }
+
+func (s *Service) DeleteStorage(ctx context.Context, id int) error {
+	return s.repo.Delete(ctx, id)
+}

@@ -61,6 +61,7 @@ type storageService interface {
 	GetStorage(ctx context.Context, id int) (Storage, error)
 	CreateStorage(ctx context.Context, storage Storage) (Storage, error)
 	UpdateStorage(ctx context.Context, id int, req updateStorageRequest) (Storage, error)
+	DeleteStorage(ctx context.Context, id int) error
 }
 
 type Handler struct {
@@ -76,6 +77,7 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/storage/:id", h.getStorage)
 	router.POST("/storage", h.createStorage)
 	router.PATCH("/storage/:id", h.updateStorage)
+	router.DELETE("/storage/:id", h.deleteStorage)
 }
 
 func (h *Handler) getStorages(ctx *gin.Context) {
@@ -154,4 +156,23 @@ func (h *Handler) updateStorage(ctx *gin.Context) {
 	}
 
 	ctx.IndentedJSON(http.StatusOK, toResponse(updated))
+}
+
+func (h *Handler) deleteStorage(ctx *gin.Context) {
+	id, err := strconv.Atoi(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	if err := h.service.DeleteStorage(ctx.Request.Context(), id); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "storage not found"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.Status(http.StatusNoContent)
 }
