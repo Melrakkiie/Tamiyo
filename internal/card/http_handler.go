@@ -2,6 +2,7 @@ package card
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -108,6 +109,10 @@ func (h *Handler) createCard(ctx *gin.Context) {
 
 	created, err := h.service.CreateCard(ctx.Request.Context(), newCard)
 	if err != nil {
+		if errors.Is(err, ErrStorageNotFound) {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "storage_id does not reference an existing storage"})
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

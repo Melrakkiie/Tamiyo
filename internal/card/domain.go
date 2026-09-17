@@ -2,8 +2,11 @@ package card
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+var ErrStorageNotFound = errors.New("referenced storage does not exist")
 
 type Card struct {
 	ID              int

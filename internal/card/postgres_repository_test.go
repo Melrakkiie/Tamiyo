@@ -238,3 +238,22 @@ func TestPostgresRepository_Create_ReturnsErrorOnInvalidScryfallID(t *testing.T)
 
 	assert.Error(t, err)
 }
+
+func TestPostgresRepository_Create_ReturnsErrStorageNotFoundOnInvalidStorageID(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	invalidStorageID := 9999
+	newCard := Card{
+		Name:            "Sol Ring",
+		ScryfallID:      "f2c8b1a0-1e2d-4c3b-9a8f-7e6d5c4b3a2f",
+		SetCode:         "cmr",
+		CollectorNumber: 322,
+		Foil:            false,
+		StorageID:       &invalidStorageID,
+	}
+
+	_, err := repo.Create(context.Background(), newCard)
+
+	assert.ErrorIs(t, err, ErrStorageNotFound)
+}

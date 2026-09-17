@@ -2,9 +2,11 @@ package card
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 type cardRow struct {
@@ -95,6 +97,10 @@ func (r *PostgresRepository) Create(ctx context.Context, c Card) (Card, error) {
 
 	var created cardRow
 	if err := stmt.GetContext(ctx, &created, row); err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23503" {
+			return Card{}, ErrStorageNotFound
+		}
 		return Card{}, err
 	}
 
