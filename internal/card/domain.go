@@ -7,6 +7,7 @@ import (
 )
 
 var ErrStorageNotFound = errors.New("referenced storage does not exist")
+var ErrNotFound = errors.New("card not found")
 
 type Card struct {
 	ID              int
@@ -22,5 +23,6 @@ type Card struct {
 
 type Repository interface {
 	FindAll(ctx context.Context, storageID *int) ([]Card, error)
+	FindByID(ctx context.Context, id int) (Card, error)
 	Create(ctx context.Context, c Card) (Card, error)
 }

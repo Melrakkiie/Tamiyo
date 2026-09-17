@@ -57,6 +57,7 @@ func (r createCardRequest) toDomain() Card {
 
 type cardService interface {
 	GetAllCards(ctx context.Context, StorageID *int) ([]Card, error)
+	GetCard(ctc context.Context, id int) (Card, error)
 	CreateCard(ctx context.Context, c Card) (Card, error)
 }
 
@@ -70,6 +71,7 @@ func NewHandler(service cardService) *Handler {
 
 func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/cards", h.getCards)
+	router.GET("/cards/:id", h.getCard)
 	router.POST("/cards", h.createCard)
 }
 
@@ -96,6 +98,26 @@ func (h *Handler) getCards(ctx *gin.Context) {
 		response = append(response, toResponse(cd))
 	}
 	ctx.IndentedJSON(http.StatusOK, response)
+}
+
+func (h *Handler) getCard(ctx *gin.Context) {
+	id, err := strconv.Atoi(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	card, err := h.service.GetCard(ctx.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "card not found"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.IndentedJSON(http.StatusCreated, toResponse(card))
 }
 
 func (h *Handler) createCard(ctx *gin.Context) {

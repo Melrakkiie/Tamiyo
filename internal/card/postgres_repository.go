@@ -2,6 +2,7 @@ package card
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"time"
 
@@ -56,8 +57,8 @@ func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
 
 func (r *PostgresRepository) FindAll(ctx context.Context, storageID *int) ([]Card, error) {
 	query := `
-    SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, added, updated
-    FROM tamiyo.cards
+	    SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, added, updated
+	    FROM tamiyo.cards
 	`
 	args := []interface{}{}
 
@@ -79,6 +80,24 @@ func (r *PostgresRepository) FindAll(ctx context.Context, storageID *int) ([]Car
 	}
 
 	return cards, nil
+}
+
+func (r *PostgresRepository) FindByID(ctx context.Context, id int) (Card, error) {
+	query := `
+		SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, added, updated
+	    FROM tamiyo.cards
+		WHERE id = $1
+	`
+
+	var row cardRow
+	if err := r.db.GetContext(ctx, &row, query, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Card{}, ErrNotFound
+		}
+		return Card{}, err
+	}
+
+	return row.toDomain(), nil
 }
 
 func (r *PostgresRepository) Create(ctx context.Context, c Card) (Card, error) {
