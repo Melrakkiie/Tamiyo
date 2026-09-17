@@ -240,3 +240,29 @@ func TestHandler_CreateCard_ReturnsErrorOnServiceFailure(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+func TestHandler_CreateCard_ReturnsBadRequestWhenStorageDoesNotExist(t *testing.T) {
+	service := &fakeService{createErr: ErrStorageNotFound}
+	router := setupRouter(service)
+
+	body := `{
+		"name": "Counterspell",
+		"scryfall_id": "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f",
+		"set_code": "mh2",
+		"collector_number": 267,
+		"foil": false,
+		"storage_id": 9999
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/cards", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	var response map[string]string
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Equal(t, "storage_id does not reference an existing storage", response["error"])
+}
