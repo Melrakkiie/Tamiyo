@@ -28,6 +28,31 @@ CREATE TABLE IF NOT EXISTS tamiyo.cards
     updated          TIMESTAMP WITH TIME ZONE   NOT NULL DEFAULT now()
 );
 
+---------------------
+---- DECK TABLE  ----
+---------------------
+CREATE TABLE IF NOT EXISTS tamiyo.deck
+(
+    id           SERIAL                      PRIMARY KEY,
+    name         text                        NOT NULL,
+    format       text                        NOT NULL,
+    commander_id int                         REFERENCES tamiyo.cards(id) ON DELETE SET NULL,
+    added        TIMESTAMP WITH TIME ZONE    NOT NULL DEFAULT now(),
+    updated      TIMESTAMP WITH TIME ZONE    NOT NULL DEFAULT now()
+);
+
+-----------------------------
+---- CARD_DECK TABLE  ----
+------------------------------
+CREATE TABLE IF NOT EXISTS tamiyo.card_deck
+(
+    card_id    int                         REFERENCES tamiyo.cards(id) ON DELETE CASCADE,
+    deck_id    int                         REFERENCES tamiyo.deck(id) ON DELETE CASCADE,
+    added      TIMESTAMP WITH TIME ZONE    NOT NULL DEFAULT now(),
+    CONSTRAINT card_deck_pkey              PRIMARY KEY (card_id, deck_id)
+);
+
+
 -------------------------
 ---- UPDATED TRIGGER ----
 -------------------------
@@ -45,4 +70,8 @@ CREATE TRIGGER update_storage_modtime
 
 CREATE TRIGGER update_cards_modtime
     BEFORE UPDATE ON tamiyo.cards
+    FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+
+CREATE TRIGGER update_deck_modtime
+    BEFORE UPDATE ON tamiyo.deck
     FOR EACH ROW EXECUTE FUNCTION update_modified_column();

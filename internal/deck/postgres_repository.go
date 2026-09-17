@@ -1,0 +1,67 @@
+package deck
+
+import (
+	"context"
+	"time"
+
+	"github.com/jmoiron/sqlx"
+)
+
+type deckRow struct {
+	ID          int       `db:"id"`
+	Name        string    `db:"name"`
+	Format      string    `db:"format"`
+	CommanderID *int      `db:"commander_id"`
+	CardCount   int       `db:"card_count"`
+	Added       time.Time `db:"added"`
+	Updated     time.Time `db:"updated"`
+}
+
+func (r deckRow) toDomain() Deck {
+	return Deck{
+		ID:          r.ID,
+		Name:        r.Name,
+		Format:      r.Format,
+		CommanderID: r.CommanderID,
+		CardCount:   r.CardCount,
+		Added:       r.Added,
+		Updated:     r.Updated,
+	}
+}
+
+type PostgresRepository struct {
+	db *sqlx.DB
+}
+
+func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
+	return &PostgresRepository{db: db}
+}
+
+func (r *PostgresRepository) FindAll(ctx context.Context) ([]Deck, error) {
+	query := `
+		SELECT
+		    d.id AS id,
+		    d.name AS name,
+		    d.format AS format,
+			d.commander_id as commander_id,
+		    d.added AS added,
+			d.updated as updated,
+		    COUNT(cd.card_id) AS card_count
+		FROM tamiyo.deck d
+		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id
+		GROUP BY d.id, d.name, d.format, d.commander_id, d.added, d.updated
+		ORDER BY d.updated DESC
+	`
+
+	var rows []deckRow
+	if err := r.db.SelectContext(ctx, &rows, query); err != nil {
+		return nil, err
+	}
+
+	decks := make([]Deck, 0, len(rows))
+	for _, row := range rows {
+		decks = append(decks, row.toDomain())
+	}
+
+	return decks, nil
+}

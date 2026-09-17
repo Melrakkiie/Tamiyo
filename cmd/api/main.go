@@ -10,6 +10,7 @@ import (
 
 	"Melrakkiie/Tamiyo/internal/card"
 	"Melrakkiie/Tamiyo/internal/config"
+	"Melrakkiie/Tamiyo/internal/deck"
 	"Melrakkiie/Tamiyo/internal/storage"
 )
 
@@ -45,9 +46,14 @@ func main() {
 	storageService := storage.NewService(storageRepo)
 	storageHandler := storage.NewHandler(storageService)
 
+	deckRepo := deck.NewPostgresRepository(db)
+	deckService := deck.NewService(deckRepo)
+	deckHandler := deck.NewHandler(deckService)
+
 	router := gin.Default()
 	cardHandler.RegisterRoutes(router)
 	storageHandler.RegisterRoutes(router)
+	deckHandler.RegisterRoutes(router)
 
 	logger.Info("starting server", zap.String("port", cfg.AppPort))
 	if err := router.Run(":" + cfg.AppPort); err != nil {
