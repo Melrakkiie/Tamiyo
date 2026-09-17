@@ -149,7 +149,7 @@ func TestService_UpdateStorage_AppliesPartialChangesOnExistingStorage(t *testing
 
 	require.NoError(t, err)
 	assert.Equal(t, "Vintage Collection Renamed", result.Name)
-	assert.Equal(t, "binder", result.Type) // inchangé, non fourni dans la requête
+	assert.Equal(t, "binder", result.Type)
 }
 
 func TestService_UpdateStorage_ReturnsNotFoundWhenStorageDoesNotExist(t *testing.T) {

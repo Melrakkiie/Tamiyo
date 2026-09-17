@@ -20,6 +20,9 @@ type fakeRepository struct {
 	createdCard Card
 	createErr   error
 
+	updatedCard Card
+	updateErr   error
+
 	deleteErr error
 }
 
@@ -41,6 +44,14 @@ func (f *fakeRepository) Create(ctx context.Context, c Card) (Card, error) {
 	}
 	f.createdCard = c
 	c.ID = 1
+	return c, nil
+}
+
+func (f *fakeRepository) Update(ctx context.Context, c Card) (Card, error) {
+	if f.updateErr != nil {
+		return Card{}, f.updateErr
+	}
+	f.updatedCard = c
 	return c, nil
 }
 
@@ -143,6 +154,46 @@ func TestService_CreateCard_PropagatesRepositoryError(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Equal(t, Card{}, result)
+}
+
+func TestService_UpdateCard_AppliesPartialChangesOnExistingCard(t *testing.T) {
+	existing := Card{ID: 1, Name: "Black Lotus", SetCode: "lea"}
+	repo := &fakeRepository{findByIDCard: existing}
+	service := NewService(repo)
+
+	newName := "Renamed"
+	req := updateCardRequest{Name: &newName}
+
+	result, err := service.UpdateCard(context.Background(), 1, req)
+
+	require.NoError(t, err)
+	assert.Equal(t, "Renamed", result.Name)
+	assert.Equal(t, "lea", result.SetCode)
+}
+
+func TestService_UpdateCard_ReturnsNotFoundWhenCardDoesNotExist(t *testing.T) {
+	repo := &fakeRepository{findByIDErr: ErrNotFound}
+	service := NewService(repo)
+
+	newName := "Doesn't matter"
+	req := updateCardRequest{Name: &newName}
+
+	_, err := service.UpdateCard(context.Background(), 999, req)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestService_UpdateCard_PropagatesRepositoryUpdateError(t *testing.T) {
+	existing := Card{ID: 1, Name: "Black Lotus", SetCode: "lea"}
+	repo := &fakeRepository{findByIDCard: existing, updateErr: errors.New("update failed")}
+	service := NewService(repo)
+
+	newName := "New Name"
+	req := updateCardRequest{Name: &newName}
+
+	_, err := service.UpdateCard(context.Background(), 1, req)
+
+	assert.Error(t, err)
 }
 
 func TestService_DeleteCard_PropagatesRepositorySuccess(t *testing.T) {

@@ -24,6 +24,9 @@ type fakeService struct {
 
 	createErr error
 
+	updateCard Card
+	updateErr  error
+
 	deleteErr error
 }
 
@@ -45,6 +48,13 @@ func (f *fakeService) CreateCard(ctx context.Context, c Card) (Card, error) {
 	}
 	c.ID = 1
 	return c, nil
+}
+
+func (f *fakeService) UpdateCard(ctx context.Context, id int, req updateCardRequest) (Card, error) {
+	if f.updateErr != nil {
+		return Card{}, f.updateErr
+	}
+	return f.updateCard, nil
 }
 
 func (f *fakeService) DeleteCard(ctx context.Context, id int) error {
@@ -158,6 +168,67 @@ func TestHandler_GetCard_ReturnsErrorOnServiceFailure(t *testing.T) {
 	router := setupRouter(service)
 
 	req := httptest.NewRequest(http.MethodGet, "/cards/1", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestHandler_UpdateCard_ReturnsUpdatedCard(t *testing.T) {
+	service := &fakeService{updateCard: Card{ID: 1, Name: "Renamed", SetCode: "lea", Foil: false}}
+	router := setupRouter(service)
+
+	body := `{"name": "Renamed"}`
+
+	req := httptest.NewRequest(http.MethodPatch, "/cards/1", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var response cardResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Equal(t, "Renamed", response.Name)
+}
+
+func TestHandler_UpdateCard_ReturnsBadRequestOnInvalidID(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	body := `{"name": "Renamed"}`
+
+	req := httptest.NewRequest(http.MethodPatch, "/cards/abc", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_UpdateCard_ReturnsNotFoundWhenCardDoesNotExist(t *testing.T) {
+	service := &fakeService{updateErr: ErrNotFound}
+	router := setupRouter(service)
+
+	body := `{"name": "Renamed"}`
+
+	req := httptest.NewRequest(http.MethodPatch, "/cards/999", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestHandler_UpdateCard_ReturnsErrorOnServiceFailure(t *testing.T) {
+	service := &fakeService{updateErr: errors.New("update failed")}
+	router := setupRouter(service)
+
+	body := `{"name": "Renamed"}`
+
+	req := httptest.NewRequest(http.MethodPatch, "/cards/1", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 

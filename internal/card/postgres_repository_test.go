@@ -281,6 +281,60 @@ func TestPostgresRepository_Create_ReturnsErrStorageNotFoundOnInvalidStorageID(t
 	assert.ErrorIs(t, err, ErrStorageNotFound)
 }
 
+func TestPostgresRepository_Update_UpdatesAndReturnsCard(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	seedCards(t, db, []Card{
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: nil},
+	})
+
+	existing, err := repo.FindByID(context.Background(), 1)
+	require.NoError(t, err)
+
+	existing.Name = "Renamed Card"
+	updated, err := repo.Update(context.Background(), existing)
+
+	require.NoError(t, err)
+	assert.Equal(t, "Renamed Card", updated.Name)
+	assert.Equal(t, "lea", updated.SetCode)
+
+	refetched, err := repo.FindByID(context.Background(), 1)
+	require.NoError(t, err)
+	assert.Equal(t, "Renamed Card", refetched.Name)
+}
+
+func TestPostgresRepository_Update_ReturnsErrNotFoundWhenCardDoesNotExist(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	nonExistent := Card{ID: 999, Name: "Non existent", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: nil}
+
+	_, err := repo.Update(context.Background(), nonExistent)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestPostgresRepository_Update_RefreshesUpdatedTimestamp(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	seedCards(t, db, []Card{
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: nil},
+	})
+
+	existing, err := repo.FindByID(context.Background(), 1)
+	require.NoError(t, err)
+
+	time.Sleep(10 * time.Millisecond)
+
+	existing.Name = "Renamed"
+	updated, err := repo.Update(context.Background(), existing)
+
+	require.NoError(t, err)
+	assert.True(t, updated.Updated.After(existing.Updated))
+}
+
 func TestPostgresRepository_Delete_RemovesCard(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewPostgresRepository(db)
@@ -309,7 +363,6 @@ func TestPostgresRepository_Delete_ReturnsErrNotFoundWhenCardDoesNotExist(t *tes
 func TestPostgresRepository_Delete_DoesNotAffectOtherCards(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewPostgresRepository(db)
-	seedStorages(t, db)
 
 	seedCards(t, db, []Card{
 		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: nil},
