@@ -19,12 +19,22 @@ type fakeService struct {
 	getAllErr error
 	storageID *int
 
+	getCard    Card
+	getCardErr error
+
 	createErr error
 }
 
 func (f *fakeService) GetAllCards(ctx context.Context, storageID *int) ([]Card, error) {
 	f.storageID = storageID
 	return f.cards, f.getAllErr
+}
+
+func (f *fakeService) GetCard(ctx context.Context, id int) (Card, error) {
+	if f.getCardErr != nil {
+		return Card{}, f.getCardErr
+	}
+	return f.getCard, nil
 }
 
 func (f *fakeService) CreateCard(ctx context.Context, c Card) (Card, error) {
@@ -93,6 +103,55 @@ func TestHandler_GetCards_ReturnsErrorOnServiceFailure(t *testing.T) {
 	router := setupRouter(service)
 
 	req := httptest.NewRequest(http.MethodGet, "/cards", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestHandler_GetCard_ReturnsCardAsJSON(t *testing.T) {
+	service := &fakeService{getCard: Card{ID: 1, Name: "Black Lotus", SetCode: "lea", Foil: false}}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/cards/1", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	var response cardResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Equal(t, "Black Lotus", response.Name)
+}
+
+func TestHandler_GetCard_ReturnsBadRequestOnInvalidID(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/cards/abc", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_GetCard_ReturnsNotFoundWhenCardDoesNotExist(t *testing.T) {
+	service := &fakeService{getCardErr: ErrNotFound}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/cards/999", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestHandler_GetCard_ReturnsErrorOnServiceFailure(t *testing.T) {
+	service := &fakeService{getCardErr: errors.New("database unreachable")}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/cards/1", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 

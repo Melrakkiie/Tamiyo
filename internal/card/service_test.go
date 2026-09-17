@@ -14,6 +14,9 @@ type fakeRepository struct {
 	findAllErr error
 	storageID  *int
 
+	findByIDCard Card
+	findByIDErr  error
+
 	createdCard Card
 	createErr   error
 }
@@ -21,6 +24,13 @@ type fakeRepository struct {
 func (f *fakeRepository) FindAll(ctx context.Context, storageID *int) ([]Card, error) {
 	f.storageID = storageID
 	return f.cards, f.findAllErr
+}
+
+func (f *fakeRepository) FindByID(ctx context.Context, id int) (Card, error) {
+	if f.findByIDErr != nil {
+		return Card{}, f.findByIDErr
+	}
+	return f.findByIDCard, nil
 }
 
 func (f *fakeRepository) Create(ctx context.Context, c Card) (Card, error) {
@@ -66,6 +76,26 @@ func TestService_GetAllCards_PropagatesRepositoryError(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
+}
+
+func TestService_GetCard_ReturnsCardFromRepository(t *testing.T) {
+	expected := Card{ID: 1, Name: "Black Lotus", SetCode: "lea"}
+	repo := &fakeRepository{findByIDCard: expected}
+	service := NewService(repo)
+
+	result, err := service.GetCard(context.Background(), 1)
+
+	require.NoError(t, err)
+	assert.Equal(t, expected, result)
+}
+
+func TestService_GetCard_PropagatesNotFoundError(t *testing.T) {
+	repo := &fakeRepository{findByIDErr: ErrNotFound}
+	service := NewService(repo)
+
+	_, err := service.GetCard(context.Background(), 999)
+
+	assert.ErrorIs(t, err, ErrNotFound)
 }
 
 func TestService_CreateCard_PassesCardUnchangedToRepository(t *testing.T) {

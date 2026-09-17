@@ -142,6 +142,31 @@ func TestPostgresRepository_FindAll_ReturnsEmptySliceWhenNoStorageMatches(t *tes
 	assert.Empty(t, result)
 }
 
+func TestPostgresRepository_FindByID_ReturnsCard(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db)
+
+	testID := 1
+	seedCards(t, db, []Card{
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: &testID},
+	})
+
+	result, err := repo.FindByID(context.Background(), 1)
+
+	require.NoError(t, err)
+	assert.Equal(t, "Black Lotus", result.Name)
+}
+
+func TestPostgresRepository_FindByID_ReturnsErrNotFoundWhenMissing(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	_, err := repo.FindByID(context.Background(), 999)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
 func TestPostgresRepository_Create_InsertsAndReturnsCardWithID(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewPostgresRepository(db)
