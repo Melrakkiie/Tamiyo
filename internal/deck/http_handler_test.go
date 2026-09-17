@@ -189,3 +189,26 @@ func TestHandler_CreateDeck_ReturnsErrorOnServiceFailure(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+func TestHandler_CreateDeck_ReturnsBadRequestWhenCommanderDoesNotExist(t *testing.T) {
+	service := &fakeService{createErr: ErrCommanderNotFound}
+	router := setupRouter(service)
+
+	body := `{
+		"name": "Otterly Playful",
+		"format": "commander",
+		"storage_id": 9999
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/deck", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	var response map[string]string
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Equal(t, "commander_id does not reference an existing card", response["error"])
+}
