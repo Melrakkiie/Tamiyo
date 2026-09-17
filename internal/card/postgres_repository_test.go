@@ -16,10 +16,10 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
-func setupTestDB(t *testing.T) *sqlx.DB {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	t.Cleanup(cancel)
+var testDB *sqlx.DB
+
+func TestMain(m *testing.M) {
+	ctx := context.Background()
 
 	pgContainer, err := postgres.Run(ctx,
 		"postgres:16",
@@ -27,42 +27,65 @@ func setupTestDB(t *testing.T) *sqlx.DB {
 		postgres.WithUsername("login"),
 		postgres.WithPassword("password"),
 	)
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		require.NoError(t, pgContainer.Terminate(ctx))
-	})
+	if err != nil {
+		panic(err)
+	}
+	defer func() {
+		_ = pgContainer.Terminate(ctx)
+	}()
 
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
+	if err != nil {
+		panic(err)
+	}
 
 	var db *sqlx.DB
-	require.Eventually(t, func() bool {
-		db, err = sqlx.Connect("postgres", connStr)
-		return err == nil
-	}, 15*time.Second, 500*time.Millisecond, "could not connect to database: %v", err)
+	var connectErr error
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		db, connectErr = sqlx.Connect("postgres", connStr)
+		if connectErr == nil {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	if connectErr != nil {
+		panic("could not connect to database: " + connectErr.Error())
+	}
+	defer db.Close()
 
-	t.Cleanup(func() {
-		db.Close()
-	})
+	schema, err := os.ReadFile(schemaFilePath())
+	if err != nil {
+		panic(err)
+	}
+	if _, err := db.Exec(string(schema)); err != nil {
+		panic(err)
+	}
 
-	schema, err := os.ReadFile(schemaFilePath(t))
-	require.NoError(t, err)
+	testDB = db
 
-	_, err = db.Exec(string(schema))
-	require.NoError(t, err)
-
-	return db
+	os.Exit(m.Run())
 }
 
-func schemaFilePath(t *testing.T) string {
-	t.Helper()
-
+func schemaFilePath() string {
 	wd, err := os.Getwd()
-	require.NoError(t, err)
-
+	if err != nil {
+		panic(err)
+	}
 	root := filepath.Join(wd, "..", "..")
 	return filepath.Join(root, "_devops", "database", "createDatabaseTables.sql")
+}
+
+func getTestDB(t *testing.T) *sqlx.DB {
+	t.Helper()
+
+	_, err := testDB.Exec(`
+		TRUNCATE TABLE tamiyo.card_deck, tamiyo.deck, tamiyo.cards, tamiyo.storage
+		RESTART IDENTITY CASCADE
+	`)
+	require.NoError(t, err)
+
+	return testDB
 }
 
 func seedStorages(t *testing.T, db *sqlx.DB) {
@@ -90,7 +113,7 @@ func seedCards(t *testing.T, db *sqlx.DB, cards []Card) {
 }
 
 func TestPostgresRepository_FindAll_ReturnsAllCardsWhenNoFilter(t *testing.T) {
-	db := setupTestDB(t)
+	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db)
 
@@ -107,7 +130,7 @@ func TestPostgresRepository_FindAll_ReturnsAllCardsWhenNoFilter(t *testing.T) {
 }
 
 func TestPostgresRepository_FindAll_FiltersByStorageID(t *testing.T) {
-	db := setupTestDB(t)
+	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db)
 
@@ -126,7 +149,7 @@ func TestPostgresRepository_FindAll_FiltersByStorageID(t *testing.T) {
 }
 
 func TestPostgresRepository_FindAll_ReturnsEmptySliceWhenNoStorageMatches(t *testing.T) {
-	db := setupTestDB(t)
+	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db)
 
@@ -143,7 +166,7 @@ func TestPostgresRepository_FindAll_ReturnsEmptySliceWhenNoStorageMatches(t *tes
 }
 
 func TestPostgresRepository_FindByID_ReturnsCard(t *testing.T) {
-	db := setupTestDB(t)
+	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
 
 	seedCards(t, db, []Card{
@@ -157,7 +180,7 @@ func TestPostgresRepository_FindByID_ReturnsCard(t *testing.T) {
 }
 
 func TestPostgresRepository_FindByID_ReturnsErrNotFoundWhenMissing(t *testing.T) {
-	db := setupTestDB(t)
+	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
 
 	_, err := repo.FindByID(context.Background(), 999)
@@ -166,7 +189,7 @@ func TestPostgresRepository_FindByID_ReturnsErrNotFoundWhenMissing(t *testing.T)
 }
 
 func TestPostgresRepository_Create_InsertsAndReturnsCardWithID(t *testing.T) {
-	db := setupTestDB(t)
+	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db)
 
@@ -193,7 +216,7 @@ func TestPostgresRepository_Create_InsertsAndReturnsCardWithID(t *testing.T) {
 }
 
 func TestPostgresRepository_Create_InsertsAndReturnsCardWithID_NoStorageID(t *testing.T) {
-	db := setupTestDB(t)
+	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db)
 
@@ -219,7 +242,7 @@ func TestPostgresRepository_Create_InsertsAndReturnsCardWithID_NoStorageID(t *te
 }
 
 func TestPostgresRepository_Create_GeneratesAddedAndUpdatedTimestamps(t *testing.T) {
-	db := setupTestDB(t)
+	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db)
 
@@ -243,7 +266,7 @@ func TestPostgresRepository_Create_GeneratesAddedAndUpdatedTimestamps(t *testing
 }
 
 func TestPostgresRepository_Create_ReturnsErrorOnInvalidScryfallID(t *testing.T) {
-	db := setupTestDB(t)
+	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db)
 
@@ -263,7 +286,7 @@ func TestPostgresRepository_Create_ReturnsErrorOnInvalidScryfallID(t *testing.T)
 }
 
 func TestPostgresRepository_Create_ReturnsErrStorageNotFoundOnInvalidStorageID(t *testing.T) {
-	db := setupTestDB(t)
+	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
 
 	invalidStorageID := 9999
@@ -282,7 +305,7 @@ func TestPostgresRepository_Create_ReturnsErrStorageNotFoundOnInvalidStorageID(t
 }
 
 func TestPostgresRepository_Update_UpdatesAndReturnsCard(t *testing.T) {
-	db := setupTestDB(t)
+	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
 
 	seedCards(t, db, []Card{
@@ -305,7 +328,7 @@ func TestPostgresRepository_Update_UpdatesAndReturnsCard(t *testing.T) {
 }
 
 func TestPostgresRepository_Update_ReturnsErrNotFoundWhenCardDoesNotExist(t *testing.T) {
-	db := setupTestDB(t)
+	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
 
 	nonExistent := Card{ID: 999, Name: "Non existent", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: nil}
@@ -316,7 +339,7 @@ func TestPostgresRepository_Update_ReturnsErrNotFoundWhenCardDoesNotExist(t *tes
 }
 
 func TestPostgresRepository_Update_RefreshesUpdatedTimestamp(t *testing.T) {
-	db := setupTestDB(t)
+	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
 
 	seedCards(t, db, []Card{
@@ -336,7 +359,7 @@ func TestPostgresRepository_Update_RefreshesUpdatedTimestamp(t *testing.T) {
 }
 
 func TestPostgresRepository_Delete_RemovesCard(t *testing.T) {
-	db := setupTestDB(t)
+	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
 
 	seedCards(t, db, []Card{
@@ -352,7 +375,7 @@ func TestPostgresRepository_Delete_RemovesCard(t *testing.T) {
 }
 
 func TestPostgresRepository_Delete_ReturnsErrNotFoundWhenCardDoesNotExist(t *testing.T) {
-	db := setupTestDB(t)
+	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
 
 	err := repo.Delete(context.Background(), 999)
@@ -361,7 +384,7 @@ func TestPostgresRepository_Delete_ReturnsErrNotFoundWhenCardDoesNotExist(t *tes
 }
 
 func TestPostgresRepository_Delete_DoesNotAffectOtherCards(t *testing.T) {
-	db := setupTestDB(t)
+	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
 
 	seedCards(t, db, []Card{
