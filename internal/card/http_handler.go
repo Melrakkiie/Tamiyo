@@ -55,10 +55,42 @@ func (r createCardRequest) toDomain() Card {
 	}
 }
 
+type updateCardRequest struct {
+	Name            *string `json:"name" binding:"omitempty"`
+	ScryfallID      *string `json:"scryfall_id" binding:"omitempty,uuid"`
+	SetCode         *string `json:"set_code" binding:"omitempty"`
+	CollectorNumber *int    `json:"collector_number" binding:"omitempty,gt=0"`
+	Foil            *bool   `json:"foil" binding:"omitempty"`
+	StorageID       *int    `json:"storage_id" binding:"omitempty,gt=0"`
+}
+
+func (r updateCardRequest) applyTo(c Card) Card {
+	if r.Name != nil {
+		c.Name = *r.Name
+	}
+	if r.ScryfallID != nil {
+		c.ScryfallID = *r.ScryfallID
+	}
+	if r.SetCode != nil {
+		c.SetCode = *r.SetCode
+	}
+	if r.CollectorNumber != nil {
+		c.CollectorNumber = *r.CollectorNumber
+	}
+	if r.Foil != nil {
+		c.Foil = *r.Foil
+	}
+	if r.StorageID != nil {
+		c.StorageID = r.StorageID
+	}
+	return c
+}
+
 type cardService interface {
 	GetAllCards(ctx context.Context, StorageID *int) ([]Card, error)
 	GetCard(ctc context.Context, id int) (Card, error)
 	CreateCard(ctx context.Context, c Card) (Card, error)
+	UpdateCard(ctx context.Context, id int, req updateCardRequest) (Card, error)
 	DeleteCard(ctx context.Context, id int) error
 }
 
@@ -74,6 +106,7 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/cards", h.getCards)
 	router.GET("/cards/:id", h.getCard)
 	router.POST("/cards", h.createCard)
+	router.PATCH("/cards/:id", h.updateCard)
 	router.DELETE("/cards/:id", h.deleteCard)
 }
 
@@ -142,6 +175,32 @@ func (h *Handler) createCard(ctx *gin.Context) {
 	}
 
 	ctx.IndentedJSON(http.StatusCreated, toResponse(created))
+}
+
+func (h *Handler) updateCard(ctx *gin.Context) {
+	id, err := strconv.Atoi(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	var req updateCardRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	updated, err := h.service.UpdateCard(ctx.Request.Context(), id, req)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "card not found"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.IndentedJSON(http.StatusOK, toResponse(updated))
 }
 
 func (h *Handler) deleteCard(ctx *gin.Context) {

@@ -38,6 +38,7 @@ func (r cardRow) toDomain() Card {
 
 func toCardRow(c Card) cardRow {
 	return cardRow{
+		ID:              c.ID,
 		Name:            c.Name,
 		ScryfallID:      c.ScryfallID,
 		SetCode:         c.SetCode,
@@ -124,6 +125,32 @@ func (r *PostgresRepository) Create(ctx context.Context, c Card) (Card, error) {
 	}
 
 	return created.toDomain(), nil
+}
+
+func (r *PostgresRepository) Update(ctx context.Context, c Card) (Card, error) {
+	row := toCardRow(c)
+	query := `
+		UPDATE tamiyo.cards
+		SET name = :name, scryfall_id = :scryfall_id, set_code = :set_code, collector_number = :collector_number, foil = :foil, storage_id = :storage_id
+		WHERE id = :id
+		RETURNING id, name, scryfall_id, set_code, collector_number, foil, storage_id, added, updated
+	`
+
+	stmt, err := r.db.PrepareNamedContext(ctx, query)
+	if err != nil {
+		return Card{}, err
+	}
+	defer stmt.Close()
+
+	var updated cardRow
+	if err := stmt.GetContext(ctx, &updated, row); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Card{}, ErrNotFound
+		}
+		return Card{}, err
+	}
+
+	return updated.toDomain(), nil
 }
 
 func (r *PostgresRepository) Delete(ctx context.Context, id int) error {
