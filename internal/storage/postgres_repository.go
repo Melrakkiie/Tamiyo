@@ -75,9 +75,17 @@ func (r *PostgresRepository) FindAll(ctx context.Context) ([]Storage, error) {
 
 func (r *PostgresRepository) FindByID(ctx context.Context, id int) (Storage, error) {
 	query := `
-		SELECT id, name, type, added, updated
+		SELECT
+		    tamiyo.storage.id AS id,
+		    tamiyo.storage.name AS name,
+		    tamiyo.storage.type AS type,
+		    tamiyo.storage.added AS added,
+			tamiyo.storage.updated as updated,
+		    COUNT(tamiyo.cards.id) AS card_count
 		FROM tamiyo.storage
-		WHERE id = $1
+		LEFT JOIN tamiyo.cards ON tamiyo.storage.id = tamiyo.cards.storage_id
+		WHERE tamiyo.storage.id = $1
+		GROUP BY tamiyo.storage.id, tamiyo.storage.name, tamiyo.storage.type, tamiyo.storage.added, tamiyo.storage.updated
 	`
 
 	var row storageRow
@@ -136,4 +144,24 @@ func (r *PostgresRepository) Update(ctx context.Context, s Storage) (Storage, er
 	}
 
 	return updated.toDomain(), nil
+}
+
+func (r *PostgresRepository) Delete(ctx context.Context, id int) error {
+	query := `DELETE FROM tamiyo.storage WHERE id = $1`
+
+	result, err := r.db.ExecContext(ctx, query, id)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return ErrNotFound
+	}
+
+	return nil
 }

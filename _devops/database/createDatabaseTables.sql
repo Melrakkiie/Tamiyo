@@ -23,10 +23,9 @@ CREATE TABLE IF NOT EXISTS tamiyo.cards
     set_code         text                       NOT NULL,
     collector_number int                        NOT NULL,
     foil             bool                       NOT NULL,
-    storage_id       int,
+    storage_id       int                        REFERENCES tamiyo.storage(id) ON DELETE SET NULL,
     added            TIMESTAMP WITH TIME ZONE   NOT NULL DEFAULT now(),
-    updated          TIMESTAMP WITH TIME ZONE   NOT NULL DEFAULT now(),
-    FOREIGN KEY (storage_id) REFERENCES tamiyo.storage(id)
+    updated          TIMESTAMP WITH TIME ZONE   NOT NULL DEFAULT now()
 );
 
 -------------------------
