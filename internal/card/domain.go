@@ -25,4 +25,5 @@ type Repository interface {
 	FindAll(ctx context.Context, storageID *int) ([]Card, error)
 	FindByID(ctx context.Context, id int) (Card, error)
 	Create(ctx context.Context, c Card) (Card, error)
+	Delete(ctx context.Context, id int) error
 }

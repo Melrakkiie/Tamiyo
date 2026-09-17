@@ -23,3 +23,7 @@ func (s *Service) GetCard(ctx context.Context, id int) (Card, error) {
 func (s *Service) CreateCard(ctx context.Context, c Card) (Card, error) {
 	return s.repo.Create(ctx, c)
 }
+
+func (s *Service) DeleteCard(ctx context.Context, id int) error {
+	return s.repo.Delete(ctx, id)
+}

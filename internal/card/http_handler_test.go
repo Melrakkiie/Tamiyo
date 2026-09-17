@@ -23,6 +23,8 @@ type fakeService struct {
 	getCardErr error
 
 	createErr error
+
+	deleteErr error
 }
 
 func (f *fakeService) GetAllCards(ctx context.Context, storageID *int) ([]Card, error) {
@@ -43,6 +45,10 @@ func (f *fakeService) CreateCard(ctx context.Context, c Card) (Card, error) {
 	}
 	c.ID = 1
 	return c, nil
+}
+
+func (f *fakeService) DeleteCard(ctx context.Context, id int) error {
+	return f.deleteErr
 }
 
 func setupRouter(service cardService) *gin.Engine {
@@ -324,4 +330,49 @@ func TestHandler_CreateCard_ReturnsBadRequestWhenStorageDoesNotExist(t *testing.
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 	assert.Equal(t, "storage_id does not reference an existing storage", response["error"])
+}
+
+func TestHandler_DeleteCard_ReturnsNoContent(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/cards/1", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Empty(t, w.Body.Bytes())
+}
+
+func TestHandler_DeleteCard_ReturnsBadRequestOnInvalidID(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/cards/abc", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_DeleteCard_ReturnsNotFoundWhenCardDoesNotExist(t *testing.T) {
+	service := &fakeService{deleteErr: ErrNotFound}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/cards/999", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestHandler_DeleteCard_ReturnsErrorOnServiceFailure(t *testing.T) {
+	service := &fakeService{deleteErr: errors.New("delete failed")}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/cards/1", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }

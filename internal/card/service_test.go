@@ -19,6 +19,8 @@ type fakeRepository struct {
 
 	createdCard Card
 	createErr   error
+
+	deleteErr error
 }
 
 func (f *fakeRepository) FindAll(ctx context.Context, storageID *int) ([]Card, error) {
@@ -40,6 +42,10 @@ func (f *fakeRepository) Create(ctx context.Context, c Card) (Card, error) {
 	f.createdCard = c
 	c.ID = 1
 	return c, nil
+}
+
+func (f *fakeRepository) Delete(ctx context.Context, id int) error {
+	return f.deleteErr
 }
 
 func TestService_GetAllCards_ReturnsCardsFromRepository(t *testing.T) {
@@ -137,4 +143,31 @@ func TestService_CreateCard_PropagatesRepositoryError(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Equal(t, Card{}, result)
+}
+
+func TestService_DeleteCard_PropagatesRepositorySuccess(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	err := service.DeleteCard(context.Background(), 1)
+
+	assert.NoError(t, err)
+}
+
+func TestService_DeleteCard_PropagatesNotFoundError(t *testing.T) {
+	repo := &fakeRepository{deleteErr: ErrNotFound}
+	service := NewService(repo)
+
+	err := service.DeleteCard(context.Background(), 999)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestService_DeleteCard_PropagatesRepositoryError(t *testing.T) {
+	repo := &fakeRepository{deleteErr: errors.New("delete failed")}
+	service := NewService(repo)
+
+	err := service.DeleteCard(context.Background(), 1)
+
+	assert.Error(t, err)
 }

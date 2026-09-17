@@ -59,6 +59,7 @@ type cardService interface {
 	GetAllCards(ctx context.Context, StorageID *int) ([]Card, error)
 	GetCard(ctc context.Context, id int) (Card, error)
 	CreateCard(ctx context.Context, c Card) (Card, error)
+	DeleteCard(ctx context.Context, id int) error
 }
 
 type Handler struct {
@@ -73,6 +74,7 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/cards", h.getCards)
 	router.GET("/cards/:id", h.getCard)
 	router.POST("/cards", h.createCard)
+	router.DELETE("/cards/:id", h.deleteCard)
 }
 
 func (h *Handler) getCards(ctx *gin.Context) {
@@ -140,4 +142,23 @@ func (h *Handler) createCard(ctx *gin.Context) {
 	}
 
 	ctx.IndentedJSON(http.StatusCreated, toResponse(created))
+}
+
+func (h *Handler) deleteCard(ctx *gin.Context) {
+	id, err := strconv.Atoi(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	if err := h.service.DeleteCard(ctx.Request.Context(), id); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "card not found"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.Status(http.StatusNoContent)
 }

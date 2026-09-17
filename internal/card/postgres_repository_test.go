@@ -145,11 +145,9 @@ func TestPostgresRepository_FindAll_ReturnsEmptySliceWhenNoStorageMatches(t *tes
 func TestPostgresRepository_FindByID_ReturnsCard(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewPostgresRepository(db)
-	seedStorages(t, db)
 
-	testID := 1
 	seedCards(t, db, []Card{
-		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: &testID},
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: nil},
 	})
 
 	result, err := repo.FindByID(context.Background(), 1)
@@ -281,4 +279,48 @@ func TestPostgresRepository_Create_ReturnsErrStorageNotFoundOnInvalidStorageID(t
 	_, err := repo.Create(context.Background(), newCard)
 
 	assert.ErrorIs(t, err, ErrStorageNotFound)
+}
+
+func TestPostgresRepository_Delete_RemovesCard(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	seedCards(t, db, []Card{
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: nil},
+	})
+
+	err := repo.Delete(context.Background(), 1)
+
+	require.NoError(t, err)
+
+	_, err = repo.FindByID(context.Background(), 1)
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestPostgresRepository_Delete_ReturnsErrNotFoundWhenCardDoesNotExist(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	err := repo.Delete(context.Background(), 999)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestPostgresRepository_Delete_DoesNotAffectOtherCards(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db)
+
+	seedCards(t, db, []Card{
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: nil},
+		{Name: "Counterspell", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 125, Foil: false, StorageID: nil},
+	})
+
+	err := repo.Delete(context.Background(), 1)
+	require.NoError(t, err)
+
+	remaining, err := repo.FindAll(context.Background(), nil)
+	require.NoError(t, err)
+	require.Len(t, remaining, 1)
+	assert.Equal(t, "Counterspell", remaining[0].Name)
 }
