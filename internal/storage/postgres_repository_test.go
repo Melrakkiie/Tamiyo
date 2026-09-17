@@ -233,3 +233,59 @@ func TestPostgresRepository_Update_RefreshesUpdatedTimestamp(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, updated.Updated.After(existing.Updated))
 }
+
+func TestPostgresRepository_Delete_RemovesStorage(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db)
+
+	err := repo.Delete(context.Background(), 1)
+
+	require.NoError(t, err)
+
+	_, err = repo.FindByID(context.Background(), 1)
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestPostgresRepository_Delete_ReturnsErrNotFoundWhenStorageDoesNotExist(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	err := repo.Delete(context.Background(), 999)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestPostgresRepository_Delete_DoesNotAffectOtherStorages(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db)
+
+	err := repo.Delete(context.Background(), 1)
+	require.NoError(t, err)
+
+	remaining, err := repo.FindAll(context.Background())
+	require.NoError(t, err)
+	require.Len(t, remaining, 1)
+	assert.Equal(t, "Red Deck Wins", remaining[0].Name)
+}
+
+func TestPostgresRepository_Delete_SetsCardStorageIDToNull(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db)
+
+	_, err := db.Exec(`
+		INSERT INTO tamiyo.cards (name, scryfall_id, set_code, collector_number, foil, storage_id)
+		VALUES ('Black Lotus', 'bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd', 'lea', 232, false, 1)
+	`)
+	require.NoError(t, err)
+
+	err = repo.Delete(context.Background(), 1)
+	require.NoError(t, err)
+
+	var storageID *int
+	err = db.Get(&storageID, `SELECT storage_id FROM tamiyo.cards WHERE name = 'Black Lotus'`)
+	require.NoError(t, err)
+	assert.Nil(t, storageID)
+}

@@ -21,6 +21,8 @@ type fakeRepository struct {
 
 	updatedStorage Storage
 	updateErr      error
+
+	deleteErr error
 }
 
 func (f *fakeRepository) FindAll(ctx context.Context) ([]Storage, error) {
@@ -49,6 +51,10 @@ func (f *fakeRepository) Update(ctx context.Context, storage Storage) (Storage, 
 	}
 	f.updatedStorage = storage
 	return storage, nil
+}
+
+func (f *fakeRepository) Delete(ctx context.Context, id int) error {
+	return f.deleteErr
 }
 
 func TestService_GetAllStorages_ReturnsStoragesFromRepository(t *testing.T) {
@@ -167,6 +173,33 @@ func TestService_UpdateStorage_PropagatesRepositoryUpdateError(t *testing.T) {
 	req := updateStorageRequest{Name: &newName}
 
 	_, err := service.UpdateStorage(context.Background(), 1, req)
+
+	assert.Error(t, err)
+}
+
+func TestService_DeleteStorage_PropagatesRepositorySuccess(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	err := service.DeleteStorage(context.Background(), 1)
+
+	assert.NoError(t, err)
+}
+
+func TestService_DeleteStorage_PropagatesNotFoundError(t *testing.T) {
+	repo := &fakeRepository{deleteErr: ErrNotFound}
+	service := NewService(repo)
+
+	err := service.DeleteStorage(context.Background(), 999)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestService_DeleteStorage_PropagatesRepositoryError(t *testing.T) {
+	repo := &fakeRepository{deleteErr: errors.New("delete failed")}
+	service := NewService(repo)
+
+	err := service.DeleteStorage(context.Background(), 1)
 
 	assert.Error(t, err)
 }

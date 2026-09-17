@@ -25,6 +25,8 @@ type fakeService struct {
 
 	updateStorage Storage
 	updateErr     error
+
+	deleteErr error
 }
 
 func (f *fakeService) GetAllStorages(ctx context.Context) ([]Storage, error) {
@@ -51,6 +53,10 @@ func (f *fakeService) UpdateStorage(ctx context.Context, id int, req updateStora
 		return Storage{}, f.updateErr
 	}
 	return f.updateStorage, nil
+}
+
+func (f *fakeService) DeleteStorage(ctx context.Context, id int) error {
+	return f.deleteErr
 }
 
 func setupRouter(service storageService) *gin.Engine {
@@ -255,6 +261,51 @@ func TestHandler_UpdateStorage_ReturnsErrorOnServiceFailure(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPatch, "/storage/1", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestHandler_DeleteStorage_ReturnsNoContent(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/storage/1", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Empty(t, w.Body.Bytes())
+}
+
+func TestHandler_DeleteStorage_ReturnsBadRequestOnInvalidID(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/storage/abc", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_DeleteStorage_ReturnsNotFoundWhenStorageDoesNotExist(t *testing.T) {
+	service := &fakeService{deleteErr: ErrNotFound}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/storage/999", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestHandler_DeleteStorage_ReturnsErrorOnServiceFailure(t *testing.T) {
+	service := &fakeService{deleteErr: errors.New("delete failed")}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/storage/1", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
