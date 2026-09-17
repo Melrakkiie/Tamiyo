@@ -2,7 +2,9 @@ package deck
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -31,6 +33,7 @@ func toResponse(d Deck) deckResponse {
 
 type deckService interface {
 	GetAllDecks(ctx context.Context) ([]Deck, error)
+	GetDeck(ctx context.Context, id int) (Deck, error)
 }
 
 type Handler struct {
@@ -43,6 +46,7 @@ func NewHandler(service deckService) *Handler {
 
 func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/deck", h.getDecks)
+	router.GET("/deck/:id", h.getDeck)
 }
 
 func (h *Handler) getDecks(ctx *gin.Context) {
@@ -57,4 +61,24 @@ func (h *Handler) getDecks(ctx *gin.Context) {
 		response = append(response, toResponse(d))
 	}
 	ctx.IndentedJSON(http.StatusOK, response)
+}
+
+func (h *Handler) getDeck(ctx *gin.Context) {
+	id, err := strconv.Atoi(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	deck, err := h.service.GetDeck(ctx.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.IndentedJSON(http.StatusCreated, toResponse(deck))
 }

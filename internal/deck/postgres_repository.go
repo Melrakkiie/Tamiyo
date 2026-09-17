@@ -2,6 +2,8 @@ package deck
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -64,4 +66,31 @@ func (r *PostgresRepository) FindAll(ctx context.Context) ([]Deck, error) {
 	}
 
 	return decks, nil
+}
+
+func (r *PostgresRepository) FindByID(ctx context.Context, id int) (Deck, error) {
+	query := `
+		SELECT
+		    d.id AS id,
+		    d.name AS name,
+		    d.format AS format,
+			d.commander_id as commander_id,
+		    d.added AS added,
+			d.updated as updated,
+		    COUNT(cd.card_id) AS card_count
+		FROM tamiyo.deck d
+		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id
+		WHERE d.id = $1
+		GROUP BY d.id, d.name, d.format, d.commander_id, d.added, d.updated
+	`
+
+	var row deckRow
+	if err := r.db.GetContext(ctx, &row, query, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Deck{}, ErrNotFound
+		}
+		return Deck{}, err
+	}
+
+	return row.toDomain(), nil
 }

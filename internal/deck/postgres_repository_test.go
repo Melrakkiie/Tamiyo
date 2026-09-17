@@ -154,3 +154,23 @@ func TestPostgresRepository_FindAll_ReturnsZeroCardCountForEmptyStorage(t *testi
 		assert.Equal(t, 0, d.CardCount)
 	}
 }
+
+func TestPostgresRepository_FindByID_ReturnsDeck(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db)
+
+	result, err := repo.FindByID(context.Background(), 1)
+
+	require.NoError(t, err)
+	assert.Equal(t, "Otterly Playful", result.Name)
+}
+
+func TestPostgresRepository_FindByID_ReturnsErrNotFoundWhenMissing(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	_, err := repo.FindByID(context.Background(), 999)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
