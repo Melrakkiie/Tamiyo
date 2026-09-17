@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+var ErrCommanderNotFound = errors.New("referenced commander does not exist")
 var ErrNotFound = errors.New("deck not found")
 
 type Deck struct {
@@ -21,4 +22,5 @@ type Deck struct {
 type Repository interface {
 	FindAll(ctx context.Context) ([]Deck, error)
 	FindByID(ctx context.Context, id int) (Deck, error)
+	Create(ctx context.Context, d Deck) (Deck, error)
 }

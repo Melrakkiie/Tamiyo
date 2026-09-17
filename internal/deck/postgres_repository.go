@@ -31,6 +31,15 @@ func (r deckRow) toDomain() Deck {
 	}
 }
 
+func toDeckRow(d Deck) deckRow {
+	return deckRow{
+		ID:          d.ID,
+		Name:        d.Name,
+		Format:      d.Format,
+		CommanderID: d.CommanderID,
+	}
+}
+
 type PostgresRepository struct {
 	db *sqlx.DB
 }
@@ -93,4 +102,25 @@ func (r *PostgresRepository) FindByID(ctx context.Context, id int) (Deck, error)
 	}
 
 	return row.toDomain(), nil
+}
+
+func (r *PostgresRepository) Create(ctx context.Context, d Deck) (Deck, error) {
+	row := toDeckRow(d)
+	query := `
+    	INSERT INTO tamiyo.deck (name, format, commander_id)
+     	VALUES (:name, :format, :commander_id)
+      	RETURNING id, name, format, commander_id, added, updated
+	`
+	stmt, err := r.db.PrepareNamedContext(ctx, query)
+	if err != nil {
+		return Deck{}, err
+	}
+	defer stmt.Close()
+
+	var created deckRow
+	if err := stmt.GetContext(ctx, &created, row); err != nil {
+		return Deck{}, err
+	}
+
+	return created.toDomain(), nil
 }

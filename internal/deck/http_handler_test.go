@@ -1,6 +1,7 @@
 package deck
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,8 @@ type fakeService struct {
 
 	getDeck    Deck
 	getDeckErr error
+
+	createErr error
 }
 
 func (f *fakeService) GetAllDecks(ctx context.Context) ([]Deck, error) {
@@ -30,6 +33,14 @@ func (f *fakeService) GetDeck(ctx context.Context, id int) (Deck, error) {
 		return Deck{}, f.getDeckErr
 	}
 	return f.getDeck, nil
+}
+
+func (f *fakeService) CreateDeck(ctx context.Context, d Deck) (Deck, error) {
+	if f.createErr != nil {
+		return Deck{}, f.createErr
+	}
+	d.ID = 1
+	return d, nil
 }
 
 func setupRouter(service deckService) *gin.Engine {
@@ -115,6 +126,64 @@ func TestHandler_GetDeck_ReturnsErrorOnServiceFailure(t *testing.T) {
 	router := setupRouter(service)
 
 	req := httptest.NewRequest(http.MethodGet, "/deck/1", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestHandler_CreateDeck_ReturnsCreatedDeck(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	body := `{
+		"name": "Otterly Playful",
+		"format": "commander"
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/deck", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	var response deckResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Equal(t, 1, response.ID)
+	assert.Equal(t, "Otterly Playful", response.Name)
+	assert.Equal(t, "commander", response.Format)
+}
+
+func TestHandler_CreateDeck_ReturnsBadRequestOnMissingRequiredField(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	// missing "name"
+	body := `{
+		"format": "commander"
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/deck", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_CreateDeck_ReturnsErrorOnServiceFailure(t *testing.T) {
+	service := &fakeService{createErr: errors.New("insert failed")}
+	router := setupRouter(service)
+
+	body := `{
+		"name": "Otterly Playful",
+		"format": "commander"
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/deck", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 

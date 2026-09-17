@@ -17,3 +17,7 @@ func (s *Service) GetAllDecks(ctx context.Context) ([]Deck, error) {
 func (s *Service) GetDeck(ctx context.Context, id int) (Deck, error) {
 	return s.repo.FindByID(ctx, id)
 }
+
+func (s *Service) CreateDeck(ctx context.Context, d Deck) (Deck, error) {
+	return s.repo.Create(ctx, d)
+}

@@ -174,3 +174,42 @@ func TestPostgresRepository_FindByID_ReturnsErrNotFoundWhenMissing(t *testing.T)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
+
+func TestPostgresRepository_Create_InsertsAndReturnsDeckWithID(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	newDeck := Deck{
+		Name:   "Otterly Playful",
+		Format: "commander",
+	}
+
+	created, err := repo.Create(context.Background(), newDeck)
+
+	require.NoError(t, err)
+	assert.NotZero(t, created.ID)
+	assert.Equal(t, "Otterly Playful", created.Name)
+
+	all, err := repo.FindAll(context.Background())
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	assert.Equal(t, created.ID, all[0].ID)
+}
+
+func TestPostgresRepository_Create_GeneratesAddedAndUpdatedTimestamps(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	before := time.Now()
+	newDeck := Deck{
+		Name:   "Otterly Playful",
+		Format: "commander",
+	}
+
+	created, err := repo.Create(context.Background(), newDeck)
+	after := time.Now()
+
+	require.NoError(t, err)
+	assert.WithinRange(t, created.Added, before, after)
+	assert.WithinRange(t, created.Updated, before, after)
+}

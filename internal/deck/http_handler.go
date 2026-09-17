@@ -31,9 +31,24 @@ func toResponse(d Deck) deckResponse {
 	}
 }
 
+type createDeckRequest struct {
+	Name        string `json:"name" binding:"required"`
+	Format      string `json:"format" binding:"required"`
+	CommanderID *int   `json:"commander_id" binding:"omitempty,gt=0"`
+}
+
+func (r createDeckRequest) toDomain() Deck {
+	return Deck{
+		Name:        r.Name,
+		Format:      r.Format,
+		CommanderID: r.CommanderID,
+	}
+}
+
 type deckService interface {
 	GetAllDecks(ctx context.Context) ([]Deck, error)
 	GetDeck(ctx context.Context, id int) (Deck, error)
+	CreateDeck(ctx context.Context, d Deck) (Deck, error)
 }
 
 type Handler struct {
@@ -47,6 +62,7 @@ func NewHandler(service deckService) *Handler {
 func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/deck", h.getDecks)
 	router.GET("/deck/:id", h.getDeck)
+	router.POST("/deck", h.createDeck)
 }
 
 func (h *Handler) getDecks(ctx *gin.Context) {
@@ -81,4 +97,26 @@ func (h *Handler) getDeck(ctx *gin.Context) {
 	}
 
 	ctx.IndentedJSON(http.StatusCreated, toResponse(deck))
+}
+
+func (h *Handler) createDeck(ctx *gin.Context) {
+	var req createDeckRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	newDeck := req.toDomain()
+
+	created, err := h.service.CreateDeck(ctx.Request.Context(), newDeck)
+	if err != nil {
+		if errors.Is(err, ErrCommanderNotFound) {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "commander_id does not reference an existing card"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.IndentedJSON(http.StatusCreated, toResponse(created))
 }
