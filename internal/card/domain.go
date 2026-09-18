@@ -24,8 +24,12 @@ type Card struct {
 type CardFilter struct {
 	StorageID *int
 	Name      string
-	Page      int
-	Limit     int
+
+	SortField string
+	SortDesc  bool
+
+	Page  int
+	Limit int
 }
 
 type Repository interface {

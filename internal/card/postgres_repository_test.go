@@ -225,6 +225,79 @@ func TestPostgresRepository_FindAll_PaginatesResults(t *testing.T) {
 	}
 }
 
+func TestPostgresRepository_FindAll_SortsByNameAscending(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	seedCards(t, db, []Card{
+		{Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: "129", Foil: true},
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false},
+		{Name: "Counterspell", ScryfallID: "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f", SetCode: "mh2", CollectorNumber: "267", Foil: false},
+	})
+
+	result, _, err := repo.FindAll(context.Background(), CardFilter{SortField: "name", SortDesc: false, Page: 1, Limit: 25})
+
+	require.NoError(t, err)
+	require.Len(t, result, 3)
+	assert.Equal(t, "Black Lotus", result[0].Name)
+	assert.Equal(t, "Counterspell", result[1].Name)
+	assert.Equal(t, "Lightning Bolt", result[2].Name)
+}
+
+func TestPostgresRepository_FindAll_SortsByNameDescending(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	seedCards(t, db, []Card{
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false},
+		{Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: "129", Foil: true},
+	})
+
+	result, _, err := repo.FindAll(context.Background(), CardFilter{SortField: "name", SortDesc: true, Page: 1, Limit: 25})
+
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	assert.Equal(t, "Lightning Bolt", result[0].Name)
+	assert.Equal(t, "Black Lotus", result[1].Name)
+}
+
+func TestPostgresRepository_FindAll_UsesIDAsTieBreakerForIdenticalSortValues(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	seedCards(t, db, []Card{
+		{Name: "Card A", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "test", CollectorNumber: "1", Foil: false},
+		{Name: "Card B", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "test", CollectorNumber: "2", Foil: false},
+		{Name: "Card C", ScryfallID: "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f", SetCode: "test", CollectorNumber: "3", Foil: false},
+	})
+
+	firstCall, _, err := repo.FindAll(context.Background(), CardFilter{SortField: "updated", SortDesc: true, Page: 1, Limit: 25})
+	require.NoError(t, err)
+
+	secondCall, _, err := repo.FindAll(context.Background(), CardFilter{SortField: "updated", SortDesc: true, Page: 1, Limit: 25})
+	require.NoError(t, err)
+
+	require.Len(t, firstCall, 3)
+	require.Len(t, secondCall, 3)
+	for i := range firstCall {
+		assert.Equal(t, firstCall[i].ID, secondCall[i].ID)
+	}
+}
+
+func TestPostgresRepository_FindAll_DefaultsToUpdatedDescendingWhenSortFieldEmpty(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	seedCards(t, db, []Card{
+		{Name: "First", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "test", CollectorNumber: "1", Foil: false},
+	})
+
+	result, _, err := repo.FindAll(context.Background(), CardFilter{Page: 1, Limit: 25})
+
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+}
+
 func TestPostgresRepository_FindByID_ReturnsCard(t *testing.T) {
 	db := getTestDB(t)
 	repo := NewPostgresRepository(db)

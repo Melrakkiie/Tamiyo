@@ -179,6 +179,43 @@ func TestHandler_GetCards_ReturnsErrorOnServiceFailure(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
+func TestHandler_GetCards_PassesSortToService(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/cards?sort=-name", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "name", service.lastFilter.SortField)
+	assert.True(t, service.lastFilter.SortDesc)
+}
+
+func TestHandler_GetCards_DefaultsSortToUpdatedDescending(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/cards", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "updated", service.lastFilter.SortField)
+	assert.True(t, service.lastFilter.SortDesc)
+}
+
+func TestHandler_GetCards_ReturnsBadRequestOnInvalidSort(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/cards?sort=price", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
 func TestHandler_GetCard_ReturnsCardAsJSON(t *testing.T) {
 	service := &fakeService{getCard: Card{ID: 1, Name: "Black Lotus", SetCode: "lea", Foil: false}}
 	router := setupRouter(service)
