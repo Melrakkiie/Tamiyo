@@ -21,7 +21,15 @@ jobs:
           cache: true
 
       - name: Run unit tests
-        run: go test ./internal/...
+        run: go test ./internal/... -coverprofile=coverage-unit.out
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage-unit.out
+          flags: unit
+          fail_ci_if_error: false
 
   integration-tests:
     name: Integration tests
@@ -39,4 +47,12 @@ jobs:
       - name: Run integration tests
         env:
           TESTCONTAINERS_RYUK_DISABLED: "true"
-        run: go test ./internal/... -tags=integration
+        run: go test ./internal/... -tags=integration -coverprofile=coverage-integration.out
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage-integration.out
+          flags: integration
+          fail_ci_if_error: false
