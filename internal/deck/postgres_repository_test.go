@@ -100,6 +100,29 @@ func seedDecks(t *testing.T, db *sqlx.DB) {
 	require.NoError(t, err)
 }
 
+func seedCardsWithoutStorage(t *testing.T, db *sqlx.DB) {
+	t.Helper()
+
+	_, err := db.Exec(`
+		INSERT INTO tamiyo.cards (name, scryfall_id, set_code, collector_number, foil, storage_id)
+		VALUES
+		    ('Black Lotus', 'bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd', 'lea', 232, false, null),
+		    ('Lightning Bolt', '9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d', '2xm', 129, true, null),
+		    ('Counterspell', '1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f', 'mh2', 267, false, null);
+	`)
+	require.NoError(t, err)
+}
+
+func linkCardToDeck(t *testing.T, db *sqlx.DB, cardID, deckID int) {
+	t.Helper()
+
+	_, err := db.Exec(`
+		INSERT INTO tamiyo.card_deck (card_id, deck_id)
+		VALUES ($1, $2)
+	`, cardID, deckID)
+	require.NoError(t, err)
+}
+
 func TestPostgresRepository_FindAll_ReturnsAllDecks(t *testing.T) {
 	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
@@ -328,4 +351,61 @@ func TestPostgresRepository_Delete_DoesNotAffectOtherDecks(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, remaining, 1)
 	assert.Equal(t, "Izzet Prowess", remaining[0].Name)
+}
+
+func TestPostgresRepository_FindCardsByDeckID_ReturnsCardsInDeck(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db)
+	seedCardsWithoutStorage(t, db)
+
+	linkCardToDeck(t, db, 1, 1)
+	linkCardToDeck(t, db, 2, 1)
+
+	result, err := repo.FindCardsByDeckID(context.Background(), 1)
+
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+
+	names := []string{result[0].Name, result[1].Name}
+	assert.Contains(t, names, "Black Lotus")
+	assert.Contains(t, names, "Lightning Bolt")
+}
+
+func TestPostgresRepository_FindCardsByDeckID_ReturnsEmptySliceWhenDeckHasNoCards(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db)
+
+	result, err := repo.FindCardsByDeckID(context.Background(), 1)
+
+	require.NoError(t, err)
+	assert.Empty(t, result)
+}
+
+func TestPostgresRepository_FindCardsByDeckID_ReturnsEmptySliceWhenDeckDoesNotExist(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	result, err := repo.FindCardsByDeckID(context.Background(), 999)
+
+	require.NoError(t, err)
+	assert.Empty(t, result)
+}
+
+func TestPostgresRepository_FindCardsByDeckID_OnlyReturnsCardsFromRequestedDeck(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db)
+	seedCardsWithoutStorage(t, db)
+
+	linkCardToDeck(t, db, 1, 1)
+	linkCardToDeck(t, db, 2, 2)
+	linkCardToDeck(t, db, 3, 2)
+
+	result, err := repo.FindCardsByDeckID(context.Background(), 1)
+
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, "Black Lotus", result[0].Name)
 }

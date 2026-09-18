@@ -23,6 +23,9 @@ type fakeRepository struct {
 	updateErr   error
 
 	deleteErr error
+
+	getDeckCards    []DeckCard
+	getDeckCardsErr error
 }
 
 func (f *fakeRepository) FindAll(ctx context.Context) ([]Deck, error) {
@@ -55,6 +58,13 @@ func (f *fakeRepository) Update(ctx context.Context, d Deck) (Deck, error) {
 
 func (f *fakeRepository) Delete(ctx context.Context, id int) error {
 	return f.deleteErr
+}
+
+func (f *fakeRepository) FindCardsByDeckID(ctx context.Context, id int) ([]DeckCard, error) {
+	if f.getDeckCardsErr != nil {
+		return nil, f.getDeckCardsErr
+	}
+	return f.getDeckCards, nil
 }
 
 func TestService_GetAllDecks_ReturnsDecksFromRepository(t *testing.T) {
@@ -202,4 +212,37 @@ func TestService_DeleteDeck_PropagatesRepositoryError(t *testing.T) {
 	err := service.DeleteDeck(context.Background(), 1)
 
 	assert.Error(t, err)
+}
+
+func TestService_GetDeckCards_ReturnsDecksFromRepository(t *testing.T) {
+	expected := []DeckCard{
+		{ID: 1, Name: "Black Lotus", SetCode: "lea"},
+		{ID: 2, Name: "Lightning Bolt", SetCode: "2xm"},
+	}
+	repo := &fakeRepository{getDeckCards: expected}
+	service := NewService(repo)
+
+	result, err := service.GetDeckCards(context.Background(), 1)
+
+	require.NoError(t, err)
+	assert.Equal(t, expected, result)
+}
+
+func TestService_GetDeckCards_ReturnsNotFoundWhenDeckDoesNotExist(t *testing.T) {
+	repo := &fakeRepository{findByIDErr: ErrNotFound}
+	service := NewService(repo)
+
+	_, err := service.GetDeckCards(context.Background(), 999)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestService_GetDeckCards_PropagatesRepositoryUpdateError(t *testing.T) {
+	repo := &fakeRepository{getDeckCardsErr: errors.New("connection lost")}
+	service := NewService(repo)
+
+	result, err := service.GetDeckCards(context.Background(), 1)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
 }

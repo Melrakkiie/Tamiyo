@@ -19,10 +19,24 @@ type Deck struct {
 	Updated     time.Time
 }
 
+type DeckCard struct {
+	ID              int
+	Name            string
+	ScryfallID      string
+	SetCode         string
+	CollectorNumber int
+	Foil            bool
+	StorageID       *int
+	Added           time.Time
+	Updated         time.Time
+}
+
 type Repository interface {
 	FindAll(ctx context.Context) ([]Deck, error)
 	FindByID(ctx context.Context, id int) (Deck, error)
 	Create(ctx context.Context, d Deck) (Deck, error)
 	Update(ctx context.Context, d Deck) (Deck, error)
 	Delete(ctx context.Context, id int) error
+
+	FindCardsByDeckID(ctx context.Context, id int) ([]DeckCard, error)
 }

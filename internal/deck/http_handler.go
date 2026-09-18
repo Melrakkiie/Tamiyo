@@ -67,12 +67,40 @@ func (r updateDeckRequest) applyTo(d Deck) Deck {
 	return d
 }
 
+type deckCardResponse struct {
+	ID              int    `json:"id"`
+	Name            string `json:"name"`
+	ScryfallID      string `json:"scryfall_id"`
+	SetCode         string `json:"set_code"`
+	CollectorNumber int    `json:"collector_number"`
+	Foil            bool   `json:"foil"`
+	StorageID       *int   `json:"storage_id"`
+	Added           string `json:"added"`
+	Updated         string `json:"updated"`
+}
+
+func toDeckCardResponse(dc DeckCard) deckCardResponse {
+	return deckCardResponse{
+		ID:              dc.ID,
+		Name:            dc.Name,
+		ScryfallID:      dc.ScryfallID,
+		SetCode:         dc.SetCode,
+		CollectorNumber: dc.CollectorNumber,
+		Foil:            dc.Foil,
+		StorageID:       dc.StorageID,
+		Added:           dc.Added.Format("2006-01-02 15:04:05"),
+		Updated:         dc.Updated.Format("2006-01-02 15:04:05"),
+	}
+}
+
 type deckService interface {
 	GetAllDecks(ctx context.Context) ([]Deck, error)
 	GetDeck(ctx context.Context, id int) (Deck, error)
 	CreateDeck(ctx context.Context, d Deck) (Deck, error)
 	UpdateDeck(ctx context.Context, id int, req updateDeckRequest) (Deck, error)
 	DeleteDeck(ctx context.Context, id int) error
+
+	GetDeckCards(ctx context.Context, deckID int) ([]DeckCard, error)
 }
 
 type Handler struct {
@@ -89,6 +117,8 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.POST("/deck", h.createDeck)
 	router.PATCH("/deck/:id", h.updateDeck)
 	router.DELETE("/deck/:id", h.deleteDeck)
+
+	router.GET("/deck/:id/cards", h.getDeckCards)
 }
 
 func (h *Handler) getDecks(ctx *gin.Context) {
@@ -194,4 +224,28 @@ func (h *Handler) deleteDeck(ctx *gin.Context) {
 	}
 
 	ctx.Status(http.StatusNoContent)
+}
+
+func (h *Handler) getDeckCards(ctx *gin.Context) {
+	id, err := strconv.Atoi(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	deckCards, err := h.service.GetDeckCards(ctx.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	response := make([]deckCardResponse, 0, len(deckCards))
+	for _, dc := range deckCards {
+		response = append(response, toDeckCardResponse(dc))
+	}
+	ctx.IndentedJSON(http.StatusOK, response)
 }

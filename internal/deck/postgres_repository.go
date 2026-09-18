@@ -41,6 +41,32 @@ func toDeckRow(d Deck) deckRow {
 	}
 }
 
+type cardRow struct {
+	ID              int       `db:"id"`
+	Name            string    `db:"name"`
+	ScryfallID      string    `db:"scryfall_id"`
+	SetCode         string    `db:"set_code"`
+	CollectorNumber int       `db:"collector_number"`
+	Foil            bool      `db:"foil"`
+	StorageID       *int      `db:"storage_id"`
+	Added           time.Time `db:"added"`
+	Updated         time.Time `db:"updated"`
+}
+
+func (r cardRow) toDomain() DeckCard {
+	return DeckCard{
+		ID:              r.ID,
+		Name:            r.Name,
+		ScryfallID:      r.ScryfallID,
+		SetCode:         r.SetCode,
+		CollectorNumber: r.CollectorNumber,
+		Foil:            r.Foil,
+		StorageID:       r.StorageID,
+		Added:           r.Added,
+		Updated:         r.Updated,
+	}
+}
+
 type PostgresRepository struct {
 	db *sqlx.DB
 }
@@ -178,4 +204,25 @@ func (r *PostgresRepository) Delete(ctx context.Context, id int) error {
 	}
 
 	return nil
+}
+
+func (r *PostgresRepository) FindCardsByDeckID(ctx context.Context, id int) ([]DeckCard, error) {
+	query := `
+		SELECT c.id, c.name, c.scryfall_id, c.set_code, c.collector_number, c.foil, c.storage_id, c.added, c.updated
+		FROM tamiyo.cards c
+		JOIN tamiyo.card_deck cd ON c.id = cd.card_id
+		WHERE cd.deck_id = $1
+	`
+
+	var rows []cardRow
+	if err := r.db.SelectContext(ctx, &rows, query, id); err != nil {
+		return nil, err
+	}
+
+	deckCards := make([]DeckCard, 0, len(rows))
+	for _, row := range rows {
+		deckCards = append(deckCards, row.toDomain())
+	}
+
+	return deckCards, nil
 }

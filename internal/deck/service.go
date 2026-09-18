@@ -36,3 +36,12 @@ func (s *Service) UpdateDeck(ctx context.Context, id int, req updateDeckRequest)
 func (s *Service) DeleteDeck(ctx context.Context, id int) error {
 	return s.repo.Delete(ctx, id)
 }
+
+func (s *Service) GetDeckCards(ctx context.Context, id int) ([]DeckCard, error) {
+	_, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.repo.FindCardsByDeckID(ctx, id)
+}
