@@ -52,7 +52,7 @@ make db-reset
 
 ## API Documentation
 
-See [`openapi.yaml`](./openapi.yaml) for the full API reference — endpoints, request/response schemas, and error codes. You can view it interactively by pasting it into [Swagger Editor](https://editor.swagger.io/).
+See [`doc/openapi.yaml`](./doc/openapi.yaml) for the full API reference — endpoints, request/response schemas, and error codes. You can view it interactively by pasting it into [Swagger Editor](https://editor.swagger.io/).
 
 ## Testing
 
