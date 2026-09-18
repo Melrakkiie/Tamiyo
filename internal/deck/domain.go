@@ -23,4 +23,5 @@ type Repository interface {
 	FindAll(ctx context.Context) ([]Deck, error)
 	FindByID(ctx context.Context, id int) (Deck, error)
 	Create(ctx context.Context, d Deck) (Deck, error)
+	Update(ctx context.Context, d Deck) (Deck, error)
 }

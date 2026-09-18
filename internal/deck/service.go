@@ -21,3 +21,14 @@ func (s *Service) GetDeck(ctx context.Context, id int) (Deck, error) {
 func (s *Service) CreateDeck(ctx context.Context, d Deck) (Deck, error) {
 	return s.repo.Create(ctx, d)
 }
+
+func (s *Service) UpdateDeck(ctx context.Context, id int, req updateDeckRequest) (Deck, error) {
+	existing, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return Deck{}, err
+	}
+
+	updated := req.applyTo(existing)
+
+	return s.repo.Update(ctx, updated)
+}

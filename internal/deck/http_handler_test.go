@@ -22,6 +22,9 @@ type fakeService struct {
 	getDeckErr error
 
 	createErr error
+
+	updateDeck Deck
+	updateErr  error
 }
 
 func (f *fakeService) GetAllDecks(ctx context.Context) ([]Deck, error) {
@@ -41,6 +44,13 @@ func (f *fakeService) CreateDeck(ctx context.Context, d Deck) (Deck, error) {
 	}
 	d.ID = 1
 	return d, nil
+}
+
+func (f *fakeService) UpdateDeck(ctx context.Context, id int, req updateDeckRequest) (Deck, error) {
+	if f.updateErr != nil {
+		return Deck{}, f.updateErr
+	}
+	return f.updateDeck, nil
 }
 
 func setupRouter(service deckService) *gin.Engine {
@@ -211,4 +221,93 @@ func TestHandler_CreateDeck_ReturnsBadRequestWhenCommanderDoesNotExist(t *testin
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 	assert.Equal(t, "commander_id does not reference an existing card", response["error"])
+}
+
+func TestHandler_UpdateDeck_ReturnsUpdatedDeck(t *testing.T) {
+	service := &fakeService{updateDeck: Deck{ID: 1, Name: "Renamed", Format: "modern", CommanderID: nil}}
+	router := setupRouter(service)
+
+	body := `{"name": "Renamed"}`
+
+	req := httptest.NewRequest(http.MethodPatch, "/deck/1", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var response deckResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Equal(t, "Renamed", response.Name)
+}
+
+func TestHandler_UpdateDeck_ReturnsBadRequestOnInvalidID(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	body := `{"name": "Renamed"}`
+
+	req := httptest.NewRequest(http.MethodPatch, "/deck/abc", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_UpdateDeck_ReturnsBadRequestOnInvalidBody(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	body := `{"name": 1}`
+
+	req := httptest.NewRequest(http.MethodPatch, "/deck/1", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_UpdateDeck_ReturnsNotFoundWhenDeckDoesNotExist(t *testing.T) {
+	service := &fakeService{updateErr: ErrNotFound}
+	router := setupRouter(service)
+
+	body := `{"name": "Renamed"}`
+
+	req := httptest.NewRequest(http.MethodPatch, "/deck/999", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestHandler_UpdateDeck_ReturnsBadRequestWhenCommanderDoesNotExist(t *testing.T) {
+	service := &fakeService{updateErr: ErrCommanderNotFound}
+	router := setupRouter(service)
+
+	body := `{"name": "Renamed", "commander_id": 999}`
+
+	req := httptest.NewRequest(http.MethodPatch, "/deck/1", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_UpdateDeck_ReturnsErrorOnServiceFailure(t *testing.T) {
+	service := &fakeService{updateErr: errors.New("update failed")}
+	router := setupRouter(service)
+
+	body := `{"name": "Renamed"}`
+
+	req := httptest.NewRequest(http.MethodPatch, "/deck/1", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }

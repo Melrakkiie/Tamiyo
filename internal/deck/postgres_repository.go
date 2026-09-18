@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 type deckRow struct {
@@ -119,8 +120,42 @@ func (r *PostgresRepository) Create(ctx context.Context, d Deck) (Deck, error) {
 
 	var created deckRow
 	if err := stmt.GetContext(ctx, &created, row); err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23503" {
+			return Deck{}, ErrCommanderNotFound
+		}
 		return Deck{}, err
 	}
 
 	return created.toDomain(), nil
+}
+
+func (r *PostgresRepository) Update(ctx context.Context, d Deck) (Deck, error) {
+	row := toDeckRow(d)
+	query := `
+		UPDATE tamiyo.deck
+		SET name = :name, format = :format, commander_id = :commander_id
+		WHERE id = :id
+		RETURNING id, name, format, commander_id, added, updated
+	`
+
+	stmt, err := r.db.PrepareNamedContext(ctx, query)
+	if err != nil {
+		return Deck{}, err
+	}
+	defer stmt.Close()
+
+	var updated deckRow
+	if err := stmt.GetContext(ctx, &updated, row); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Deck{}, ErrNotFound
+		}
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23503" {
+			return Deck{}, ErrCommanderNotFound
+		}
+		return Deck{}, err
+	}
+
+	return updated.toDomain(), nil
 }

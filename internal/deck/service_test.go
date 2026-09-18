@@ -18,6 +18,9 @@ type fakeRepository struct {
 
 	createdDeck Deck
 	createErr   error
+
+	updatedDeck Deck
+	updateErr   error
 }
 
 func (f *fakeRepository) FindAll(ctx context.Context) ([]Deck, error) {
@@ -37,6 +40,14 @@ func (f *fakeRepository) Create(ctx context.Context, d Deck) (Deck, error) {
 	}
 	f.createdDeck = d
 	d.ID = 1
+	return d, nil
+}
+
+func (f *fakeRepository) Update(ctx context.Context, d Deck) (Deck, error) {
+	if f.updateErr != nil {
+		return Deck{}, f.updateErr
+	}
+	f.updatedDeck = d
 	return d, nil
 }
 
@@ -118,4 +129,44 @@ func TestService_CreateDeck_PropagatesRepositoryError(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Equal(t, Deck{}, result)
+}
+
+func TestService_UpdateDeck_AppliesPartialChangesOnExistingDeck(t *testing.T) {
+	existing := Deck{ID: 1, Name: "Red Deck", Format: "modern", CommanderID: nil}
+	repo := &fakeRepository{findByIDDeck: existing}
+	service := NewService(repo)
+
+	newName := "Renamed"
+	req := updateDeckRequest{Name: &newName}
+
+	result, err := service.UpdateDeck(context.Background(), 1, req)
+
+	require.NoError(t, err)
+	assert.Equal(t, "Renamed", result.Name)
+	assert.Equal(t, "modern", result.Format)
+}
+
+func TestService_UpdateDeck_ReturnsNotFoundWhenDeckDoesNotExist(t *testing.T) {
+	repo := &fakeRepository{findByIDErr: ErrNotFound}
+	service := NewService(repo)
+
+	newName := "Doesn't matter"
+	req := updateDeckRequest{Name: &newName}
+
+	_, err := service.UpdateDeck(context.Background(), 999, req)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestService_UpdateDeck_PropagatesRepositoryUpdateError(t *testing.T) {
+	existing := Deck{ID: 1, Name: "Red Deck", Format: "modern", CommanderID: nil}
+	repo := &fakeRepository{findByIDDeck: existing, updateErr: errors.New("update failed")}
+	service := NewService(repo)
+
+	newName := "New Name"
+	req := updateDeckRequest{Name: &newName}
+
+	_, err := service.UpdateDeck(context.Background(), 1, req)
+
+	assert.Error(t, err)
 }

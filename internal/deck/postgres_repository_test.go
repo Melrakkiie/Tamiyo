@@ -213,3 +213,83 @@ func TestPostgresRepository_Create_GeneratesAddedAndUpdatedTimestamps(t *testing
 	assert.WithinRange(t, created.Added, before, after)
 	assert.WithinRange(t, created.Updated, before, after)
 }
+
+func TestPostgresRepository_Create_ReturnsErrCommanderNotFoundOnInvalidCommanderID(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	invalidStorageID := 9999
+	newDeck := Deck{
+		Name:        "Otterly Playful",
+		Format:      "commander",
+		CommanderID: &invalidStorageID,
+	}
+
+	_, err := repo.Create(context.Background(), newDeck)
+
+	assert.ErrorIs(t, err, ErrCommanderNotFound)
+}
+
+func TestPostgresRepository_Update_UpdatesAndReturnsDeck(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db)
+
+	existing, err := repo.FindByID(context.Background(), 1)
+	require.NoError(t, err)
+
+	existing.Name = "Renamed Deck"
+	updated, err := repo.Update(context.Background(), existing)
+
+	require.NoError(t, err)
+	assert.Equal(t, "Renamed Deck", updated.Name)
+	assert.Equal(t, "modern", updated.Format)
+
+	refetched, err := repo.FindByID(context.Background(), 1)
+	require.NoError(t, err)
+	assert.Equal(t, "Renamed Deck", refetched.Name)
+}
+
+func TestPostgresRepository_Update_ReturnsErrNotFoundWhenDeckDoesNotExist(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	nonExistent := Deck{ID: 999, Name: "Non existent", Format: "modern", CommanderID: nil}
+
+	_, err := repo.Update(context.Background(), nonExistent)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestPostgresRepository_Update_ReturnsErrCommanderNotFoundOnInvalidCommanderID(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db)
+
+	existing, err := repo.FindByID(context.Background(), 1)
+	require.NoError(t, err)
+
+	invalidCommanderID := 9999
+	existing.Name = "Renamed Deck"
+	existing.CommanderID = &invalidCommanderID
+	_, errUpdate := repo.Update(context.Background(), existing)
+
+	assert.ErrorIs(t, errUpdate, ErrCommanderNotFound)
+}
+
+func TestPostgresRepository_Update_RefreshesUpdatedTimestamp(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db)
+
+	existing, err := repo.FindByID(context.Background(), 1)
+	require.NoError(t, err)
+
+	time.Sleep(10 * time.Millisecond)
+
+	existing.Name = "Renamed"
+	updated, err := repo.Update(context.Background(), existing)
+
+	require.NoError(t, err)
+	assert.True(t, updated.Updated.After(existing.Updated))
+}

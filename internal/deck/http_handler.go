@@ -45,10 +45,33 @@ func (r createDeckRequest) toDomain() Deck {
 	}
 }
 
+type updateDeckRequest struct {
+	Name             *string `json:"name" binding:"omitempty"`
+	Format           *string `json:"format" binding:"omitempty"`
+	CommanderID      *int    `json:"commander_id" binding:"omitempty,gt=0"`
+	ClearCommanderID bool    `json:"clear_storage_id"`
+}
+
+func (r updateDeckRequest) applyTo(d Deck) Deck {
+	if r.Name != nil {
+		d.Name = *r.Name
+	}
+	if r.Format != nil {
+		d.Format = *r.Format
+	}
+	if r.ClearCommanderID {
+		d.CommanderID = nil
+	} else if r.CommanderID != nil {
+		d.CommanderID = r.CommanderID
+	}
+	return d
+}
+
 type deckService interface {
 	GetAllDecks(ctx context.Context) ([]Deck, error)
 	GetDeck(ctx context.Context, id int) (Deck, error)
 	CreateDeck(ctx context.Context, d Deck) (Deck, error)
+	UpdateDeck(ctx context.Context, id int, req updateDeckRequest) (Deck, error)
 }
 
 type Handler struct {
@@ -63,6 +86,7 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/deck", h.getDecks)
 	router.GET("/deck/:id", h.getDeck)
 	router.POST("/deck", h.createDeck)
+	router.PATCH("/deck/:id", h.updateDeck)
 }
 
 func (h *Handler) getDecks(ctx *gin.Context) {
@@ -119,4 +143,34 @@ func (h *Handler) createDeck(ctx *gin.Context) {
 	}
 
 	ctx.IndentedJSON(http.StatusCreated, toResponse(created))
+}
+
+func (h *Handler) updateDeck(ctx *gin.Context) {
+	id, err := strconv.Atoi(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	var req updateDeckRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	updated, err := h.service.UpdateDeck(ctx.Request.Context(), id, req)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
+			return
+		}
+		if errors.Is(err, ErrCommanderNotFound) {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "commander_id does not reference an existing card"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.IndentedJSON(http.StatusOK, toResponse(updated))
 }
