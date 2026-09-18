@@ -107,7 +107,7 @@ func TestHandler_GetStorage_ReturnsStorageAsJSON(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusCreated, w.Code)
+	require.Equal(t, http.StatusOK, w.Code)
 
 	var response storageResponse
 	err := json.Unmarshal(w.Body.Bytes(), &response)

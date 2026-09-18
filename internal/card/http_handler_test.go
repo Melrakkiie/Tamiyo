@@ -133,7 +133,7 @@ func TestHandler_GetCard_ReturnsCardAsJSON(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusCreated, w.Code)
+	require.Equal(t, http.StatusOK, w.Code)
 
 	var response cardResponse
 	err := json.Unmarshal(w.Body.Bytes(), &response)

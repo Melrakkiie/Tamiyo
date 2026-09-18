@@ -152,7 +152,7 @@ func (h *Handler) getCard(ctx *gin.Context) {
 		return
 	}
 
-	ctx.IndentedJSON(http.StatusCreated, toResponse(card))
+	ctx.IndentedJSON(http.StatusOK, toResponse(card))
 }
 
 func (h *Handler) createCard(ctx *gin.Context) {

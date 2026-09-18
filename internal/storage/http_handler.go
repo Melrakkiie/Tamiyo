@@ -111,7 +111,7 @@ func (h *Handler) getStorage(ctx *gin.Context) {
 		return
 	}
 
-	ctx.IndentedJSON(http.StatusCreated, toResponse(storage))
+	ctx.IndentedJSON(http.StatusOK, toResponse(storage))
 }
 
 func (h *Handler) createStorage(ctx *gin.Context) {

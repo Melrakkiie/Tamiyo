@@ -49,7 +49,7 @@ type updateDeckRequest struct {
 	Name             *string `json:"name" binding:"omitempty"`
 	Format           *string `json:"format" binding:"omitempty"`
 	CommanderID      *int    `json:"commander_id" binding:"omitempty,gt=0"`
-	ClearCommanderID bool    `json:"clear_storage_id"`
+	ClearCommanderID bool    `json:"clear_commander_id"`
 }
 
 func (r updateDeckRequest) applyTo(d Deck) Deck {
@@ -156,7 +156,7 @@ func (h *Handler) getDeck(ctx *gin.Context) {
 		return
 	}
 
-	ctx.IndentedJSON(http.StatusCreated, toResponse(deck))
+	ctx.IndentedJSON(http.StatusOK, toResponse(deck))
 }
 
 func (h *Handler) createDeck(ctx *gin.Context) {
