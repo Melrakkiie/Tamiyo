@@ -12,8 +12,8 @@ func NewService(repo Repository) *Service {
 	return &Service{repo: repo}
 }
 
-func (s *Service) GetAllCards(ctx context.Context, storageID *int) ([]Card, error) {
-	return s.repo.FindAll(ctx, storageID)
+func (s *Service) GetAllCards(ctx context.Context, filter CardFilter) ([]Card, int, error) {
+	return s.repo.FindAll(ctx, filter)
 }
 
 func (s *Service) GetCard(ctx context.Context, id int) (Card, error) {

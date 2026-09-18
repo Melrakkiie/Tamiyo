@@ -11,8 +11,9 @@ import (
 
 type fakeRepository struct {
 	cards      []Card
+	total      int
 	findAllErr error
-	storageID  *int
+	lastFilter CardFilter
 
 	findByIDCard Card
 	findByIDErr  error
@@ -26,9 +27,9 @@ type fakeRepository struct {
 	deleteErr error
 }
 
-func (f *fakeRepository) FindAll(ctx context.Context, storageID *int) ([]Card, error) {
-	f.storageID = storageID
-	return f.cards, f.findAllErr
+func (f *fakeRepository) FindAll(ctx context.Context, filter CardFilter) ([]Card, int, error) {
+	f.lastFilter = filter
+	return f.cards, f.total, f.findAllErr
 }
 
 func (f *fakeRepository) FindByID(ctx context.Context, id int) (Card, error) {
@@ -59,40 +60,43 @@ func (f *fakeRepository) Delete(ctx context.Context, id int) error {
 	return f.deleteErr
 }
 
-func TestService_GetAllCards_ReturnsCardsFromRepository(t *testing.T) {
+func TestService_GetAllCards_ReturnsCardsAndTotalFromRepository(t *testing.T) {
 	expected := []Card{
 		{ID: 1, Name: "Black Lotus", SetCode: "lea"},
 		{ID: 2, Name: "Lightning Bolt", SetCode: "2xm"},
 	}
-	repo := &fakeRepository{cards: expected}
+	repo := &fakeRepository{cards: expected, total: 2}
 	service := NewService(repo)
 
-	result, err := service.GetAllCards(context.Background(), nil)
+	result, total, err := service.GetAllCards(context.Background(), CardFilter{Page: 1, Limit: 25})
 
 	require.NoError(t, err)
 	assert.Equal(t, expected, result)
+	assert.Equal(t, 2, total)
 }
 
-func TestService_GetAllCards_PassesStorageIDToRepository(t *testing.T) {
+func TestService_GetAllCards_PassesFilterToRepository(t *testing.T) {
 	repo := &fakeRepository{}
 	service := NewService(repo)
 
 	testID := 1
-	_, err := service.GetAllCards(context.Background(), &testID)
+	filter := CardFilter{StorageID: &testID, Name: "bolt", Page: 2, Limit: 10}
+
+	_, _, err := service.GetAllCards(context.Background(), filter)
 
 	require.NoError(t, err)
-	require.NotNil(t, repo.storageID)
-	assert.Equal(t, testID, *repo.storageID)
+	assert.Equal(t, filter, repo.lastFilter)
 }
 
 func TestService_GetAllCards_PropagatesRepositoryError(t *testing.T) {
 	repo := &fakeRepository{findAllErr: errors.New("connection lost")}
 	service := NewService(repo)
 
-	result, err := service.GetAllCards(context.Background(), nil)
+	result, total, err := service.GetAllCards(context.Background(), CardFilter{Page: 1, Limit: 25})
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
+	assert.Equal(t, 0, total)
 }
 
 func TestService_GetCard_ReturnsCardFromRepository(t *testing.T) {

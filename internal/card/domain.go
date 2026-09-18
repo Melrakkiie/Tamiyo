@@ -21,8 +21,15 @@ type Card struct {
 	Updated         time.Time
 }
 
+type CardFilter struct {
+	StorageID *int
+	Name      string
+	Page      int
+	Limit     int
+}
+
 type Repository interface {
-	FindAll(ctx context.Context, storageID *int) ([]Card, error)
+	FindAll(ctx context.Context, filter CardFilter) ([]Card, int, error)
 	FindByID(ctx context.Context, id int) (Card, error)
 	Create(ctx context.Context, c Card) (Card, error)
 	Update(ctx context.Context, c Card) (Card, error)

@@ -15,9 +15,10 @@ import (
 )
 
 type fakeService struct {
-	cards     []Card
-	getAllErr error
-	storageID *int
+	cards      []Card
+	total      int
+	getAllErr  error
+	lastFilter CardFilter
 
 	getCard    Card
 	getCardErr error
@@ -30,9 +31,9 @@ type fakeService struct {
 	deleteErr error
 }
 
-func (f *fakeService) GetAllCards(ctx context.Context, storageID *int) ([]Card, error) {
-	f.storageID = storageID
-	return f.cards, f.getAllErr
+func (f *fakeService) GetAllCards(ctx context.Context, filter CardFilter) ([]Card, int, error) {
+	f.lastFilter = filter
+	return f.cards, f.total, f.getAllErr
 }
 
 func (f *fakeService) GetCard(ctx context.Context, id int) (Card, error) {
@@ -68,11 +69,12 @@ func setupRouter(service cardService) *gin.Engine {
 	return router
 }
 
-func TestHandler_GetCards_ReturnsCardsAsJSON(t *testing.T) {
+func TestHandler_GetCards_ReturnsPaginatedCardsAsJSON(t *testing.T) {
 	service := &fakeService{
 		cards: []Card{
 			{ID: 1, Name: "Black Lotus", SetCode: "lea", Foil: false},
 		},
+		total: 1,
 	}
 	router := setupRouter(service)
 
@@ -82,12 +84,64 @@ func TestHandler_GetCards_ReturnsCardsAsJSON(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var response []cardResponse
+	var response paginatedCardsResponse
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	require.Len(t, response, 1)
-	assert.Equal(t, "Black Lotus", response[0].Name)
-	assert.Equal(t, "lea", response[0].SetCode)
+	require.Len(t, response.Data, 1)
+	assert.Equal(t, "Black Lotus", response.Data[0].Name)
+	assert.Equal(t, 1, response.Page)
+	assert.Equal(t, defaultLimit, response.Limit)
+	assert.Equal(t, 1, response.Total)
+	assert.Equal(t, 1, response.TotalPages)
+}
+
+func TestHandler_GetCards_UsesDefaultPageAndLimitWhenAbsent(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/cards", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, defaultPage, service.lastFilter.Page)
+	assert.Equal(t, defaultLimit, service.lastFilter.Limit)
+}
+
+func TestHandler_GetCards_PassesPageLimitAndNameToService(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/cards?page=3&limit=10&name=bolt", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, 3, service.lastFilter.Page)
+	assert.Equal(t, 10, service.lastFilter.Limit)
+	assert.Equal(t, "bolt", service.lastFilter.Name)
+}
+
+func TestHandler_GetCards_ReturnsBadRequestOnInvalidPage(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/cards?page=0", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_GetCards_ReturnsBadRequestOnInvalidLimit(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/cards?limit=101", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 func TestHandler_GetCards_PassesStorageIDQueryParamToService(t *testing.T) {
@@ -99,8 +153,8 @@ func TestHandler_GetCards_PassesStorageIDQueryParamToService(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	require.NotNil(t, service.storageID)
-	assert.Equal(t, 1, *service.storageID)
+	require.NotNil(t, service.lastFilter.StorageID)
+	assert.Equal(t, 1, *service.lastFilter.StorageID)
 }
 
 func TestHandler_GetCards_ReturnsErrorInvalidStorageID(t *testing.T) {
@@ -325,7 +379,6 @@ func TestHandler_CreateCard_ReturnsBadRequestOnMissingRequiredField(t *testing.T
 	service := &fakeService{}
 	router := setupRouter(service)
 
-	// missing "name"
 	body := `{
 		"scryfall_id": "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f",
 		"set_code": "mh2",

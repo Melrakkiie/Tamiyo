@@ -3,10 +3,17 @@ package card
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+)
+
+const (
+	defaultPage  = 1
+	defaultLimit = 25
+	maxLimit     = 100
 )
 
 type cardResponse struct {
@@ -33,6 +40,14 @@ func toResponse(c Card) cardResponse {
 		Added:           c.Added.Format("2006-01-02 15:04:05"),
 		Updated:         c.Updated.Format("2006-01-02 15:04:05"),
 	}
+}
+
+type paginatedCardsResponse struct {
+	Data       []cardResponse `json:"data"`
+	Page       int            `json:"page"`
+	Limit      int            `json:"limit"`
+	Total      int            `json:"total"`
+	TotalPages int            `json:"total_pages"`
 }
 
 type createCardRequest struct {
@@ -87,8 +102,8 @@ func (r updateCardRequest) applyTo(c Card) Card {
 }
 
 type cardService interface {
-	GetAllCards(ctx context.Context, StorageID *int) ([]Card, error)
-	GetCard(ctc context.Context, id int) (Card, error)
+	GetAllCards(ctx context.Context, filter CardFilter) ([]Card, int, error)
+	GetCard(ctx context.Context, id int) (Card, error)
 	CreateCard(ctx context.Context, c Card) (Card, error)
 	UpdateCard(ctx context.Context, id int, req updateCardRequest) (Card, error)
 	DeleteCard(ctx context.Context, id int) error
@@ -112,7 +127,6 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 
 func (h *Handler) getCards(ctx *gin.Context) {
 	var storageID *int
-
 	if raw := ctx.Query("storage_id"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
 		if err != nil {
@@ -122,7 +136,34 @@ func (h *Handler) getCards(ctx *gin.Context) {
 		storageID = &parsed
 	}
 
-	cards, err := h.service.GetAllCards(ctx.Request.Context(), storageID)
+	page := defaultPage
+	if raw := ctx.Query("page"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "page must be a positive integer"})
+			return
+		}
+		page = parsed
+	}
+
+	limit := defaultLimit
+	if raw := ctx.Query("limit"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > maxLimit {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("limit must be an integer between 1 and %d", maxLimit)})
+			return
+		}
+		limit = parsed
+	}
+
+	filter := CardFilter{
+		StorageID: storageID,
+		Name:      ctx.Query("name"),
+		Page:      page,
+		Limit:     limit,
+	}
+
+	cards, total, err := h.service.GetAllCards(ctx.Request.Context(), filter)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -132,7 +173,19 @@ func (h *Handler) getCards(ctx *gin.Context) {
 	for _, cd := range cards {
 		response = append(response, toResponse(cd))
 	}
-	ctx.IndentedJSON(http.StatusOK, response)
+
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + limit - 1) / limit
+	}
+
+	ctx.IndentedJSON(http.StatusOK, paginatedCardsResponse{
+		Data:       response,
+		Page:       page,
+		Limit:      limit,
+		Total:      total,
+		TotalPages: totalPages,
+	})
 }
 
 func (h *Handler) getCard(ctx *gin.Context) {

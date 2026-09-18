@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -56,23 +58,46 @@ func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
 	return &PostgresRepository{db: db}
 }
 
-func (r *PostgresRepository) FindAll(ctx context.Context, storageID *int) ([]Card, error) {
+func (r *PostgresRepository) FindAll(ctx context.Context, filter CardFilter) ([]Card, int, error) {
+	var conditions []string
+	var args []interface{}
+	argPos := 1
+
+	if filter.StorageID != nil {
+		conditions = append(conditions, fmt.Sprintf("storage_id = $%d", argPos))
+		args = append(args, *filter.StorageID)
+		argPos++
+	}
+
+	if filter.Name != "" {
+		conditions = append(conditions, fmt.Sprintf("name ILIKE $%d", argPos))
+		args = append(args, "%"+filter.Name+"%")
+		argPos++
+	}
+
+	whereClause := ""
+	if len(conditions) > 0 {
+		whereClause = " WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	countQuery := `SELECT COUNT(*) FROM tamiyo.cards` + whereClause
+	var total int
+	if err := r.db.GetContext(ctx, &total, countQuery, args...); err != nil {
+		return nil, 0, err
+	}
+
+	offset := (filter.Page - 1) * filter.Limit
+
 	query := `
 	    SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, added, updated
 	    FROM tamiyo.cards
-	`
-	args := []interface{}{}
+	` + whereClause + fmt.Sprintf(" ORDER BY updated DESC LIMIT $%d OFFSET $%d", argPos, argPos+1)
 
-	if storageID != nil {
-		query += ` WHERE storage_id = $1`
-		args = append(args, *storageID)
-	}
-
-	query += ` ORDER BY updated DESC`
+	pagedArgs := append(args, filter.Limit, offset)
 
 	var rows []cardRow
-	if err := r.db.SelectContext(ctx, &rows, query, args...); err != nil {
-		return nil, err
+	if err := r.db.SelectContext(ctx, &rows, query, pagedArgs...); err != nil {
+		return nil, 0, err
 	}
 
 	cards := make([]Card, 0, len(rows))
@@ -80,7 +105,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, storageID *int) ([]Car
 		cards = append(cards, row.toDomain())
 	}
 
-	return cards, nil
+	return cards, total, nil
 }
 
 func (r *PostgresRepository) FindByID(ctx context.Context, id int) (Card, error) {

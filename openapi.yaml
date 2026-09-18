@@ -22,7 +22,7 @@ paths:
     get:
       tags: [cards]
       summary: List cards
-      description: List all cards, optionally filtered by storage.
+      description: List all cards, with optional filtering and pagination.
       parameters:
         - name: storage_id
           in: query
@@ -30,17 +30,38 @@ paths:
           schema:
             type: integer
           description: Only return cards belonging to this storage.
+        - name: name
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Case-insensitive partial match on the card name.
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 1-based page number.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+          description: Number of cards per page (max 100).
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Card"
+                $ref: "#/components/schemas/PaginatedCards"
         "400":
-          description: storage_id is not a valid integer
+          description: storage_id, page or limit is not a valid integer, or out of allowed range.
           content:
             application/json:
               schema:
@@ -503,6 +524,23 @@ components:
         - foil
         - added
         - updated
+
+    PaginatedCards:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Card"
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+      required: [data, page, limit, total, total_pages]
 
     CreateCardRequest:
       type: object

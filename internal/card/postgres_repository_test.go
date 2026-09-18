@@ -123,10 +123,11 @@ func TestPostgresRepository_FindAll_ReturnsAllCardsWhenNoFilter(t *testing.T) {
 		{Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: "129", Foil: true, StorageID: &testID2},
 	})
 
-	result, err := repo.FindAll(context.Background(), nil)
+	result, total, err := repo.FindAll(context.Background(), CardFilter{Page: 1, Limit: 25})
 
 	require.NoError(t, err)
 	assert.Len(t, result, 2)
+	assert.Equal(t, 2, total)
 }
 
 func TestPostgresRepository_FindAll_FiltersByStorageID(t *testing.T) {
@@ -141,11 +142,12 @@ func TestPostgresRepository_FindAll_FiltersByStorageID(t *testing.T) {
 	})
 
 	testID := 1
-	result, err := repo.FindAll(context.Background(), &testID)
+	result, total, err := repo.FindAll(context.Background(), CardFilter{StorageID: &testID, Page: 1, Limit: 25})
 
 	require.NoError(t, err)
 	require.Len(t, result, 1)
 	assert.Equal(t, "Black Lotus", result[0].Name)
+	assert.Equal(t, 1, total)
 }
 
 func TestPostgresRepository_FindAll_ReturnsEmptySliceWhenNoStorageMatches(t *testing.T) {
@@ -159,10 +161,68 @@ func TestPostgresRepository_FindAll_ReturnsEmptySliceWhenNoStorageMatches(t *tes
 	})
 
 	unknownTestID := 67
-	result, err := repo.FindAll(context.Background(), &unknownTestID)
+	result, total, err := repo.FindAll(context.Background(), CardFilter{StorageID: &unknownTestID, Page: 1, Limit: 25})
 
 	require.NoError(t, err)
 	assert.Empty(t, result)
+	assert.Equal(t, 0, total)
+}
+
+func TestPostgresRepository_FindAll_FiltersByNameCaseInsensitive(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	seedCards(t, db, []Card{
+		{Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: "129", Foil: true},
+		{Name: "Lightning Helix", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "rav", CollectorNumber: "5", Foil: false},
+		{Name: "Counterspell", ScryfallID: "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f", SetCode: "mh2", CollectorNumber: "267", Foil: false},
+	})
+
+	result, total, err := repo.FindAll(context.Background(), CardFilter{Name: "lightning", Page: 1, Limit: 25})
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, total)
+	names := []string{result[0].Name, result[1].Name}
+	assert.Contains(t, names, "Lightning Bolt")
+	assert.Contains(t, names, "Lightning Helix")
+}
+
+func TestPostgresRepository_FindAll_PaginatesResults(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	for i := 0; i < 5; i++ {
+		seedCards(t, db, []Card{
+			{
+				Name:            "Card " + string(rune('A'+i)),
+				ScryfallID:      "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1" + string(rune('0'+i)),
+				SetCode:         "test",
+				CollectorNumber: "1",
+				Foil:            false,
+			},
+		})
+	}
+
+	firstPage, total, err := repo.FindAll(context.Background(), CardFilter{Page: 1, Limit: 2})
+	require.NoError(t, err)
+	assert.Len(t, firstPage, 2)
+	assert.Equal(t, 5, total)
+
+	secondPage, total, err := repo.FindAll(context.Background(), CardFilter{Page: 2, Limit: 2})
+	require.NoError(t, err)
+	assert.Len(t, secondPage, 2)
+	assert.Equal(t, 5, total)
+
+	thirdPage, total, err := repo.FindAll(context.Background(), CardFilter{Page: 3, Limit: 2})
+	require.NoError(t, err)
+	assert.Len(t, thirdPage, 1)
+	assert.Equal(t, 5, total)
+
+	allIDs := map[int]bool{}
+	for _, c := range append(append(firstPage, secondPage...), thirdPage...) {
+		assert.False(t, allIDs[c.ID], "card ID %d returned on more than one page", c.ID)
+		allIDs[c.ID] = true
+	}
 }
 
 func TestPostgresRepository_FindByID_ReturnsCard(t *testing.T) {
@@ -209,9 +269,10 @@ func TestPostgresRepository_Create_InsertsAndReturnsCardWithID(t *testing.T) {
 	assert.NotZero(t, created.ID)
 	assert.Equal(t, "Sol Ring", created.Name)
 
-	all, err := repo.FindAll(context.Background(), &testID)
+	all, total, err := repo.FindAll(context.Background(), CardFilter{StorageID: &testID, Page: 1, Limit: 25})
 	require.NoError(t, err)
 	require.Len(t, all, 1)
+	assert.Equal(t, 1, total)
 	assert.Equal(t, created.ID, all[0].ID)
 }
 
@@ -235,9 +296,10 @@ func TestPostgresRepository_Create_InsertsAndReturnsCardWithID_NoStorageID(t *te
 	assert.Equal(t, "Sol Ring", created.Name)
 	assert.Nil(t, created.StorageID)
 
-	all, err := repo.FindAll(context.Background(), nil)
+	all, total, err := repo.FindAll(context.Background(), CardFilter{Page: 1, Limit: 25})
 	require.NoError(t, err)
 	require.Len(t, all, 1)
+	assert.Equal(t, 1, total)
 	assert.Equal(t, created.ID, all[0].ID)
 }
 
@@ -408,14 +470,15 @@ func TestPostgresRepository_Delete_DoesNotAffectOtherCards(t *testing.T) {
 
 	seedCards(t, db, []Card{
 		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false, StorageID: nil},
-		{Name: "Counterspell", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "125", Foil: false, StorageID: nil},
+		{Name: "Counterspell", ScryfallID: "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f", SetCode: "mh2", CollectorNumber: "125", Foil: false, StorageID: nil},
 	})
 
 	err := repo.Delete(context.Background(), 1)
 	require.NoError(t, err)
 
-	remaining, err := repo.FindAll(context.Background(), nil)
+	remaining, total, err := repo.FindAll(context.Background(), CardFilter{Page: 1, Limit: 25})
 	require.NoError(t, err)
 	require.Len(t, remaining, 1)
+	assert.Equal(t, 1, total)
 	assert.Equal(t, "Counterspell", remaining[0].Name)
 }
