@@ -11,6 +11,7 @@ servers:
     description: Local development
 
 tags:
+  - name: health
   - name: cards
   - name: storage
   - name: decks
@@ -18,6 +19,37 @@ tags:
     description: Deck ↔ card relationship
 
 paths:
+  /health:
+    get:
+      tags: [health]
+      summary: Health check
+      description: Checks that the API can reach the database.
+      responses:
+        "200":
+          description: The database is reachable.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                required: [status]
+        "503":
+          description: The database is not reachable.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: unavailable
+                  error:
+                    type: string
+                required: [status, error]
+
   /cards:
     get:
       tags: [cards]
