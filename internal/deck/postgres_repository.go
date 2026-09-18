@@ -226,3 +226,28 @@ func (r *PostgresRepository) FindCardsByDeckID(ctx context.Context, id int) ([]D
 
 	return deckCards, nil
 }
+
+func (r *PostgresRepository) LinkCardToDeck(ctx context.Context, deckID, cardID int) error {
+	query := `INSERT INTO tamiyo.card_deck (card_id, deck_id) VALUES ($1, $2)`
+
+	_, err := r.db.ExecContext(ctx, query, cardID, deckID)
+	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) {
+			switch pqErr.Code {
+			case "23503": // foreign_key_violation
+				if pqErr.Constraint == "card_deck_deck_id_fkey" {
+					return ErrNotFound
+				}
+				if pqErr.Constraint == "card_deck_card_id_fkey" {
+					return ErrCardNotFound
+				}
+			case "23505": // unique_violation
+				return nil
+			}
+		}
+		return err
+	}
+
+	return nil
+}

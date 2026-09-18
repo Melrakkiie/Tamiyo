@@ -101,6 +101,7 @@ type deckService interface {
 	DeleteDeck(ctx context.Context, id int) error
 
 	GetDeckCards(ctx context.Context, deckID int) ([]DeckCard, error)
+	PutCardInDeck(ctx context.Context, deckID int, cardID int) error
 }
 
 type Handler struct {
@@ -119,6 +120,7 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.DELETE("/deck/:id", h.deleteDeck)
 
 	router.GET("/deck/:id/cards", h.getDeckCards)
+	router.PUT("/deck/:deck_id/cards/:card_id", h.putCardInDeck)
 }
 
 func (h *Handler) getDecks(ctx *gin.Context) {
@@ -248,4 +250,32 @@ func (h *Handler) getDeckCards(ctx *gin.Context) {
 		response = append(response, toDeckCardResponse(dc))
 	}
 	ctx.IndentedJSON(http.StatusOK, response)
+}
+
+func (h *Handler) putCardInDeck(ctx *gin.Context) {
+	deckID, err := strconv.Atoi(ctx.Param("deck_id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid deck_id"})
+		return
+	}
+
+	cardID, err := strconv.Atoi(ctx.Param("card_id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid card_id"})
+		return
+	}
+
+	if err := h.service.PutCardInDeck(ctx.Request.Context(), deckID, cardID); err != nil {
+		switch {
+		case errors.Is(err, ErrNotFound):
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
+		case errors.Is(err, ErrCardNotFound):
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "card not found"})
+		default:
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	ctx.Status(http.StatusNoContent)
 }

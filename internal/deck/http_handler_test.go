@@ -30,6 +30,8 @@ type fakeService struct {
 
 	getDeckCards    []DeckCard
 	getDeckCardsErr error
+
+	putCardErr error
 }
 
 func (f *fakeService) GetAllDecks(ctx context.Context) ([]Deck, error) {
@@ -67,6 +69,10 @@ func (f *fakeService) GetDeckCards(ctx context.Context, id int) ([]DeckCard, err
 		return nil, f.getDeckCardsErr
 	}
 	return f.getDeckCards, nil
+}
+
+func (f *fakeService) PutCardInDeck(ctx context.Context, deckID, cardID int) error {
+	return f.putCardErr
 }
 
 func setupRouter(service deckService) *gin.Engine {
@@ -422,6 +428,83 @@ func TestHandler_GetDeckCards_ReturnsErrorOnServiceFailure(t *testing.T) {
 	router := setupRouter(service)
 
 	req := httptest.NewRequest(http.MethodGet, "/deck/1/cards", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestHandler_PutCardInDeck_ReturnsNoContent(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPut, "/deck/1/cards/4", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Empty(t, w.Body.Bytes())
+}
+
+func TestHandler_PutCardInDeck_ReturnsBadRequestOnInvalidDeckID(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPut, "/deck/abc/cards/4", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_PutCardInDeck_ReturnsBadRequestOnInvalidCardID(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPut, "/deck/1/cards/abc", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_PutCardInDeck_ReturnsNotFoundWhenDeckDoesNotExist(t *testing.T) {
+	service := &fakeService{putCardErr: ErrNotFound}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPut, "/deck/999/cards/4", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+
+	var response map[string]string
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Equal(t, "deck not found", response["error"])
+}
+
+func TestHandler_PutCardInDeck_ReturnsNotFoundWhenCardDoesNotExist(t *testing.T) {
+	service := &fakeService{putCardErr: ErrCardNotFound}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPut, "/deck/1/cards/9999", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+
+	var response map[string]string
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Equal(t, "card not found", response["error"])
+}
+
+func TestHandler_PutCardInDeck_ReturnsErrorOnServiceFailure(t *testing.T) {
+	service := &fakeService{putCardErr: errors.New("insert failed")}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPut, "/deck/1/cards/4", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 

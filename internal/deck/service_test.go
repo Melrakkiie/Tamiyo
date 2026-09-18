@@ -26,6 +26,8 @@ type fakeRepository struct {
 
 	getDeckCards    []DeckCard
 	getDeckCardsErr error
+
+	linkErr error
 }
 
 func (f *fakeRepository) FindAll(ctx context.Context) ([]Deck, error) {
@@ -65,6 +67,10 @@ func (f *fakeRepository) FindCardsByDeckID(ctx context.Context, id int) ([]DeckC
 		return nil, f.getDeckCardsErr
 	}
 	return f.getDeckCards, nil
+}
+
+func (f *fakeRepository) LinkCardToDeck(ctx context.Context, deckID, cardID int) error {
+	return f.linkErr
 }
 
 func TestService_GetAllDecks_ReturnsDecksFromRepository(t *testing.T) {
@@ -245,4 +251,40 @@ func TestService_GetDeckCards_PropagatesRepositoryUpdateError(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
+}
+
+func TestService_PutCardInDeck_PropagatesRepositorySuccess(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	err := service.PutCardInDeck(context.Background(), 1, 4)
+
+	assert.NoError(t, err)
+}
+
+func TestService_PutCardInDeck_PropagatesDeckNotFoundError(t *testing.T) {
+	repo := &fakeRepository{linkErr: ErrNotFound}
+	service := NewService(repo)
+
+	err := service.PutCardInDeck(context.Background(), 999, 4)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestService_PutCardInDeck_PropagatesCardNotFoundError(t *testing.T) {
+	repo := &fakeRepository{linkErr: ErrCardNotFound}
+	service := NewService(repo)
+
+	err := service.PutCardInDeck(context.Background(), 1, 9999)
+
+	assert.ErrorIs(t, err, ErrCardNotFound)
+}
+
+func TestService_PutCardInDeck_PropagatesRepositoryError(t *testing.T) {
+	repo := &fakeRepository{linkErr: errors.New("insert failed")}
+	service := NewService(repo)
+
+	err := service.PutCardInDeck(context.Background(), 1, 4)
+
+	assert.Error(t, err)
 }

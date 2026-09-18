@@ -7,6 +7,7 @@ import (
 )
 
 var ErrCommanderNotFound = errors.New("referenced commander does not exist")
+var ErrCardNotFound = errors.New("referenced card does not exist")
 var ErrNotFound = errors.New("deck not found")
 
 type Deck struct {
@@ -39,4 +40,5 @@ type Repository interface {
 	Delete(ctx context.Context, id int) error
 
 	FindCardsByDeckID(ctx context.Context, id int) ([]DeckCard, error)
+	LinkCardToDeck(ctx context.Context, deckID int, cardID int) error
 }

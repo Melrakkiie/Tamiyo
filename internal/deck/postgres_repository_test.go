@@ -409,3 +409,70 @@ func TestPostgresRepository_FindCardsByDeckID_OnlyReturnsCardsFromRequestedDeck(
 	require.Len(t, result, 1)
 	assert.Equal(t, "Black Lotus", result[0].Name)
 }
+
+func TestPostgresRepository_LinkCardToDeck_CreatesLink(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db)
+	seedCardsWithoutStorage(t, db)
+
+	err := repo.LinkCardToDeck(context.Background(), 1, 1)
+
+	require.NoError(t, err)
+
+	cards, err := repo.FindCardsByDeckID(context.Background(), 1)
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	assert.Equal(t, "Black Lotus", cards[0].Name)
+}
+
+func TestPostgresRepository_LinkCardToDeck_IsIdempotent(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db)
+	seedCardsWithoutStorage(t, db)
+
+	err1 := repo.LinkCardToDeck(context.Background(), 1, 1)
+	require.NoError(t, err1)
+
+	err2 := repo.LinkCardToDeck(context.Background(), 1, 1)
+	require.NoError(t, err2)
+
+	cards, err := repo.FindCardsByDeckID(context.Background(), 1)
+	require.NoError(t, err)
+	assert.Len(t, cards, 1)
+}
+
+func TestPostgresRepository_LinkCardToDeck_ReturnsErrNotFoundOnInvalidDeckID(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedCardsWithoutStorage(t, db)
+
+	err := repo.LinkCardToDeck(context.Background(), 9999, 1)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestPostgresRepository_LinkCardToDeck_ReturnsErrCardNotFoundOnInvalidCardID(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db)
+
+	err := repo.LinkCardToDeck(context.Background(), 1, 9999)
+
+	assert.ErrorIs(t, err, ErrCardNotFound)
+}
+
+func TestPostgresRepository_LinkCardToDeck_DoesNotAffectOtherDecks(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db)
+	seedCardsWithoutStorage(t, db)
+
+	err := repo.LinkCardToDeck(context.Background(), 1, 1)
+	require.NoError(t, err)
+
+	cardsInDeck2, err := repo.FindCardsByDeckID(context.Background(), 2)
+	require.NoError(t, err)
+	assert.Empty(t, cardsInDeck2)
+}
