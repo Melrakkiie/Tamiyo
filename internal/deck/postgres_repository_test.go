@@ -476,3 +476,96 @@ func TestPostgresRepository_LinkCardToDeck_DoesNotAffectOtherDecks(t *testing.T)
 	require.NoError(t, err)
 	assert.Empty(t, cardsInDeck2)
 }
+
+func TestPostgresRepository_UnlinkCardFromDeck_RemovesLink(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db)
+	seedCardsWithoutStorage(t, db)
+	linkCardToDeck(t, db, 1, 1)
+
+	err := repo.UnlinkCardFromDeck(context.Background(), 1, 1)
+
+	require.NoError(t, err)
+
+	cards, err := repo.FindCardsByDeckID(context.Background(), 1)
+	require.NoError(t, err)
+	assert.Empty(t, cards)
+}
+
+func TestPostgresRepository_UnlinkCardFromDeck_SucceedsWhenLinkDoesNotExist(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db)
+	seedCardsWithoutStorage(t, db)
+
+	err := repo.UnlinkCardFromDeck(context.Background(), 1, 1)
+
+	assert.NoError(t, err)
+}
+
+func TestPostgresRepository_UnlinkCardFromDeck_SucceedsWhenDeckDoesNotExist(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	err := repo.UnlinkCardFromDeck(context.Background(), 9999, 1)
+
+	assert.NoError(t, err)
+}
+
+func TestPostgresRepository_UnlinkCardFromDeck_SucceedsWhenCardDoesNotExist(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db)
+
+	err := repo.UnlinkCardFromDeck(context.Background(), 1, 9999)
+
+	assert.NoError(t, err)
+}
+
+func TestPostgresRepository_UnlinkCardFromDeck_DoesNotAffectOtherLinks(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db)
+	seedCardsWithoutStorage(t, db)
+	linkCardToDeck(t, db, 1, 1)
+	linkCardToDeck(t, db, 2, 1)
+
+	err := repo.UnlinkCardFromDeck(context.Background(), 1, 1)
+	require.NoError(t, err)
+
+	cards, err := repo.FindCardsByDeckID(context.Background(), 1)
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	assert.Equal(t, "Lightning Bolt", cards[0].Name)
+}
+
+func TestPostgresRepository_DeletingCommanderCard_SetsCommanderIDToNullOnDeck(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	var commanderCardID int
+	err := db.Get(&commanderCardID, `
+		INSERT INTO tamiyo.cards (name, scryfall_id, set_code, collector_number, foil, storage_id)
+		VALUES ('Kess, Dissident Mage', '1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f', 'aer', 189, false, null)
+		RETURNING id
+	`)
+	require.NoError(t, err)
+
+	newDeck := Deck{
+		Name:        "Kess Commander",
+		Format:      "commander",
+		CommanderID: &commanderCardID,
+	}
+	created, err := repo.Create(context.Background(), newDeck)
+	require.NoError(t, err)
+	require.NotNil(t, created.CommanderID)
+	assert.Equal(t, commanderCardID, *created.CommanderID)
+
+	_, err = db.Exec(`DELETE FROM tamiyo.cards WHERE id = $1`, commanderCardID)
+	require.NoError(t, err)
+
+	refetched, err := repo.FindByID(context.Background(), created.ID)
+	require.NoError(t, err)
+	assert.Nil(t, refetched.CommanderID)
+}

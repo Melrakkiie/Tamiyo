@@ -32,6 +32,8 @@ type fakeService struct {
 	getDeckCardsErr error
 
 	putCardErr error
+
+	removeCardErr error
 }
 
 func (f *fakeService) GetAllDecks(ctx context.Context) ([]Deck, error) {
@@ -73,6 +75,10 @@ func (f *fakeService) GetDeckCards(ctx context.Context, id int) ([]DeckCard, err
 
 func (f *fakeService) PutCardInDeck(ctx context.Context, deckID, cardID int) error {
 	return f.putCardErr
+}
+
+func (f *fakeService) RemoveCardFromDeck(ctx context.Context, deckID, cardID int) error {
+	return f.removeCardErr
 }
 
 func setupRouter(service deckService) *gin.Engine {
@@ -505,6 +511,62 @@ func TestHandler_PutCardInDeck_ReturnsErrorOnServiceFailure(t *testing.T) {
 	router := setupRouter(service)
 
 	req := httptest.NewRequest(http.MethodPut, "/deck/1/cards/4", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestHandler_RemoveCardFromDeck_ReturnsNoContent(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/deck/1/cards/4", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Empty(t, w.Body.Bytes())
+}
+
+func TestHandler_RemoveCardFromDeck_ReturnsBadRequestOnInvalidDeckID(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/deck/abc/cards/4", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_RemoveCardFromDeck_ReturnsBadRequestOnInvalidCardID(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/deck/1/cards/abc", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_RemoveCardFromDeck_ReturnsNoContentEvenWhenLinkDoesNotExist(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/deck/1/cards/9999", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+}
+
+func TestHandler_RemoveCardFromDeck_ReturnsErrorOnServiceFailure(t *testing.T) {
+	service := &fakeService{removeCardErr: errors.New("delete failed")}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/deck/1/cards/4", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 

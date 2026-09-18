@@ -28,6 +28,8 @@ type fakeRepository struct {
 	getDeckCardsErr error
 
 	linkErr error
+
+	unlinkErr error
 }
 
 func (f *fakeRepository) FindAll(ctx context.Context) ([]Deck, error) {
@@ -71,6 +73,10 @@ func (f *fakeRepository) FindCardsByDeckID(ctx context.Context, id int) ([]DeckC
 
 func (f *fakeRepository) LinkCardToDeck(ctx context.Context, deckID, cardID int) error {
 	return f.linkErr
+}
+
+func (f *fakeRepository) UnlinkCardFromDeck(ctx context.Context, deckID, cardID int) error {
+	return f.unlinkErr
 }
 
 func TestService_GetAllDecks_ReturnsDecksFromRepository(t *testing.T) {
@@ -285,6 +291,33 @@ func TestService_PutCardInDeck_PropagatesRepositoryError(t *testing.T) {
 	service := NewService(repo)
 
 	err := service.PutCardInDeck(context.Background(), 1, 4)
+
+	assert.Error(t, err)
+}
+
+func TestService_RemoveCardFromDeck_PropagatesRepositorySuccess(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	err := service.RemoveCardFromDeck(context.Background(), 1, 4)
+
+	assert.NoError(t, err)
+}
+
+func TestService_RemoveCardFromDeck_SucceedsWhenLinkDoesNotExist(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	err := service.RemoveCardFromDeck(context.Background(), 1, 999)
+
+	assert.NoError(t, err)
+}
+
+func TestService_RemoveCardFromDeck_PropagatesRepositoryError(t *testing.T) {
+	repo := &fakeRepository{unlinkErr: errors.New("delete failed")}
+	service := NewService(repo)
+
+	err := service.RemoveCardFromDeck(context.Background(), 1, 4)
 
 	assert.Error(t, err)
 }

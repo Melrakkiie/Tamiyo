@@ -102,6 +102,7 @@ type deckService interface {
 
 	GetDeckCards(ctx context.Context, deckID int) ([]DeckCard, error)
 	PutCardInDeck(ctx context.Context, deckID int, cardID int) error
+	RemoveCardFromDeck(ctx context.Context, deckID int, cardId int) error
 }
 
 type Handler struct {
@@ -120,7 +121,8 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.DELETE("/deck/:id", h.deleteDeck)
 
 	router.GET("/deck/:id/cards", h.getDeckCards)
-	router.PUT("/deck/:deck_id/cards/:card_id", h.putCardInDeck)
+	router.PUT("/deck/:id/cards/:card_id", h.putCardInDeck)
+	router.DELETE("/deck/:id/cards/:card_id", h.removeCardFromDeck)
 }
 
 func (h *Handler) getDecks(ctx *gin.Context) {
@@ -253,7 +255,7 @@ func (h *Handler) getDeckCards(ctx *gin.Context) {
 }
 
 func (h *Handler) putCardInDeck(ctx *gin.Context) {
-	deckID, err := strconv.Atoi(ctx.Param("deck_id"))
+	deckID, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid deck_id"})
 		return
@@ -274,6 +276,27 @@ func (h *Handler) putCardInDeck(ctx *gin.Context) {
 		default:
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
+		return
+	}
+
+	ctx.Status(http.StatusNoContent)
+}
+
+func (h *Handler) removeCardFromDeck(ctx *gin.Context) {
+	deckID, err := strconv.Atoi(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid deck_id"})
+		return
+	}
+
+	cardID, err := strconv.Atoi(ctx.Param("card_id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid card_id"})
+		return
+	}
+
+	if err := h.service.RemoveCardFromDeck(ctx.Request.Context(), deckID, cardID); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 

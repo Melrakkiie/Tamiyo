@@ -49,3 +49,7 @@ func (s *Service) GetDeckCards(ctx context.Context, id int) ([]DeckCard, error) 
 func (s *Service) PutCardInDeck(ctx context.Context, deckID int, cardID int) error {
 	return s.repo.LinkCardToDeck(ctx, deckID, cardID)
 }
+
+func (s *Service) RemoveCardFromDeck(ctx context.Context, deckID int, cardID int) error {
+	return s.repo.UnlinkCardFromDeck(ctx, deckID, cardID)
+}

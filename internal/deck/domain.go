@@ -41,4 +41,5 @@ type Repository interface {
 
 	FindCardsByDeckID(ctx context.Context, id int) ([]DeckCard, error)
 	LinkCardToDeck(ctx context.Context, deckID int, cardID int) error
+	UnlinkCardFromDeck(ctx context.Context, deckID int, cardID int) error
 }

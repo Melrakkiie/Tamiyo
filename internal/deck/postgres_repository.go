@@ -251,3 +251,14 @@ func (r *PostgresRepository) LinkCardToDeck(ctx context.Context, deckID, cardID 
 
 	return nil
 }
+
+func (r *PostgresRepository) UnlinkCardFromDeck(ctx context.Context, deckID, cardID int) error {
+	query := `DELETE FROM tamiyo.card_deck WHERE deck_id = $1 AND card_id = $2`
+
+	_, err := r.db.ExecContext(ctx, query, deckID, cardID)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
