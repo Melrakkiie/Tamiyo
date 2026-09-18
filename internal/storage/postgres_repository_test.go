@@ -41,7 +41,7 @@ func TestMain(m *testing.M) {
 
 	var db *sqlx.DB
 	var connectErr error
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		db, connectErr = sqlx.Connect("postgres", connStr)
 		if connectErr == nil {

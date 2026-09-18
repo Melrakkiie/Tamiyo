@@ -271,7 +271,7 @@ func TestHandler_CreateCard_ReturnsCreatedCard(t *testing.T) {
 		"name": "Counterspell",
 		"scryfall_id": "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f",
 		"set_code": "mh2",
-		"collector_number": 267,
+		"collector_number": "267",
 		"foil": false,
 		"storage_id": 1
 	}`
@@ -290,7 +290,7 @@ func TestHandler_CreateCard_ReturnsCreatedCard(t *testing.T) {
 	assert.Equal(t, "Counterspell", response.Name)
 	assert.Equal(t, "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f", response.ScryfallID)
 	assert.Equal(t, "mh2", response.SetCode)
-	assert.Equal(t, 267, response.CollectorNumber)
+	assert.Equal(t, "267", response.CollectorNumber)
 	assert.Equal(t, false, response.Foil)
 	require.NotNil(t, response.StorageID)
 	assert.Equal(t, 1, *response.StorageID)
@@ -304,7 +304,7 @@ func TestHandler_CreateCard_AllowsNilStorageID(t *testing.T) {
 		"name": "Counterspell",
 		"scryfall_id": "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f",
 		"set_code": "mh2",
-		"collector_number": 267,
+		"collector_number": "267",
 		"foil": false
 	}`
 
@@ -329,7 +329,7 @@ func TestHandler_CreateCard_ReturnsBadRequestOnMissingRequiredField(t *testing.T
 	body := `{
 		"scryfall_id": "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f",
 		"set_code": "mh2",
-		"collector_number": 267,
+		"collector_number": "267",
 		"foil": false,
 		"storage_id": 1
 	}`
@@ -350,7 +350,7 @@ func TestHandler_CreateCard_ReturnsBadRequestOnInvalidScryfallID(t *testing.T) {
 		"name": "Counterspell",
 		"scryfall_id": "not-a-valid-uuid",
 		"set_code": "mh2",
-		"collector_number": 267,
+		"collector_number": "267",
 		"foil": false,
 		"storage_id": 1
 	}`
@@ -371,7 +371,7 @@ func TestHandler_CreateCard_ReturnsBadRequestOnInvalidCollectorNumber(t *testing
 		"name": "Counterspell",
 		"scryfall_id": "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f",
 		"set_code": "mh2",
-		"collector_number": 0,
+		"collector_number": 999,
 		"foil": false,
 		"storage_id": 1
 	}`
@@ -392,7 +392,7 @@ func TestHandler_CreateCard_ReturnsErrorOnServiceFailure(t *testing.T) {
 		"name": "Counterspell",
 		"scryfall_id": "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f",
 		"set_code": "mh2",
-		"collector_number": 267,
+		"collector_number": "267",
 		"foil": false,
 		"storage_id": 1
 	}`
@@ -413,7 +413,7 @@ func TestHandler_CreateCard_ReturnsBadRequestWhenStorageDoesNotExist(t *testing.
 		"name": "Counterspell",
 		"scryfall_id": "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f",
 		"set_code": "mh2",
-		"collector_number": 267,
+		"collector_number": "267",
 		"foil": false,
 		"storage_id": 9999
 	}`

@@ -41,7 +41,7 @@ func TestMain(m *testing.M) {
 
 	var db *sqlx.DB
 	var connectErr error
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		db, connectErr = sqlx.Connect("postgres", connStr)
 		if connectErr == nil {
@@ -119,8 +119,8 @@ func TestPostgresRepository_FindAll_ReturnsAllCardsWhenNoFilter(t *testing.T) {
 
 	testID1, testID2 := 1, 2
 	seedCards(t, db, []Card{
-		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: &testID1},
-		{Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: 129, Foil: true, StorageID: &testID2},
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false, StorageID: &testID1},
+		{Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: "129", Foil: true, StorageID: &testID2},
 	})
 
 	result, err := repo.FindAll(context.Background(), nil)
@@ -136,8 +136,8 @@ func TestPostgresRepository_FindAll_FiltersByStorageID(t *testing.T) {
 
 	testID1, testID2 := 1, 2
 	seedCards(t, db, []Card{
-		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: &testID1},
-		{Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: 129, Foil: true, StorageID: &testID2},
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false, StorageID: &testID1},
+		{Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: "129", Foil: true, StorageID: &testID2},
 	})
 
 	testID := 1
@@ -155,7 +155,7 @@ func TestPostgresRepository_FindAll_ReturnsEmptySliceWhenNoStorageMatches(t *tes
 
 	testID := 1
 	seedCards(t, db, []Card{
-		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: &testID},
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false, StorageID: &testID},
 	})
 
 	unknownTestID := 67
@@ -170,7 +170,7 @@ func TestPostgresRepository_FindByID_ReturnsCard(t *testing.T) {
 	repo := NewPostgresRepository(db)
 
 	seedCards(t, db, []Card{
-		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: nil},
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false, StorageID: nil},
 	})
 
 	result, err := repo.FindByID(context.Background(), 1)
@@ -198,7 +198,7 @@ func TestPostgresRepository_Create_InsertsAndReturnsCardWithID(t *testing.T) {
 		Name:            "Sol Ring",
 		ScryfallID:      "f2c8b1a0-1e2d-4c3b-9a8f-7e6d5c4b3a2f",
 		SetCode:         "cmr",
-		CollectorNumber: 322,
+		CollectorNumber: "322",
 		Foil:            false,
 		StorageID:       &testID,
 	}
@@ -224,7 +224,7 @@ func TestPostgresRepository_Create_InsertsAndReturnsCardWithID_NoStorageID(t *te
 		Name:            "Sol Ring",
 		ScryfallID:      "f2c8b1a0-1e2d-4c3b-9a8f-7e6d5c4b3a2f",
 		SetCode:         "cmr",
-		CollectorNumber: 322,
+		CollectorNumber: "322",
 		Foil:            false,
 	}
 
@@ -252,7 +252,7 @@ func TestPostgresRepository_Create_GeneratesAddedAndUpdatedTimestamps(t *testing
 		Name:            "Tarmogoyf",
 		ScryfallID:      "3a1b2c3d-4e5f-6789-0abc-def123456789",
 		SetCode:         "mm3",
-		CollectorNumber: 156,
+		CollectorNumber: "156",
 		Foil:            true,
 		StorageID:       &testID,
 	}
@@ -275,7 +275,7 @@ func TestPostgresRepository_Create_ReturnsErrorOnInvalidScryfallID(t *testing.T)
 		Name:            "Bad Card",
 		ScryfallID:      "not-a-uuid",
 		SetCode:         "test",
-		CollectorNumber: 1,
+		CollectorNumber: "1",
 		Foil:            false,
 		StorageID:       &testID,
 	}
@@ -294,7 +294,7 @@ func TestPostgresRepository_Create_ReturnsErrStorageNotFoundOnInvalidStorageID(t
 		Name:            "Sol Ring",
 		ScryfallID:      "f2c8b1a0-1e2d-4c3b-9a8f-7e6d5c4b3a2f",
 		SetCode:         "cmr",
-		CollectorNumber: 322,
+		CollectorNumber: "322",
 		Foil:            false,
 		StorageID:       &invalidStorageID,
 	}
@@ -309,7 +309,7 @@ func TestPostgresRepository_Update_UpdatesAndReturnsCard(t *testing.T) {
 	repo := NewPostgresRepository(db)
 
 	seedCards(t, db, []Card{
-		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: nil},
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false, StorageID: nil},
 	})
 
 	existing, err := repo.FindByID(context.Background(), 1)
@@ -331,7 +331,7 @@ func TestPostgresRepository_Update_ReturnsErrNotFoundWhenCardDoesNotExist(t *tes
 	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
 
-	nonExistent := Card{ID: 999, Name: "Non existent", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: nil}
+	nonExistent := Card{ID: 999, Name: "Non existent", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false, StorageID: nil}
 
 	_, err := repo.Update(context.Background(), nonExistent)
 
@@ -343,7 +343,7 @@ func TestPostgresRepository_Update_ReturnsErrStorageNotFoundOnInvalidStorageID(t
 	repo := NewPostgresRepository(db)
 
 	seedCards(t, db, []Card{
-		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: nil},
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false, StorageID: nil},
 	})
 
 	existing, err := repo.FindByID(context.Background(), 1)
@@ -362,7 +362,7 @@ func TestPostgresRepository_Update_RefreshesUpdatedTimestamp(t *testing.T) {
 	repo := NewPostgresRepository(db)
 
 	seedCards(t, db, []Card{
-		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: nil},
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false, StorageID: nil},
 	})
 
 	existing, err := repo.FindByID(context.Background(), 1)
@@ -382,7 +382,7 @@ func TestPostgresRepository_Delete_RemovesCard(t *testing.T) {
 	repo := NewPostgresRepository(db)
 
 	seedCards(t, db, []Card{
-		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: nil},
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false, StorageID: nil},
 	})
 
 	err := repo.Delete(context.Background(), 1)
@@ -407,8 +407,8 @@ func TestPostgresRepository_Delete_DoesNotAffectOtherCards(t *testing.T) {
 	repo := NewPostgresRepository(db)
 
 	seedCards(t, db, []Card{
-		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: nil},
-		{Name: "Counterspell", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 125, Foil: false, StorageID: nil},
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false, StorageID: nil},
+		{Name: "Counterspell", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "125", Foil: false, StorageID: nil},
 	})
 
 	err := repo.Delete(context.Background(), 1)

@@ -14,7 +14,7 @@ type cardResponse struct {
 	Name            string `json:"name"`
 	ScryfallID      string `json:"scryfall_id"`
 	SetCode         string `json:"set_code"`
-	CollectorNumber int    `json:"collector_number"`
+	CollectorNumber string `json:"collector_number"`
 	Foil            bool   `json:"foil"`
 	StorageID       *int   `json:"storage_id"`
 	Added           string `json:"added"`
@@ -39,7 +39,7 @@ type createCardRequest struct {
 	Name            string `json:"name" binding:"required"`
 	ScryfallID      string `json:"scryfall_id" binding:"required,uuid"`
 	SetCode         string `json:"set_code" binding:"required"`
-	CollectorNumber int    `json:"collector_number" binding:"required,gt=0"`
+	CollectorNumber string `json:"collector_number" binding:"required"`
 	Foil            bool   `json:"foil"`
 	StorageID       *int   `json:"storage_id" binding:"omitempty,gt=0"`
 }
@@ -59,7 +59,7 @@ type updateCardRequest struct {
 	Name            *string `json:"name" binding:"omitempty"`
 	ScryfallID      *string `json:"scryfall_id" binding:"omitempty,uuid"`
 	SetCode         *string `json:"set_code" binding:"omitempty"`
-	CollectorNumber *int    `json:"collector_number" binding:"omitempty,gt=0"`
+	CollectorNumber *string `json:"collector_number" binding:"omitempty"`
 	Foil            *bool   `json:"foil" binding:"omitempty"`
 	StorageID       *int    `json:"storage_id" binding:"omitempty,gt=0"`
 }

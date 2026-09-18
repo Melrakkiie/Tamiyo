@@ -25,7 +25,7 @@ type DeckCard struct {
 	Name            string
 	ScryfallID      string
 	SetCode         string
-	CollectorNumber int
+	CollectorNumber string
 	Foil            bool
 	StorageID       *int
 	Added           time.Time

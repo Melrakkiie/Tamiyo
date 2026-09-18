@@ -41,7 +41,7 @@ func TestMain(m *testing.M) {
 
 	var db *sqlx.DB
 	var connectErr error
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		db, connectErr = sqlx.Connect("postgres", connStr)
 		if connectErr == nil {
@@ -106,9 +106,9 @@ func seedCardsWithoutStorage(t *testing.T, db *sqlx.DB) {
 	_, err := db.Exec(`
 		INSERT INTO tamiyo.cards (name, scryfall_id, set_code, collector_number, foil, storage_id)
 		VALUES
-		    ('Black Lotus', 'bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd', 'lea', 232, false, null),
-		    ('Lightning Bolt', '9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d', '2xm', 129, true, null),
-		    ('Counterspell', '1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f', 'mh2', 267, false, null);
+		    ('Black Lotus', 'bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd', 'lea', '232', false, null),
+		    ('Lightning Bolt', '9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d', '2xm', '129', true, null),
+		    ('Counterspell', '1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f', 'mh2', '267', false, null);
 	`)
 	require.NoError(t, err)
 }
@@ -141,7 +141,7 @@ func TestPostgresRepository_FindAll_ReturnsCorrectCardCount(t *testing.T) {
 
 	_, errCard := db.Exec(`
 		INSERT INTO tamiyo.cards (name, scryfall_id, set_code, collector_number, foil, storage_id)
-		VALUES ('Black Lotus', 'bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd', 'lea', 232, false, null)
+		VALUES ('Black Lotus', 'bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd', 'lea', '232', false, null)
 	`)
 	require.NoError(t, errCard)
 
@@ -547,7 +547,7 @@ func TestPostgresRepository_DeletingCommanderCard_SetsCommanderIDToNullOnDeck(t 
 	var commanderCardID int
 	err := db.Get(&commanderCardID, `
 		INSERT INTO tamiyo.cards (name, scryfall_id, set_code, collector_number, foil, storage_id)
-		VALUES ('Kess, Dissident Mage', '1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f', 'aer', 189, false, null)
+		VALUES ('Kess, Dissident Mage', '1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f', 'aer', '189', false, null)
 		RETURNING id
 	`)
 	require.NoError(t, err)

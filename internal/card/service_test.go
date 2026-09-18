@@ -124,7 +124,7 @@ func TestService_CreateCard_PassesCardUnchangedToRepository(t *testing.T) {
 		Name:            "Sol Ring",
 		ScryfallID:      "f2c8b1a0-1e2d-4c3b-9a8f-7e6d5c4b3a2f",
 		SetCode:         "cmr",
-		CollectorNumber: 322,
+		CollectorNumber: "322",
 		Foil:            false,
 		StorageID:       &storageID,
 	}
