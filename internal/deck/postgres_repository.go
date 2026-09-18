@@ -88,7 +88,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context) ([]Deck, error) {
 		FROM tamiyo.deck d
 		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id
 		GROUP BY d.id, d.name, d.format, d.commander_id, d.added, d.updated
-		ORDER BY d.updated DESC
+		ORDER BY d.updated DESC, d.id DESC
 	`
 
 	var rows []deckRow

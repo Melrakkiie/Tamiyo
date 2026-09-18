@@ -91,7 +91,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, filter CardFilter) ([]
 	query := `
 	    SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, added, updated
 	    FROM tamiyo.cards
-	` + whereClause + fmt.Sprintf(" ORDER BY updated DESC LIMIT $%d OFFSET $%d", argPos, argPos+1)
+	` + whereClause + fmt.Sprintf(" ORDER BY updated DESC, id DESC LIMIT $%d OFFSET $%d", argPos, argPos+1)
 
 	pagedArgs := append(args, filter.Limit, offset)
 

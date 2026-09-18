@@ -48,16 +48,16 @@ func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
 func (r *PostgresRepository) FindAll(ctx context.Context) ([]Storage, error) {
 	query := `
 		SELECT
-		    tamiyo.storage.id AS id,
-		    tamiyo.storage.name AS name,
-		    tamiyo.storage.type AS type,
-		    tamiyo.storage.added AS added,
-			tamiyo.storage.updated as updated,
-		    COUNT(tamiyo.cards.id) AS card_count
-		FROM tamiyo.storage
-		LEFT JOIN tamiyo.cards ON tamiyo.storage.id = tamiyo.cards.storage_id
-		GROUP BY tamiyo.storage.id, tamiyo.storage.name, tamiyo.storage.type, tamiyo.storage.added, tamiyo.storage.updated
-		ORDER BY tamiyo.storage.updated DESC
+		    s.id AS id,
+		    s.name AS name,
+		    s.type AS type,
+		    s.added AS added,
+			s.updated as updated,
+		    COUNT(c.id) AS card_count
+		FROM tamiyo.storage s
+		LEFT JOIN tamiyo.cards c ON s.id = c.storage_id
+		GROUP BY s.id, s.name, s.type, s.added, s.updated
+		ORDER BY s.updated DESC, s.id DESC
 	`
 
 	var rows []storageRow
