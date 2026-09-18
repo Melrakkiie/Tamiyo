@@ -18,7 +18,6 @@ Usage:
 import argparse
 import csv
 import os
-import re
 import sys
 
 import requests
@@ -26,16 +25,6 @@ import requests
 DEFAULT_API_URL = "http://localhost:8080"
 # The CSV has no "format" column for decks — adjust here if needed.
 DEFAULT_DECK_FORMAT = "commander"
-
-
-def extract_collector_number(raw: str) -> int | None:
-    """Extract a positive integer from a collector number that may contain
-    letters or symbols (e.g. "44p", "HOU-141", "141★"). Returns None if no
-    digit sequence is found."""
-    match = re.search(r"\d+", raw)
-    if not match:
-        return None
-    return int(match.group())
 
 
 class TamiyoClient:
@@ -78,7 +67,7 @@ class TamiyoClient:
         name: str,
         scryfall_id: str,
         set_code: str,
-        collector_number: int,
+        collector_number: str,
         foil: bool,
         storage_id: int,
     ) -> dict:
@@ -139,7 +128,6 @@ def main():
     cards_skipped = 0
     storages_created_before = len(storage_cache)
     decks_created_before = len(deck_cache)
-    skipped_rows = []
 
     with open(args.csv_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
@@ -150,19 +138,9 @@ def main():
             card_name = row["Name"]
             set_code = row["Set code"]
             scryfall_id = row["Scryfall ID"]
+            collector_number = row["Collector number"]
             foil = row["Foil"] == "foil"
             quantity = int(row["Quantity"])
-
-            collector_number = extract_collector_number(row["Collector number"])
-            if collector_number is None:
-                print(
-                    f"[line {i}] SKIPPED: could not extract a collector number from "
-                    f"'{row['Collector number']}' ({card_name})",
-                    file=sys.stderr,
-                )
-                skipped_rows.append(i)
-                cards_skipped += quantity
-                continue
 
             storage_id = get_or_create_storage(client, storage_cache, binder_name, binder_type)
 
@@ -199,8 +177,6 @@ def main():
     print(f"Cards skipped:     {cards_skipped}")
     print(f"Storages created:  {len(storage_cache) - storages_created_before}")
     print(f"Decks created:     {len(deck_cache) - decks_created_before}")
-    if skipped_rows:
-        print(f"Skipped CSV lines (bad collector number): {skipped_rows}")
 
 
 if __name__ == "__main__":
