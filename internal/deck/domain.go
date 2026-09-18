@@ -24,4 +24,5 @@ type Repository interface {
 	FindByID(ctx context.Context, id int) (Deck, error)
 	Create(ctx context.Context, d Deck) (Deck, error)
 	Update(ctx context.Context, d Deck) (Deck, error)
+	Delete(ctx context.Context, id int) error
 }

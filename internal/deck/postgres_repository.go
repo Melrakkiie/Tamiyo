@@ -159,3 +159,23 @@ func (r *PostgresRepository) Update(ctx context.Context, d Deck) (Deck, error) {
 
 	return updated.toDomain(), nil
 }
+
+func (r *PostgresRepository) Delete(ctx context.Context, id int) error {
+	query := `DELETE FROM tamiyo.deck WHERE id = $1`
+
+	result, err := r.db.ExecContext(ctx, query, id)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}

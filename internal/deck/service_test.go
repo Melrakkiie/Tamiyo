@@ -21,6 +21,8 @@ type fakeRepository struct {
 
 	updatedDeck Deck
 	updateErr   error
+
+	deleteErr error
 }
 
 func (f *fakeRepository) FindAll(ctx context.Context) ([]Deck, error) {
@@ -49,6 +51,10 @@ func (f *fakeRepository) Update(ctx context.Context, d Deck) (Deck, error) {
 	}
 	f.updatedDeck = d
 	return d, nil
+}
+
+func (f *fakeRepository) Delete(ctx context.Context, id int) error {
+	return f.deleteErr
 }
 
 func TestService_GetAllDecks_ReturnsDecksFromRepository(t *testing.T) {
@@ -167,6 +173,33 @@ func TestService_UpdateDeck_PropagatesRepositoryUpdateError(t *testing.T) {
 	req := updateDeckRequest{Name: &newName}
 
 	_, err := service.UpdateDeck(context.Background(), 1, req)
+
+	assert.Error(t, err)
+}
+
+func TestService_DeleteDeck_PropagatesRepositorySuccess(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	err := service.DeleteDeck(context.Background(), 1)
+
+	assert.NoError(t, err)
+}
+
+func TestService_DeleteDeck_PropagatesNotFoundError(t *testing.T) {
+	repo := &fakeRepository{deleteErr: ErrNotFound}
+	service := NewService(repo)
+
+	err := service.DeleteDeck(context.Background(), 999)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestService_DeleteDeck_PropagatesRepositoryError(t *testing.T) {
+	repo := &fakeRepository{deleteErr: errors.New("delete failed")}
+	service := NewService(repo)
+
+	err := service.DeleteDeck(context.Background(), 1)
 
 	assert.Error(t, err)
 }

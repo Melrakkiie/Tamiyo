@@ -72,6 +72,7 @@ type deckService interface {
 	GetDeck(ctx context.Context, id int) (Deck, error)
 	CreateDeck(ctx context.Context, d Deck) (Deck, error)
 	UpdateDeck(ctx context.Context, id int, req updateDeckRequest) (Deck, error)
+	DeleteDeck(ctx context.Context, id int) error
 }
 
 type Handler struct {
@@ -87,6 +88,7 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/deck/:id", h.getDeck)
 	router.POST("/deck", h.createDeck)
 	router.PATCH("/deck/:id", h.updateDeck)
+	router.DELETE("/deck/:id", h.deleteDeck)
 }
 
 func (h *Handler) getDecks(ctx *gin.Context) {
@@ -173,4 +175,23 @@ func (h *Handler) updateDeck(ctx *gin.Context) {
 	}
 
 	ctx.IndentedJSON(http.StatusOK, toResponse(updated))
+}
+
+func (h *Handler) deleteDeck(ctx *gin.Context) {
+	id, err := strconv.Atoi(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	if err := h.service.DeleteDeck(ctx.Request.Context(), id); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.Status(http.StatusNoContent)
 }

@@ -32,3 +32,7 @@ func (s *Service) UpdateDeck(ctx context.Context, id int, req updateDeckRequest)
 
 	return s.repo.Update(ctx, updated)
 }
+
+func (s *Service) DeleteDeck(ctx context.Context, id int) error {
+	return s.repo.Delete(ctx, id)
+}

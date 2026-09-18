@@ -25,6 +25,8 @@ type fakeService struct {
 
 	updateDeck Deck
 	updateErr  error
+
+	deleteErr error
 }
 
 func (f *fakeService) GetAllDecks(ctx context.Context) ([]Deck, error) {
@@ -51,6 +53,10 @@ func (f *fakeService) UpdateDeck(ctx context.Context, id int, req updateDeckRequ
 		return Deck{}, f.updateErr
 	}
 	return f.updateDeck, nil
+}
+
+func (f *fakeService) DeleteDeck(ctx context.Context, id int) error {
+	return f.deleteErr
 }
 
 func setupRouter(service deckService) *gin.Engine {
@@ -306,6 +312,51 @@ func TestHandler_UpdateDeck_ReturnsErrorOnServiceFailure(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPatch, "/deck/1", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestHandler_DeleteDeck_ReturnsNoContent(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/deck/1", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Empty(t, w.Body.Bytes())
+}
+
+func TestHandler_DeleteDeck_ReturnsBadRequestOnInvalidID(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/deck/abc", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_DeleteDeck_ReturnsNotFoundWhenDeckDoesNotExist(t *testing.T) {
+	service := &fakeService{deleteErr: ErrNotFound}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/deck/999", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestHandler_DeleteDeck_ReturnsErrorOnServiceFailure(t *testing.T) {
+	service := &fakeService{deleteErr: errors.New("delete failed")}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/deck/1", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
