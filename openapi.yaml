@@ -1,0 +1,633 @@
+openapi: 3.0.3
+info:
+  title: Tamiyo API
+  description: >
+    REST API for managing a Magic: The Gathering card collection —
+    cards, physical storage (binders, boxes, deckboxes), and decks.
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: cards
+  - name: storage
+  - name: decks
+  - name: deck-cards
+    description: Deck ↔ card relationship
+
+paths:
+  /cards:
+    get:
+      tags: [cards]
+      summary: List cards
+      description: List all cards, optionally filtered by storage.
+      parameters:
+        - name: storage_id
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Only return cards belonging to this storage.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Card"
+        "400":
+          description: storage_id is not a valid integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      tags: [cards]
+      summary: Create a card
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCardRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Card"
+        "400":
+          description: >
+            Missing required field, invalid UUID, invalid collector_number,
+            or storage_id does not reference an existing storage.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /cards/{id}:
+    parameters:
+      - $ref: "#/components/parameters/CardID"
+    get:
+      tags: [cards]
+      summary: Get a card by ID
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Card"
+        "400":
+          $ref: "#/components/responses/InvalidID"
+        "404":
+          description: Card not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      tags: [cards]
+      summary: Partially update a card
+      description: >
+        Only the fields present in the body are modified. added and
+        updated can never be changed after creation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCardRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Card"
+        "400":
+          description: >
+            Invalid id, invalid body, invalid scryfall_id, or storage_id
+            does not reference an existing storage.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Card not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: [cards]
+      summary: Delete a card
+      description: >
+        Removes the card from any deck it belongs to, and clears
+        commander_id on any deck where it was the commander.
+      responses:
+        "204":
+          description: No Content
+        "400":
+          $ref: "#/components/responses/InvalidID"
+        "404":
+          description: Card not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /storage:
+    get:
+      tags: [storage]
+      summary: List storages
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Storage"
+    post:
+      tags: [storage]
+      summary: Create a storage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStorageRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Storage"
+        "400":
+          description: Missing required field
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /storage/{id}:
+    parameters:
+      - $ref: "#/components/parameters/StorageID"
+    get:
+      tags: [storage]
+      summary: Get a storage by ID
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Storage"
+        "400":
+          $ref: "#/components/responses/InvalidID"
+        "404":
+          description: Storage not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      tags: [storage]
+      summary: Partially update a storage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStorageRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Storage"
+        "400":
+          $ref: "#/components/responses/InvalidID"
+        "404":
+          description: Storage not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: [storage]
+      summary: Delete a storage
+      description: >
+        Any card currently in this storage has its storage_id set to null.
+        Cards are never deleted as a side effect.
+      responses:
+        "204":
+          description: No Content
+        "400":
+          $ref: "#/components/responses/InvalidID"
+        "404":
+          description: Storage not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /deck:
+    get:
+      tags: [decks]
+      summary: List decks
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Deck"
+    post:
+      tags: [decks]
+      summary: Create a deck
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDeckRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Deck"
+        "400":
+          description: >
+            Missing required field, or commander_id does not reference
+            an existing card.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /deck/{id}:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    get:
+      tags: [decks]
+      summary: Get a deck by ID
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Deck"
+        "400":
+          $ref: "#/components/responses/InvalidID"
+        "404":
+          description: Deck not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      tags: [decks]
+      summary: Partially update a deck
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDeckRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Deck"
+        "400":
+          description: Invalid id, invalid body, or invalid commander_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Deck not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: [decks]
+      summary: Delete a deck
+      description: >
+        Removes all card_deck associations for this deck. Cards themselves
+        are never deleted.
+      responses:
+        "204":
+          description: No Content
+        "400":
+          $ref: "#/components/responses/InvalidID"
+        "404":
+          description: Deck not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /deck/{id}/cards:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    get:
+      tags: [deck-cards]
+      summary: List the cards in a deck
+      responses:
+        "200":
+          description: OK (empty array if the deck has no cards)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Card"
+        "400":
+          $ref: "#/components/responses/InvalidID"
+        "404":
+          description: Deck not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /deck/{id}/cards/{card_id}:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+      - $ref: "#/components/parameters/CardIDPath"
+    put:
+      tags: [deck-cards]
+      summary: Add a card to a deck
+      description: >
+        Idempotent: calling this again with the same id/card_id succeeds
+        silently if the card is already in the deck.
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: id or card_id is not a valid integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Deck not found or card not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [deck-cards]
+      summary: Remove a card from a deck
+      description: >
+        Idempotent: always succeeds, whether or not the card was actually
+        linked to the deck, or whether the deck/card exist at all. The
+        guaranteed end state is "this card is not in this deck".
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: id or card_id is not a valid integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  parameters:
+    CardID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Card ID
+    StorageID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Storage ID
+    DeckID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Deck ID
+    CardIDPath:
+      name: card_id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Card ID
+
+  responses:
+    InvalidID:
+      description: id is not a valid integer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalError:
+      description: Unexpected server/database error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    Card:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        scryfall_id:
+          type: string
+          format: uuid
+        set_code:
+          type: string
+        collector_number:
+          type: integer
+        foil:
+          type: boolean
+        storage_id:
+          type: integer
+          nullable: true
+        added:
+          type: string
+        updated:
+          type: string
+      required:
+        - id
+        - name
+        - scryfall_id
+        - set_code
+        - collector_number
+        - foil
+        - added
+        - updated
+
+    CreateCardRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        scryfall_id:
+          type: string
+          format: uuid
+        set_code:
+          type: string
+        collector_number:
+          type: integer
+          minimum: 1
+        foil:
+          type: boolean
+          default: false
+        storage_id:
+          type: integer
+          nullable: true
+          minimum: 1
+      required:
+        - name
+        - scryfall_id
+        - set_code
+        - collector_number
+
+    UpdateCardRequest:
+      type: object
+      description: All fields optional; only included fields are modified.
+      properties:
+        name:
+          type: string
+        scryfall_id:
+          type: string
+          format: uuid
+        set_code:
+          type: string
+        collector_number:
+          type: integer
+          minimum: 1
+        foil:
+          type: boolean
+        storage_id:
+          type: integer
+          minimum: 1
+
+    Storage:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+        card_count:
+          type: integer
+        added:
+          type: string
+        updated:
+          type: string
+      required: [id, name, type, card_count, added, updated]
+
+    CreateStorageRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+      required: [name, type]
+
+    UpdateStorageRequest:
+      type: object
+      description: All fields optional; only included fields are modified.
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+
+    Deck:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        format:
+          type: string
+        commander_id:
+          type: integer
+          nullable: true
+        card_count:
+          type: integer
+        added:
+          type: string
+        updated:
+          type: string
+      required: [id, name, format, card_count, added, updated]
+
+    CreateDeckRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        format:
+          type: string
+        commander_id:
+          type: integer
+          minimum: 1
+      required: [name, format]
+
+    UpdateDeckRequest:
+      type: object
+      description: All fields optional; only included fields are modified.
+      properties:
+        name:
+          type: string
+        format:
+          type: string
+        commander_id:
+          type: integer
+          minimum: 1
+        clear_commander_id:
+          type: boolean
+          description: Set to true to explicitly clear commander_id (set it to null).
