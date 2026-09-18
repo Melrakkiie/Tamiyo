@@ -239,6 +239,20 @@ func TestHandler_UpdateStorage_ReturnsBadRequestOnInvalidID(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestHandler_UpdateStorage_ReturnsBadRequestOnInvalidBody(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	body := `{"name": 1}`
+
+	req := httptest.NewRequest(http.MethodPatch, "/storage/1", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
 func TestHandler_UpdateStorage_ReturnsNotFoundWhenStorageDoesNotExist(t *testing.T) {
 	service := &fakeService{updateErr: ErrNotFound}
 	router := setupRouter(service)

@@ -147,6 +147,10 @@ func (r *PostgresRepository) Update(ctx context.Context, c Card) (Card, error) {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Card{}, ErrNotFound
 		}
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23503" {
+			return Card{}, ErrStorageNotFound
+		}
 		return Card{}, err
 	}
 

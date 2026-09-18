@@ -207,6 +207,20 @@ func TestHandler_UpdateCard_ReturnsBadRequestOnInvalidID(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestHandler_UpdateCard_ReturnsBadRequestOnInvalidBody(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	body := `{"name": 1}`
+
+	req := httptest.NewRequest(http.MethodPatch, "/cards/1", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
 func TestHandler_UpdateCard_ReturnsNotFoundWhenCardDoesNotExist(t *testing.T) {
 	service := &fakeService{updateErr: ErrNotFound}
 	router := setupRouter(service)
@@ -219,6 +233,20 @@ func TestHandler_UpdateCard_ReturnsNotFoundWhenCardDoesNotExist(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestHandler_UpdateCard_ReturnsBadRequestWhenStorageDoesNotExist(t *testing.T) {
+	service := &fakeService{updateErr: ErrStorageNotFound}
+	router := setupRouter(service)
+
+	body := `{"name": "Renamed", "storage_id": 999}`
+
+	req := httptest.NewRequest(http.MethodPatch, "/cards/1", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 func TestHandler_UpdateCard_ReturnsErrorOnServiceFailure(t *testing.T) {

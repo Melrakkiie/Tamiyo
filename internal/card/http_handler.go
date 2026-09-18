@@ -196,6 +196,10 @@ func (h *Handler) updateCard(ctx *gin.Context) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "card not found"})
 			return
 		}
+		if errors.Is(err, ErrStorageNotFound) {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "storage_id does not reference an existing storage"})
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

@@ -338,6 +338,25 @@ func TestPostgresRepository_Update_ReturnsErrNotFoundWhenCardDoesNotExist(t *tes
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
+func TestPostgresRepository_Update_ReturnsErrStorageNotFoundOnInvalidStorageID(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	seedCards(t, db, []Card{
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: 232, Foil: false, StorageID: nil},
+	})
+
+	existing, err := repo.FindByID(context.Background(), 1)
+	require.NoError(t, err)
+
+	invalidStorageID := 9999
+	existing.Name = "Renamed Card"
+	existing.StorageID = &invalidStorageID
+	_, errUpdate := repo.Update(context.Background(), existing)
+
+	assert.ErrorIs(t, errUpdate, ErrStorageNotFound)
+}
+
 func TestPostgresRepository_Update_RefreshesUpdatedTimestamp(t *testing.T) {
 	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
