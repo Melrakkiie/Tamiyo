@@ -32,3 +32,4 @@ go.work.sum
 # .vscode/
 coverage.html
 coverage.out
+_devops/utils/ManaBox_Collection.csv
