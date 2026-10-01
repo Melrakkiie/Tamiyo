@@ -4,11 +4,18 @@ info:
   description: >
     REST API for managing a Magic: The Gathering card collection —
     cards, physical storage (binders, boxes, deckboxes), and decks.
+    Every endpoint except /health and /auth/register, /auth/login,
+    /auth/refresh, /auth/logout requires a Bearer access token
+    (obtained from /auth/register or /auth/login) and scopes all data
+    to the authenticated user.
   version: "1.0.0"
 
 servers:
   - url: http://localhost:8080
     description: Local development
+
+security:
+  - bearerAuth: []
 
 tags:
   - name: health
@@ -18,9 +25,6 @@ tags:
   - name: decks
   - name: deck-cards
     description: Deck ↔ card relationship
-
-security:
-  - bearerAuth: []
 
 paths:
   /health:
@@ -59,6 +63,10 @@ paths:
     post:
       tags: [auth]
       summary: Register a new account
+      description: >
+        Creates a user and returns an access/refresh token pair, the same
+        as /auth/login. Rate-limited per client IP (shared with
+        /auth/login); see the 429 response.
       security: []
       requestBody:
         required: true
@@ -72,7 +80,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuthResponse"
+                $ref: "#/components/schemas/TokenPair"
         "400":
           description: Missing/invalid email, or password shorter than 8 characters.
           content:
@@ -80,16 +88,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "409":
-          description: Email is already registered.
+          description: Email already registered
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /auth/login:
     post:
       tags: [auth]
-      summary: Log in and obtain a JWT
+      summary: Log in
+      description: >
+        Returns an access/refresh token pair. Rate-limited per client IP
+        (shared with /auth/register); see the 429 response.
       security: []
       requestBody:
         required: true
@@ -103,15 +116,112 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuthResponse"
+                $ref: "#/components/schemas/TokenPair"
+        "401":
+          description: Invalid email or password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: Exchange a refresh token for a new token pair
+      description: >
+        The submitted refresh token is single-use: a successful call
+        revokes it and returns a new one. Reusing an already-rotated
+        refresh token is treated as a possible theft and revokes every
+        refresh token for that user, so all of that user's other sessions
+        are also logged out.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
         "400":
-          description: Missing/invalid email or password.
+          description: Missing refresh_token
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "401":
-          description: Invalid email or password.
+          description: Invalid, expired, or already-used refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Log out
+      description: >
+        Revokes the given refresh token so it can no longer be used to
+        obtain new access tokens. Idempotent: logging out with an
+        unknown or already-revoked refresh token still returns 204.
+        Note this does not invalidate an access token already issued —
+        it simply expires on its own shortly after (see
+        JWT_ACCESS_TOKEN_TTL_MINUTES).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LogoutRequest"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Missing refresh_token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/password:
+    post:
+      tags: [auth]
+      summary: Change the authenticated user's password
+      description: >
+        Requires the current password. On success, every refresh token
+        belonging to the user is revoked — other sessions must log in
+        again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Missing current_password, or new_password shorter than 8 characters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing/invalid access token, or current_password is incorrect.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: User no longer exists
           content:
             application/json:
               schema:
@@ -121,7 +231,7 @@ paths:
     get:
       tags: [cards]
       summary: List cards
-      description: List all cards, with optional filtering and pagination.
+      description: List the authenticated user's cards, with optional filtering and pagination.
       parameters:
         - name: storage_id
           in: query
@@ -175,6 +285,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
     post:
       tags: [cards]
       summary: Create a card
@@ -194,11 +306,14 @@ paths:
         "400":
           description: >
             Missing required field, invalid UUID, invalid collector_number,
-            or storage_id does not reference an existing storage.
+            or storage_id does not reference an existing storage owned by
+            the authenticated user.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -217,8 +332,10 @@ paths:
                 $ref: "#/components/schemas/Card"
         "400":
           $ref: "#/components/responses/InvalidID"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
-          description: Card not found
+          description: Card not found, or not owned by the authenticated user
           content:
             application/json:
               schema:
@@ -245,13 +362,16 @@ paths:
         "400":
           description: >
             Invalid id, invalid body, invalid scryfall_id, or storage_id
-            does not reference an existing storage.
+            does not reference an existing storage owned by the
+            authenticated user.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
-          description: Card not found
+          description: Card not found, or not owned by the authenticated user
           content:
             application/json:
               schema:
@@ -267,8 +387,10 @@ paths:
           description: No Content
         "400":
           $ref: "#/components/responses/InvalidID"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
-          description: Card not found
+          description: Card not found, or not owned by the authenticated user
           content:
             application/json:
               schema:
@@ -278,13 +400,15 @@ paths:
     get:
       tags: [storage]
       summary: List storages
+      description: List the authenticated user's storages, with optional filtering.
       parameters:
         - name: type
           in: query
           required: false
           schema:
             type: string
-          description: Only return storages of this type (exact match, case-insensitive).
+          description: >
+            Only return storages whose type exactly matches (case-insensitive).
       responses:
         "200":
           description: OK
@@ -294,6 +418,8 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Storage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
     post:
       tags: [storage]
       summary: Create a storage
@@ -316,6 +442,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /storage/{id}:
     parameters:
@@ -332,8 +460,10 @@ paths:
                 $ref: "#/components/schemas/Storage"
         "400":
           $ref: "#/components/responses/InvalidID"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
-          description: Storage not found
+          description: Storage not found, or not owned by the authenticated user
           content:
             application/json:
               schema:
@@ -356,8 +486,10 @@ paths:
                 $ref: "#/components/schemas/Storage"
         "400":
           $ref: "#/components/responses/InvalidID"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
-          description: Storage not found
+          description: Storage not found, or not owned by the authenticated user
           content:
             application/json:
               schema:
@@ -373,8 +505,10 @@ paths:
           description: No Content
         "400":
           $ref: "#/components/responses/InvalidID"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
-          description: Storage not found
+          description: Storage not found, or not owned by the authenticated user
           content:
             application/json:
               schema:
@@ -384,13 +518,15 @@ paths:
     get:
       tags: [decks]
       summary: List decks
+      description: List the authenticated user's decks, with optional filtering.
       parameters:
         - name: format
           in: query
           required: false
           schema:
             type: string
-          description: Only return decks of this format (exact match, case-insensitive).
+          description: >
+            Only return decks whose format exactly matches (case-insensitive).
       responses:
         "200":
           description: OK
@@ -400,6 +536,8 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Deck"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
     post:
       tags: [decks]
       summary: Create a deck
@@ -419,11 +557,13 @@ paths:
         "400":
           description: >
             Missing required field, or commander_id does not reference
-            an existing card.
+            an existing card owned by the authenticated user.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /deck/{id}:
     parameters:
@@ -440,8 +580,10 @@ paths:
                 $ref: "#/components/schemas/Deck"
         "400":
           $ref: "#/components/responses/InvalidID"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
-          description: Deck not found
+          description: Deck not found, or not owned by the authenticated user
           content:
             application/json:
               schema:
@@ -468,8 +610,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
-          description: Deck not found
+          description: Deck not found, or not owned by the authenticated user
           content:
             application/json:
               schema:
@@ -485,8 +629,10 @@ paths:
           description: No Content
         "400":
           $ref: "#/components/responses/InvalidID"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
-          description: Deck not found
+          description: Deck not found, or not owned by the authenticated user
           content:
             application/json:
               schema:
@@ -509,8 +655,10 @@ paths:
                   $ref: "#/components/schemas/Card"
         "400":
           $ref: "#/components/responses/InvalidID"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
-          description: Deck not found
+          description: Deck not found, or not owned by the authenticated user
           content:
             application/json:
               schema:
@@ -535,6 +683,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           description: Deck not found or card not found
           content:
@@ -559,6 +709,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -569,10 +721,10 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: >
-        All endpoints except /health, /auth/register and /auth/login require
-        a Bearer token obtained from /auth/login or /auth/register. Every
-        resource (cards, storage, decks) is scoped to the authenticated
-        user — accounts never see or affect each other's data.
+        Access token returned by /auth/register, /auth/login or
+        /auth/refresh. Short-lived (JWT_ACCESS_TOKEN_TTL_MINUTES,
+        15 minutes by default) — use /auth/refresh to obtain a new one
+        without logging in again.
 
   parameters:
     CardID:
@@ -617,6 +769,27 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Missing, invalid, or expired access token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    TooManyRequests:
+      description: >
+        Too many requests from this client IP on /auth/register and
+        /auth/login combined (AUTH_RATE_LIMIT_MAX per
+        AUTH_RATE_LIMIT_WINDOW_SECONDS, 5 per 60s by default). A
+        Retry-After header (seconds) indicates when to retry.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds until the rate limit window resets.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
 
   schemas:
     Error:
@@ -647,13 +820,42 @@ components:
           type: string
       required: [email, password]
 
-    AuthResponse:
+    TokenPair:
       type: object
       properties:
         token:
           type: string
-          description: "JWT to send as `Authorization: Bearer <token>` on subsequent requests."
-      required: [token]
+          description: 'Short-lived JWT access token. Send as "Authorization: Bearer <token>".'
+        refresh_token:
+          type: string
+          description: >
+            Long-lived opaque token. Send to /auth/refresh to obtain a new
+            token pair, or to /auth/logout to end this session.
+      required: [token, refresh_token]
+
+    RefreshRequest:
+      type: object
+      properties:
+        refresh_token:
+          type: string
+      required: [refresh_token]
+
+    LogoutRequest:
+      type: object
+      properties:
+        refresh_token:
+          type: string
+      required: [refresh_token]
+
+    ChangePasswordRequest:
+      type: object
+      properties:
+        current_password:
+          type: string
+        new_password:
+          type: string
+          minLength: 8
+      required: [current_password, new_password]
 
     Card:
       type: object

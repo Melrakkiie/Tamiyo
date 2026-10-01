@@ -21,7 +21,7 @@ Tamiyo is a REST API for managing a Magic: The Gathering card collection — car
 
 ## Authentication
 
-Tamiyo is multi-tenant. `/health`, `/auth/register`, and `/auth/login` are public; every other endpoint requires a Bearer token and is scoped to the authenticated account — you only ever see or modify your own cards, storages, and decks.
+Tamiyo is multi-tenant. `/health`, `/auth/register`, `/auth/login`, `/auth/refresh`, and `/auth/logout` are public; every other endpoint — including `/auth/password` — requires a Bearer token and is scoped to the authenticated account. You only ever see or modify your own cards, storages, and decks.
 
 ### `POST /auth/register`
 
@@ -36,16 +36,19 @@ Create an account.
 
 **Response `201 Created`**
 ```json
-{ "token": "eyJhbGciOi..." }
+{
+  "token": "eyJhbGciOi...",
+  "refresh_token": "Z3f8K1m..."
+}
 ```
 
-**Errors:** `400` missing/invalid field · `409` email already registered (`"email already registered"`)
+**Errors:** `400` missing/invalid field · `409` email already registered (`"email already registered"`) · `429` too many requests (see [rate limiting](#rate-limiting))
 
 ---
 
 ### `POST /auth/login`
 
-Exchange credentials for a JWT.
+Exchange credentials for a token pair.
 
 **Body**
 
@@ -56,20 +59,96 @@ Exchange credentials for a JWT.
 
 **Response `200 OK`**
 ```json
-{ "token": "eyJhbGciOi..." }
+{
+  "token": "eyJhbGciOi...",
+  "refresh_token": "Z3f8K1m..."
+}
 ```
 
-**Errors:** `400` missing/invalid field · `401` invalid email or password
+**Errors:** `400` missing/invalid field · `401` invalid email or password · `429` too many requests (see [rate limiting](#rate-limiting))
 
 > The same error is returned for "no such account" and "wrong password", by design — this prevents an attacker from using the endpoint to discover which emails have an account.
 
 ### Using the token
 
-Send it on every other request:
+Send the access token on every other request:
 ```
 Authorization: Bearer <token>
 ```
-Tokens are valid for 7 days. There's no refresh endpoint yet — log in again once it expires.
+Access tokens are short-lived — 15 minutes by default (`JWT_ACCESS_TOKEN_TTL_MINUTES`). Use the `refresh_token` returned alongside it to get a new pair without logging in again (see below), instead of waiting for it to expire.
+
+### `POST /auth/refresh`
+
+Exchange a refresh token for a brand-new token pair.
+
+**Body**
+
+| Field | Type | Required |
+|---|---|---|
+| `refresh_token` | string | Yes |
+
+**Response `200 OK`**
+```json
+{
+  "token": "eyJhbGciOi...",
+  "refresh_token": "N9pQ2x..."
+}
+```
+
+**Errors:** `400` missing `refresh_token` · `401` invalid, expired, or already-used refresh token
+
+> Refresh tokens are **single-use**: a successful call revokes the one you sent and returns a new one (token rotation). Submitting an already-used refresh token is treated as a possible theft — it revokes *every* refresh token belonging to that account, logging out all of its sessions.
+
+Refresh tokens are valid for 30 days by default (`JWT_REFRESH_TOKEN_TTL_DAYS`) unless revoked sooner by a refresh, a logout, a password change, or reuse detection.
+
+---
+
+### `POST /auth/logout`
+
+Revoke a refresh token, ending that session.
+
+**Body**
+
+| Field | Type | Required |
+|---|---|---|
+| `refresh_token` | string | Yes |
+
+**Response `204 No Content`**
+
+**Errors:** `400` missing `refresh_token`
+
+> Idempotent — logging out with an unknown or already-revoked refresh token still returns `204`. This only revokes the refresh token: an access token already issued remains valid until it naturally expires (JWTs are stateless), which is exactly why the access token's lifetime is kept short.
+
+---
+
+### `POST /auth/password`
+
+Change the authenticated account's password. **Requires `Authorization: Bearer <token>`.**
+
+**Body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `current_password` | string | Yes | Must match the account's current password. |
+| `new_password` | string | Yes | Minimum 8 characters. |
+
+**Response `204 No Content`**
+
+**Errors:** `400` missing field / `new_password` too short · `401` missing/invalid token, or `current_password` is incorrect · `404` account no longer exists
+
+> On success, **every** refresh token belonging to the account is revoked — all other sessions (and this one, once its current access token expires) must log in again.
+
+### Rate limiting
+
+`POST /auth/register` and `POST /auth/login` share a per-client-IP limit: 5 requests per 60-second window by default (`AUTH_RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns:
+
+**Response `429 Too Many Requests`**
+```json
+{ "error": "too many requests" }
+```
+with a `Retry-After` header giving the number of seconds until the window resets.
+
+> The limiter is in-memory and per-instance. Running several replicas behind a load balancer means each instance tracks its own counter — there's no shared global limit without an external store (e.g. Redis).
 
 ---
 
@@ -95,37 +174,47 @@ All `PATCH` endpoints accept a partial body — only the fields you include are 
 
 ### `GET /cards`
 
-List all cards, optionally filtered by storage.
+List cards, with optional filtering, sorting, and pagination.
 
 **Query parameters**
 
 | Param | Type | Required | Description |
 |---|---|---|---|
 | `storage_id` | int | No | Only return cards belonging to this storage. |
+| `name` | string | No | Case-insensitive partial match on the card name. |
+| `page` | int | No | 1-based page number. Defaults to `1`. |
+| `limit` | int | No | Cards per page, max `100`. Defaults to `25`. |
+| `sort` | string | No | One of `name`, `-name`, `added`, `-added`, `updated`, `-updated`. Defaults to `-updated`. A `-` prefix means descending. `id` is always used as a stable secondary tie-breaker. |
 
 **Example**
 ```
-GET /cards?storage_id=1
+GET /cards?storage_id=1&sort=-added&page=1&limit=25
 ```
 
 **Response `200 OK`**
 ```json
-[
-  {
-    "id": 1,
-    "name": "Black Lotus",
-    "scryfall_id": "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd",
-    "set_code": "lea",
-    "collector_number": 232,
-    "foil": false,
-    "storage_id": 1,
-    "added": "2026-01-15 10:30:00",
-    "updated": "2026-01-15 10:30:00"
-  }
-]
+{
+  "data": [
+    {
+      "id": 1,
+      "name": "Black Lotus",
+      "scryfall_id": "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd",
+      "set_code": "lea",
+      "collector_number": 232,
+      "foil": false,
+      "storage_id": 1,
+      "added": "2026-01-15 10:30:00",
+      "updated": "2026-01-15 10:30:00"
+    }
+  ],
+  "page": 1,
+  "limit": 25,
+  "total": 1,
+  "total_pages": 1
+}
 ```
 
-**Errors:** `400` if `storage_id` is not a valid integer.
+**Errors:** `400` if `storage_id`, `page`, or `limit` is not a valid integer, or `sort` is not one of the allowed values.
 
 ---
 
@@ -400,11 +489,11 @@ Partially update a deck.
 | `name` | string | |
 | `format` | string | |
 | `commander_id` | int | Must reference an existing card if provided. |
-| `clear_storage_id` | bool | Set to `true` to explicitly remove the current commander (set `commander_id` to `null`). |
+| `clear_commander_id` | bool | Set to `true` to explicitly remove the current commander (set `commander_id` to `null`). |
 
 **Example — clear the commander**
 ```json
-{ "clear_storage_id": true }
+{ "clear_commander_id": true }
 ```
 
 **Response `200 OK`** — the full, updated deck.
@@ -487,9 +576,10 @@ All error responses share the same shape:
 | Status | Meaning |
 |---|---|
 | `400 Bad Request` | Malformed input: invalid id, invalid JSON body, failed field validation, or a referenced resource ID (`storage_id`, `commander_id`) doesn't exist — including when that ID belongs to another account. |
-| `401 Unauthorized` | Missing/malformed `Authorization` header, invalid or expired token, or (on `/auth/login`) wrong email/password. |
+| `401 Unauthorized` | Missing/malformed `Authorization` header, invalid or expired access token, invalid/expired/reused refresh token, incorrect `current_password`, or (on `/auth/login`) wrong email/password. |
 | `404 Not Found` | The resource identified by the URL doesn't exist for the authenticated account. A resource that exists but belongs to another account also returns `404`, not `403` — this avoids confirming that an ID exists at all. |
 | `409 Conflict` | Email already registered (`/auth/register`). |
+| `429 Too Many Requests` | Rate limit exceeded on `/auth/register` or `/auth/login` (see [rate limiting](#rate-limiting)). |
 | `500 Internal Server Error` | Unexpected failure (database unreachable, etc). |
 
 ### Validation rules summary
@@ -500,3 +590,5 @@ All error responses share the same shape:
 | `collector_number` | Must be an integer > 0 |
 | `storage_id` (on cards) | Must reference an existing storage row, if provided |
 | `commander_id` (on decks) | Must reference an existing card row, if provided |
+| `password` / `new_password` | Minimum 8 characters |
+| `refresh_token` | Single-use; reuse after rotation revokes all of the account's refresh tokens |
