@@ -1,4 +1,4 @@
-package bulkimport
+package bulk
 
 import (
 	"bufio"

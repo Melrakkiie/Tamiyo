@@ -20,7 +20,7 @@ tamiyo/
 │   ├── card/             # card domain: model, service, repository, HTTP handler
 │   ├── storage/          # storage domain (binders, boxes, deckboxes)
 │   ├── deck/             # deck domain, including deck ↔ card relationship
-│   ├── bulkimport/       # bulk import routes (ManaBox, Moxfield)
+│   ├── bulk/       # bulk import/export routes (ManaBox, Moxfield)
 │   └── config/           # environment configuration
 ├── _devops/database/     # SQL schema
 ├── .githooks/            # versioned git hooks (see Code Quality)
@@ -142,6 +142,21 @@ curl -X POST localhost:8080/import/moxfield/collection \
 ```
 
 A bulk import never fails outright over a single bad row — it returns `200 OK` with a summary (`cards_created`, `cards_skipped`, `storages_created`, `decks_created`, and a `warnings` list for anything skipped).
+
+## Bulk Export
+
+The symmetric pair of `GET` routes export the whole collection back out as a CSV in the same format the matching import route above reads — see [`doc/API.md`](./doc/API.md#bulk-export) for details:
+
+- `GET /export/manabox` — ManaBox-compatible CSV, grouped by storage (a card with no storage lands in a synthetic "Unsorted" binder).
+- `GET /export/moxfield/collection` — Moxfield-compatible "Export Collection" CSV; Moxfield's format has no storage concept, so this groups the entire collection together regardless of storage.
+
+Both always export the whole collection (no filtering by storage or deck) and return the raw CSV file as a download, not JSON:
+
+```bash
+curl -X GET localhost:8080/export/manabox \
+  -H "Authorization: Bearer <token>" \
+  -o ManaBox_Collection_export.csv
+```
 
 ### Importing a ManaBox Collection via script (alternative)
 

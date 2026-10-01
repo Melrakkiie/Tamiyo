@@ -1008,6 +1008,69 @@ paths:
         "502":
           $ref: "#/components/responses/BadGateway"
 
+  /export/manabox:
+    get:
+      tags: [bulk-export]
+      summary: Export the collection as a ManaBox CSV
+      description: >
+        Exports the account's entire collection as a ManaBox-compatible
+        CSV (ManaBox_Collection_export.csv), matching the columns
+        POST /import/manabox reads. Identical physical copies within the
+        same storage collapse into one row with a Quantity. Cards are
+        grouped by storage (ManaBox's only organizing concept); a card
+        with no storage is grouped under a synthetic "Unsorted" binder
+        rather than dropped. A card's deck membership is tracked
+        independently of storage in Tamiyo and isn't reflected here —
+        only a storage whose own type is "deck" is exported as
+        Binder Type "deck".
+      responses:
+        "200":
+          description: The CSV file, served as a download.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="ManaBox_Collection_export.csv"
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /export/moxfield/collection:
+    get:
+      tags: [bulk-export]
+      summary: Export the collection as a Moxfield collection CSV
+      description: >
+        Exports the account's entire collection as a Moxfield-compatible
+        "Export Collection" CSV, matching the columns
+        POST /import/moxfield/collection reads. Identical physical copies
+        collapse into one row with a Count. Moxfield's format has no
+        storage concept, so — unlike the ManaBox export — cards are
+        grouped across every storage (and unsorted cards) without
+        distinction.
+      responses:
+        "200":
+          description: The CSV file, served as a download.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="Moxfield_Collection_export.csv"
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
 components:
   securitySchemes:
     bearerAuth:

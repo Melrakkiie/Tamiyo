@@ -1,4 +1,4 @@
-package bulkimport
+package bulk
 
 import (
 	"context"
@@ -15,6 +15,7 @@ const defaultManaBoxDeckFormat = "commander"
 
 type cardService interface {
 	CreateCard(ctx context.Context, userID string, c card.Card) (card.Card, error)
+	GetAllCards(ctx context.Context, userID string, filter card.CardFilter) ([]card.Card, int, error)
 }
 
 type storageService interface {
@@ -268,6 +269,38 @@ func (s *Service) ImportMoxfieldDeck(ctx context.Context, userID string, req Mox
 	}
 
 	return summary, nil
+}
+
+func (s *Service) loadAllCards(ctx context.Context, userID string) ([]card.Card, error) {
+	var all []card.Card
+	const limit = 100
+	for page := 1; ; page++ {
+		items, total, err := s.cards.GetAllCards(ctx, userID, card.CardFilter{Page: page, Limit: limit})
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, items...)
+		if len(items) == 0 || page*limit >= total {
+			return all, nil
+		}
+	}
+}
+
+func (s *Service) loadAllStoragesByID(ctx context.Context, userID string) (map[int]storage.Storage, error) {
+	byID := make(map[int]storage.Storage)
+	const limit = 100
+	for page := 1; ; page++ {
+		items, total, err := s.storages.GetAllStorages(ctx, userID, storage.Filter{Page: page, Limit: limit})
+		if err != nil {
+			return nil, err
+		}
+		for _, st := range items {
+			byID[st.ID] = st
+		}
+		if len(items) == 0 || page*limit >= total {
+			return byID, nil
+		}
+	}
 }
 
 func (s *Service) loadStorageCache(ctx context.Context, userID string) (map[string]int, error) {

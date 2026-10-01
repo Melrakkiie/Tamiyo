@@ -1,6 +1,7 @@
-package bulkimport
+package bulk
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -16,6 +17,9 @@ type importService interface {
 	ImportManaBox(ctx context.Context, userID string, r io.Reader) (Summary, error)
 	ImportMoxfieldCollection(ctx context.Context, userID string, storageID int, r io.Reader) (Summary, error)
 	ImportMoxfieldDeck(ctx context.Context, userID string, req MoxfieldDeckImportRequest, r io.Reader) (Summary, error)
+
+	ExportManaBox(ctx context.Context, userID string, w io.Writer) error
+	ExportMoxfieldCollection(ctx context.Context, userID string, w io.Writer) error
 }
 
 type Handler struct {
@@ -30,6 +34,9 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.POST("/import/manabox", h.importManaBox)
 	router.POST("/import/moxfield/collection", h.importMoxfieldCollection)
 	router.POST("/import/moxfield/deck", h.importMoxfieldDeck)
+
+	router.GET("/export/manabox", h.exportManaBox)
+	router.GET("/export/moxfield/collection", h.exportMoxfieldCollection)
 }
 
 func (h *Handler) importManaBox(ctx *gin.Context) {
@@ -132,6 +139,40 @@ func (h *Handler) importMoxfieldDeck(ctx *gin.Context) {
 
 	summary, err := h.service.ImportMoxfieldDeck(ctx.Request.Context(), userID, req, file)
 	h.respondImport(ctx, summary, err)
+}
+
+func (h *Handler) exportManaBox(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
+	var buf bytes.Buffer
+	if err := h.service.ExportManaBox(ctx.Request.Context(), userID, &buf); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.Header("Content-Disposition", `attachment; filename="ManaBox_Collection_export.csv"`)
+	ctx.Data(http.StatusOK, "text/csv; charset=utf-8", buf.Bytes())
+}
+
+func (h *Handler) exportMoxfieldCollection(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
+	var buf bytes.Buffer
+	if err := h.service.ExportMoxfieldCollection(ctx.Request.Context(), userID, &buf); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.Header("Content-Disposition", `attachment; filename="Moxfield_Collection_export.csv"`)
+	ctx.Data(http.StatusOK, "text/csv; charset=utf-8", buf.Bytes())
 }
 
 func (h *Handler) respondImport(ctx *gin.Context, summary Summary, err error) {

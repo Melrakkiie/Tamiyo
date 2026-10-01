@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"Melrakkiie/Tamiyo/internal/auth"
-	"Melrakkiie/Tamiyo/internal/bulkimport"
+	"Melrakkiie/Tamiyo/internal/bulk"
 	"Melrakkiie/Tamiyo/internal/card"
 	"Melrakkiie/Tamiyo/internal/config"
 	"Melrakkiie/Tamiyo/internal/cors"
@@ -84,8 +84,8 @@ func main() {
 	deckService := deck.NewService(deckRepo)
 	deckHandler := deck.NewHandler(deckService)
 
-	importService := bulkimport.NewService(cardService, storageService, deckService, bulkimport.NewScryfallClient())
-	importHandler := bulkimport.NewHandler(importService)
+	importService := bulk.NewService(cardService, storageService, deckService, bulk.NewScryfallClient())
+	importHandler := bulk.NewHandler(importService)
 
 	healthHandler := health.NewHandler(db)
 

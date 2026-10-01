@@ -1,4 +1,4 @@
-package bulkimport
+package bulk
 
 import (
 	"context"
@@ -22,6 +22,9 @@ type fakeCardService struct {
 	nextID    int
 	created   []card.Card
 	createErr error
+
+	allCards  []card.Card
+	getAllErr error
 }
 
 func (f *fakeCardService) CreateCard(ctx context.Context, userID string, c card.Card) (card.Card, error) {
@@ -34,14 +37,38 @@ func (f *fakeCardService) CreateCard(ctx context.Context, userID string, c card.
 	return c, nil
 }
 
+func (f *fakeCardService) GetAllCards(ctx context.Context, userID string, filter card.CardFilter) ([]card.Card, int, error) {
+	if f.getAllErr != nil {
+		return nil, 0, f.getAllErr
+	}
+	total := len(f.allCards)
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = total
+	}
+	start := (filter.Page - 1) * limit
+	if start < 0 || start >= total {
+		return nil, total, nil
+	}
+	end := start + limit
+	if end > total {
+		end = total
+	}
+	return f.allCards[start:end], total, nil
+}
+
 type fakeStorageService struct {
 	storages   []storage.Storage
 	nextID     int
 	created    []storage.Storage
 	getByIDErr error
+	getAllErr  error
 }
 
 func (f *fakeStorageService) GetAllStorages(ctx context.Context, userID string, filter storage.Filter) ([]storage.Storage, int, error) {
+	if f.getAllErr != nil {
+		return nil, 0, f.getAllErr
+	}
 	return f.storages, len(f.storages), nil
 }
 

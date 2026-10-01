@@ -16,6 +16,7 @@ Tamiyo is a REST API for managing a Magic: The Gathering card collection — car
 - [Decks](#decks)
 - [Deck ↔ Card relationship](#deck--card-relationship)
 - [Bulk Import](#bulk-import)
+- [Bulk Export](#bulk-export)
 - [Error reference](#error-reference)
 
 ---
@@ -717,6 +718,30 @@ The plain-text format has no section headers (no `Commander`/`Sideboard` markers
 | `storage_id` | No | Must reference an existing storage for this account if provided. Left unset, imported cards have no storage (`storage_id: null`) — reasonable for a decklist, which isn't tied to a physical location the way a binder is. |
 
 **Expected line format:** `<quantity> <name> (<set code>) <collector number>[ *F*]`, e.g. `1 Sol Ring (SLD) 1011 *F*`. Cards with two names (e.g. double-faced cards) keep both, separated by ` / `.
+
+---
+
+## Bulk Export
+
+Two routes export your entire collection as a CSV file in the same format the matching [Bulk Import](#bulk-import) route reads — so round-tripping a collection out and back in is a no-op. Both are plain `GET` requests (no body, no query parameters): the response is the CSV file itself, not JSON, served with `Content-Type: text/csv; charset=utf-8` and a `Content-Disposition: attachment; filename="..."` header so a browser or HTTP client downloads it directly.
+
+Both routes always export the whole collection regardless of storage or deck — there's no filtering by `storage_id` or `deck_id`. Every physical copy of the same printing (same name, set, collector number and foil status) is collapsed into a single CSV row with a quantity/count column, the reverse of how importing that same row expands it back into that many individual cards.
+
+**Errors common to both**
+- `401` — unauthenticated, like every other route under this section
+- `500` — unexpected failure reading the collection
+
+---
+
+### `GET /export/manabox`
+
+Exports the account's entire collection as a ManaBox-compatible CSV (`ManaBox_Collection_export.csv`), matching the columns `POST /import/manabox` reads: `Binder Name, Binder Type, Name, Set code, Scryfall ID, Collector number, Foil, Quantity`.
+
+Cards are grouped by storage, since storage (`Binder Name`/`Binder Type`) is ManaBox's only organizing concept. A card with no storage (`storage_id: null`) is grouped under a synthetic `Unsorted` / `binder` bucket rather than being dropped, sorted after every real storage. A card's deck membership is tracked independently of storage in Tamiyo (see [Deck ↔ Card relationship](#deck--card-relationship)) and isn't reflected here — only a storage whose own `type` is `deck` is exported as `Binder Type: deck`, mirroring exactly how `POST /import/manabox` derives deck membership on the way in.
+
+### `GET /export/moxfield/collection`
+
+Exports the account's entire collection as a Moxfield-compatible "Export Collection" CSV, matching the columns `POST /import/moxfield/collection` reads: `Count, Name, Edition, Foil, Collector Number`. Moxfield's own format has no storage concept at all, so unlike the ManaBox export, cards are grouped across every storage (and unsorted cards) with no distinction — the only way to see a card's storage is via `GET /cards`, not this export.
 
 ---
 

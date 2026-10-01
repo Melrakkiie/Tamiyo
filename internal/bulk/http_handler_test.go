@@ -1,4 +1,4 @@
-package bulkimport
+package bulk
 
 import (
 	"bytes"
@@ -23,6 +23,10 @@ type fakeImportService struct {
 	lastMoxfieldStorageID int
 	lastDeckRequest       MoxfieldDeckImportRequest
 	lastFileContent       string
+
+	exportContent  string
+	exportErr      error
+	lastExportUser string
 }
 
 func (f *fakeImportService) ImportManaBox(ctx context.Context, userID string, r io.Reader) (Summary, error) {
@@ -48,6 +52,24 @@ func (f *fakeImportService) ImportMoxfieldDeck(ctx context.Context, userID strin
 func (f *fakeImportService) readFile(r io.Reader) {
 	b, _ := io.ReadAll(r)
 	f.lastFileContent = string(b)
+}
+
+func (f *fakeImportService) ExportManaBox(ctx context.Context, userID string, w io.Writer) error {
+	f.lastExportUser = userID
+	if f.exportErr != nil {
+		return f.exportErr
+	}
+	_, err := w.Write([]byte(f.exportContent))
+	return err
+}
+
+func (f *fakeImportService) ExportMoxfieldCollection(ctx context.Context, userID string, w io.Writer) error {
+	f.lastExportUser = userID
+	if f.exportErr != nil {
+		return f.exportErr
+	}
+	_, err := w.Write([]byte(f.exportContent))
+	return err
 }
 
 func setupRouter(service importService) *gin.Engine {
@@ -231,3 +253,54 @@ func TestRespondImport_UnknownErrorReturnsInternalServerError(t *testing.T) {
 type assertAnError struct{}
 
 func (assertAnError) Error() string { return "something went wrong" }
+
+// --- export routes ---------------------------------------------------------
+
+func TestExportManaBox_ReturnsCSVWithAttachmentHeaders(t *testing.T) {
+	service := &fakeImportService{exportContent: "Binder Name,Binder Type\nMain,binder\n"}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/export/manabox", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, `attachment; filename="ManaBox_Collection_export.csv"`, w.Header().Get("Content-Disposition"))
+	assert.Equal(t, "text/csv; charset=utf-8", w.Header().Get("Content-Type"))
+	assert.Equal(t, "Binder Name,Binder Type\nMain,binder\n", w.Body.String())
+	assert.Equal(t, testUserID, service.lastExportUser)
+}
+
+func TestExportManaBox_ServiceErrorReturnsInternalServerError(t *testing.T) {
+	router := setupRouter(&fakeImportService{exportErr: assertAnError{}})
+
+	req := httptest.NewRequest(http.MethodGet, "/export/manabox", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestExportMoxfieldCollection_ReturnsCSVWithAttachmentHeaders(t *testing.T) {
+	service := &fakeImportService{exportContent: "Count,Name,Edition,Foil,Collector Number\n2,Sol Ring,sld,,1011\n"}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/export/moxfield/collection", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, `attachment; filename="Moxfield_Collection_export.csv"`, w.Header().Get("Content-Disposition"))
+	assert.Equal(t, "text/csv; charset=utf-8", w.Header().Get("Content-Type"))
+	assert.Equal(t, "Count,Name,Edition,Foil,Collector Number\n2,Sol Ring,sld,,1011\n", w.Body.String())
+}
+
+func TestExportMoxfieldCollection_ServiceErrorReturnsInternalServerError(t *testing.T) {
+	router := setupRouter(&fakeImportService{exportErr: assertAnError{}})
+
+	req := httptest.NewRequest(http.MethodGet, "/export/moxfield/collection", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
