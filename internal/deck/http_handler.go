@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -169,10 +170,31 @@ func (h *Handler) getDecks(ctx *gin.Context) {
 		limit = parsed
 	}
 
+	sortField := "updated"
+	sortDesc := true
+	if raw := ctx.Query("sort"); raw != "" {
+		field := raw
+		desc := false
+		if strings.HasPrefix(raw, "-") {
+			desc = true
+			field = raw[1:]
+		}
+		switch field {
+		case "name", "added", "updated":
+			sortField = field
+			sortDesc = desc
+		default:
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "sort must be one of: name, -name, added, -added, updated, -updated"})
+			return
+		}
+	}
+
 	filter := Filter{
-		Format: ctx.Query("format"),
-		Page:   page,
-		Limit:  limit,
+		Format:    ctx.Query("format"),
+		SortField: sortField,
+		SortDesc:  sortDesc,
+		Page:      page,
+		Limit:     limit,
 	}
 
 	decks, total, err := h.service.GetAllDecks(ctx.Request.Context(), userID, filter)

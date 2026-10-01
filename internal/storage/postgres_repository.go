@@ -82,8 +82,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		LEFT JOIN tamiyo.cards ON tamiyo.storage.id = tamiyo.cards.storage_id AND tamiyo.cards.user_id = $1
 	` + whereClause + `
 		GROUP BY tamiyo.storage.id, tamiyo.storage.name, tamiyo.storage.type, tamiyo.storage.added, tamiyo.storage.updated
-		ORDER BY tamiyo.storage.updated DESC, tamiyo.storage.id DESC
-	` + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
+	` + orderByClause(filter) + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 
 	pagedArgs := append(args, filter.Limit, offset)
 
@@ -98,6 +97,24 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 	}
 
 	return storages, total, nil
+}
+
+func orderByClause(filter Filter) string {
+	dir := "ASC"
+	if filter.SortDesc {
+		dir = "DESC"
+	}
+
+	switch filter.SortField {
+	case "name":
+		return fmt.Sprintf(" ORDER BY tamiyo.storage.name %s, tamiyo.storage.id %s", dir, dir)
+	case "added":
+		return fmt.Sprintf(" ORDER BY tamiyo.storage.added %s, tamiyo.storage.id %s", dir, dir)
+	case "updated":
+		return fmt.Sprintf(" ORDER BY tamiyo.storage.updated %s, tamiyo.storage.id %s", dir, dir)
+	default:
+		return " ORDER BY tamiyo.storage.updated DESC, tamiyo.storage.id DESC"
+	}
 }
 
 func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int) (Storage, error) {

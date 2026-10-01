@@ -151,6 +151,56 @@ func TestHandler_GetStorages_ReturnsBadRequestOnLimitAboveMax(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestHandler_GetStorages_DefaultsSortToUpdatedDescending(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/storage", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "updated", service.lastFilter.SortField)
+	assert.True(t, service.lastFilter.SortDesc)
+}
+
+func TestHandler_GetStorages_PassesSortToService(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/storage?sort=-name", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "name", service.lastFilter.SortField)
+	assert.True(t, service.lastFilter.SortDesc)
+}
+
+func TestHandler_GetStorages_PassesAscendingSortToService(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/storage?sort=added", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "added", service.lastFilter.SortField)
+	assert.False(t, service.lastFilter.SortDesc)
+}
+
+func TestHandler_GetStorages_ReturnsBadRequestOnInvalidSort(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/storage?sort=price", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
 func TestHandler_GetStorages_ReturnsPaginationEnvelope(t *testing.T) {
 	service := &fakeService{
 		storages:    []Storage{{ID: 1, Name: "Vintage Collection", Type: "binder"}},

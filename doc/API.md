@@ -386,10 +386,11 @@ List all storages, each annotated with its current card count. Supports optional
 | `type` | string | No | Only return storages of this type. Exact match, case-insensitive. |
 | `page` | int | No | 1-based page number. Defaults to `1`. |
 | `limit` | int | No | Storages per page, max `100`. Defaults to `25`. |
+| `sort` | string | No | One of `name`, `-name`, `added`, `-added`, `updated`, `-updated`. Defaults to `-updated`. A `-` prefix means descending. `id` is always used as a stable secondary tie-breaker. |
 
 **Example**
 ```
-GET /storage?type=binder&page=1&limit=25
+GET /storage?type=binder&sort=-added&page=1&limit=25
 ```
 
 **Response `200 OK`**
@@ -412,7 +413,7 @@ GET /storage?type=binder&page=1&limit=25
 }
 ```
 
-**Errors:** `400` if `page` or `limit` is not a valid integer, or `limit` is outside `1..100`.
+**Errors:** `400` if `page` or `limit` is not a valid integer, `limit` is outside `1..100`, or `sort` is not one of the allowed values.
 
 ---
 
@@ -490,10 +491,11 @@ List all decks, each annotated with its current card count. Supports optional fi
 | `format` | string | No | Only return decks of this format. Exact match, case-insensitive. |
 | `page` | int | No | 1-based page number. Defaults to `1`. |
 | `limit` | int | No | Decks per page, max `100`. Defaults to `25`. |
+| `sort` | string | No | One of `name`, `-name`, `added`, `-added`, `updated`, `-updated`. Defaults to `-updated`. A `-` prefix means descending. `id` is always used as a stable secondary tie-breaker. |
 
 **Example**
 ```
-GET /deck?format=commander&page=1&limit=25
+GET /deck?format=commander&sort=-added&page=1&limit=25
 ```
 
 **Response `200 OK`**
@@ -517,7 +519,7 @@ GET /deck?format=commander&page=1&limit=25
 }
 ```
 
-**Errors:** `400` if `page` or `limit` is not a valid integer, or `limit` is outside `1..100`.
+**Errors:** `400` if `page` or `limit` is not a valid integer, `limit` is outside `1..100`, or `sort` is not one of the allowed values.
 
 ---
 

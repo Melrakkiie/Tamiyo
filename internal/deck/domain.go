@@ -35,6 +35,9 @@ type DeckCard struct {
 type Filter struct {
 	Format string
 
+	SortField string
+	SortDesc  bool
+
 	Page  int
 	Limit int
 }

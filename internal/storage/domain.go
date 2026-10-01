@@ -20,6 +20,9 @@ type Storage struct {
 type Filter struct {
 	Type string
 
+	SortField string
+	SortDesc  bool
+
 	Page  int
 	Limit int
 }

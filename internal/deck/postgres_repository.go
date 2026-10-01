@@ -103,8 +103,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id
 	` + whereClause + `
 		GROUP BY d.id, d.name, d.format, d.commander_id, d.added, d.updated
-		ORDER BY d.updated DESC, d.id DESC
-	` + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
+	` + orderByClause(filter) + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 
 	pagedArgs := append(args, filter.Limit, offset)
 
@@ -119,6 +118,24 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 	}
 
 	return decks, total, nil
+}
+
+func orderByClause(filter Filter) string {
+	dir := "ASC"
+	if filter.SortDesc {
+		dir = "DESC"
+	}
+
+	switch filter.SortField {
+	case "name":
+		return fmt.Sprintf(" ORDER BY d.name %s, d.id %s", dir, dir)
+	case "added":
+		return fmt.Sprintf(" ORDER BY d.added %s, d.id %s", dir, dir)
+	case "updated":
+		return fmt.Sprintf(" ORDER BY d.updated %s, d.id %s", dir, dir)
+	default:
+		return " ORDER BY d.updated DESC, d.id DESC"
+	}
 }
 
 func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int) (Deck, error) {

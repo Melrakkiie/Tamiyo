@@ -184,6 +184,56 @@ func TestHandler_GetDecks_ReturnsBadRequestOnLimitAboveMax(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestHandler_GetDecks_DefaultsSortToUpdatedDescending(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "updated", service.lastFilter.SortField)
+	assert.True(t, service.lastFilter.SortDesc)
+}
+
+func TestHandler_GetDecks_PassesSortToService(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck?sort=-name", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "name", service.lastFilter.SortField)
+	assert.True(t, service.lastFilter.SortDesc)
+}
+
+func TestHandler_GetDecks_PassesAscendingSortToService(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck?sort=added", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "added", service.lastFilter.SortField)
+	assert.False(t, service.lastFilter.SortDesc)
+}
+
+func TestHandler_GetDecks_ReturnsBadRequestOnInvalidSort(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck?sort=price", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
 func TestHandler_GetDecks_ReturnsPaginationEnvelope(t *testing.T) {
 	service := &fakeService{
 		decks:       []Deck{{ID: 1, Name: "Otterly Playful", Format: "commander"}},
