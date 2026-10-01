@@ -1,4 +1,4 @@
-.PHONY: test test-unit test-integration test-all coverage coverage-all build vet lint check install-hooks db-reset
+.PHONY: test test-unit test-integration test-all coverage coverage-all build vet lint govulncheck check install-hooks db-reset
 
 install-hooks:
 	git config core.hooksPath .githooks
@@ -34,8 +34,11 @@ vet:
 lint:
 	golangci-lint run ./...
 
-check: build vet lint test-all
-	@echo "Build, vet, lint et tests OK"
+govulncheck:
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+check: build vet lint govulncheck test-all
+	@echo "Build, vet, lint, govulncheck et tests OK"
 
 db-reset:
 	docker compose down -v
