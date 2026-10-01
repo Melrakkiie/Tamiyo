@@ -13,6 +13,7 @@ import (
 	"Melrakkiie/Tamiyo/internal/config"
 	"Melrakkiie/Tamiyo/internal/deck"
 	"Melrakkiie/Tamiyo/internal/health"
+	"Melrakkiie/Tamiyo/internal/ratelimit"
 	"Melrakkiie/Tamiyo/internal/storage"
 	"Melrakkiie/Tamiyo/internal/user"
 )
@@ -64,10 +65,12 @@ func main() {
 
 	healthHandler := health.NewHandler(db)
 
+	authLimiter := ratelimit.NewLimiter(cfg.AuthRateLimitMax, cfg.AuthRateLimitWindow)
+
 	router := gin.Default()
 
 	healthHandler.RegisterRoutes(router)
-	userHandler.RegisterRoutes(router)
+	userHandler.RegisterRoutes(router, ratelimit.Middleware(authLimiter))
 
 	protected := router.Group("/")
 	protected.Use(auth.RequireAuth(cfg.JWTSecret))

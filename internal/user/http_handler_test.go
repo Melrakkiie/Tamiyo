@@ -129,3 +129,24 @@ func TestHandler_Login_ReturnsUnauthorizedOnInvalidCredentials(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
+
+func TestHandler_RegisterRoutes_AppliesGivenMiddlewareToBothAuthRoutes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+
+	blockAll := func(c *gin.Context) {
+		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests, please try again later"})
+	}
+
+	NewHandler(&fakeService{}, "test-secret").RegisterRoutes(router, blockAll)
+
+	for _, path := range []string{"/auth/register", "/auth/login"} {
+		body := `{"email": "alice@example.com", "password": "supersecret"}`
+		req := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusTooManyRequests, w.Code, "path %s should go through the middleware", path)
+	}
+}

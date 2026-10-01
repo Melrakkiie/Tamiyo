@@ -44,9 +44,12 @@ func NewHandler(service userService, jwtSecret string) *Handler {
 	}
 }
 
-func (h *Handler) RegisterRoutes(router *gin.Engine) {
-	router.POST("/auth/register", h.register)
-	router.POST("/auth/login", h.login)
+func (h *Handler) RegisterRoutes(router *gin.Engine, authMiddleware ...gin.HandlerFunc) {
+	registerHandlers := append(append([]gin.HandlerFunc{}, authMiddleware...), h.register)
+	loginHandlers := append(append([]gin.HandlerFunc{}, authMiddleware...), h.login)
+
+	router.POST("/auth/register", registerHandlers...)
+	router.POST("/auth/login", loginHandlers...)
 }
 
 func (h *Handler) register(ctx *gin.Context) {
