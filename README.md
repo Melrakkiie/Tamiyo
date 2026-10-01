@@ -29,6 +29,8 @@ tamiyo/
 
 Each domain follows the same layered structure: `domain.go` (entities + repository interface), `service.go` (use cases), `postgres_repository.go` (persistence), `http_handler.go` (routes + HTTP concerns).
 
+Copy [`.env.example`](./.env.example) to `.env` and fill in `JWT_SECRET` at minimum before running the app.
+
 ## Getting Started
 
 ### Prerequisites
