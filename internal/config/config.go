@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -30,6 +31,8 @@ type Config struct {
 	SMTPFrom     string `mapstructure:"SMTP_FROM"`
 
 	PasswordResetURLTemplate string `mapstructure:"PASSWORD_RESET_URL_TEMPLATE"`
+
+	CORSAllowedOrigins []string
 }
 
 func Load() (*Config, error) {
@@ -41,6 +44,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("JWT_REFRESH_TOKEN_TTL_DAYS", 30)
 	viper.SetDefault("PASSWORD_RESET_TOKEN_TTL_MINUTES", 30)
 	viper.SetDefault("SMTP_PORT", "587")
+	viper.SetDefault("CORS_ALLOWED_ORIGINS", "")
 
 	cfg := &Config{
 		PGHost:              viper.GetString("PGHOST"),
@@ -64,7 +68,26 @@ func Load() (*Config, error) {
 		SMTPFrom:     viper.GetString("SMTP_FROM"),
 
 		PasswordResetURLTemplate: viper.GetString("PASSWORD_RESET_URL_TEMPLATE"),
+
+		CORSAllowedOrigins: parseOrigins(viper.GetString("CORS_ALLOWED_ORIGINS")),
 	}
 
 	return cfg, nil
+}
+
+func parseOrigins(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+
+	parts := strings.Split(raw, ",")
+	origins := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			origins = append(origins, p)
+		}
+	}
+
+	return origins
 }

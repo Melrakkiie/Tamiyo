@@ -39,3 +39,37 @@ func TestLoad_DefaultsAppPortWhenNotSet(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "8080", cfg.AppPort)
 }
+
+func TestLoad_DefaultsCORSAllowedOriginsToEmptyWhenNotSet(t *testing.T) {
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Empty(t, cfg.CORSAllowedOrigins)
+}
+
+func TestLoad_ParsesCORSAllowedOriginsFromCommaSeparatedList(t *testing.T) {
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,https://tamiyo.example.com")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"http://localhost:5173", "https://tamiyo.example.com"}, cfg.CORSAllowedOrigins)
+}
+
+func TestLoad_TrimsWhitespaceAroundEachCORSOrigin(t *testing.T) {
+	t.Setenv("CORS_ALLOWED_ORIGINS", " http://localhost:5173 , https://tamiyo.example.com ")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"http://localhost:5173", "https://tamiyo.example.com"}, cfg.CORSAllowedOrigins)
+}
+
+func TestLoad_DropsEmptyEntriesInCORSAllowedOrigins(t *testing.T) {
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,,https://tamiyo.example.com,")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"http://localhost:5173", "https://tamiyo.example.com"}, cfg.CORSAllowedOrigins)
+}

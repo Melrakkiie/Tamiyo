@@ -88,6 +88,16 @@ Tamiyo is multi-tenant: every account has its own cards, storages, and decks, co
 
 `/health`, `/auth/register`, and `/auth/login` are the only public routes — everything else (`/cards`, `/storage`, `/deck`) requires a valid Bearer token and only ever returns or modifies that account's own data.
 
+## CORS and security headers
+
+Every response carries a baseline set of HTTP security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, a strict `Content-Security-Policy`) — see [`internal/security`](./internal/security).
+
+Cross-origin browser access is denied by default: no frontend origin can read Tamiyo's responses until you list it in `CORS_ALLOWED_ORIGINS` (comma-separated, see [`.env.example`](./.env.example)). This only matters for a web frontend running in a browser — curl, a mobile app, or a server-to-server call are never affected by CORS either way. See [`internal/cors`](./internal/cors) for the exact rules.
+
+```bash
+CORS_ALLOWED_ORIGINS=http://localhost:5173
+```
+
 ## API Documentation
 
 See [`openapi.yaml`](./openapi.yaml) for the full API reference — endpoints, request/response schemas, and error codes. You can view it interactively by pasting it into [Swagger Editor](https://editor.swagger.io/).
