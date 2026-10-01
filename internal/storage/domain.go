@@ -18,9 +18,9 @@ type Storage struct {
 }
 
 type Repository interface {
-	FindAll(ctx context.Context) ([]Storage, error)
-	FindByID(ctx context.Context, id int) (Storage, error)
-	Create(ctx context.Context, storage Storage) (Storage, error)
-	Update(ctx context.Context, storage Storage) (Storage, error)
-	Delete(ctx context.Context, id int) error
+	FindAll(ctx context.Context, userID string) ([]Storage, error)
+	FindByID(ctx context.Context, userID string, id int) (Storage, error)
+	Create(ctx context.Context, userID string, storage Storage) (Storage, error)
+	Update(ctx context.Context, userID string, storage Storage) (Storage, error)
+	Delete(ctx context.Context, userID string, id int) error
 }

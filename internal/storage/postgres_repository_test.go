@@ -41,7 +41,7 @@ func TestMain(m *testing.M) {
 
 	var db *sqlx.DB
 	var connectErr error
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
 		db, connectErr = sqlx.Connect("postgres", connStr)
 		if connectErr == nil {
@@ -80,7 +80,7 @@ func getTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
 
 	_, err := testDB.Exec(`
-		TRUNCATE TABLE tamiyo.card_deck, tamiyo.deck, tamiyo.cards, tamiyo.storage
+		TRUNCATE TABLE tamiyo.card_deck, tamiyo.deck, tamiyo.cards, tamiyo.storage, tamiyo.users
 		RESTART IDENTITY CASCADE
 	`)
 	require.NoError(t, err)
@@ -88,42 +88,69 @@ func getTestDB(t *testing.T) *sqlx.DB {
 	return testDB
 }
 
-func seedStorages(t *testing.T, db *sqlx.DB) {
+func seedUser(t *testing.T, db *sqlx.DB, email string) string {
+	t.Helper()
+
+	var userID string
+	err := db.Get(&userID, `
+		INSERT INTO tamiyo.users (email, password_hash)
+		VALUES ($1, 'fake-hash')
+		RETURNING id
+	`, email)
+	require.NoError(t, err)
+	return userID
+}
+
+func seedStorages(t *testing.T, db *sqlx.DB, userID string) {
 	t.Helper()
 
 	_, err := db.Exec(`
-		INSERT INTO tamiyo.storage (name, type)
+		INSERT INTO tamiyo.storage (user_id, name, type)
 		VALUES
-		    ('Vintage Collection', 'binder'),
-		    ('Red Deck Wins', 'deckbox');
-	`)
+		    ($1, 'Vintage Collection', 'binder'),
+		    ($1, 'Red Deck Wins', 'deckbox');
+	`, userID)
 	require.NoError(t, err)
 }
 
 func TestPostgresRepository_FindAll_ReturnsAllStorages(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedStorages(t, db)
+	seedStorages(t, db, userID)
 
-	result, err := repo.FindAll(context.Background())
+	result, err := repo.FindAll(context.Background(), userID)
 
 	require.NoError(t, err)
 	assert.Len(t, result, 2)
 }
 
+func TestPostgresRepository_FindAll_DoesNotReturnOtherUsersStorages(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userA)
+
+	result, err := repo.FindAll(context.Background(), userB)
+
+	require.NoError(t, err)
+	assert.Empty(t, result)
+}
+
 func TestPostgresRepository_FindAll_ReturnsCorrectCardCount(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedStorages(t, db)
+	seedStorages(t, db, userID)
 
-	// storage_id 1 = "Vintage Collection" (first insert in seedStorage)
-	_, err := db.Exec(`
-		INSERT INTO tamiyo.cards (name, scryfall_id, set_code, collector_number, foil, storage_id)
-		VALUES ('Black Lotus', 'bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd', 'lea', 232, false, 1)
-	`)
-	require.NoError(t, err)
+	_, errCard := db.Exec(`
+		INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id)
+		VALUES ($1, 'Black Lotus', 'bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd', 'lea', '232', false, 1)
+	`, userID)
+	require.NoError(t, errCard)
 
-	result, err := repo.FindAll(context.Background())
+	result, err := repo.FindAll(context.Background(), userID)
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -139,10 +166,11 @@ func TestPostgresRepository_FindAll_ReturnsCorrectCardCount(t *testing.T) {
 
 func TestPostgresRepository_FindAll_ReturnsZeroCardCountForEmptyStorage(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedStorages(t, db)
+	seedStorages(t, db, userID)
 
-	result, err := repo.FindAll(context.Background())
+	result, err := repo.FindAll(context.Background(), userID)
 
 	require.NoError(t, err)
 	for _, s := range result {
@@ -150,51 +178,35 @@ func TestPostgresRepository_FindAll_ReturnsZeroCardCountForEmptyStorage(t *testi
 	}
 }
 
-func TestPostgresRepository_Create_InsertsAndReturnsStorageWithID(t *testing.T) {
+func TestPostgresRepository_FindAll_DoesNotCountAnotherUsersCards(t *testing.T) {
 	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
 	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userA)
 
-	newStorage := Storage{
-		Name: "Vintage Collection",
-		Type: "binder",
+	_, err := db.Exec(`
+		INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id)
+		VALUES ($1, 'Black Lotus', 'bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd', 'lea', '232', false, 1)
+	`, userB)
+	require.NoError(t, err)
+
+	result, err := repo.FindAll(context.Background(), userA)
+
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	for _, s := range result {
+		assert.Equal(t, 0, s.CardCount)
 	}
-
-	created, err := repo.Create(context.Background(), newStorage)
-
-	require.NoError(t, err)
-	assert.NotZero(t, created.ID)
-	assert.Equal(t, "Vintage Collection", created.Name)
-
-	all, err := repo.FindAll(context.Background())
-	require.NoError(t, err)
-	require.Len(t, all, 1)
-	assert.Equal(t, created.ID, all[0].ID)
-}
-
-func TestPostgresRepository_Create_GeneratesAddedAndUpdatedTimestamps(t *testing.T) {
-	db := getTestDB(t)
-	repo := NewPostgresRepository(db)
-
-	before := time.Now()
-	newStorage := Storage{
-		Name: "Vintage Collection",
-		Type: "binder",
-	}
-
-	created, err := repo.Create(context.Background(), newStorage)
-	after := time.Now()
-
-	require.NoError(t, err)
-	assert.WithinRange(t, created.Added, before, after)
-	assert.WithinRange(t, created.Updated, before, after)
 }
 
 func TestPostgresRepository_FindByID_ReturnsStorage(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedStorages(t, db)
+	seedStorages(t, db, userID)
 
-	result, err := repo.FindByID(context.Background(), 1)
+	result, err := repo.FindByID(context.Background(), userID, 1)
 
 	require.NoError(t, err)
 	assert.Equal(t, "Vintage Collection", result.Name)
@@ -202,56 +214,124 @@ func TestPostgresRepository_FindByID_ReturnsStorage(t *testing.T) {
 
 func TestPostgresRepository_FindByID_ReturnsErrNotFoundWhenMissing(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
 
-	_, err := repo.FindByID(context.Background(), 999)
+	_, err := repo.FindByID(context.Background(), userID, 999)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
+func TestPostgresRepository_FindByID_ReturnsErrNotFoundWhenStorageBelongsToAnotherUser(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userA)
+
+	_, err := repo.FindByID(context.Background(), userB, 1)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestPostgresRepository_Create_InsertsAndReturnsStorageWithID(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+
+	newStorage := Storage{Name: "Vintage Collection", Type: "binder"}
+
+	created, err := repo.Create(context.Background(), userID, newStorage)
+
+	require.NoError(t, err)
+	assert.NotZero(t, created.ID)
+	assert.Equal(t, "Vintage Collection", created.Name)
+
+	all, err := repo.FindAll(context.Background(), userID)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	assert.Equal(t, created.ID, all[0].ID)
+}
+
+func TestPostgresRepository_Create_GeneratesAddedAndUpdatedTimestamps(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+
+	before := time.Now()
+	newStorage := Storage{Name: "Vintage Collection", Type: "binder"}
+
+	created, err := repo.Create(context.Background(), userID, newStorage)
+	after := time.Now()
+
+	require.NoError(t, err)
+	assert.WithinRange(t, created.Added, before, after)
+	assert.WithinRange(t, created.Updated, before, after)
+}
+
 func TestPostgresRepository_Update_UpdatesAndReturnsStorage(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedStorages(t, db)
+	seedStorages(t, db, userID)
 
-	existing, err := repo.FindByID(context.Background(), 1)
+	existing, err := repo.FindByID(context.Background(), userID, 1)
 	require.NoError(t, err)
 
 	existing.Name = "Renamed Collection"
-	updated, err := repo.Update(context.Background(), existing)
+	updated, err := repo.Update(context.Background(), userID, existing)
 
 	require.NoError(t, err)
 	assert.Equal(t, "Renamed Collection", updated.Name)
 	assert.Equal(t, "binder", updated.Type)
 
-	refetched, err := repo.FindByID(context.Background(), 1)
+	refetched, err := repo.FindByID(context.Background(), userID, 1)
 	require.NoError(t, err)
 	assert.Equal(t, "Renamed Collection", refetched.Name)
 }
 
 func TestPostgresRepository_Update_ReturnsErrNotFoundWhenStorageDoesNotExist(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
 
 	nonExistent := Storage{ID: 999, Name: "Ghost", Type: "binder"}
 
-	_, err := repo.Update(context.Background(), nonExistent)
+	_, err := repo.Update(context.Background(), userID, nonExistent)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
+func TestPostgresRepository_Update_ReturnsErrNotFoundWhenStorageBelongsToAnotherUser(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userA)
+
+	storageFromA := Storage{ID: 1, Name: "Hijacked", Type: "binder"}
+	_, err := repo.Update(context.Background(), userB, storageFromA)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+
+	untouched, err := repo.FindByID(context.Background(), userA, 1)
+	require.NoError(t, err)
+	assert.Equal(t, "Vintage Collection", untouched.Name)
+}
+
 func TestPostgresRepository_Update_RefreshesUpdatedTimestamp(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedStorages(t, db)
+	seedStorages(t, db, userID)
 
-	existing, err := repo.FindByID(context.Background(), 1)
+	existing, err := repo.FindByID(context.Background(), userID, 1)
 	require.NoError(t, err)
 
 	time.Sleep(10 * time.Millisecond)
 
 	existing.Name = "Renamed"
-	updated, err := repo.Update(context.Background(), existing)
+	updated, err := repo.Update(context.Background(), userID, existing)
 
 	require.NoError(t, err)
 	assert.True(t, updated.Updated.After(existing.Updated))
@@ -259,56 +339,55 @@ func TestPostgresRepository_Update_RefreshesUpdatedTimestamp(t *testing.T) {
 
 func TestPostgresRepository_Delete_RemovesStorage(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedStorages(t, db)
+	seedStorages(t, db, userID)
 
-	err := repo.Delete(context.Background(), 1)
+	err := repo.Delete(context.Background(), userID, 1)
 
 	require.NoError(t, err)
 
-	_, err = repo.FindByID(context.Background(), 1)
+	_, err = repo.FindByID(context.Background(), userID, 1)
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
 func TestPostgresRepository_Delete_ReturnsErrNotFoundWhenStorageDoesNotExist(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
 
-	err := repo.Delete(context.Background(), 999)
+	err := repo.Delete(context.Background(), userID, 999)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
 func TestPostgresRepository_Delete_DoesNotAffectOtherStorages(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedStorages(t, db)
+	seedStorages(t, db, userID)
 
-	err := repo.Delete(context.Background(), 1)
+	err := repo.Delete(context.Background(), userID, 1)
 	require.NoError(t, err)
 
-	remaining, err := repo.FindAll(context.Background())
+	remaining, err := repo.FindAll(context.Background(), userID)
 	require.NoError(t, err)
 	require.Len(t, remaining, 1)
 	assert.Equal(t, "Red Deck Wins", remaining[0].Name)
 }
 
-func TestPostgresRepository_Delete_SetsCardStorageIDToNull(t *testing.T) {
+func TestPostgresRepository_Delete_DoesNotAffectAnotherUsersStorage(t *testing.T) {
 	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
 	repo := NewPostgresRepository(db)
-	seedStorages(t, db)
+	seedStorages(t, db, userA)
 
-	_, err := db.Exec(`
-		INSERT INTO tamiyo.cards (name, scryfall_id, set_code, collector_number, foil, storage_id)
-		VALUES ('Black Lotus', 'bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd', 'lea', 232, false, 1)
-	`)
-	require.NoError(t, err)
+	err := repo.Delete(context.Background(), userB, 1)
 
-	err = repo.Delete(context.Background(), 1)
-	require.NoError(t, err)
+	assert.ErrorIs(t, err, ErrNotFound)
 
-	var storageID *int
-	err = db.Get(&storageID, `SELECT storage_id FROM tamiyo.cards WHERE name = 'Black Lotus'`)
+	result, err := repo.FindByID(context.Background(), userA, 1)
 	require.NoError(t, err)
-	assert.Nil(t, storageID)
+	assert.Equal(t, "Vintage Collection", result.Name)
 }

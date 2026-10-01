@@ -8,11 +8,13 @@ import (
 	_ "github.com/lib/pq"
 	"go.uber.org/zap"
 
+	"Melrakkiie/Tamiyo/internal/auth"
 	"Melrakkiie/Tamiyo/internal/card"
 	"Melrakkiie/Tamiyo/internal/config"
 	"Melrakkiie/Tamiyo/internal/deck"
 	"Melrakkiie/Tamiyo/internal/health"
 	"Melrakkiie/Tamiyo/internal/storage"
+	"Melrakkiie/Tamiyo/internal/user"
 )
 
 func main() {
@@ -38,7 +40,10 @@ func main() {
 	}
 	defer db.Close()
 
-	// infrastructure -> application -> interface
+	userRepo := user.NewPostgresRepository(db)
+	userService := user.NewService(userRepo)
+	userHandler := user.NewHandler(userService, cfg.JWTSecret)
+
 	cardRepo := card.NewPostgresRepository(db)
 	cardService := card.NewService(cardRepo)
 	cardHandler := card.NewHandler(cardService)
@@ -54,10 +59,15 @@ func main() {
 	healthHandler := health.NewHandler(db)
 
 	router := gin.Default()
-	cardHandler.RegisterRoutes(router)
-	storageHandler.RegisterRoutes(router)
-	deckHandler.RegisterRoutes(router)
+
 	healthHandler.RegisterRoutes(router)
+	userHandler.RegisterRoutes(router)
+
+	protected := router.Group("/")
+	protected.Use(auth.RequireAuth(cfg.JWTSecret))
+	cardHandler.RegisterRoutes(protected)
+	storageHandler.RegisterRoutes(protected)
+	deckHandler.RegisterRoutes(protected)
 
 	logger.Info("starting server", zap.String("port", cfg.AppPort))
 	if err := router.Run(":" + cfg.AppPort); err != nil {

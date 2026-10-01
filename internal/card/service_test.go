@@ -9,10 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testUserID = "11111111-1111-1111-1111-111111111111"
+const otherUserID = "22222222-2222-2222-2222-222222222222"
+
 type fakeRepository struct {
 	cards      []Card
 	total      int
 	findAllErr error
+	lastUserID string
 	lastFilter CardFilter
 
 	findByIDCard Card
@@ -27,19 +31,22 @@ type fakeRepository struct {
 	deleteErr error
 }
 
-func (f *fakeRepository) FindAll(ctx context.Context, filter CardFilter) ([]Card, int, error) {
+func (f *fakeRepository) FindAll(ctx context.Context, userID string, filter CardFilter) ([]Card, int, error) {
+	f.lastUserID = userID
 	f.lastFilter = filter
 	return f.cards, f.total, f.findAllErr
 }
 
-func (f *fakeRepository) FindByID(ctx context.Context, id int) (Card, error) {
+func (f *fakeRepository) FindByID(ctx context.Context, userID string, id int) (Card, error) {
+	f.lastUserID = userID
 	if f.findByIDErr != nil {
 		return Card{}, f.findByIDErr
 	}
 	return f.findByIDCard, nil
 }
 
-func (f *fakeRepository) Create(ctx context.Context, c Card) (Card, error) {
+func (f *fakeRepository) Create(ctx context.Context, userID string, c Card) (Card, error) {
+	f.lastUserID = userID
 	if f.createErr != nil {
 		return Card{}, f.createErr
 	}
@@ -48,7 +55,8 @@ func (f *fakeRepository) Create(ctx context.Context, c Card) (Card, error) {
 	return c, nil
 }
 
-func (f *fakeRepository) Update(ctx context.Context, c Card) (Card, error) {
+func (f *fakeRepository) Update(ctx context.Context, userID string, c Card) (Card, error) {
+	f.lastUserID = userID
 	if f.updateErr != nil {
 		return Card{}, f.updateErr
 	}
@@ -56,8 +64,21 @@ func (f *fakeRepository) Update(ctx context.Context, c Card) (Card, error) {
 	return c, nil
 }
 
-func (f *fakeRepository) Delete(ctx context.Context, id int) error {
+func (f *fakeRepository) Delete(ctx context.Context, userID string, id int) error {
+	f.lastUserID = userID
 	return f.deleteErr
+}
+
+func TestService_GetAllCards_PassesUserIDAndFilterToRepository(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	filter := CardFilter{Page: 1, Limit: 25}
+	_, _, err := service.GetAllCards(context.Background(), testUserID, filter)
+
+	require.NoError(t, err)
+	assert.Equal(t, testUserID, repo.lastUserID)
+	assert.Equal(t, filter, repo.lastFilter)
 }
 
 func TestService_GetAllCards_ReturnsCardsAndTotalFromRepository(t *testing.T) {
@@ -68,58 +89,44 @@ func TestService_GetAllCards_ReturnsCardsAndTotalFromRepository(t *testing.T) {
 	repo := &fakeRepository{cards: expected, total: 2}
 	service := NewService(repo)
 
-	result, total, err := service.GetAllCards(context.Background(), CardFilter{Page: 1, Limit: 25})
+	result, total, err := service.GetAllCards(context.Background(), testUserID, CardFilter{Page: 1, Limit: 25})
 
 	require.NoError(t, err)
 	assert.Equal(t, expected, result)
 	assert.Equal(t, 2, total)
 }
 
-func TestService_GetAllCards_PassesFilterToRepository(t *testing.T) {
-	repo := &fakeRepository{}
-	service := NewService(repo)
-
-	testID := 1
-	filter := CardFilter{StorageID: &testID, Name: "bolt", Page: 2, Limit: 10}
-
-	_, _, err := service.GetAllCards(context.Background(), filter)
-
-	require.NoError(t, err)
-	assert.Equal(t, filter, repo.lastFilter)
-}
-
 func TestService_GetAllCards_PropagatesRepositoryError(t *testing.T) {
 	repo := &fakeRepository{findAllErr: errors.New("connection lost")}
 	service := NewService(repo)
 
-	result, total, err := service.GetAllCards(context.Background(), CardFilter{Page: 1, Limit: 25})
+	result, total, err := service.GetAllCards(context.Background(), testUserID, CardFilter{Page: 1, Limit: 25})
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Equal(t, 0, total)
 }
 
-func TestService_GetCard_ReturnsCardFromRepository(t *testing.T) {
-	expected := Card{ID: 1, Name: "Black Lotus", SetCode: "lea"}
-	repo := &fakeRepository{findByIDCard: expected}
+func TestService_GetCard_PassesUserIDToRepository(t *testing.T) {
+	repo := &fakeRepository{}
 	service := NewService(repo)
 
-	result, err := service.GetCard(context.Background(), 1)
+	_, err := service.GetCard(context.Background(), testUserID, 1)
 
 	require.NoError(t, err)
-	assert.Equal(t, expected, result)
+	assert.Equal(t, testUserID, repo.lastUserID)
 }
 
-func TestService_GetCard_PropagatesNotFoundError(t *testing.T) {
+func TestService_GetCard_ReturnsNotFoundWhenCardBelongsToAnotherUser(t *testing.T) {
 	repo := &fakeRepository{findByIDErr: ErrNotFound}
 	service := NewService(repo)
 
-	_, err := service.GetCard(context.Background(), 999)
+	_, err := service.GetCard(context.Background(), otherUserID, 1)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
-func TestService_CreateCard_PassesCardUnchangedToRepository(t *testing.T) {
+func TestService_CreateCard_PassesUserIDAndCardToRepository(t *testing.T) {
 	repo := &fakeRepository{}
 	service := NewService(repo)
 
@@ -133,9 +140,10 @@ func TestService_CreateCard_PassesCardUnchangedToRepository(t *testing.T) {
 		StorageID:       &storageID,
 	}
 
-	_, err := service.CreateCard(context.Background(), input)
+	_, err := service.CreateCard(context.Background(), testUserID, input)
 
 	require.NoError(t, err)
+	assert.Equal(t, testUserID, repo.lastUserID)
 	assert.Equal(t, input, repo.createdCard)
 }
 
@@ -143,7 +151,7 @@ func TestService_CreateCard_ReturnsCardFromRepository(t *testing.T) {
 	repo := &fakeRepository{}
 	service := NewService(repo)
 
-	result, err := service.CreateCard(context.Background(), Card{Name: "Sol Ring", SetCode: "cmr"})
+	result, err := service.CreateCard(context.Background(), testUserID, Card{Name: "Sol Ring", SetCode: "cmr"})
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.ID)
@@ -154,7 +162,7 @@ func TestService_CreateCard_PropagatesRepositoryError(t *testing.T) {
 	repo := &fakeRepository{createErr: errors.New("insert failed")}
 	service := NewService(repo)
 
-	result, err := service.CreateCard(context.Background(), Card{Name: "Sol Ring"})
+	result, err := service.CreateCard(context.Background(), testUserID, Card{Name: "Sol Ring"})
 
 	assert.Error(t, err)
 	assert.Equal(t, Card{}, result)
@@ -168,21 +176,32 @@ func TestService_UpdateCard_AppliesPartialChangesOnExistingCard(t *testing.T) {
 	newName := "Renamed"
 	req := updateCardRequest{Name: &newName}
 
-	result, err := service.UpdateCard(context.Background(), 1, req)
+	result, err := service.UpdateCard(context.Background(), testUserID, 1, req)
 
 	require.NoError(t, err)
 	assert.Equal(t, "Renamed", result.Name)
 	assert.Equal(t, "lea", result.SetCode)
 }
 
-func TestService_UpdateCard_ReturnsNotFoundWhenCardDoesNotExist(t *testing.T) {
+func TestService_UpdateCard_PassesUserIDToFindAndUpdate(t *testing.T) {
+	repo := &fakeRepository{findByIDCard: Card{ID: 1, Name: "Black Lotus"}}
+	service := NewService(repo)
+
+	newName := "Renamed"
+	_, err := service.UpdateCard(context.Background(), testUserID, 1, updateCardRequest{Name: &newName})
+
+	require.NoError(t, err)
+	assert.Equal(t, testUserID, repo.lastUserID)
+}
+
+func TestService_UpdateCard_ReturnsNotFoundWhenCardDoesNotBelongToUser(t *testing.T) {
 	repo := &fakeRepository{findByIDErr: ErrNotFound}
 	service := NewService(repo)
 
 	newName := "Doesn't matter"
 	req := updateCardRequest{Name: &newName}
 
-	_, err := service.UpdateCard(context.Background(), 999, req)
+	_, err := service.UpdateCard(context.Background(), otherUserID, 999, req)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
@@ -195,25 +214,26 @@ func TestService_UpdateCard_PropagatesRepositoryUpdateError(t *testing.T) {
 	newName := "New Name"
 	req := updateCardRequest{Name: &newName}
 
-	_, err := service.UpdateCard(context.Background(), 1, req)
+	_, err := service.UpdateCard(context.Background(), testUserID, 1, req)
 
 	assert.Error(t, err)
 }
 
-func TestService_DeleteCard_PropagatesRepositorySuccess(t *testing.T) {
+func TestService_DeleteCard_PassesUserIDToRepository(t *testing.T) {
 	repo := &fakeRepository{}
 	service := NewService(repo)
 
-	err := service.DeleteCard(context.Background(), 1)
+	err := service.DeleteCard(context.Background(), testUserID, 1)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	assert.Equal(t, testUserID, repo.lastUserID)
 }
 
 func TestService_DeleteCard_PropagatesNotFoundError(t *testing.T) {
 	repo := &fakeRepository{deleteErr: ErrNotFound}
 	service := NewService(repo)
 
-	err := service.DeleteCard(context.Background(), 999)
+	err := service.DeleteCard(context.Background(), testUserID, 999)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
@@ -222,7 +242,7 @@ func TestService_DeleteCard_PropagatesRepositoryError(t *testing.T) {
 	repo := &fakeRepository{deleteErr: errors.New("delete failed")}
 	service := NewService(repo)
 
-	err := service.DeleteCard(context.Background(), 1)
+	err := service.DeleteCard(context.Background(), testUserID, 1)
 
 	assert.Error(t, err)
 }

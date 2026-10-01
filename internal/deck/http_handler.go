@@ -7,6 +7,8 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+
+	"Melrakkiie/Tamiyo/internal/auth"
 )
 
 type deckResponse struct {
@@ -94,15 +96,15 @@ func toDeckCardResponse(dc DeckCard) deckCardResponse {
 }
 
 type deckService interface {
-	GetAllDecks(ctx context.Context) ([]Deck, error)
-	GetDeck(ctx context.Context, id int) (Deck, error)
-	CreateDeck(ctx context.Context, d Deck) (Deck, error)
-	UpdateDeck(ctx context.Context, id int, req updateDeckRequest) (Deck, error)
-	DeleteDeck(ctx context.Context, id int) error
+	GetAllDecks(ctx context.Context, userID string) ([]Deck, error)
+	GetDeck(ctx context.Context, userID string, id int) (Deck, error)
+	CreateDeck(ctx context.Context, userID string, d Deck) (Deck, error)
+	UpdateDeck(ctx context.Context, userID string, id int, req updateDeckRequest) (Deck, error)
+	DeleteDeck(ctx context.Context, userID string, id int) error
 
-	GetDeckCards(ctx context.Context, deckID int) ([]DeckCard, error)
-	PutCardInDeck(ctx context.Context, deckID int, cardID int) error
-	RemoveCardFromDeck(ctx context.Context, deckID int, cardId int) error
+	GetDeckCards(ctx context.Context, userID string, deckID int) ([]DeckCard, error)
+	PutCardInDeck(ctx context.Context, userID string, deckID int, cardID int) error
+	RemoveCardFromDeck(ctx context.Context, userID string, deckID int, cardID int) error
 }
 
 type Handler struct {
@@ -113,7 +115,7 @@ func NewHandler(service deckService) *Handler {
 	return &Handler{service: service}
 }
 
-func (h *Handler) RegisterRoutes(router *gin.Engine) {
+func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.GET("/deck", h.getDecks)
 	router.GET("/deck/:id", h.getDeck)
 	router.POST("/deck", h.createDeck)
@@ -126,7 +128,13 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 }
 
 func (h *Handler) getDecks(ctx *gin.Context) {
-	decks, err := h.service.GetAllDecks(ctx.Request.Context())
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
+	decks, err := h.service.GetAllDecks(ctx.Request.Context(), userID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -140,13 +148,19 @@ func (h *Handler) getDecks(ctx *gin.Context) {
 }
 
 func (h *Handler) getDeck(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
 
-	deck, err := h.service.GetDeck(ctx.Request.Context(), id)
+	deck, err := h.service.GetDeck(ctx.Request.Context(), userID, id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
@@ -160,15 +174,19 @@ func (h *Handler) getDeck(ctx *gin.Context) {
 }
 
 func (h *Handler) createDeck(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
 	var req createDeckRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	newDeck := req.toDomain()
-
-	created, err := h.service.CreateDeck(ctx.Request.Context(), newDeck)
+	created, err := h.service.CreateDeck(ctx.Request.Context(), userID, req.toDomain())
 	if err != nil {
 		if errors.Is(err, ErrCommanderNotFound) {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "commander_id does not reference an existing card"})
@@ -182,6 +200,12 @@ func (h *Handler) createDeck(ctx *gin.Context) {
 }
 
 func (h *Handler) updateDeck(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
@@ -194,7 +218,7 @@ func (h *Handler) updateDeck(ctx *gin.Context) {
 		return
 	}
 
-	updated, err := h.service.UpdateDeck(ctx.Request.Context(), id, req)
+	updated, err := h.service.UpdateDeck(ctx.Request.Context(), userID, id, req)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
@@ -212,13 +236,19 @@ func (h *Handler) updateDeck(ctx *gin.Context) {
 }
 
 func (h *Handler) deleteDeck(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
 
-	if err := h.service.DeleteDeck(ctx.Request.Context(), id); err != nil {
+	if err := h.service.DeleteDeck(ctx.Request.Context(), userID, id); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
 			return
@@ -231,13 +261,19 @@ func (h *Handler) deleteDeck(ctx *gin.Context) {
 }
 
 func (h *Handler) getDeckCards(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
 
-	deckCards, err := h.service.GetDeckCards(ctx.Request.Context(), id)
+	deckCards, err := h.service.GetDeckCards(ctx.Request.Context(), userID, id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
@@ -255,6 +291,12 @@ func (h *Handler) getDeckCards(ctx *gin.Context) {
 }
 
 func (h *Handler) putCardInDeck(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
 	deckID, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid deck_id"})
@@ -267,7 +309,7 @@ func (h *Handler) putCardInDeck(ctx *gin.Context) {
 		return
 	}
 
-	if err := h.service.PutCardInDeck(ctx.Request.Context(), deckID, cardID); err != nil {
+	if err := h.service.PutCardInDeck(ctx.Request.Context(), userID, deckID, cardID); err != nil {
 		switch {
 		case errors.Is(err, ErrNotFound):
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
@@ -283,6 +325,12 @@ func (h *Handler) putCardInDeck(ctx *gin.Context) {
 }
 
 func (h *Handler) removeCardFromDeck(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
 	deckID, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid deck_id"})
@@ -295,7 +343,11 @@ func (h *Handler) removeCardFromDeck(ctx *gin.Context) {
 		return
 	}
 
-	if err := h.service.RemoveCardFromDeck(ctx.Request.Context(), deckID, cardID); err != nil {
+	if err := h.service.RemoveCardFromDeck(ctx.Request.Context(), userID, deckID, cardID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

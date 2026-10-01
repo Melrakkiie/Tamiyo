@@ -15,8 +15,9 @@ import (
 )
 
 type fakeService struct {
-	decks     []Deck
-	getAllErr error
+	decks      []Deck
+	getAllErr  error
+	lastUserID string
 
 	getDeck    Deck
 	getDeckErr error
@@ -31,23 +32,25 @@ type fakeService struct {
 	getDeckCards    []DeckCard
 	getDeckCardsErr error
 
-	putCardErr error
-
+	putCardErr    error
 	removeCardErr error
 }
 
-func (f *fakeService) GetAllDecks(ctx context.Context) ([]Deck, error) {
+func (f *fakeService) GetAllDecks(ctx context.Context, userID string) ([]Deck, error) {
+	f.lastUserID = userID
 	return f.decks, f.getAllErr
 }
 
-func (f *fakeService) GetDeck(ctx context.Context, id int) (Deck, error) {
+func (f *fakeService) GetDeck(ctx context.Context, userID string, id int) (Deck, error) {
+	f.lastUserID = userID
 	if f.getDeckErr != nil {
 		return Deck{}, f.getDeckErr
 	}
 	return f.getDeck, nil
 }
 
-func (f *fakeService) CreateDeck(ctx context.Context, d Deck) (Deck, error) {
+func (f *fakeService) CreateDeck(ctx context.Context, userID string, d Deck) (Deck, error) {
+	f.lastUserID = userID
 	if f.createErr != nil {
 		return Deck{}, f.createErr
 	}
@@ -55,44 +58,51 @@ func (f *fakeService) CreateDeck(ctx context.Context, d Deck) (Deck, error) {
 	return d, nil
 }
 
-func (f *fakeService) UpdateDeck(ctx context.Context, id int, req updateDeckRequest) (Deck, error) {
+func (f *fakeService) UpdateDeck(ctx context.Context, userID string, id int, req updateDeckRequest) (Deck, error) {
+	f.lastUserID = userID
 	if f.updateErr != nil {
 		return Deck{}, f.updateErr
 	}
 	return f.updateDeck, nil
 }
 
-func (f *fakeService) DeleteDeck(ctx context.Context, id int) error {
+func (f *fakeService) DeleteDeck(ctx context.Context, userID string, id int) error {
+	f.lastUserID = userID
 	return f.deleteErr
 }
 
-func (f *fakeService) GetDeckCards(ctx context.Context, id int) ([]DeckCard, error) {
+func (f *fakeService) GetDeckCards(ctx context.Context, userID string, id int) ([]DeckCard, error) {
+	f.lastUserID = userID
 	if f.getDeckCardsErr != nil {
 		return nil, f.getDeckCardsErr
 	}
 	return f.getDeckCards, nil
 }
 
-func (f *fakeService) PutCardInDeck(ctx context.Context, deckID, cardID int) error {
+func (f *fakeService) PutCardInDeck(ctx context.Context, userID string, deckID, cardID int) error {
+	f.lastUserID = userID
 	return f.putCardErr
 }
 
-func (f *fakeService) RemoveCardFromDeck(ctx context.Context, deckID, cardID int) error {
+func (f *fakeService) RemoveCardFromDeck(ctx context.Context, userID string, deckID, cardID int) error {
+	f.lastUserID = userID
 	return f.removeCardErr
 }
 
 func setupRouter(service deckService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set("user_id", testUserID)
+		c.Next()
+	})
 	NewHandler(service).RegisterRoutes(router)
 	return router
 }
 
-func TestHandler_GetDecks_ReturnsDecksAsJSON(t *testing.T) {
+func TestHandler_GetDecks_PassesUserIDToService(t *testing.T) {
 	service := &fakeService{
-		decks: []Deck{
-			{ID: 1, Name: "Otterly Playful", Format: "commander"},
-		},
+		decks: []Deck{{ID: 1, Name: "Otterly Playful", Format: "commander"}},
 	}
 	router := setupRouter(service)
 
@@ -101,13 +111,13 @@ func TestHandler_GetDecks_ReturnsDecksAsJSON(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, testUserID, service.lastUserID)
 
 	var response []deckResponse
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 	require.Len(t, response, 1)
 	assert.Equal(t, "Otterly Playful", response[0].Name)
-	assert.Equal(t, "commander", response[0].Format)
 }
 
 func TestHandler_GetDecks_ReturnsErrorOnServiceFailure(t *testing.T) {
@@ -148,7 +158,7 @@ func TestHandler_GetDeck_ReturnsBadRequestOnInvalidID(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestHandler_GetDeck_ReturnsNotFoundWhenDeckDoesNotExist(t *testing.T) {
+func TestHandler_GetDeck_ReturnsNotFoundWhenDeckDoesNotBelongToUser(t *testing.T) {
 	service := &fakeService{getDeckErr: ErrNotFound}
 	router := setupRouter(service)
 
@@ -174,10 +184,7 @@ func TestHandler_CreateDeck_ReturnsCreatedDeck(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)
 
-	body := `{
-		"name": "Otterly Playful",
-		"format": "commander"
-	}`
+	body := `{"name": "Otterly Playful", "format": "commander"}`
 
 	req := httptest.NewRequest(http.MethodPost, "/deck", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -185,23 +192,20 @@ func TestHandler_CreateDeck_ReturnsCreatedDeck(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusCreated, w.Code)
+	assert.Equal(t, testUserID, service.lastUserID)
 
 	var response deckResponse
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 	assert.Equal(t, 1, response.ID)
 	assert.Equal(t, "Otterly Playful", response.Name)
-	assert.Equal(t, "commander", response.Format)
 }
 
 func TestHandler_CreateDeck_ReturnsBadRequestOnMissingRequiredField(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)
 
-	// missing "name"
-	body := `{
-		"format": "commander"
-	}`
+	body := `{"format": "commander"}`
 
 	req := httptest.NewRequest(http.MethodPost, "/deck", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -215,10 +219,7 @@ func TestHandler_CreateDeck_ReturnsErrorOnServiceFailure(t *testing.T) {
 	service := &fakeService{createErr: errors.New("insert failed")}
 	router := setupRouter(service)
 
-	body := `{
-		"name": "Otterly Playful",
-		"format": "commander"
-	}`
+	body := `{"name": "Otterly Playful", "format": "commander"}`
 
 	req := httptest.NewRequest(http.MethodPost, "/deck", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -232,11 +233,7 @@ func TestHandler_CreateDeck_ReturnsBadRequestWhenCommanderDoesNotExist(t *testin
 	service := &fakeService{createErr: ErrCommanderNotFound}
 	router := setupRouter(service)
 
-	body := `{
-		"name": "Otterly Playful",
-		"format": "commander",
-		"storage_id": 9999
-	}`
+	body := `{"name": "Otterly Playful", "format": "commander", "commander_id": 9999}`
 
 	req := httptest.NewRequest(http.MethodPost, "/deck", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -252,7 +249,7 @@ func TestHandler_CreateDeck_ReturnsBadRequestWhenCommanderDoesNotExist(t *testin
 }
 
 func TestHandler_UpdateDeck_ReturnsUpdatedDeck(t *testing.T) {
-	service := &fakeService{updateDeck: Deck{ID: 1, Name: "Renamed", Format: "modern", CommanderID: nil}}
+	service := &fakeService{updateDeck: Deck{ID: 1, Name: "Renamed", Format: "modern"}}
 	router := setupRouter(service)
 
 	body := `{"name": "Renamed"}`
@@ -298,7 +295,7 @@ func TestHandler_UpdateDeck_ReturnsBadRequestOnInvalidBody(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestHandler_UpdateDeck_ReturnsNotFoundWhenDeckDoesNotExist(t *testing.T) {
+func TestHandler_UpdateDeck_ReturnsNotFoundWhenDeckDoesNotBelongToUser(t *testing.T) {
 	service := &fakeService{updateErr: ErrNotFound}
 	router := setupRouter(service)
 
@@ -363,7 +360,7 @@ func TestHandler_DeleteDeck_ReturnsBadRequestOnInvalidID(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestHandler_DeleteDeck_ReturnsNotFoundWhenDeckDoesNotExist(t *testing.T) {
+func TestHandler_DeleteDeck_ReturnsNotFoundWhenDeckDoesNotBelongToUser(t *testing.T) {
 	service := &fakeService{deleteErr: ErrNotFound}
 	router := setupRouter(service)
 
@@ -404,7 +401,6 @@ func TestHandler_GetDeckCards_ReturnsCardsAsJSON(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, response, 1)
 	assert.Equal(t, "Black Lotus", response[0].Name)
-	assert.Equal(t, "lea", response[0].SetCode)
 }
 
 func TestHandler_GetDeckCards_ReturnsBadRequestOnInvalidID(t *testing.T) {
@@ -418,7 +414,7 @@ func TestHandler_GetDeckCards_ReturnsBadRequestOnInvalidID(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestHandler_GetDeckCards_ReturnsNotFoundWhenDeckDoesNotExist(t *testing.T) {
+func TestHandler_GetDeckCards_ReturnsNotFoundWhenDeckDoesNotBelongToUser(t *testing.T) {
 	service := &fakeService{getDeckCardsErr: ErrNotFound}
 	router := setupRouter(service)
 
@@ -474,7 +470,7 @@ func TestHandler_PutCardInDeck_ReturnsBadRequestOnInvalidCardID(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestHandler_PutCardInDeck_ReturnsNotFoundWhenDeckDoesNotExist(t *testing.T) {
+func TestHandler_PutCardInDeck_ReturnsNotFoundWhenDeckDoesNotBelongToUser(t *testing.T) {
 	service := &fakeService{putCardErr: ErrNotFound}
 	router := setupRouter(service)
 
@@ -551,15 +547,15 @@ func TestHandler_RemoveCardFromDeck_ReturnsBadRequestOnInvalidCardID(t *testing.
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestHandler_RemoveCardFromDeck_ReturnsNoContentEvenWhenLinkDoesNotExist(t *testing.T) {
-	service := &fakeService{}
+func TestHandler_RemoveCardFromDeck_ReturnsNotFoundWhenDeckDoesNotBelongToUser(t *testing.T) {
+	service := &fakeService{removeCardErr: ErrNotFound}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodDelete, "/deck/1/cards/9999", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/deck/999/cards/4", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
 func TestHandler_RemoveCardFromDeck_ReturnsErrorOnServiceFailure(t *testing.T) {

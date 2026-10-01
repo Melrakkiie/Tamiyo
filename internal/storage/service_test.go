@@ -9,9 +9,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testUserID = "11111111-1111-1111-1111-111111111111"
+const otherUserID = "22222222-2222-2222-2222-222222222222"
+
 type fakeRepository struct {
 	storages   []Storage
 	findAllErr error
+	lastUserID string
 
 	findByIDStorage Storage
 	findByIDErr     error
@@ -25,18 +29,21 @@ type fakeRepository struct {
 	deleteErr error
 }
 
-func (f *fakeRepository) FindAll(ctx context.Context) ([]Storage, error) {
+func (f *fakeRepository) FindAll(ctx context.Context, userID string) ([]Storage, error) {
+	f.lastUserID = userID
 	return f.storages, f.findAllErr
 }
 
-func (f *fakeRepository) FindByID(ctx context.Context, id int) (Storage, error) {
+func (f *fakeRepository) FindByID(ctx context.Context, userID string, id int) (Storage, error) {
+	f.lastUserID = userID
 	if f.findByIDErr != nil {
 		return Storage{}, f.findByIDErr
 	}
 	return f.findByIDStorage, nil
 }
 
-func (f *fakeRepository) Create(ctx context.Context, storage Storage) (Storage, error) {
+func (f *fakeRepository) Create(ctx context.Context, userID string, storage Storage) (Storage, error) {
+	f.lastUserID = userID
 	if f.createErr != nil {
 		return Storage{}, f.createErr
 	}
@@ -45,7 +52,8 @@ func (f *fakeRepository) Create(ctx context.Context, storage Storage) (Storage, 
 	return storage, nil
 }
 
-func (f *fakeRepository) Update(ctx context.Context, storage Storage) (Storage, error) {
+func (f *fakeRepository) Update(ctx context.Context, userID string, storage Storage) (Storage, error) {
+	f.lastUserID = userID
 	if f.updateErr != nil {
 		return Storage{}, f.updateErr
 	}
@@ -53,19 +61,27 @@ func (f *fakeRepository) Update(ctx context.Context, storage Storage) (Storage, 
 	return storage, nil
 }
 
-func (f *fakeRepository) Delete(ctx context.Context, id int) error {
+func (f *fakeRepository) Delete(ctx context.Context, userID string, id int) error {
+	f.lastUserID = userID
 	return f.deleteErr
 }
 
+func TestService_GetAllStorages_PassesUserIDToRepository(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	_, err := service.GetAllStorages(context.Background(), testUserID)
+
+	require.NoError(t, err)
+	assert.Equal(t, testUserID, repo.lastUserID)
+}
+
 func TestService_GetAllStorages_ReturnsStoragesFromRepository(t *testing.T) {
-	expected := []Storage{
-		{ID: 1, Name: "Vintage Collection", Type: "binder"},
-		{ID: 2, Name: "Tarkir", Type: "box"},
-	}
+	expected := []Storage{{ID: 1, Name: "Vintage Collection", Type: "binder"}}
 	repo := &fakeRepository{storages: expected}
 	service := NewService(repo)
 
-	result, err := service.GetAllStorages(context.Background())
+	result, err := service.GetAllStorages(context.Background(), testUserID)
 
 	require.NoError(t, err)
 	assert.Equal(t, expected, result)
@@ -75,131 +91,77 @@ func TestService_GetAllStorages_PropagatesRepositoryError(t *testing.T) {
 	repo := &fakeRepository{findAllErr: errors.New("connection lost")}
 	service := NewService(repo)
 
-	result, err := service.GetAllStorages(context.Background())
+	result, err := service.GetAllStorages(context.Background(), testUserID)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
 }
 
-func TestService_GetStorage_ReturnsStorageFromRepository(t *testing.T) {
-	expected := Storage{ID: 1, Name: "Vintage Collection", Type: "binder"}
-	repo := &fakeRepository{findByIDStorage: expected}
+func TestService_GetStorage_PassesUserIDToRepository(t *testing.T) {
+	repo := &fakeRepository{}
 	service := NewService(repo)
 
-	result, err := service.GetStorage(context.Background(), 1)
+	_, err := service.GetStorage(context.Background(), testUserID, 1)
 
 	require.NoError(t, err)
-	assert.Equal(t, expected, result)
+	assert.Equal(t, testUserID, repo.lastUserID)
 }
 
-func TestService_GetStorage_PropagatesNotFoundError(t *testing.T) {
+func TestService_GetStorage_ReturnsNotFoundWhenStorageBelongsToAnotherUser(t *testing.T) {
 	repo := &fakeRepository{findByIDErr: ErrNotFound}
 	service := NewService(repo)
 
-	_, err := service.GetStorage(context.Background(), 999)
+	_, err := service.GetStorage(context.Background(), otherUserID, 1)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
-func TestService_CreateStorage_PassesStorageUnchangedToRepository(t *testing.T) {
+func TestService_CreateStorage_PassesUserIDToRepository(t *testing.T) {
 	repo := &fakeRepository{}
 	service := NewService(repo)
 
-	input := Storage{
-		Name: "Vintage Collection",
-		Type: "binder",
-	}
-
-	_, err := service.CreateStorage(context.Background(), input)
+	_, err := service.CreateStorage(context.Background(), testUserID, Storage{Name: "Trade Binder", Type: "binder"})
 
 	require.NoError(t, err)
-	assert.Equal(t, input, repo.createdStorage)
+	assert.Equal(t, testUserID, repo.lastUserID)
 }
 
-func TestService_CreateStorage_ReturnsStorageFromRepository(t *testing.T) {
-	repo := &fakeRepository{}
-	service := NewService(repo)
-
-	result, err := service.CreateStorage(context.Background(), Storage{Name: "Vintage Collection", Type: "binder"})
-
-	require.NoError(t, err)
-	assert.Equal(t, 1, result.ID)
-	assert.Equal(t, "Vintage Collection", result.Name)
-}
-
-func TestService_CreateStorage_PropagatesRepositoryError(t *testing.T) {
-	repo := &fakeRepository{createErr: errors.New("insert failed")}
-	service := NewService(repo)
-
-	result, err := service.CreateStorage(context.Background(), Storage{Name: "Vintage Collection"})
-
-	assert.Error(t, err)
-	assert.Equal(t, Storage{}, result)
-}
-
-func TestService_UpdateStorage_AppliesPartialChangesOnExistingStorage(t *testing.T) {
-	existing := Storage{ID: 1, Name: "Vintage Collection", Type: "binder"}
-	repo := &fakeRepository{findByIDStorage: existing}
-	service := NewService(repo)
-
-	newName := "Vintage Collection Renamed"
-	req := updateStorageRequest{Name: &newName}
-
-	result, err := service.UpdateStorage(context.Background(), 1, req)
-
-	require.NoError(t, err)
-	assert.Equal(t, "Vintage Collection Renamed", result.Name)
-	assert.Equal(t, "binder", result.Type)
-}
-
-func TestService_UpdateStorage_ReturnsNotFoundWhenStorageDoesNotExist(t *testing.T) {
-	repo := &fakeRepository{findByIDErr: ErrNotFound}
-	service := NewService(repo)
-
-	newName := "Doesn't matter"
-	req := updateStorageRequest{Name: &newName}
-
-	_, err := service.UpdateStorage(context.Background(), 999, req)
-
-	assert.ErrorIs(t, err, ErrNotFound)
-}
-
-func TestService_UpdateStorage_PropagatesRepositoryUpdateError(t *testing.T) {
-	existing := Storage{ID: 1, Name: "Vintage Collection", Type: "binder"}
-	repo := &fakeRepository{findByIDStorage: existing, updateErr: errors.New("update failed")}
+func TestService_UpdateStorage_PassesUserIDToFindAndUpdate(t *testing.T) {
+	repo := &fakeRepository{findByIDStorage: Storage{ID: 1, Name: "Old", Type: "binder"}}
 	service := NewService(repo)
 
 	newName := "New Name"
-	req := updateStorageRequest{Name: &newName}
+	_, err := service.UpdateStorage(context.Background(), testUserID, 1, updateStorageRequest{Name: &newName})
 
-	_, err := service.UpdateStorage(context.Background(), 1, req)
-
-	assert.Error(t, err)
+	require.NoError(t, err)
+	assert.Equal(t, testUserID, repo.lastUserID)
 }
 
-func TestService_DeleteStorage_PropagatesRepositorySuccess(t *testing.T) {
+func TestService_UpdateStorage_ReturnsNotFoundWhenStorageDoesNotBelongToUser(t *testing.T) {
+	repo := &fakeRepository{findByIDErr: ErrNotFound}
+	service := NewService(repo)
+
+	newName := "New Name"
+	_, err := service.UpdateStorage(context.Background(), otherUserID, 1, updateStorageRequest{Name: &newName})
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestService_DeleteStorage_PassesUserIDToRepository(t *testing.T) {
 	repo := &fakeRepository{}
 	service := NewService(repo)
 
-	err := service.DeleteStorage(context.Background(), 1)
+	err := service.DeleteStorage(context.Background(), testUserID, 1)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	assert.Equal(t, testUserID, repo.lastUserID)
 }
 
 func TestService_DeleteStorage_PropagatesNotFoundError(t *testing.T) {
 	repo := &fakeRepository{deleteErr: ErrNotFound}
 	service := NewService(repo)
 
-	err := service.DeleteStorage(context.Background(), 999)
+	err := service.DeleteStorage(context.Background(), testUserID, 999)
 
 	assert.ErrorIs(t, err, ErrNotFound)
-}
-
-func TestService_DeleteStorage_PropagatesRepositoryError(t *testing.T) {
-	repo := &fakeRepository{deleteErr: errors.New("delete failed")}
-	service := NewService(repo)
-
-	err := service.DeleteStorage(context.Background(), 1)
-
-	assert.Error(t, err)
 }

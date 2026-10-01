@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+
+	"Melrakkiie/Tamiyo/internal/auth"
 )
 
 const (
@@ -103,11 +105,11 @@ func (r updateCardRequest) applyTo(c Card) Card {
 }
 
 type cardService interface {
-	GetAllCards(ctx context.Context, filter CardFilter) ([]Card, int, error)
-	GetCard(ctx context.Context, id int) (Card, error)
-	CreateCard(ctx context.Context, c Card) (Card, error)
-	UpdateCard(ctx context.Context, id int, req updateCardRequest) (Card, error)
-	DeleteCard(ctx context.Context, id int) error
+	GetAllCards(ctx context.Context, userID string, filter CardFilter) ([]Card, int, error)
+	GetCard(ctx context.Context, userID string, id int) (Card, error)
+	CreateCard(ctx context.Context, userID string, c Card) (Card, error)
+	UpdateCard(ctx context.Context, userID string, id int, req updateCardRequest) (Card, error)
+	DeleteCard(ctx context.Context, userID string, id int) error
 }
 
 type Handler struct {
@@ -118,7 +120,7 @@ func NewHandler(service cardService) *Handler {
 	return &Handler{service: service}
 }
 
-func (h *Handler) RegisterRoutes(router *gin.Engine) {
+func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.GET("/cards", h.getCards)
 	router.GET("/cards/:id", h.getCard)
 	router.POST("/cards", h.createCard)
@@ -127,6 +129,12 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 }
 
 func (h *Handler) getCards(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
 	var storageID *int
 	if raw := ctx.Query("storage_id"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
@@ -185,7 +193,7 @@ func (h *Handler) getCards(ctx *gin.Context) {
 		Limit:     limit,
 	}
 
-	cards, total, err := h.service.GetAllCards(ctx.Request.Context(), filter)
+	cards, total, err := h.service.GetAllCards(ctx.Request.Context(), userID, filter)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -211,13 +219,19 @@ func (h *Handler) getCards(ctx *gin.Context) {
 }
 
 func (h *Handler) getCard(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
 
-	card, err := h.service.GetCard(ctx.Request.Context(), id)
+	card, err := h.service.GetCard(ctx.Request.Context(), userID, id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "card not found"})
@@ -231,15 +245,19 @@ func (h *Handler) getCard(ctx *gin.Context) {
 }
 
 func (h *Handler) createCard(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
 	var req createCardRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	newCard := req.toDomain()
-
-	created, err := h.service.CreateCard(ctx.Request.Context(), newCard)
+	created, err := h.service.CreateCard(ctx.Request.Context(), userID, req.toDomain())
 	if err != nil {
 		if errors.Is(err, ErrStorageNotFound) {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "storage_id does not reference an existing storage"})
@@ -253,6 +271,12 @@ func (h *Handler) createCard(ctx *gin.Context) {
 }
 
 func (h *Handler) updateCard(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
@@ -265,7 +289,7 @@ func (h *Handler) updateCard(ctx *gin.Context) {
 		return
 	}
 
-	updated, err := h.service.UpdateCard(ctx.Request.Context(), id, req)
+	updated, err := h.service.UpdateCard(ctx.Request.Context(), userID, id, req)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "card not found"})
@@ -283,13 +307,19 @@ func (h *Handler) updateCard(ctx *gin.Context) {
 }
 
 func (h *Handler) deleteCard(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
 
-	if err := h.service.DeleteCard(ctx.Request.Context(), id); err != nil {
+	if err := h.service.DeleteCard(ctx.Request.Context(), userID, id); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "card not found"})
 			return

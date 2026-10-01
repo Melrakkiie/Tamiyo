@@ -1,8 +1,8 @@
 CREATE SCHEMA IF NOT EXISTS tamiyo;
 
-------------------------
----- USERS TABLE    ----
-------------------------
+---------------------
+---- USERS TABLE ----
+---------------------
 CREATE TABLE IF NOT EXISTS tamiyo.users
 (
     id            UUID                        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS tamiyo.users
 CREATE TABLE IF NOT EXISTS tamiyo.storage
 (
     id      SERIAL                      PRIMARY KEY,
+    user_id UUID                        NOT NULL REFERENCES tamiyo.users(id) ON DELETE CASCADE,
     name    text                        NOT NULL,
     type    text                        NOT NULL,
     added   TIMESTAMP WITH TIME ZONE    NOT NULL DEFAULT now(),
@@ -30,6 +31,7 @@ CREATE TABLE IF NOT EXISTS tamiyo.storage
 CREATE TABLE IF NOT EXISTS tamiyo.cards
 (
     id               SERIAL                     PRIMARY KEY,
+    user_id          UUID                       NOT NULL REFERENCES tamiyo.users(id) ON DELETE CASCADE,
     name             text                       NOT NULL,
     scryfall_id      uuid                       NOT NULL,
     set_code         text                       NOT NULL,
@@ -46,6 +48,7 @@ CREATE TABLE IF NOT EXISTS tamiyo.cards
 CREATE TABLE IF NOT EXISTS tamiyo.deck
 (
     id           SERIAL                      PRIMARY KEY,
+    user_id      UUID                        NOT NULL REFERENCES tamiyo.users(id) ON DELETE CASCADE,
     name         text                        NOT NULL,
     format       text                        NOT NULL,
     commander_id int                         REFERENCES tamiyo.cards(id) ON DELETE SET NULL,
@@ -53,9 +56,9 @@ CREATE TABLE IF NOT EXISTS tamiyo.deck
     updated      TIMESTAMP WITH TIME ZONE    NOT NULL DEFAULT now()
 );
 
------------------------------
----- CARD_DECK TABLE  ----
-------------------------------
+-------------------------
+---- CARD_DECK TABLE ----
+-------------------------
 CREATE TABLE IF NOT EXISTS tamiyo.card_deck
 (
     card_id    int                         REFERENCES tamiyo.cards(id) ON DELETE CASCADE,
@@ -63,7 +66,6 @@ CREATE TABLE IF NOT EXISTS tamiyo.card_deck
     added      TIMESTAMP WITH TIME ZONE    NOT NULL DEFAULT now(),
     CONSTRAINT card_deck_pkey              PRIMARY KEY (card_id, deck_id)
 );
-
 
 -------------------------
 ---- UPDATED TRIGGER ----

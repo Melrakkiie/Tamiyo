@@ -12,6 +12,7 @@ import (
 
 type deckRow struct {
 	ID          int       `db:"id"`
+	UserID      string    `db:"user_id"`
 	Name        string    `db:"name"`
 	Format      string    `db:"format"`
 	CommanderID *int      `db:"commander_id"`
@@ -32,9 +33,10 @@ func (r deckRow) toDomain() Deck {
 	}
 }
 
-func toDeckRow(d Deck) deckRow {
+func toDeckRow(userID string, d Deck) deckRow {
 	return deckRow{
 		ID:          d.ID,
+		UserID:      userID,
 		Name:        d.Name,
 		Format:      d.Format,
 		CommanderID: d.CommanderID,
@@ -75,7 +77,7 @@ func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
 	return &PostgresRepository{db: db}
 }
 
-func (r *PostgresRepository) FindAll(ctx context.Context) ([]Deck, error) {
+func (r *PostgresRepository) FindAll(ctx context.Context, userID string) ([]Deck, error) {
 	query := `
 		SELECT
 		    d.id AS id,
@@ -87,12 +89,13 @@ func (r *PostgresRepository) FindAll(ctx context.Context) ([]Deck, error) {
 		    COUNT(cd.card_id) AS card_count
 		FROM tamiyo.deck d
 		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id
+		WHERE d.user_id = $1
 		GROUP BY d.id, d.name, d.format, d.commander_id, d.added, d.updated
-		ORDER BY d.updated DESC, d.id DESC
+		ORDER BY d.updated DESC
 	`
 
 	var rows []deckRow
-	if err := r.db.SelectContext(ctx, &rows, query); err != nil {
+	if err := r.db.SelectContext(ctx, &rows, query, userID); err != nil {
 		return nil, err
 	}
 
@@ -104,7 +107,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context) ([]Deck, error) {
 	return decks, nil
 }
 
-func (r *PostgresRepository) FindByID(ctx context.Context, id int) (Deck, error) {
+func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int) (Deck, error) {
 	query := `
 		SELECT
 		    d.id AS id,
@@ -116,12 +119,12 @@ func (r *PostgresRepository) FindByID(ctx context.Context, id int) (Deck, error)
 		    COUNT(cd.card_id) AS card_count
 		FROM tamiyo.deck d
 		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id
-		WHERE d.id = $1
+		WHERE d.id = $1 AND d.user_id = $2
 		GROUP BY d.id, d.name, d.format, d.commander_id, d.added, d.updated
 	`
 
 	var row deckRow
-	if err := r.db.GetContext(ctx, &row, query, id); err != nil {
+	if err := r.db.GetContext(ctx, &row, query, id, userID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Deck{}, ErrNotFound
 		}
@@ -131,11 +134,11 @@ func (r *PostgresRepository) FindByID(ctx context.Context, id int) (Deck, error)
 	return row.toDomain(), nil
 }
 
-func (r *PostgresRepository) Create(ctx context.Context, d Deck) (Deck, error) {
-	row := toDeckRow(d)
+func (r *PostgresRepository) Create(ctx context.Context, userID string, d Deck) (Deck, error) {
+	row := toDeckRow(userID, d)
 	query := `
-    	INSERT INTO tamiyo.deck (name, format, commander_id)
-     	VALUES (:name, :format, :commander_id)
+    	INSERT INTO tamiyo.deck (user_id, name, format, commander_id)
+     	VALUES (:user_id, :name, :format, :commander_id)
       	RETURNING id, name, format, commander_id, added, updated
 	`
 	stmt, err := r.db.PrepareNamedContext(ctx, query)
@@ -156,12 +159,12 @@ func (r *PostgresRepository) Create(ctx context.Context, d Deck) (Deck, error) {
 	return created.toDomain(), nil
 }
 
-func (r *PostgresRepository) Update(ctx context.Context, d Deck) (Deck, error) {
-	row := toDeckRow(d)
+func (r *PostgresRepository) Update(ctx context.Context, userID string, d Deck) (Deck, error) {
+	row := toDeckRow(userID, d)
 	query := `
 		UPDATE tamiyo.deck
 		SET name = :name, format = :format, commander_id = :commander_id
-		WHERE id = :id
+		WHERE id = :id AND user_id = :user_id
 		RETURNING id, name, format, commander_id, added, updated
 	`
 
@@ -186,10 +189,10 @@ func (r *PostgresRepository) Update(ctx context.Context, d Deck) (Deck, error) {
 	return updated.toDomain(), nil
 }
 
-func (r *PostgresRepository) Delete(ctx context.Context, id int) error {
-	query := `DELETE FROM tamiyo.deck WHERE id = $1`
+func (r *PostgresRepository) Delete(ctx context.Context, userID string, id int) error {
+	query := `DELETE FROM tamiyo.deck WHERE id = $1 AND user_id = $2`
 
-	result, err := r.db.ExecContext(ctx, query, id)
+	result, err := r.db.ExecContext(ctx, query, id, userID)
 	if err != nil {
 		return err
 	}
@@ -206,16 +209,16 @@ func (r *PostgresRepository) Delete(ctx context.Context, id int) error {
 	return nil
 }
 
-func (r *PostgresRepository) FindCardsByDeckID(ctx context.Context, id int) ([]DeckCard, error) {
+func (r *PostgresRepository) FindCardsByDeckID(ctx context.Context, userID string, id int) ([]DeckCard, error) {
 	query := `
 		SELECT c.id, c.name, c.scryfall_id, c.set_code, c.collector_number, c.foil, c.storage_id, c.added, c.updated
 		FROM tamiyo.cards c
 		JOIN tamiyo.card_deck cd ON c.id = cd.card_id
-		WHERE cd.deck_id = $1
+		WHERE cd.deck_id = $1 AND c.user_id = $2
 	`
 
 	var rows []cardRow
-	if err := r.db.SelectContext(ctx, &rows, query, id); err != nil {
+	if err := r.db.SelectContext(ctx, &rows, query, id, userID); err != nil {
 		return nil, err
 	}
 
@@ -227,38 +230,34 @@ func (r *PostgresRepository) FindCardsByDeckID(ctx context.Context, id int) ([]D
 	return deckCards, nil
 }
 
-func (r *PostgresRepository) LinkCardToDeck(ctx context.Context, deckID, cardID int) error {
-	query := `INSERT INTO tamiyo.card_deck (card_id, deck_id) VALUES ($1, $2)`
-
-	_, err := r.db.ExecContext(ctx, query, cardID, deckID)
-	if err != nil {
-		var pqErr *pq.Error
-		if errors.As(err, &pqErr) {
-			switch pqErr.Code {
-			case "23503": // foreign_key_violation
-				if pqErr.Constraint == "card_deck_deck_id_fkey" {
-					return ErrNotFound
-				}
-				if pqErr.Constraint == "card_deck_card_id_fkey" {
-					return ErrCardNotFound
-				}
-			case "23505": // unique_violation
-				return nil
-			}
-		}
+func (r *PostgresRepository) LinkCardToDeck(ctx context.Context, userID string, deckID, cardID int) error {
+	var exists bool
+	checkQuery := `SELECT EXISTS(SELECT 1 FROM tamiyo.cards WHERE id = $1 AND user_id = $2)`
+	if err := r.db.GetContext(ctx, &exists, checkQuery, cardID, userID); err != nil {
 		return err
 	}
+	if !exists {
+		return ErrCardNotFound
+	}
 
-	return nil
+	query := `
+		INSERT INTO tamiyo.card_deck (card_id, deck_id)
+		VALUES ($1, $2)
+		ON CONFLICT (card_id, deck_id) DO NOTHING
+	`
+	_, err := r.db.ExecContext(ctx, query, cardID, deckID)
+	return err
 }
 
-func (r *PostgresRepository) UnlinkCardFromDeck(ctx context.Context, deckID, cardID int) error {
-	query := `DELETE FROM tamiyo.card_deck WHERE deck_id = $1 AND card_id = $2`
-
-	_, err := r.db.ExecContext(ctx, query, deckID, cardID)
-	if err != nil {
-		return err
-	}
-
-	return nil
+func (r *PostgresRepository) UnlinkCardFromDeck(ctx context.Context, userID string, deckID, cardID int) error {
+	query := `
+		DELETE FROM tamiyo.card_deck cd
+		USING tamiyo.deck d
+		WHERE cd.deck_id = d.id
+		  AND cd.deck_id = $1
+		  AND cd.card_id = $2
+		  AND d.user_id = $3
+	`
+	_, err := r.db.ExecContext(ctx, query, deckID, cardID, userID)
+	return err
 }

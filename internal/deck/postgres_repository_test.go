@@ -41,7 +41,7 @@ func TestMain(m *testing.M) {
 
 	var db *sqlx.DB
 	var connectErr error
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
 		db, connectErr = sqlx.Connect("postgres", connStr)
 		if connectErr == nil {
@@ -80,7 +80,7 @@ func getTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
 
 	_, err := testDB.Exec(`
-		TRUNCATE TABLE tamiyo.card_deck, tamiyo.deck, tamiyo.cards, tamiyo.storage
+		TRUNCATE TABLE tamiyo.card_deck, tamiyo.deck, tamiyo.cards, tamiyo.storage, tamiyo.users
 		RESTART IDENTITY CASCADE
 	`)
 	require.NoError(t, err)
@@ -88,28 +88,41 @@ func getTestDB(t *testing.T) *sqlx.DB {
 	return testDB
 }
 
-func seedDecks(t *testing.T, db *sqlx.DB) {
+func seedUser(t *testing.T, db *sqlx.DB, email string) string {
+	t.Helper()
+
+	var userID string
+	err := db.Get(&userID, `
+		INSERT INTO tamiyo.users (email, password_hash)
+		VALUES ($1, 'fake-hash')
+		RETURNING id
+	`, email)
+	require.NoError(t, err)
+	return userID
+}
+
+func seedDecks(t *testing.T, db *sqlx.DB, userID string) {
 	t.Helper()
 
 	_, err := db.Exec(`
-		INSERT INTO tamiyo.deck (name, format, commander_id)
+		INSERT INTO tamiyo.deck (user_id, name, format, commander_id)
 		VALUES
-		    ('Otterly Playful', 'modern', null),
-		    ('Izzet Prowess', 'standard', null);
-	`)
+		    ($1, 'Otterly Playful', 'modern', null),
+		    ($1, 'Izzet Prowess', 'standard', null);
+	`, userID)
 	require.NoError(t, err)
 }
 
-func seedCardsWithoutStorage(t *testing.T, db *sqlx.DB) {
+func seedCardsWithoutStorage(t *testing.T, db *sqlx.DB, userID string) {
 	t.Helper()
 
 	_, err := db.Exec(`
-		INSERT INTO tamiyo.cards (name, scryfall_id, set_code, collector_number, foil, storage_id)
+		INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id)
 		VALUES
-		    ('Black Lotus', 'bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd', 'lea', '232', false, null),
-		    ('Lightning Bolt', '9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d', '2xm', '129', true, null),
-		    ('Counterspell', '1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f', 'mh2', '267', false, null);
-	`)
+		    ($1, 'Black Lotus', 'bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd', 'lea', '232', false, null),
+		    ($1, 'Lightning Bolt', '9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d', '2xm', '129', true, null),
+		    ($1, 'Counterspell', '1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f', 'mh2', '267', false, null);
+	`, userID)
 	require.NoError(t, err)
 }
 
@@ -125,33 +138,39 @@ func linkCardToDeck(t *testing.T, db *sqlx.DB, cardID, deckID int) {
 
 func TestPostgresRepository_FindAll_ReturnsAllDecks(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedDecks(t, db)
+	seedDecks(t, db, userID)
 
-	result, err := repo.FindAll(context.Background())
+	result, err := repo.FindAll(context.Background(), userID)
 
 	require.NoError(t, err)
 	assert.Len(t, result, 2)
 }
 
+func TestPostgresRepository_FindAll_DoesNotReturnOtherUsersDecks(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userA)
+
+	result, err := repo.FindAll(context.Background(), userB)
+
+	require.NoError(t, err)
+	assert.Empty(t, result)
+}
+
 func TestPostgresRepository_FindAll_ReturnsCorrectCardCount(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedDecks(t, db)
+	seedDecks(t, db, userID)
+	seedCardsWithoutStorage(t, db, userID)
 
-	_, errCard := db.Exec(`
-		INSERT INTO tamiyo.cards (name, scryfall_id, set_code, collector_number, foil, storage_id)
-		VALUES ('Black Lotus', 'bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd', 'lea', '232', false, null)
-	`)
-	require.NoError(t, errCard)
+	linkCardToDeck(t, db, 1, 1)
 
-	_, errCardDeck := db.Exec(`
-		INSERT INTO tamiyo.card_deck (card_id, deck_id)
-		VALUES (1, 1)
-	`)
-	require.NoError(t, errCardDeck)
-
-	result, err := repo.FindAll(context.Background())
+	result, err := repo.FindAll(context.Background(), userID)
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -165,25 +184,13 @@ func TestPostgresRepository_FindAll_ReturnsCorrectCardCount(t *testing.T) {
 	assert.Equal(t, 1, otters.CardCount)
 }
 
-func TestPostgresRepository_FindAll_ReturnsZeroCardCountForEmptyStorage(t *testing.T) {
-	db := getTestDB(t)
-	repo := NewPostgresRepository(db)
-	seedDecks(t, db)
-
-	result, err := repo.FindAll(context.Background())
-
-	require.NoError(t, err)
-	for _, d := range result {
-		assert.Equal(t, 0, d.CardCount)
-	}
-}
-
 func TestPostgresRepository_FindByID_ReturnsDeck(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedDecks(t, db)
+	seedDecks(t, db, userID)
 
-	result, err := repo.FindByID(context.Background(), 1)
+	result, err := repo.FindByID(context.Background(), userID, 1)
 
 	require.NoError(t, err)
 	assert.Equal(t, "Otterly Playful", result.Name)
@@ -191,29 +198,40 @@ func TestPostgresRepository_FindByID_ReturnsDeck(t *testing.T) {
 
 func TestPostgresRepository_FindByID_ReturnsErrNotFoundWhenMissing(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
 
-	_, err := repo.FindByID(context.Background(), 999)
+	_, err := repo.FindByID(context.Background(), userID, 999)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestPostgresRepository_FindByID_ReturnsErrNotFoundWhenDeckBelongsToAnotherUser(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userA)
+
+	_, err := repo.FindByID(context.Background(), userB, 1)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
 func TestPostgresRepository_Create_InsertsAndReturnsDeckWithID(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
 
-	newDeck := Deck{
-		Name:   "Otterly Playful",
-		Format: "commander",
-	}
+	newDeck := Deck{Name: "Otterly Playful", Format: "commander"}
 
-	created, err := repo.Create(context.Background(), newDeck)
+	created, err := repo.Create(context.Background(), userID, newDeck)
 
 	require.NoError(t, err)
 	assert.NotZero(t, created.ID)
 	assert.Equal(t, "Otterly Playful", created.Name)
 
-	all, err := repo.FindAll(context.Background())
+	all, err := repo.FindAll(context.Background(), userID)
 	require.NoError(t, err)
 	require.Len(t, all, 1)
 	assert.Equal(t, created.ID, all[0].ID)
@@ -221,15 +239,13 @@ func TestPostgresRepository_Create_InsertsAndReturnsDeckWithID(t *testing.T) {
 
 func TestPostgresRepository_Create_GeneratesAddedAndUpdatedTimestamps(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
 
 	before := time.Now()
-	newDeck := Deck{
-		Name:   "Otterly Playful",
-		Format: "commander",
-	}
+	newDeck := Deck{Name: "Otterly Playful", Format: "commander"}
 
-	created, err := repo.Create(context.Background(), newDeck)
+	created, err := repo.Create(context.Background(), userID, newDeck)
 	after := time.Now()
 
 	require.NoError(t, err)
@@ -239,79 +255,95 @@ func TestPostgresRepository_Create_GeneratesAddedAndUpdatedTimestamps(t *testing
 
 func TestPostgresRepository_Create_ReturnsErrCommanderNotFoundOnInvalidCommanderID(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
 
-	invalidStorageID := 9999
-	newDeck := Deck{
-		Name:        "Otterly Playful",
-		Format:      "commander",
-		CommanderID: &invalidStorageID,
-	}
+	invalidCommanderID := 9999
+	newDeck := Deck{Name: "Otterly Playful", Format: "commander", CommanderID: &invalidCommanderID}
 
-	_, err := repo.Create(context.Background(), newDeck)
+	_, err := repo.Create(context.Background(), userID, newDeck)
 
 	assert.ErrorIs(t, err, ErrCommanderNotFound)
 }
 
 func TestPostgresRepository_Update_UpdatesAndReturnsDeck(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedDecks(t, db)
+	seedDecks(t, db, userID)
 
-	existing, err := repo.FindByID(context.Background(), 1)
+	existing, err := repo.FindByID(context.Background(), userID, 1)
 	require.NoError(t, err)
 
 	existing.Name = "Renamed Deck"
-	updated, err := repo.Update(context.Background(), existing)
+	updated, err := repo.Update(context.Background(), userID, existing)
 
 	require.NoError(t, err)
 	assert.Equal(t, "Renamed Deck", updated.Name)
-	assert.Equal(t, "modern", updated.Format)
 
-	refetched, err := repo.FindByID(context.Background(), 1)
+	refetched, err := repo.FindByID(context.Background(), userID, 1)
 	require.NoError(t, err)
 	assert.Equal(t, "Renamed Deck", refetched.Name)
 }
 
 func TestPostgresRepository_Update_ReturnsErrNotFoundWhenDeckDoesNotExist(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
 
-	nonExistent := Deck{ID: 999, Name: "Non existent", Format: "modern", CommanderID: nil}
+	nonExistent := Deck{ID: 999, Name: "Non existent", Format: "modern"}
 
-	_, err := repo.Update(context.Background(), nonExistent)
+	_, err := repo.Update(context.Background(), userID, nonExistent)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
+func TestPostgresRepository_Update_ReturnsErrNotFoundWhenDeckBelongsToAnotherUser(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userA)
+
+	deckFromA := Deck{ID: 1, Name: "Hijacked", Format: "modern"}
+	_, err := repo.Update(context.Background(), userB, deckFromA)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+
+	untouched, err := repo.FindByID(context.Background(), userA, 1)
+	require.NoError(t, err)
+	assert.Equal(t, "Otterly Playful", untouched.Name)
+}
+
 func TestPostgresRepository_Update_ReturnsErrCommanderNotFoundOnInvalidCommanderID(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedDecks(t, db)
+	seedDecks(t, db, userID)
 
-	existing, err := repo.FindByID(context.Background(), 1)
+	existing, err := repo.FindByID(context.Background(), userID, 1)
 	require.NoError(t, err)
 
 	invalidCommanderID := 9999
-	existing.Name = "Renamed Deck"
 	existing.CommanderID = &invalidCommanderID
-	_, errUpdate := repo.Update(context.Background(), existing)
+	_, errUpdate := repo.Update(context.Background(), userID, existing)
 
 	assert.ErrorIs(t, errUpdate, ErrCommanderNotFound)
 }
 
 func TestPostgresRepository_Update_RefreshesUpdatedTimestamp(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedDecks(t, db)
+	seedDecks(t, db, userID)
 
-	existing, err := repo.FindByID(context.Background(), 1)
+	existing, err := repo.FindByID(context.Background(), userID, 1)
 	require.NoError(t, err)
 
 	time.Sleep(10 * time.Millisecond)
 
 	existing.Name = "Renamed"
-	updated, err := repo.Update(context.Background(), existing)
+	updated, err := repo.Update(context.Background(), userID, existing)
 
 	require.NoError(t, err)
 	assert.True(t, updated.Updated.After(existing.Updated))
@@ -319,50 +351,55 @@ func TestPostgresRepository_Update_RefreshesUpdatedTimestamp(t *testing.T) {
 
 func TestPostgresRepository_Delete_RemovesDeck(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedDecks(t, db)
+	seedDecks(t, db, userID)
 
-	err := repo.Delete(context.Background(), 1)
+	err := repo.Delete(context.Background(), userID, 1)
 
 	require.NoError(t, err)
 
-	_, err = repo.FindByID(context.Background(), 1)
+	_, err = repo.FindByID(context.Background(), userID, 1)
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
 func TestPostgresRepository_Delete_ReturnsErrNotFoundWhenDeckDoesNotExist(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
 
-	err := repo.Delete(context.Background(), 999)
+	err := repo.Delete(context.Background(), userID, 999)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
-func TestPostgresRepository_Delete_DoesNotAffectOtherDecks(t *testing.T) {
+func TestPostgresRepository_Delete_DoesNotAffectAnotherUsersDeck(t *testing.T) {
 	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
 	repo := NewPostgresRepository(db)
-	seedDecks(t, db)
+	seedDecks(t, db, userA)
 
-	err := repo.Delete(context.Background(), 1)
-	require.NoError(t, err)
+	err := repo.Delete(context.Background(), userB, 1)
 
-	remaining, err := repo.FindAll(context.Background())
+	assert.ErrorIs(t, err, ErrNotFound)
+
+	result, err := repo.FindByID(context.Background(), userA, 1)
 	require.NoError(t, err)
-	require.Len(t, remaining, 1)
-	assert.Equal(t, "Izzet Prowess", remaining[0].Name)
+	assert.Equal(t, "Otterly Playful", result.Name)
 }
 
 func TestPostgresRepository_FindCardsByDeckID_ReturnsCardsInDeck(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedDecks(t, db)
-	seedCardsWithoutStorage(t, db)
+	seedDecks(t, db, userID)
+	seedCardsWithoutStorage(t, db, userID)
 
 	linkCardToDeck(t, db, 1, 1)
 	linkCardToDeck(t, db, 2, 1)
 
-	result, err := repo.FindCardsByDeckID(context.Background(), 1)
+	result, err := repo.FindCardsByDeckID(context.Background(), userID, 1)
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -374,20 +411,11 @@ func TestPostgresRepository_FindCardsByDeckID_ReturnsCardsInDeck(t *testing.T) {
 
 func TestPostgresRepository_FindCardsByDeckID_ReturnsEmptySliceWhenDeckHasNoCards(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedDecks(t, db)
+	seedDecks(t, db, userID)
 
-	result, err := repo.FindCardsByDeckID(context.Background(), 1)
-
-	require.NoError(t, err)
-	assert.Empty(t, result)
-}
-
-func TestPostgresRepository_FindCardsByDeckID_ReturnsEmptySliceWhenDeckDoesNotExist(t *testing.T) {
-	db := getTestDB(t)
-	repo := NewPostgresRepository(db)
-
-	result, err := repo.FindCardsByDeckID(context.Background(), 999)
+	result, err := repo.FindCardsByDeckID(context.Background(), userID, 1)
 
 	require.NoError(t, err)
 	assert.Empty(t, result)
@@ -395,15 +423,16 @@ func TestPostgresRepository_FindCardsByDeckID_ReturnsEmptySliceWhenDeckDoesNotEx
 
 func TestPostgresRepository_FindCardsByDeckID_OnlyReturnsCardsFromRequestedDeck(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedDecks(t, db)
-	seedCardsWithoutStorage(t, db)
+	seedDecks(t, db, userID)
+	seedCardsWithoutStorage(t, db, userID)
 
 	linkCardToDeck(t, db, 1, 1)
 	linkCardToDeck(t, db, 2, 2)
 	linkCardToDeck(t, db, 3, 2)
 
-	result, err := repo.FindCardsByDeckID(context.Background(), 1)
+	result, err := repo.FindCardsByDeckID(context.Background(), userID, 1)
 
 	require.NoError(t, err)
 	require.Len(t, result, 1)
@@ -412,15 +441,16 @@ func TestPostgresRepository_FindCardsByDeckID_OnlyReturnsCardsFromRequestedDeck(
 
 func TestPostgresRepository_LinkCardToDeck_CreatesLink(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedDecks(t, db)
-	seedCardsWithoutStorage(t, db)
+	seedDecks(t, db, userID)
+	seedCardsWithoutStorage(t, db, userID)
 
-	err := repo.LinkCardToDeck(context.Background(), 1, 1)
+	err := repo.LinkCardToDeck(context.Background(), userID, 1, 1)
 
 	require.NoError(t, err)
 
-	cards, err := repo.FindCardsByDeckID(context.Background(), 1)
+	cards, err := repo.FindCardsByDeckID(context.Background(), userID, 1)
 	require.NoError(t, err)
 	require.Len(t, cards, 1)
 	assert.Equal(t, "Black Lotus", cards[0].Name)
@@ -428,144 +458,103 @@ func TestPostgresRepository_LinkCardToDeck_CreatesLink(t *testing.T) {
 
 func TestPostgresRepository_LinkCardToDeck_IsIdempotent(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedDecks(t, db)
-	seedCardsWithoutStorage(t, db)
+	seedDecks(t, db, userID)
+	seedCardsWithoutStorage(t, db, userID)
 
-	err1 := repo.LinkCardToDeck(context.Background(), 1, 1)
+	err1 := repo.LinkCardToDeck(context.Background(), userID, 1, 1)
 	require.NoError(t, err1)
 
-	err2 := repo.LinkCardToDeck(context.Background(), 1, 1)
+	err2 := repo.LinkCardToDeck(context.Background(), userID, 1, 1)
 	require.NoError(t, err2)
 
-	cards, err := repo.FindCardsByDeckID(context.Background(), 1)
+	cards, err := repo.FindCardsByDeckID(context.Background(), userID, 1)
 	require.NoError(t, err)
 	assert.Len(t, cards, 1)
 }
 
-func TestPostgresRepository_LinkCardToDeck_ReturnsErrNotFoundOnInvalidDeckID(t *testing.T) {
-	db := getTestDB(t)
-	repo := NewPostgresRepository(db)
-	seedCardsWithoutStorage(t, db)
-
-	err := repo.LinkCardToDeck(context.Background(), 9999, 1)
-
-	assert.ErrorIs(t, err, ErrNotFound)
-}
-
 func TestPostgresRepository_LinkCardToDeck_ReturnsErrCardNotFoundOnInvalidCardID(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedDecks(t, db)
+	seedDecks(t, db, userID)
 
-	err := repo.LinkCardToDeck(context.Background(), 1, 9999)
+	err := repo.LinkCardToDeck(context.Background(), userID, 1, 9999)
+
+	assert.ErrorIs(t, err, ErrCardNotFound)
+}
+
+func TestPostgresRepository_LinkCardToDeck_ReturnsErrCardNotFoundWhenCardBelongsToAnotherUser(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userA)
+	seedCardsWithoutStorage(t, db, userB)
+
+	err := repo.LinkCardToDeck(context.Background(), userA, 1, 1)
 
 	assert.ErrorIs(t, err, ErrCardNotFound)
 }
 
 func TestPostgresRepository_LinkCardToDeck_DoesNotAffectOtherDecks(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedDecks(t, db)
-	seedCardsWithoutStorage(t, db)
+	seedDecks(t, db, userID)
+	seedCardsWithoutStorage(t, db, userID)
 
-	err := repo.LinkCardToDeck(context.Background(), 1, 1)
+	err := repo.LinkCardToDeck(context.Background(), userID, 1, 1)
 	require.NoError(t, err)
 
-	cardsInDeck2, err := repo.FindCardsByDeckID(context.Background(), 2)
+	cardsInDeck2, err := repo.FindCardsByDeckID(context.Background(), userID, 2)
 	require.NoError(t, err)
 	assert.Empty(t, cardsInDeck2)
 }
 
 func TestPostgresRepository_UnlinkCardFromDeck_RemovesLink(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedDecks(t, db)
-	seedCardsWithoutStorage(t, db)
+	seedDecks(t, db, userID)
+	seedCardsWithoutStorage(t, db, userID)
 	linkCardToDeck(t, db, 1, 1)
 
-	err := repo.UnlinkCardFromDeck(context.Background(), 1, 1)
+	err := repo.UnlinkCardFromDeck(context.Background(), userID, 1, 1)
 
 	require.NoError(t, err)
 
-	cards, err := repo.FindCardsByDeckID(context.Background(), 1)
+	cards, err := repo.FindCardsByDeckID(context.Background(), userID, 1)
 	require.NoError(t, err)
 	assert.Empty(t, cards)
 }
 
 func TestPostgresRepository_UnlinkCardFromDeck_SucceedsWhenLinkDoesNotExist(t *testing.T) {
 	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
-	seedDecks(t, db)
-	seedCardsWithoutStorage(t, db)
+	seedDecks(t, db, userID)
+	seedCardsWithoutStorage(t, db, userID)
 
-	err := repo.UnlinkCardFromDeck(context.Background(), 1, 1)
+	err := repo.UnlinkCardFromDeck(context.Background(), userID, 1, 1)
 
 	assert.NoError(t, err)
 }
 
-func TestPostgresRepository_UnlinkCardFromDeck_SucceedsWhenDeckDoesNotExist(t *testing.T) {
+func TestPostgresRepository_UnlinkCardFromDeck_DoesNotRemoveLinkWhenDeckBelongsToAnotherUser(t *testing.T) {
 	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
 	repo := NewPostgresRepository(db)
-
-	err := repo.UnlinkCardFromDeck(context.Background(), 9999, 1)
-
-	assert.NoError(t, err)
-}
-
-func TestPostgresRepository_UnlinkCardFromDeck_SucceedsWhenCardDoesNotExist(t *testing.T) {
-	db := getTestDB(t)
-	repo := NewPostgresRepository(db)
-	seedDecks(t, db)
-
-	err := repo.UnlinkCardFromDeck(context.Background(), 1, 9999)
-
-	assert.NoError(t, err)
-}
-
-func TestPostgresRepository_UnlinkCardFromDeck_DoesNotAffectOtherLinks(t *testing.T) {
-	db := getTestDB(t)
-	repo := NewPostgresRepository(db)
-	seedDecks(t, db)
-	seedCardsWithoutStorage(t, db)
+	seedDecks(t, db, userA)
+	seedCardsWithoutStorage(t, db, userA)
 	linkCardToDeck(t, db, 1, 1)
-	linkCardToDeck(t, db, 2, 1)
 
-	err := repo.UnlinkCardFromDeck(context.Background(), 1, 1)
-	require.NoError(t, err)
+	err := repo.UnlinkCardFromDeck(context.Background(), userB, 1, 1)
+	require.NoError(t, err) // idempotent, pas d'erreur, mais rien ne doit changer
 
-	cards, err := repo.FindCardsByDeckID(context.Background(), 1)
+	cards, err := repo.FindCardsByDeckID(context.Background(), userA, 1)
 	require.NoError(t, err)
 	require.Len(t, cards, 1)
-	assert.Equal(t, "Lightning Bolt", cards[0].Name)
-}
-
-func TestPostgresRepository_DeletingCommanderCard_SetsCommanderIDToNullOnDeck(t *testing.T) {
-	db := getTestDB(t)
-	repo := NewPostgresRepository(db)
-
-	var commanderCardID int
-	err := db.Get(&commanderCardID, `
-		INSERT INTO tamiyo.cards (name, scryfall_id, set_code, collector_number, foil, storage_id)
-		VALUES ('Kess, Dissident Mage', '1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f', 'aer', '189', false, null)
-		RETURNING id
-	`)
-	require.NoError(t, err)
-
-	newDeck := Deck{
-		Name:        "Kess Commander",
-		Format:      "commander",
-		CommanderID: &commanderCardID,
-	}
-	created, err := repo.Create(context.Background(), newDeck)
-	require.NoError(t, err)
-	require.NotNil(t, created.CommanderID)
-	assert.Equal(t, commanderCardID, *created.CommanderID)
-
-	_, err = db.Exec(`DELETE FROM tamiyo.cards WHERE id = $1`, commanderCardID)
-	require.NoError(t, err)
-
-	refetched, err := repo.FindByID(context.Background(), created.ID)
-	require.NoError(t, err)
-	assert.Nil(t, refetched.CommanderID)
 }

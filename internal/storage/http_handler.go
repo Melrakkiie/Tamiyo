@@ -7,6 +7,8 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+
+	"Melrakkiie/Tamiyo/internal/auth"
 )
 
 type storageResponse struct {
@@ -35,10 +37,7 @@ type createStorageRequest struct {
 }
 
 func (r createStorageRequest) toDomain() Storage {
-	return Storage{
-		Name: r.Name,
-		Type: r.Type,
-	}
+	return Storage{Name: r.Name, Type: r.Type}
 }
 
 type updateStorageRequest struct {
@@ -57,11 +56,11 @@ func (r updateStorageRequest) applyTo(s Storage) Storage {
 }
 
 type storageService interface {
-	GetAllStorages(ctx context.Context) ([]Storage, error)
-	GetStorage(ctx context.Context, id int) (Storage, error)
-	CreateStorage(ctx context.Context, storage Storage) (Storage, error)
-	UpdateStorage(ctx context.Context, id int, req updateStorageRequest) (Storage, error)
-	DeleteStorage(ctx context.Context, id int) error
+	GetAllStorages(ctx context.Context, userID string) ([]Storage, error)
+	GetStorage(ctx context.Context, userID string, id int) (Storage, error)
+	CreateStorage(ctx context.Context, userID string, storage Storage) (Storage, error)
+	UpdateStorage(ctx context.Context, userID string, id int, req updateStorageRequest) (Storage, error)
+	DeleteStorage(ctx context.Context, userID string, id int) error
 }
 
 type Handler struct {
@@ -72,7 +71,7 @@ func NewHandler(service storageService) *Handler {
 	return &Handler{service: service}
 }
 
-func (h *Handler) RegisterRoutes(router *gin.Engine) {
+func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.GET("/storage", h.getStorages)
 	router.GET("/storage/:id", h.getStorage)
 	router.POST("/storage", h.createStorage)
@@ -81,27 +80,39 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 }
 
 func (h *Handler) getStorages(ctx *gin.Context) {
-	storages, err := h.service.GetAllStorages(ctx.Request.Context())
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
+	storages, err := h.service.GetAllStorages(ctx.Request.Context(), userID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	response := make([]storageResponse, 0, len(storages))
-	for _, cd := range storages {
-		response = append(response, toResponse(cd))
+	for _, s := range storages {
+		response = append(response, toResponse(s))
 	}
 	ctx.IndentedJSON(http.StatusOK, response)
 }
 
 func (h *Handler) getStorage(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
 
-	storage, err := h.service.GetStorage(ctx.Request.Context(), id)
+	s, err := h.service.GetStorage(ctx.Request.Context(), userID, id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "storage not found"})
@@ -111,19 +122,23 @@ func (h *Handler) getStorage(ctx *gin.Context) {
 		return
 	}
 
-	ctx.IndentedJSON(http.StatusOK, toResponse(storage))
+	ctx.IndentedJSON(http.StatusOK, toResponse(s))
 }
 
 func (h *Handler) createStorage(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
 	var req createStorageRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	newStorage := req.toDomain()
-
-	created, err := h.service.CreateStorage(ctx.Request.Context(), newStorage)
+	created, err := h.service.CreateStorage(ctx.Request.Context(), userID, req.toDomain())
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -133,6 +148,12 @@ func (h *Handler) createStorage(ctx *gin.Context) {
 }
 
 func (h *Handler) updateStorage(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
@@ -145,7 +166,7 @@ func (h *Handler) updateStorage(ctx *gin.Context) {
 		return
 	}
 
-	updated, err := h.service.UpdateStorage(ctx.Request.Context(), id, req)
+	updated, err := h.service.UpdateStorage(ctx.Request.Context(), userID, id, req)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "storage not found"})
@@ -159,13 +180,19 @@ func (h *Handler) updateStorage(ctx *gin.Context) {
 }
 
 func (h *Handler) deleteStorage(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
 
-	if err := h.service.DeleteStorage(ctx.Request.Context(), id); err != nil {
+	if err := h.service.DeleteStorage(ctx.Request.Context(), userID, id); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "storage not found"})
 			return

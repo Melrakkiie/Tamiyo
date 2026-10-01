@@ -33,9 +33,9 @@ type CardFilter struct {
 }
 
 type Repository interface {
-	FindAll(ctx context.Context, filter CardFilter) ([]Card, int, error)
-	FindByID(ctx context.Context, id int) (Card, error)
-	Create(ctx context.Context, c Card) (Card, error)
-	Update(ctx context.Context, c Card) (Card, error)
-	Delete(ctx context.Context, id int) error
+	FindAll(ctx context.Context, userID string, filter CardFilter) ([]Card, int, error)
+	FindByID(ctx context.Context, userID string, id int) (Card, error)
+	Create(ctx context.Context, userID string, c Card) (Card, error)
+	Update(ctx context.Context, userID string, c Card) (Card, error)
+	Delete(ctx context.Context, userID string, id int) error
 }

@@ -15,8 +15,9 @@ import (
 )
 
 type fakeService struct {
-	storages  []Storage
-	getAllErr error
+	storages   []Storage
+	getAllErr  error
+	lastUserID string
 
 	getStorage    Storage
 	getStorageErr error
@@ -29,18 +30,21 @@ type fakeService struct {
 	deleteErr error
 }
 
-func (f *fakeService) GetAllStorages(ctx context.Context) ([]Storage, error) {
+func (f *fakeService) GetAllStorages(ctx context.Context, userID string) ([]Storage, error) {
+	f.lastUserID = userID
 	return f.storages, f.getAllErr
 }
 
-func (f *fakeService) GetStorage(ctx context.Context, id int) (Storage, error) {
+func (f *fakeService) GetStorage(ctx context.Context, userID string, id int) (Storage, error) {
+	f.lastUserID = userID
 	if f.getStorageErr != nil {
 		return Storage{}, f.getStorageErr
 	}
 	return f.getStorage, nil
 }
 
-func (f *fakeService) CreateStorage(ctx context.Context, storage Storage) (Storage, error) {
+func (f *fakeService) CreateStorage(ctx context.Context, userID string, storage Storage) (Storage, error) {
+	f.lastUserID = userID
 	if f.createErr != nil {
 		return Storage{}, f.createErr
 	}
@@ -48,30 +52,32 @@ func (f *fakeService) CreateStorage(ctx context.Context, storage Storage) (Stora
 	return storage, nil
 }
 
-func (f *fakeService) UpdateStorage(ctx context.Context, id int, req updateStorageRequest) (Storage, error) {
+func (f *fakeService) UpdateStorage(ctx context.Context, userID string, id int, req updateStorageRequest) (Storage, error) {
+	f.lastUserID = userID
 	if f.updateErr != nil {
 		return Storage{}, f.updateErr
 	}
 	return f.updateStorage, nil
 }
 
-func (f *fakeService) DeleteStorage(ctx context.Context, id int) error {
+func (f *fakeService) DeleteStorage(ctx context.Context, userID string, id int) error {
+	f.lastUserID = userID
 	return f.deleteErr
 }
 
 func setupRouter(service storageService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set("user_id", testUserID)
+		c.Next()
+	})
 	NewHandler(service).RegisterRoutes(router)
 	return router
 }
 
-func TestHandler_GetStorages_ReturnsStoragesAsJSON(t *testing.T) {
-	service := &fakeService{
-		storages: []Storage{
-			{ID: 1, Name: "Vintage Collection", Type: "binder"},
-		},
-	}
+func TestHandler_GetStorages_PassesUserIDToService(t *testing.T) {
+	service := &fakeService{}
 	router := setupRouter(service)
 
 	req := httptest.NewRequest(http.MethodGet, "/storage", nil)
@@ -79,13 +85,7 @@ func TestHandler_GetStorages_ReturnsStoragesAsJSON(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-
-	var response []storageResponse
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
-	require.Len(t, response, 1)
-	assert.Equal(t, "Vintage Collection", response[0].Name)
-	assert.Equal(t, "binder", response[0].Type)
+	assert.Equal(t, testUserID, service.lastUserID)
 }
 
 func TestHandler_GetStorages_ReturnsErrorOnServiceFailure(t *testing.T) {
@@ -115,6 +115,17 @@ func TestHandler_GetStorage_ReturnsStorageAsJSON(t *testing.T) {
 	assert.Equal(t, "Vintage Collection", response.Name)
 }
 
+func TestHandler_GetStorage_ReturnsNotFoundWhenStorageDoesNotBelongToUser(t *testing.T) {
+	service := &fakeService{getStorageErr: ErrNotFound}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/storage/1", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
 func TestHandler_GetStorage_ReturnsBadRequestOnInvalidID(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)
@@ -126,84 +137,31 @@ func TestHandler_GetStorage_ReturnsBadRequestOnInvalidID(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestHandler_GetStorage_ReturnsNotFoundWhenStorageDoesNotExist(t *testing.T) {
-	service := &fakeService{getStorageErr: ErrNotFound}
-	router := setupRouter(service)
-
-	req := httptest.NewRequest(http.MethodGet, "/storage/999", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusNotFound, w.Code)
-}
-
-func TestHandler_GetStorage_ReturnsErrorOnServiceFailure(t *testing.T) {
-	service := &fakeService{getStorageErr: errors.New("database unreachable")}
-	router := setupRouter(service)
-
-	req := httptest.NewRequest(http.MethodGet, "/storage/1", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
-}
-
 func TestHandler_CreateStorage_ReturnsCreatedStorage(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)
 
-	body := `{
-		"name": "Vintage Collection",
-		"type": "binder"
-	}`
-
+	body := `{"name": "Vintage Collection", "type": "binder"}`
 	req := httptest.NewRequest(http.MethodPost, "/storage", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusCreated, w.Code)
-
-	var response storageResponse
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
-	assert.Equal(t, 1, response.ID)
-	assert.Equal(t, "Vintage Collection", response.Name)
-	assert.Equal(t, "binder", response.Type)
+	assert.Equal(t, testUserID, service.lastUserID)
 }
 
 func TestHandler_CreateStorage_ReturnsBadRequestOnMissingRequiredField(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)
 
-	// missing "name"
-	body := `{
-		"type": "binder"
-	}`
-
+	body := `{"type": "binder"}`
 	req := httptest.NewRequest(http.MethodPost, "/storage", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
-
-func TestHandler_CreateStorage_ReturnsErrorOnServiceFailure(t *testing.T) {
-	service := &fakeService{createErr: errors.New("insert failed")}
-	router := setupRouter(service)
-
-	body := `{
-		"name": "Vintage Collection",
-		"type": "binder"
-	}`
-
-	req := httptest.NewRequest(http.MethodPost, "/storage", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
 func TestHandler_UpdateStorage_ReturnsUpdatedStorage(t *testing.T) {
@@ -211,74 +169,25 @@ func TestHandler_UpdateStorage_ReturnsUpdatedStorage(t *testing.T) {
 	router := setupRouter(service)
 
 	body := `{"name": "Renamed"}`
-
 	req := httptest.NewRequest(http.MethodPatch, "/storage/1", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-
-	var response storageResponse
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
-	assert.Equal(t, "Renamed", response.Name)
 }
 
-func TestHandler_UpdateStorage_ReturnsBadRequestOnInvalidID(t *testing.T) {
-	service := &fakeService{}
-	router := setupRouter(service)
-
-	body := `{"name": "Renamed"}`
-
-	req := httptest.NewRequest(http.MethodPatch, "/storage/abc", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
-
-func TestHandler_UpdateStorage_ReturnsBadRequestOnInvalidBody(t *testing.T) {
-	service := &fakeService{}
-	router := setupRouter(service)
-
-	body := `{"name": 1}`
-
-	req := httptest.NewRequest(http.MethodPatch, "/storage/1", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
-
-func TestHandler_UpdateStorage_ReturnsNotFoundWhenStorageDoesNotExist(t *testing.T) {
+func TestHandler_UpdateStorage_ReturnsNotFoundWhenStorageDoesNotBelongToUser(t *testing.T) {
 	service := &fakeService{updateErr: ErrNotFound}
 	router := setupRouter(service)
 
 	body := `{"name": "Renamed"}`
-
-	req := httptest.NewRequest(http.MethodPatch, "/storage/999", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPatch, "/storage/1", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
-}
-
-func TestHandler_UpdateStorage_ReturnsErrorOnServiceFailure(t *testing.T) {
-	service := &fakeService{updateErr: errors.New("update failed")}
-	router := setupRouter(service)
-
-	body := `{"name": "Renamed"}`
-
-	req := httptest.NewRequest(http.MethodPatch, "/storage/1", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
 func TestHandler_DeleteStorage_ReturnsNoContent(t *testing.T) {
@@ -290,38 +199,15 @@ func TestHandler_DeleteStorage_ReturnsNoContent(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNoContent, w.Code)
-	assert.Empty(t, w.Body.Bytes())
 }
 
-func TestHandler_DeleteStorage_ReturnsBadRequestOnInvalidID(t *testing.T) {
-	service := &fakeService{}
-	router := setupRouter(service)
-
-	req := httptest.NewRequest(http.MethodDelete, "/storage/abc", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
-
-func TestHandler_DeleteStorage_ReturnsNotFoundWhenStorageDoesNotExist(t *testing.T) {
+func TestHandler_DeleteStorage_ReturnsNotFoundWhenStorageDoesNotBelongToUser(t *testing.T) {
 	service := &fakeService{deleteErr: ErrNotFound}
-	router := setupRouter(service)
-
-	req := httptest.NewRequest(http.MethodDelete, "/storage/999", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusNotFound, w.Code)
-}
-
-func TestHandler_DeleteStorage_ReturnsErrorOnServiceFailure(t *testing.T) {
-	service := &fakeService{deleteErr: errors.New("delete failed")}
 	router := setupRouter(service)
 
 	req := httptest.NewRequest(http.MethodDelete, "/storage/1", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }

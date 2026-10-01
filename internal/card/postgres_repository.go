@@ -14,6 +14,7 @@ import (
 
 type cardRow struct {
 	ID              int       `db:"id"`
+	UserID          string    `db:"user_id"`
 	Name            string    `db:"name"`
 	ScryfallID      string    `db:"scryfall_id"`
 	SetCode         string    `db:"set_code"`
@@ -38,9 +39,10 @@ func (r cardRow) toDomain() Card {
 	}
 }
 
-func toCardRow(c Card) cardRow {
+func toCardRow(userID string, c Card) cardRow {
 	return cardRow{
 		ID:              c.ID,
+		UserID:          userID,
 		Name:            c.Name,
 		ScryfallID:      c.ScryfallID,
 		SetCode:         c.SetCode,
@@ -58,10 +60,10 @@ func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
 	return &PostgresRepository{db: db}
 }
 
-func (r *PostgresRepository) FindAll(ctx context.Context, filter CardFilter) ([]Card, int, error) {
-	var conditions []string
-	var args []interface{}
-	argPos := 1
+func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter CardFilter) ([]Card, int, error) {
+	conditions := []string{"user_id = $1"}
+	args := []interface{}{userID}
+	argPos := 2
 
 	if filter.StorageID != nil {
 		conditions = append(conditions, fmt.Sprintf("storage_id = $%d", argPos))
@@ -75,10 +77,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, filter CardFilter) ([]
 		argPos++
 	}
 
-	whereClause := ""
-	if len(conditions) > 0 {
-		whereClause = " WHERE " + strings.Join(conditions, " AND ")
-	}
+	whereClause := " WHERE " + strings.Join(conditions, " AND ")
 
 	countQuery := `SELECT COUNT(*) FROM tamiyo.cards` + whereClause
 	var total int
@@ -126,15 +125,15 @@ func orderByClause(filter CardFilter) string {
 	}
 }
 
-func (r *PostgresRepository) FindByID(ctx context.Context, id int) (Card, error) {
+func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int) (Card, error) {
 	query := `
 		SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, added, updated
 	    FROM tamiyo.cards
-		WHERE id = $1
+		WHERE id = $1 AND user_id = $2
 	`
 
 	var row cardRow
-	if err := r.db.GetContext(ctx, &row, query, id); err != nil {
+	if err := r.db.GetContext(ctx, &row, query, id, userID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Card{}, ErrNotFound
 		}
@@ -144,11 +143,11 @@ func (r *PostgresRepository) FindByID(ctx context.Context, id int) (Card, error)
 	return row.toDomain(), nil
 }
 
-func (r *PostgresRepository) Create(ctx context.Context, c Card) (Card, error) {
-	row := toCardRow(c)
+func (r *PostgresRepository) Create(ctx context.Context, userID string, c Card) (Card, error) {
+	row := toCardRow(userID, c)
 	query := `
-    	INSERT INTO tamiyo.cards (name, scryfall_id, set_code, collector_number, foil, storage_id)
-     	VALUES (:name, :scryfall_id, :set_code, :collector_number, :foil, :storage_id)
+    	INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id)
+     	VALUES (:user_id, :name, :scryfall_id, :set_code, :collector_number, :foil, :storage_id)
       	RETURNING id, name, scryfall_id, set_code, collector_number, foil, storage_id, added, updated
 	`
 
@@ -170,12 +169,12 @@ func (r *PostgresRepository) Create(ctx context.Context, c Card) (Card, error) {
 	return created.toDomain(), nil
 }
 
-func (r *PostgresRepository) Update(ctx context.Context, c Card) (Card, error) {
-	row := toCardRow(c)
+func (r *PostgresRepository) Update(ctx context.Context, userID string, c Card) (Card, error) {
+	row := toCardRow(userID, c)
 	query := `
 		UPDATE tamiyo.cards
 		SET name = :name, scryfall_id = :scryfall_id, set_code = :set_code, collector_number = :collector_number, foil = :foil, storage_id = :storage_id
-		WHERE id = :id
+		WHERE id = :id AND user_id = :user_id
 		RETURNING id, name, scryfall_id, set_code, collector_number, foil, storage_id, added, updated
 	`
 
@@ -200,10 +199,10 @@ func (r *PostgresRepository) Update(ctx context.Context, c Card) (Card, error) {
 	return updated.toDomain(), nil
 }
 
-func (r *PostgresRepository) Delete(ctx context.Context, id int) error {
-	query := `DELETE FROM tamiyo.cards WHERE id = $1`
+func (r *PostgresRepository) Delete(ctx context.Context, userID string, id int) error {
+	query := `DELETE FROM tamiyo.cards WHERE id = $1 AND user_id = $2`
 
-	result, err := r.db.ExecContext(ctx, query, id)
+	result, err := r.db.ExecContext(ctx, query, id, userID)
 	if err != nil {
 		return err
 	}

@@ -33,13 +33,13 @@ type DeckCard struct {
 }
 
 type Repository interface {
-	FindAll(ctx context.Context) ([]Deck, error)
-	FindByID(ctx context.Context, id int) (Deck, error)
-	Create(ctx context.Context, d Deck) (Deck, error)
-	Update(ctx context.Context, d Deck) (Deck, error)
-	Delete(ctx context.Context, id int) error
+	FindAll(ctx context.Context, userID string) ([]Deck, error)
+	FindByID(ctx context.Context, userID string, id int) (Deck, error)
+	Create(ctx context.Context, userID string, d Deck) (Deck, error)
+	Update(ctx context.Context, userID string, d Deck) (Deck, error)
+	Delete(ctx context.Context, userID string, id int) error
 
-	FindCardsByDeckID(ctx context.Context, id int) ([]DeckCard, error)
-	LinkCardToDeck(ctx context.Context, deckID int, cardID int) error
-	UnlinkCardFromDeck(ctx context.Context, deckID int, cardID int) error
+	FindCardsByDeckID(ctx context.Context, userID string, id int) ([]DeckCard, error)
+	LinkCardToDeck(ctx context.Context, userID string, deckID int, cardID int) error
+	UnlinkCardFromDeck(ctx context.Context, userID string, deckID int, cardID int) error
 }
