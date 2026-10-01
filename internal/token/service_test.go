@@ -2,6 +2,7 @@ package token
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -75,6 +76,16 @@ func TestService_IssueRefreshToken_GeneratesDifferentTokensEachTime(t *testing.T
 	require.NoError(t, err)
 
 	assert.NotEqual(t, first, second)
+}
+
+func TestService_IssueRefreshToken_PropagatesRepositoryCreateError(t *testing.T) {
+	repo := &fakeRepository{createErr: errors.New("boom")}
+	service := NewService(repo, time.Hour)
+
+	plaintext, err := service.IssueRefreshToken(context.Background(), "user-1")
+
+	require.Error(t, err)
+	assert.Empty(t, plaintext)
 }
 
 func TestService_Rotate_IssuesNewTokenAndRevokesOldOne(t *testing.T) {

@@ -186,6 +186,16 @@ func TestImportMoxfieldCollection_UnknownStorageReturnsBadRequest(t *testing.T) 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestImportMoxfieldCollection_RequiresFile(t *testing.T) {
+	router := setupRouter(&fakeImportService{})
+
+	req := multipartRequest(t, "/import/moxfield/collection", "", map[string]string{"storage_id": "7"})
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
 func TestImportMoxfieldCollection_ScryfallFailureReturnsBadGateway(t *testing.T) {
 	router := setupRouter(&fakeImportService{err: ErrScryfallUnavailable})
 
@@ -244,6 +254,30 @@ func TestImportMoxfieldDeck_RejectsInvalidBoolean(t *testing.T) {
 
 	req := multipartRequest(t, "/import/moxfield/deck", "deck content", map[string]string{
 		"name": "Pile", "format": "modern", "commander_from_first_line": "not-a-bool",
+	})
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestImportMoxfieldDeck_RejectsNonPositiveStorageID(t *testing.T) {
+	router := setupRouter(&fakeImportService{})
+
+	req := multipartRequest(t, "/import/moxfield/deck", "deck content", map[string]string{
+		"name": "Pile", "format": "modern", "storage_id": "0",
+	})
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestImportMoxfieldDeck_RequiresFile(t *testing.T) {
+	router := setupRouter(&fakeImportService{})
+
+	req := multipartRequest(t, "/import/moxfield/deck", "", map[string]string{
+		"name": "Pile", "format": "modern",
 	})
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)

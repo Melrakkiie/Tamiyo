@@ -207,6 +207,37 @@ func TestService_UpdateDeck_AppliesPartialChangesOnExistingDeck(t *testing.T) {
 	assert.Equal(t, "modern", result.Format)
 }
 
+func TestService_UpdateDeck_AppliesFormatAndCommanderIDWhenProvided(t *testing.T) {
+	existing := Deck{ID: 1, Name: "Red Deck", Format: "modern"}
+	repo := &fakeRepository{findByIDDeck: existing}
+	service := NewService(repo)
+
+	newFormat := "commander"
+	newCommanderID := 42
+	req := updateDeckRequest{Format: &newFormat, CommanderID: &newCommanderID}
+
+	result, err := service.UpdateDeck(context.Background(), testUserID, 1, req)
+
+	require.NoError(t, err)
+	assert.Equal(t, "commander", result.Format)
+	require.NotNil(t, result.CommanderID)
+	assert.Equal(t, 42, *result.CommanderID)
+}
+
+func TestService_UpdateDeck_ClearsCommanderIDWhenRequested(t *testing.T) {
+	existingCommanderID := 42
+	existing := Deck{ID: 1, Name: "Red Deck", Format: "commander", CommanderID: &existingCommanderID}
+	repo := &fakeRepository{findByIDDeck: existing}
+	service := NewService(repo)
+
+	req := updateDeckRequest{ClearCommanderID: true}
+
+	result, err := service.UpdateDeck(context.Background(), testUserID, 1, req)
+
+	require.NoError(t, err)
+	assert.Nil(t, result.CommanderID)
+}
+
 func TestService_UpdateDeck_ReturnsNotFoundWhenDeckDoesNotBelongToUser(t *testing.T) {
 	repo := &fakeRepository{findByIDErr: ErrNotFound}
 	service := NewService(repo)

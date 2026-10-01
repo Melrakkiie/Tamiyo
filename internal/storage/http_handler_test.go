@@ -347,3 +347,60 @@ func TestHandler_DeleteStorage_ReturnsNotFoundWhenStorageDoesNotBelongToUser(t *
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
+
+func TestHandler_UpdateStorage_ReturnsBadRequestOnInvalidID(t *testing.T) {
+	router := setupRouter(&fakeService{})
+
+	body := `{"name": "Renamed"}`
+	req := httptest.NewRequest(http.MethodPatch, "/storage/not-a-number", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_UpdateStorage_ReturnsBadRequestOnInvalidJSON(t *testing.T) {
+	router := setupRouter(&fakeService{})
+
+	req := httptest.NewRequest(http.MethodPatch, "/storage/1", bytes.NewBufferString(`not-json`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_UpdateStorage_ReturnsInternalServerErrorOnOtherServiceError(t *testing.T) {
+	service := &fakeService{updateErr: errors.New("boom")}
+	router := setupRouter(service)
+
+	body := `{"name": "Renamed"}`
+	req := httptest.NewRequest(http.MethodPatch, "/storage/1", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestHandler_DeleteStorage_ReturnsBadRequestOnInvalidID(t *testing.T) {
+	router := setupRouter(&fakeService{})
+
+	req := httptest.NewRequest(http.MethodDelete, "/storage/not-a-number", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_DeleteStorage_ReturnsInternalServerErrorOnOtherServiceError(t *testing.T) {
+	service := &fakeService{deleteErr: errors.New("boom")}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/storage/1", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}

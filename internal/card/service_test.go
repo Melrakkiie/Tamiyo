@@ -183,6 +183,38 @@ func TestService_UpdateCard_AppliesPartialChangesOnExistingCard(t *testing.T) {
 	assert.Equal(t, "lea", result.SetCode)
 }
 
+func TestService_UpdateCard_AppliesAllFieldsWhenProvided(t *testing.T) {
+	existing := Card{ID: 1, Name: "Black Lotus", ScryfallID: "old-id", SetCode: "lea", CollectorNumber: "1", Foil: false}
+	repo := &fakeRepository{findByIDCard: existing}
+	service := NewService(repo)
+
+	newName := "Renamed"
+	newScryfallID := "11111111-1111-1111-1111-111111111111"
+	newSetCode := "2ed"
+	newCollectorNumber := "233"
+	newFoil := true
+	newStorageID := 7
+	req := updateCardRequest{
+		Name:            &newName,
+		ScryfallID:      &newScryfallID,
+		SetCode:         &newSetCode,
+		CollectorNumber: &newCollectorNumber,
+		Foil:            &newFoil,
+		StorageID:       &newStorageID,
+	}
+
+	result, err := service.UpdateCard(context.Background(), testUserID, 1, req)
+
+	require.NoError(t, err)
+	assert.Equal(t, "Renamed", result.Name)
+	assert.Equal(t, newScryfallID, result.ScryfallID)
+	assert.Equal(t, "2ed", result.SetCode)
+	assert.Equal(t, "233", result.CollectorNumber)
+	assert.True(t, result.Foil)
+	require.NotNil(t, result.StorageID)
+	assert.Equal(t, 7, *result.StorageID)
+}
+
 func TestService_UpdateCard_PassesUserIDToFindAndUpdate(t *testing.T) {
 	repo := &fakeRepository{findByIDCard: Card{ID: 1, Name: "Black Lotus"}}
 	service := NewService(repo)

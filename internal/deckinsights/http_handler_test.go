@@ -134,6 +134,18 @@ func TestGetDeckStats_UnknownDeckReturnsNotFound(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
+func TestGetDeckLegality_ReturnsUnauthorizedWhenNotAuthenticated(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	NewHandler(&fakeInsightsService{}).RegisterRoutes(router)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck/1/legality", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
 type assertAnError struct{}
 
 func (assertAnError) Error() string { return "something went wrong" }

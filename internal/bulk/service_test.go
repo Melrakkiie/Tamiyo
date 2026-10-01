@@ -102,6 +102,7 @@ type fakeDeckService struct {
 	cardsByDeck     map[int][]deck.DeckCard
 	getDeckErr      error
 	getDeckCardsErr error
+	createDeckErr   error
 }
 
 func (f *fakeDeckService) GetAllDecks(ctx context.Context, userID string, filter deck.Filter) ([]deck.Deck, int, error) {
@@ -128,6 +129,9 @@ func (f *fakeDeckService) GetDeckCards(ctx context.Context, userID string, id in
 }
 
 func (f *fakeDeckService) CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error) {
+	if f.createDeckErr != nil {
+		return deck.Deck{}, f.createDeckErr
+	}
 	f.nextID++
 	d.ID = f.nextID
 	f.decks = append(f.decks, d)
@@ -220,6 +224,38 @@ Atraxa Deck,deck,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
 	require.Len(t, decks.created, 1)
 	assert.Equal(t, "commander", decks.created[0].Format)
 	assert.Equal(t, []int{cards.created[0].ID}, decks.linkedCards[decks.created[0].ID])
+}
+
+func TestImportManaBox_ReusesSameDeckAcrossMultipleRows(t *testing.T) {
+	csv := `Binder Name,Binder Type,Name,Set code,Scryfall ID,Collector number,Foil,Quantity
+Atraxa Deck,deck,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
+Atraxa Deck,deck,Lightning Bolt,CMM,bbbbbbbb-0000-0000-0000-000000000000,456,,1
+`
+	cards := &fakeCardService{}
+	storages := &fakeStorageService{}
+	decks := &fakeDeckService{}
+	svc := NewService(cards, storages, decks, &fakeResolver{})
+
+	summary, err := svc.ImportManaBox(context.Background(), testUserID, strings.NewReader(csv))
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, summary.DecksCreated)
+	require.Len(t, decks.created, 1)
+	assert.ElementsMatch(t, []int{cards.created[0].ID, cards.created[1].ID}, decks.linkedCards[decks.created[0].ID])
+}
+
+func TestImportManaBox_ReturnsErrorWhenDeckCreationFails(t *testing.T) {
+	csv := `Binder Name,Binder Type,Name,Set code,Scryfall ID,Collector number,Foil,Quantity
+Atraxa Deck,deck,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
+`
+	cards := &fakeCardService{}
+	storages := &fakeStorageService{}
+	decks := &fakeDeckService{createDeckErr: errors.New("db is down")}
+	svc := NewService(cards, storages, decks, &fakeResolver{})
+
+	_, err := svc.ImportManaBox(context.Background(), testUserID, strings.NewReader(csv))
+
+	require.Error(t, err)
 }
 
 func TestImportManaBox_SkipsCardOnCreateErrorButContinues(t *testing.T) {
@@ -383,4 +419,94 @@ func TestImportMoxfieldDeck_UnresolvedCommanderIsSkippedButDeckStillCreated(t *t
 	assert.Equal(t, 1, summary.CardsCreated)
 	assert.Equal(t, 1, summary.CardsSkipped)
 	assert.Nil(t, decks.created[0].CommanderID)
+}
+
+func TestImportMoxfieldDeck_ReturnsErrorWhenTargetStorageDoesNotExist(t *testing.T) {
+	decklist := "1 Sol Ring (SLD) 1011\n"
+	cards := &fakeCardService{}
+	storages := &fakeStorageService{} // no storages registered
+	resolver := &fakeResolver{resolved: map[string]string{resolveKey("SLD", "1011"): "22222222-0000-0000-0000-000000000000"}}
+	svc := NewService(cards, storages, &fakeDeckService{}, resolver)
+
+	missingStorageID := 999
+	_, err := svc.ImportMoxfieldDeck(context.Background(), testUserID, MoxfieldDeckImportRequest{
+		Name: "Modern Pile", Format: "modern", StorageID: &missingStorageID,
+	}, strings.NewReader(decklist))
+
+	assert.ErrorIs(t, err, ErrTargetStorageNotFound)
+}
+
+func TestImportMoxfieldDeck_ReturnsErrorWhenScryfallResolveFails(t *testing.T) {
+	decklist := "1 Sol Ring (SLD) 1011\n"
+	cards := &fakeCardService{}
+	resolver := &fakeResolver{err: errors.New("scryfall is down")}
+	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, resolver)
+
+	_, err := svc.ImportMoxfieldDeck(context.Background(), testUserID, MoxfieldDeckImportRequest{
+		Name: "Modern Pile", Format: "modern",
+	}, strings.NewReader(decklist))
+
+	assert.ErrorIs(t, err, ErrScryfallUnavailable)
+}
+
+func TestImportMoxfieldDeck_SkipsLineAndWarnsWhenCardCreationFails(t *testing.T) {
+	decklist := "1 Sol Ring (SLD) 1011\n"
+	cards := &fakeCardService{createErr: errors.New("db is down")}
+	decks := &fakeDeckService{}
+	resolver := &fakeResolver{resolved: map[string]string{resolveKey("SLD", "1011"): "22222222-0000-0000-0000-000000000000"}}
+	svc := NewService(cards, &fakeStorageService{}, decks, resolver)
+
+	summary, err := svc.ImportMoxfieldDeck(context.Background(), testUserID, MoxfieldDeckImportRequest{
+		Name: "Modern Pile", Format: "modern",
+	}, strings.NewReader(decklist))
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, summary.CardsCreated)
+	assert.Equal(t, 1, summary.CardsSkipped)
+	assert.NotEmpty(t, summary.Warnings)
+}
+
+func TestImportMoxfieldDeck_ReturnsErrorWhenDeckCreationFails(t *testing.T) {
+	decklist := "1 Sol Ring (SLD) 1011\n"
+	cards := &fakeCardService{}
+	decks := &fakeDeckService{createDeckErr: errors.New("db is down")}
+	resolver := &fakeResolver{resolved: map[string]string{resolveKey("SLD", "1011"): "22222222-0000-0000-0000-000000000000"}}
+	svc := NewService(cards, &fakeStorageService{}, decks, resolver)
+
+	_, err := svc.ImportMoxfieldDeck(context.Background(), testUserID, MoxfieldDeckImportRequest{
+		Name: "Modern Pile", Format: "modern",
+	}, strings.NewReader(decklist))
+
+	require.Error(t, err)
+}
+
+func TestImportMoxfieldDeck_WarnsWhenLinkingCommanderToDeckFails(t *testing.T) {
+	decklist := "1 Atraxa, Praetors' Voice (CMR) 1\n"
+	cards := &fakeCardService{}
+	decks := &fakeDeckService{linkErr: errors.New("link failed")}
+	resolver := &fakeResolver{resolved: map[string]string{resolveKey("CMR", "1"): "11111111-0000-0000-0000-000000000000"}}
+	svc := NewService(cards, &fakeStorageService{}, decks, resolver)
+
+	summary, err := svc.ImportMoxfieldDeck(context.Background(), testUserID, MoxfieldDeckImportRequest{
+		Name: "My Deck", Format: "commander", CommanderFromFirstLine: true,
+	}, strings.NewReader(decklist))
+
+	require.NoError(t, err)
+	assert.NotEmpty(t, summary.Warnings)
+}
+
+func TestImportMoxfieldDeck_WarnsWhenLinkingRegularCardToDeckFails(t *testing.T) {
+	decklist := "1 Sol Ring (SLD) 1011\n"
+	cards := &fakeCardService{}
+	decks := &fakeDeckService{linkErr: errors.New("link failed")}
+	resolver := &fakeResolver{resolved: map[string]string{resolveKey("SLD", "1011"): "22222222-0000-0000-0000-000000000000"}}
+	svc := NewService(cards, &fakeStorageService{}, decks, resolver)
+
+	summary, err := svc.ImportMoxfieldDeck(context.Background(), testUserID, MoxfieldDeckImportRequest{
+		Name: "Modern Pile", Format: "modern",
+	}, strings.NewReader(decklist))
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, summary.CardsCreated)
+	assert.NotEmpty(t, summary.Warnings)
 }

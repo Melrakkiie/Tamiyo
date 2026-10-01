@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -208,6 +209,44 @@ func TestHandler_Login_ReturnsUnauthorizedOnInvalidCredentials(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestHandler_Login_ReturnsBadRequestOnInvalidBody(t *testing.T) {
+	router := setupRouter(&fakeService{}, &fakeTokenService{})
+
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewBufferString(`not-json`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_Login_ReturnsInternalServerErrorOnUnknownAuthError(t *testing.T) {
+	service := &fakeService{authErr: errors.New("boom")}
+	router := setupRouter(service, &fakeTokenService{})
+
+	body := `{"email": "alice@example.com", "password": "supersecret"}`
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestHandler_Login_ReturnsInternalServerErrorWhenRefreshTokenIssueFails(t *testing.T) {
+	service := &fakeService{authUser: User{ID: "11111111-1111-1111-1111-111111111111", Email: "alice@example.com"}}
+	tokens := &fakeTokenService{issueErr: errors.New("boom")}
+	router := setupRouter(service, tokens)
+
+	body := `{"email": "alice@example.com", "password": "supersecret"}`
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
 func TestHandler_RegisterRoutes_AppliesGivenMiddlewareToBothAuthRoutes(t *testing.T) {

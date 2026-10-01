@@ -142,6 +142,24 @@ func TestExportMoxfieldCollection_LowercasesSetCode(t *testing.T) {
 	assert.Contains(t, buf.String(), ",sld,")
 }
 
+func TestExportMoxfieldCollection_MarksFoilCardsAndSortsByNameThenSetThenCollectorNumber(t *testing.T) {
+	cards := &fakeCardService{allCards: []card.Card{
+		{Name: "Sol Ring", SetCode: "SLD", CollectorNumber: "1011", Foil: true},
+		{Name: "Counterspell", SetCode: "CLB", CollectorNumber: "2"},
+		{Name: "Counterspell", SetCode: "CLB", CollectorNumber: "1"},
+	}}
+	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
+
+	var buf bytes.Buffer
+	require.NoError(t, svc.ExportMoxfieldCollection(context.Background(), testUserID, &buf))
+
+	lines := splitCSVLines(buf.String())
+	require.Len(t, lines, 4) // header + 3 rows
+	assert.Contains(t, lines[1], "Counterspell,clb,,1")
+	assert.Contains(t, lines[2], "Counterspell,clb,,2")
+	assert.Contains(t, lines[3], "1,Sol Ring,sld,foil,1011")
+}
+
 func TestExportMoxfieldCollection_PropagatesCardLoadError(t *testing.T) {
 	cards := &fakeCardService{getAllErr: errors.New("db down")}
 	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})

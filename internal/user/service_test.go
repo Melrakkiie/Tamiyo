@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -74,6 +75,17 @@ func TestService_Register_PropagatesEmailAlreadyTakenError(t *testing.T) {
 	_, err := service.Register(context.Background(), "alice@example.com", "supersecret")
 
 	assert.ErrorIs(t, err, ErrEmailAlreadyTaken)
+}
+
+func TestService_Register_ReturnsErrorWhenPasswordTooLongToHash(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	tooLong := strings.Repeat("a", 73) // bcrypt rejects passwords over 72 bytes
+
+	_, err := service.Register(context.Background(), "alice@example.com", tooLong)
+
+	require.Error(t, err)
 }
 
 func TestService_Authenticate_SucceedsWithCorrectPassword(t *testing.T) {
@@ -179,6 +191,17 @@ func TestService_SetPassword_UpdatesHashWithoutCheckingCurrentPassword(t *testin
 	require.NoError(t, err)
 	assert.Equal(t, "fake-id", repo.updatePasswordID)
 	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(repo.updatePasswordHash), []byte("brandnewpassword")))
+}
+
+func TestService_SetPassword_ReturnsErrorWhenPasswordTooLongToHash(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	tooLong := strings.Repeat("a", 73) // bcrypt rejects passwords over 72 bytes
+
+	err := service.SetPassword(context.Background(), "fake-id", tooLong)
+
+	require.Error(t, err)
 }
 
 func TestService_SetPassword_PropagatesUpdatePasswordError(t *testing.T) {
