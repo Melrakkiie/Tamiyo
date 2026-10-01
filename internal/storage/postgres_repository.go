@@ -122,7 +122,9 @@ func (r *PostgresRepository) Create(ctx context.Context, userID string, storage 
 	if err != nil {
 		return Storage{}, err
 	}
-	defer stmt.Close()
+	defer func() {
+		_ = stmt.Close()
+	}()
 
 	var created storageRow
 	if err := stmt.GetContext(ctx, &created, row); err != nil {
@@ -145,7 +147,9 @@ func (r *PostgresRepository) Update(ctx context.Context, userID string, s Storag
 	if err != nil {
 		return Storage{}, err
 	}
-	defer stmt.Close()
+	defer func() {
+		_ = stmt.Close()
+	}()
 
 	var updated storageRow
 	if err := stmt.GetContext(ctx, &updated, row); err != nil {

@@ -19,13 +19,7 @@ type userRow struct {
 }
 
 func (r userRow) toDomain() User {
-	return User{
-		ID:           r.ID,
-		Email:        r.Email,
-		PasswordHash: r.PasswordHash,
-		Added:        r.Added,
-		Updated:      r.Updated,
-	}
+	return User(r)
 }
 
 func toUserRow(u User) userRow {
@@ -56,7 +50,9 @@ func (r *PostgresRepository) Create(ctx context.Context, u User) (User, error) {
 	if err != nil {
 		return User{}, err
 	}
-	defer stmt.Close()
+	defer func() {
+		_ = stmt.Close()
+	}()
 
 	var created userRow
 	if err := stmt.GetContext(ctx, &created, row); err != nil {

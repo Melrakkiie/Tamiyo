@@ -7,9 +7,47 @@ on:
     branches: [main]
 
 jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Build
+        run: go build ./...
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.5.0
+
   unit-tests:
     name: Unit tests
     runs-on: ubuntu-latest
+    needs: [build, lint]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -34,6 +72,7 @@ jobs:
   integration-tests:
     name: Integration tests
     runs-on: ubuntu-latest
+    needs: [build, lint]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

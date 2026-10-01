@@ -155,7 +155,9 @@ func (r *PostgresRepository) Create(ctx context.Context, userID string, c Card) 
 	if err != nil {
 		return Card{}, err
 	}
-	defer stmt.Close()
+	defer func() {
+		_ = stmt.Close()
+	}()
 
 	var created cardRow
 	if err := stmt.GetContext(ctx, &created, row); err != nil {
@@ -182,7 +184,9 @@ func (r *PostgresRepository) Update(ctx context.Context, userID string, c Card) 
 	if err != nil {
 		return Card{}, err
 	}
-	defer stmt.Close()
+	defer func() {
+		_ = stmt.Close()
+	}()
 
 	var updated cardRow
 	if err := stmt.GetContext(ctx, &updated, row); err != nil {

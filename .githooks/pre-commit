@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# N'exécute le hook que s'il y a des fichiers .go dans le commit — évite
+# de lancer build/vet/lint pour un commit qui ne touche que la doc, etc.
+staged_go_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.go')
+
+if [ -z "$staged_go_files" ]; then
+    exit 0
+fi
+
+echo "pre-commit: build, vet et lint..."
+
+if ! go build ./...; then
+    echo "pre-commit: échec du build. Commit annulé." >&2
+    exit 1
+fi
+
+if ! go vet ./...; then
+    echo "pre-commit: go vet a trouvé des problèmes. Commit annulé." >&2
+    exit 1
+fi
+
+if command -v golangci-lint >/dev/null 2>&1; then
+    if ! golangci-lint run ./...; then
+        echo "pre-commit: golangci-lint a trouvé des problèmes. Commit annulé." >&2
+        exit 1
+    fi
+else
+    echo "pre-commit: golangci-lint n'est pas installé, étape de lint ignorée." >&2
+    echo "  go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.5.0" >&2
+fi
+
+echo "pre-commit: tests unitaires..."
+if ! go test ./internal/... > /tmp/pre-commit-test-output.log 2>&1; then
+    cat /tmp/pre-commit-test-output.log
+    echo "pre-commit: tests unitaires en échec. Commit annulé." >&2
+    exit 1
+fi
+
+echo "pre-commit: OK"

@@ -22,7 +22,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer logger.Sync()
+	defer func() {
+		_ = logger.Sync()
+	}()
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -38,7 +40,11 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to connect to database", zap.Error(err))
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			logger.Error("failed to close database connection", zap.Error(err))
+		}
+	}()
 
 	userRepo := user.NewPostgresRepository(db)
 	userService := user.NewService(userRepo)

@@ -56,17 +56,7 @@ type cardRow struct {
 }
 
 func (r cardRow) toDomain() DeckCard {
-	return DeckCard{
-		ID:              r.ID,
-		Name:            r.Name,
-		ScryfallID:      r.ScryfallID,
-		SetCode:         r.SetCode,
-		CollectorNumber: r.CollectorNumber,
-		Foil:            r.Foil,
-		StorageID:       r.StorageID,
-		Added:           r.Added,
-		Updated:         r.Updated,
-	}
+	return DeckCard(r)
 }
 
 type PostgresRepository struct {
@@ -154,7 +144,9 @@ func (r *PostgresRepository) Create(ctx context.Context, userID string, d Deck) 
 	if err != nil {
 		return Deck{}, err
 	}
-	defer stmt.Close()
+	defer func() {
+		_ = stmt.Close()
+	}()
 
 	var created deckRow
 	if err := stmt.GetContext(ctx, &created, row); err != nil {
@@ -181,7 +173,9 @@ func (r *PostgresRepository) Update(ctx context.Context, userID string, d Deck) 
 	if err != nil {
 		return Deck{}, err
 	}
-	defer stmt.Close()
+	defer func() {
+		_ = stmt.Close()
+	}()
 
 	var updated deckRow
 	if err := stmt.GetContext(ctx, &updated, row); err != nil {

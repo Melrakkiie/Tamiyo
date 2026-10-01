@@ -22,6 +22,7 @@ tamiyo/
 │   ├── deck/             # deck domain, including deck ↔ card relationship
 │   └── config/           # environment configuration
 ├── _devops/database/     # SQL schema
+├── .githooks/            # versioned git hooks (see Code Quality)
 ├── docker-compose.yml
 └── Dockerfile
 ```
@@ -49,6 +50,17 @@ Since the schema init script only runs on a fresh volume, use this whenever the 
 ```bash
 make db-reset
 ```
+
+### Set up git hooks
+ 
+A pre-commit hook (build + `go vet` + `golangci-lint` + unit tests) is versioned in [`.githooks/`](./.githooks). Enable it once per clone:
+ 
+```bash
+make install-hooks
+```
+
+It only runs when staged files include `.go` changes, and only checks unit tests (integration tests are left to CI/`make test-integration`, since they spin up a Postgres container). Requires [`golangci-lint`](https://golangci-lint.run/) installed locally for the lint step; if it's missing, that step is skipped with a warning rather than blocking the commit.
+
 
 ## Authentication
 
