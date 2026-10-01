@@ -20,7 +20,7 @@ tamiyo/
 │   ├── card/             # card domain: model, service, repository, HTTP handler
 │   ├── storage/          # storage domain (binders, boxes, deckboxes)
 │   ├── deck/             # deck domain, including deck ↔ card relationship
-│   ├── bulk/       # bulk import/export routes (ManaBox, Moxfield)
+│   ├── bulk/             # bulk import/export routes (ManaBox, Moxfield)
 │   └── config/           # environment configuration
 ├── _devops/database/     # SQL schema
 ├── .githooks/            # versioned git hooks (see Code Quality)
