@@ -145,17 +145,22 @@ A bulk import never fails outright over a single bad row — it returns `200 OK`
 
 ## Bulk Export
 
-The symmetric pair of `GET` routes export the whole collection back out as a CSV in the same format the matching import route above reads — see [`doc/API.md`](./doc/API.md#bulk-export) for details:
+Routes export back out in the same formats the import routes above read — see [`doc/API.md`](./doc/API.md#bulk-export) for details:
 
-- `GET /export/manabox` — ManaBox-compatible CSV, grouped by storage (a card with no storage lands in a synthetic "Unsorted" binder).
-- `GET /export/moxfield/collection` — Moxfield-compatible "Export Collection" CSV; Moxfield's format has no storage concept, so this groups the entire collection together regardless of storage.
+- `GET /export/manabox` — the whole collection as a ManaBox-compatible CSV, grouped by storage (a card with no storage lands in a synthetic "Unsorted" binder).
+- `GET /export/moxfield/collection` — the whole collection as a Moxfield-compatible "Export Collection" CSV; Moxfield's format has no storage concept, so this groups the entire collection together regardless of storage.
+- `GET /export/moxfield/deck/:id` — **one deck** (not the whole collection) as a Moxfield deck plain-text export. If the deck has a commander, its line is written first with its full quantity, so re-importing reconstructs the same commander.
 
-Both always export the whole collection (no filtering by storage or deck) and return the raw CSV file as a download, not JSON:
+The two collection-wide routes always export everything (no filtering by storage or deck) and return a raw CSV download, not JSON; the deck route returns a raw `.txt` download:
 
 ```bash
 curl -X GET localhost:8080/export/manabox \
   -H "Authorization: Bearer <token>" \
   -o ManaBox_Collection_export.csv
+
+curl -X GET localhost:8080/export/moxfield/deck/1 \
+  -H "Authorization: Bearer <token>" \
+  -o Moxfield_Deck_export.txt
 ```
 
 ### Importing a ManaBox Collection via script (alternative)

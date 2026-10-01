@@ -1071,6 +1071,47 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /export/moxfield/deck/{id}:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    get:
+      tags: [bulk-export]
+      summary: Export one deck as a Moxfield deck plain-text export
+      description: >
+        Exports one deck (not the whole collection) as a Moxfield deck
+        plain-text export, matching the format POST /import/moxfield/deck
+        reads: one line per distinct printing. If the deck has a
+        commander, that printing's line (with its full quantity in the
+        deck) is written first, so re-importing the file reconstructs the
+        same commander via the usual "first line" convention. A deck with
+        no commander has no special first line — every line is sorted
+        alphabetically.
+      responses:
+        "200":
+          description: The deck's plain-text export, served as a download.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="Moxfield_Deck_export.txt"
+          content:
+            text/plain:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/InvalidID"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found, or not owned by the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
 components:
   securitySchemes:
     bearerAuth:

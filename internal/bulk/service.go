@@ -26,8 +26,10 @@ type storageService interface {
 
 type deckService interface {
 	GetAllDecks(ctx context.Context, userID string, filter deck.Filter) ([]deck.Deck, int, error)
+	GetDeck(ctx context.Context, userID string, id int) (deck.Deck, error)
 	CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error)
 	PutCardInDeck(ctx context.Context, userID string, deckID, cardID int) error
+	GetDeckCards(ctx context.Context, userID string, id int) ([]deck.DeckCard, error)
 }
 
 type Service struct {

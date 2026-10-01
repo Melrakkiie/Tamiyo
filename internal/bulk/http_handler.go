@@ -20,6 +20,7 @@ type importService interface {
 
 	ExportManaBox(ctx context.Context, userID string, w io.Writer) error
 	ExportMoxfieldCollection(ctx context.Context, userID string, w io.Writer) error
+	ExportMoxfieldDeck(ctx context.Context, userID string, deckID int, w io.Writer) error
 }
 
 type Handler struct {
@@ -37,6 +38,7 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 
 	router.GET("/export/manabox", h.exportManaBox)
 	router.GET("/export/moxfield/collection", h.exportMoxfieldCollection)
+	router.GET("/export/moxfield/deck/:id", h.exportMoxfieldDeck)
 }
 
 func (h *Handler) importManaBox(ctx *gin.Context) {
@@ -173,6 +175,33 @@ func (h *Handler) exportMoxfieldCollection(ctx *gin.Context) {
 
 	ctx.Header("Content-Disposition", `attachment; filename="Moxfield_Collection_export.csv"`)
 	ctx.Data(http.StatusOK, "text/csv; charset=utf-8", buf.Bytes())
+}
+
+func (h *Handler) exportMoxfieldDeck(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
+	deckID, err := strconv.Atoi(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	var buf bytes.Buffer
+	if err := h.service.ExportMoxfieldDeck(ctx.Request.Context(), userID, deckID, &buf); err != nil {
+		if errors.Is(err, ErrDeckNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.Header("Content-Disposition", `attachment; filename="Moxfield_Deck_export.txt"`)
+	ctx.Data(http.StatusOK, "text/plain; charset=utf-8", buf.Bytes())
 }
 
 func (h *Handler) respondImport(ctx *gin.Context, summary Summary, err error) {

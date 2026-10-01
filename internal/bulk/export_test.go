@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"Melrakkiie/Tamiyo/internal/card"
+	"Melrakkiie/Tamiyo/internal/deck"
 	"Melrakkiie/Tamiyo/internal/storage"
 )
 
@@ -146,6 +147,107 @@ func TestExportMoxfieldCollection_PropagatesCardLoadError(t *testing.T) {
 	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
 	err := svc.ExportMoxfieldCollection(context.Background(), testUserID, &bytes.Buffer{})
+
+	require.Error(t, err)
+}
+
+// --- ExportMoxfieldDeck ----------------------------------------------------
+
+func TestExportMoxfieldDeck_CommanderLineIsWrittenFirst(t *testing.T) {
+	decks := &fakeDeckService{
+		decks: []deck.Deck{{ID: 1, Name: "Atraxa", CommanderID: ptr(100)}},
+		cardsByDeck: map[int][]deck.DeckCard{
+			1: {
+				{ID: 100, Name: "Atraxa, Praetors' Voice", SetCode: "CMR", CollectorNumber: "1"},
+				{ID: 101, Name: "Sol Ring", SetCode: "SLD", CollectorNumber: "1011"},
+			},
+		},
+	}
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+
+	var buf bytes.Buffer
+	err := svc.ExportMoxfieldDeck(context.Background(), testUserID, 1, &buf)
+
+	require.NoError(t, err)
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	require.Len(t, lines, 2)
+	assert.Equal(t, "1 Atraxa, Praetors' Voice (CMR) 1", lines[0])
+	assert.Equal(t, "1 Sol Ring (SLD) 1011", lines[1])
+}
+
+func TestExportMoxfieldDeck_CommanderLineIncludesFullQuantityOfThatPrinting(t *testing.T) {
+	decks := &fakeDeckService{
+		decks: []deck.Deck{{ID: 1, Name: "Mono Mountain", CommanderID: ptr(200)}},
+		cardsByDeck: map[int][]deck.DeckCard{
+			1: {
+				{ID: 200, Name: "Mountain", SetCode: "WOE", CollectorNumber: "265"},
+				{ID: 201, Name: "Mountain", SetCode: "WOE", CollectorNumber: "265"},
+			},
+		},
+	}
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+
+	var buf bytes.Buffer
+	require.NoError(t, svc.ExportMoxfieldDeck(context.Background(), testUserID, 1, &buf))
+
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	require.Len(t, lines, 1)
+	assert.Equal(t, "2 Mountain (WOE) 265", lines[0])
+}
+
+func TestExportMoxfieldDeck_NoCommanderSortsAlphabeticallyWithNoSpecialFirstLine(t *testing.T) {
+	decks := &fakeDeckService{
+		decks: []deck.Deck{{ID: 1, Name: "Pile"}},
+		cardsByDeck: map[int][]deck.DeckCard{
+			1: {
+				{ID: 1, Name: "Sol Ring", SetCode: "SLD", CollectorNumber: "1011"},
+				{ID: 2, Name: "Lightning Bolt", SetCode: "CMM", CollectorNumber: "456"},
+			},
+		},
+	}
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+
+	var buf bytes.Buffer
+	require.NoError(t, svc.ExportMoxfieldDeck(context.Background(), testUserID, 1, &buf))
+
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	require.Len(t, lines, 2)
+	assert.Equal(t, "1 Lightning Bolt (CMM) 456", lines[0])
+	assert.Equal(t, "1 Sol Ring (SLD) 1011", lines[1])
+}
+
+func TestExportMoxfieldDeck_FoilSuffix(t *testing.T) {
+	decks := &fakeDeckService{
+		decks: []deck.Deck{{ID: 1, Name: "Pile"}},
+		cardsByDeck: map[int][]deck.DeckCard{
+			1: {{ID: 1, Name: "Sol Ring", SetCode: "SLD", CollectorNumber: "1011", Foil: true}},
+		},
+	}
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+
+	var buf bytes.Buffer
+	require.NoError(t, svc.ExportMoxfieldDeck(context.Background(), testUserID, 1, &buf))
+
+	assert.Equal(t, "1 Sol Ring (SLD) 1011 *F*\n", buf.String())
+}
+
+func TestExportMoxfieldDeck_UnknownDeckReturnsErrDeckNotFound(t *testing.T) {
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
+
+	err := svc.ExportMoxfieldDeck(context.Background(), testUserID, 999, &bytes.Buffer{})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrDeckNotFound)
+}
+
+func TestExportMoxfieldDeck_PropagatesGetDeckCardsError(t *testing.T) {
+	decks := &fakeDeckService{
+		decks:           []deck.Deck{{ID: 1, Name: "Pile"}},
+		getDeckCardsErr: errors.New("db down"),
+	}
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+
+	err := svc.ExportMoxfieldDeck(context.Background(), testUserID, 1, &bytes.Buffer{})
 
 	require.Error(t, err)
 }

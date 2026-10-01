@@ -743,6 +743,18 @@ Cards are grouped by storage, since storage (`Binder Name`/`Binder Type`) is Man
 
 Exports the account's entire collection as a Moxfield-compatible "Export Collection" CSV, matching the columns `POST /import/moxfield/collection` reads: `Count, Name, Edition, Foil, Collector Number`. Moxfield's own format has no storage concept at all, so unlike the ManaBox export, cards are grouped across every storage (and unsorted cards) with no distinction — the only way to see a card's storage is via `GET /cards`, not this export.
 
+### `GET /export/moxfield/deck/:id`
+
+Exports **one deck** — not the whole collection — as a Moxfield deck plain-text export, matching the format `POST /import/moxfield/deck` reads: one line per distinct printing, `<quantity> <name> (<set code>) <collector number>[ *F*]`. Unlike the two collection-wide routes above, the response is plain text (`Content-Type: text/plain; charset=utf-8`), served as a download (`Moxfield_Deck_export.txt`).
+
+If the deck has a commander (`commander_id` on the deck), that printing's line is written **first** — with its full quantity in the deck, not just the one physical card that happens to be marked as commander — so re-importing the file via `POST /import/moxfield/deck` (which defaults to treating the first line as the commander) reconstructs the same commander. A deck with no commander has no special first line at all; every line is sorted alphabetically.
+
+**Errors**
+- `400` — `:id` is not a valid integer
+- `401` — unauthenticated
+- `404` — no deck with that id exists for this account
+- `500` — unexpected failure reading the deck
+
 ---
 
 ## Error reference

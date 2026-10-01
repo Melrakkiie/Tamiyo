@@ -98,10 +98,33 @@ type fakeDeckService struct {
 	created     []deck.Deck
 	linkedCards map[int][]int
 	linkErr     error
+
+	cardsByDeck     map[int][]deck.DeckCard
+	getDeckErr      error
+	getDeckCardsErr error
 }
 
 func (f *fakeDeckService) GetAllDecks(ctx context.Context, userID string, filter deck.Filter) ([]deck.Deck, int, error) {
 	return f.decks, len(f.decks), nil
+}
+
+func (f *fakeDeckService) GetDeck(ctx context.Context, userID string, id int) (deck.Deck, error) {
+	if f.getDeckErr != nil {
+		return deck.Deck{}, f.getDeckErr
+	}
+	for _, d := range f.decks {
+		if d.ID == id {
+			return d, nil
+		}
+	}
+	return deck.Deck{}, deck.ErrNotFound
+}
+
+func (f *fakeDeckService) GetDeckCards(ctx context.Context, userID string, id int) ([]deck.DeckCard, error) {
+	if f.getDeckCardsErr != nil {
+		return nil, f.getDeckCardsErr
+	}
+	return f.cardsByDeck[id], nil
 }
 
 func (f *fakeDeckService) CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error) {
