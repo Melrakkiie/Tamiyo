@@ -2,10 +2,11 @@ package passwordreset
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
+	"Melrakkiie/Tamiyo/internal/apierr"
 )
 
 type forgotPasswordRequest struct {
@@ -79,24 +80,17 @@ func (h *Handler) resetPassword(ctx *gin.Context) {
 
 	userID, err := h.service.Consume(ctx.Request.Context(), req.Token)
 	if err != nil {
-		if errors.Is(err, ErrInvalid) {
-			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired reset token"})
-			return
-		}
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrInvalid, Status: http.StatusUnauthorized, Message: "invalid or expired reset token"})
 		return
 	}
 
 	if err := h.users.SetPassword(ctx.Request.Context(), userID, req.NewPassword); err != nil {
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err)
 		return
 	}
 
 	if err := h.tokens.RevokeAllForUser(ctx.Request.Context(), userID); err != nil {
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err)
 		return
 	}
 

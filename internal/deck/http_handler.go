@@ -2,7 +2,6 @@ package deck
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"Melrakkiie/Tamiyo/internal/apierr"
 	"Melrakkiie/Tamiyo/internal/auth"
 )
 
@@ -199,8 +199,7 @@ func (h *Handler) getDecks(ctx *gin.Context) {
 
 	decks, total, err := h.service.GetAllDecks(ctx.Request.Context(), userID, filter)
 	if err != nil {
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err)
 		return
 	}
 
@@ -238,12 +237,7 @@ func (h *Handler) getDeck(ctx *gin.Context) {
 
 	deck, err := h.service.GetDeck(ctx.Request.Context(), userID, id)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
-			return
-		}
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"})
 		return
 	}
 
@@ -265,12 +259,7 @@ func (h *Handler) createDeck(ctx *gin.Context) {
 
 	created, err := h.service.CreateDeck(ctx.Request.Context(), userID, req.toDomain())
 	if err != nil {
-		if errors.Is(err, ErrCommanderNotFound) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "commander_id does not reference an existing card"})
-			return
-		}
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrCommanderNotFound, Status: http.StatusBadRequest, Message: "commander_id does not reference an existing card"})
 		return
 	}
 
@@ -298,16 +287,10 @@ func (h *Handler) updateDeck(ctx *gin.Context) {
 
 	updated, err := h.service.UpdateDeck(ctx.Request.Context(), userID, id, req)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
-			return
-		}
-		if errors.Is(err, ErrCommanderNotFound) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "commander_id does not reference an existing card"})
-			return
-		}
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err,
+			apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
+			apierr.Mapping{Err: ErrCommanderNotFound, Status: http.StatusBadRequest, Message: "commander_id does not reference an existing card"},
+		)
 		return
 	}
 
@@ -328,12 +311,7 @@ func (h *Handler) deleteDeck(ctx *gin.Context) {
 	}
 
 	if err := h.service.DeleteDeck(ctx.Request.Context(), userID, id); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
-			return
-		}
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"})
 		return
 	}
 
@@ -355,12 +333,7 @@ func (h *Handler) getDeckCards(ctx *gin.Context) {
 
 	deckCards, err := h.service.GetDeckCards(ctx.Request.Context(), userID, id)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
-			return
-		}
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"})
 		return
 	}
 
@@ -391,15 +364,10 @@ func (h *Handler) putCardInDeck(ctx *gin.Context) {
 	}
 
 	if err := h.service.PutCardInDeck(ctx.Request.Context(), userID, deckID, cardID); err != nil {
-		switch {
-		case errors.Is(err, ErrNotFound):
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
-		case errors.Is(err, ErrCardNotFound):
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "card not found"})
-		default:
-			_ = ctx.Error(err)
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		}
+		apierr.Respond(ctx, err,
+			apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
+			apierr.Mapping{Err: ErrCardNotFound, Status: http.StatusNotFound, Message: "card not found"},
+		)
 		return
 	}
 
@@ -426,12 +394,7 @@ func (h *Handler) removeCardFromDeck(ctx *gin.Context) {
 	}
 
 	if err := h.service.RemoveCardFromDeck(ctx.Request.Context(), userID, deckID, cardID); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
-			return
-		}
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"})
 		return
 	}
 

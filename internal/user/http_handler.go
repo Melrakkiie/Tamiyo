@@ -2,12 +2,12 @@ package user
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"Melrakkiie/Tamiyo/internal/apierr"
 	"Melrakkiie/Tamiyo/internal/auth"
 )
 
@@ -79,12 +79,7 @@ func (h *Handler) register(ctx *gin.Context) {
 
 	created, err := h.service.Register(ctx.Request.Context(), req.Email, req.Password)
 	if err != nil {
-		if errors.Is(err, ErrEmailAlreadyTaken) {
-			ctx.JSON(http.StatusConflict, gin.H{"error": "email already registered"})
-			return
-		}
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrEmailAlreadyTaken, Status: http.StatusConflict, Message: "email already registered"})
 		return
 	}
 
@@ -100,12 +95,7 @@ func (h *Handler) login(ctx *gin.Context) {
 
 	authenticated, err := h.service.Authenticate(ctx.Request.Context(), req.Email, req.Password)
 	if err != nil {
-		if errors.Is(err, ErrInvalidCredentials) {
-			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid email or password"})
-			return
-		}
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrInvalidCredentials, Status: http.StatusUnauthorized, Message: "invalid email or password"})
 		return
 	}
 
@@ -115,15 +105,13 @@ func (h *Handler) login(ctx *gin.Context) {
 func (h *Handler) respondWithTokenPair(ctx *gin.Context, userID string, status int) {
 	accessToken, err := auth.GenerateToken(h.jwtSecret, userID, h.accessTokenTTL)
 	if err != nil {
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err)
 		return
 	}
 
 	refreshToken, err := h.tokens.IssueRefreshToken(ctx.Request.Context(), userID)
 	if err != nil {
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err)
 		return
 	}
 
@@ -144,22 +132,15 @@ func (h *Handler) changePassword(ctx *gin.Context) {
 	}
 
 	if err := h.service.ChangePassword(ctx.Request.Context(), userID, req.CurrentPassword, req.NewPassword); err != nil {
-		if errors.Is(err, ErrIncorrectPassword) {
-			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "incorrect current password"})
-			return
-		}
-		if errors.Is(err, ErrNotFound) {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-			return
-		}
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err,
+			apierr.Mapping{Err: ErrIncorrectPassword, Status: http.StatusUnauthorized, Message: "incorrect current password"},
+			apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "user not found"},
+		)
 		return
 	}
 
 	if err := h.tokens.RevokeAllForUser(ctx.Request.Context(), userID); err != nil {
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err)
 		return
 	}
 

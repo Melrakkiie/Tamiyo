@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"Melrakkiie/Tamiyo/internal/apierr"
 	"Melrakkiie/Tamiyo/internal/auth"
 )
 
@@ -152,8 +153,7 @@ func (h *Handler) exportManaBox(ctx *gin.Context) {
 
 	var buf bytes.Buffer
 	if err := h.service.ExportManaBox(ctx.Request.Context(), userID, &buf); err != nil {
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err)
 		return
 	}
 
@@ -170,8 +170,7 @@ func (h *Handler) exportMoxfieldCollection(ctx *gin.Context) {
 
 	var buf bytes.Buffer
 	if err := h.service.ExportMoxfieldCollection(ctx.Request.Context(), userID, &buf); err != nil {
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err)
 		return
 	}
 
@@ -194,12 +193,7 @@ func (h *Handler) exportMoxfieldDeck(ctx *gin.Context) {
 
 	var buf bytes.Buffer
 	if err := h.service.ExportMoxfieldDeck(ctx.Request.Context(), userID, deckID, &buf); err != nil {
-		if errors.Is(err, ErrDeckNotFound) {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
-			return
-		}
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"})
 		return
 	}
 
@@ -209,17 +203,11 @@ func (h *Handler) exportMoxfieldDeck(ctx *gin.Context) {
 
 func (h *Handler) respondImport(ctx *gin.Context, summary Summary, err error) {
 	if err != nil {
-		switch {
-		case errors.Is(err, ErrInvalidFile):
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		case errors.Is(err, ErrTargetStorageNotFound):
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "storage_id does not reference an existing storage"})
-		case errors.Is(err, ErrScryfallUnavailable):
-			ctx.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
-		default:
-			_ = ctx.Error(err)
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		}
+		apierr.Respond(ctx, err,
+			apierr.Mapping{Err: ErrInvalidFile, Status: http.StatusBadRequest},
+			apierr.Mapping{Err: ErrTargetStorageNotFound, Status: http.StatusBadRequest, Message: "storage_id does not reference an existing storage"},
+			apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway},
+		)
 		return
 	}
 

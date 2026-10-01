@@ -2,12 +2,12 @@ package deckinsights
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 
+	"Melrakkiie/Tamiyo/internal/apierr"
 	"Melrakkiie/Tamiyo/internal/auth"
 )
 
@@ -76,15 +76,9 @@ func (h *Handler) authAndParseID(ctx *gin.Context) (userID string, deckID int, o
 }
 
 func (h *Handler) respondError(ctx *gin.Context, err error) {
-	switch {
-	case errors.Is(err, ErrDeckNotFound):
-		ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
-	case errors.Is(err, ErrUnknownFormat):
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-	case errors.Is(err, ErrScryfallUnavailable):
-		ctx.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
-	default:
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-	}
+	apierr.Respond(ctx, err,
+		apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
+		apierr.Mapping{Err: ErrUnknownFormat, Status: http.StatusBadRequest},
+		apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway},
+	)
 }

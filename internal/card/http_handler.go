@@ -2,7 +2,6 @@ package card
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"Melrakkiie/Tamiyo/internal/apierr"
 	"Melrakkiie/Tamiyo/internal/auth"
 )
 
@@ -195,8 +195,7 @@ func (h *Handler) getCards(ctx *gin.Context) {
 
 	cards, total, err := h.service.GetAllCards(ctx.Request.Context(), userID, filter)
 	if err != nil {
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err)
 		return
 	}
 
@@ -234,12 +233,7 @@ func (h *Handler) getCard(ctx *gin.Context) {
 
 	card, err := h.service.GetCard(ctx.Request.Context(), userID, id)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "card not found"})
-			return
-		}
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "card not found"})
 		return
 	}
 
@@ -261,12 +255,7 @@ func (h *Handler) createCard(ctx *gin.Context) {
 
 	created, err := h.service.CreateCard(ctx.Request.Context(), userID, req.toDomain())
 	if err != nil {
-		if errors.Is(err, ErrStorageNotFound) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "storage_id does not reference an existing storage"})
-			return
-		}
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrStorageNotFound, Status: http.StatusBadRequest, Message: "storage_id does not reference an existing storage"})
 		return
 	}
 
@@ -294,16 +283,10 @@ func (h *Handler) updateCard(ctx *gin.Context) {
 
 	updated, err := h.service.UpdateCard(ctx.Request.Context(), userID, id, req)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "card not found"})
-			return
-		}
-		if errors.Is(err, ErrStorageNotFound) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "storage_id does not reference an existing storage"})
-			return
-		}
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err,
+			apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "card not found"},
+			apierr.Mapping{Err: ErrStorageNotFound, Status: http.StatusBadRequest, Message: "storage_id does not reference an existing storage"},
+		)
 		return
 	}
 
@@ -324,12 +307,7 @@ func (h *Handler) deleteCard(ctx *gin.Context) {
 	}
 
 	if err := h.service.DeleteCard(ctx.Request.Context(), userID, id); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "card not found"})
-			return
-		}
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "card not found"})
 		return
 	}
 

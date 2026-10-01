@@ -2,12 +2,12 @@ package token
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"Melrakkiie/Tamiyo/internal/apierr"
 	"Melrakkiie/Tamiyo/internal/auth"
 )
 
@@ -53,19 +53,13 @@ func (h *Handler) refresh(ctx *gin.Context) {
 
 	userID, newRefreshToken, err := h.service.Rotate(ctx.Request.Context(), req.RefreshToken)
 	if err != nil {
-		if errors.Is(err, ErrInvalid) {
-			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired refresh token"})
-			return
-		}
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrInvalid, Status: http.StatusUnauthorized, Message: "invalid or expired refresh token"})
 		return
 	}
 
 	accessToken, err := auth.GenerateToken(h.jwtSecret, userID, h.accessTokenTTL)
 	if err != nil {
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err)
 		return
 	}
 
@@ -80,8 +74,7 @@ func (h *Handler) logout(ctx *gin.Context) {
 	}
 
 	if err := h.service.Revoke(ctx.Request.Context(), req.RefreshToken); err != nil {
-		_ = ctx.Error(err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apierr.Respond(ctx, err)
 		return
 	}
 
