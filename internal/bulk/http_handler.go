@@ -152,6 +152,7 @@ func (h *Handler) exportManaBox(ctx *gin.Context) {
 
 	var buf bytes.Buffer
 	if err := h.service.ExportManaBox(ctx.Request.Context(), userID, &buf); err != nil {
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -169,6 +170,7 @@ func (h *Handler) exportMoxfieldCollection(ctx *gin.Context) {
 
 	var buf bytes.Buffer
 	if err := h.service.ExportMoxfieldCollection(ctx.Request.Context(), userID, &buf); err != nil {
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -196,6 +198,7 @@ func (h *Handler) exportMoxfieldDeck(ctx *gin.Context) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
 			return
 		}
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -214,6 +217,7 @@ func (h *Handler) respondImport(ctx *gin.Context, summary Summary, err error) {
 		case errors.Is(err, ErrScryfallUnavailable):
 			ctx.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		default:
+			_ = ctx.Error(err)
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
 		return

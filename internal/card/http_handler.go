@@ -195,6 +195,7 @@ func (h *Handler) getCards(ctx *gin.Context) {
 
 	cards, total, err := h.service.GetAllCards(ctx.Request.Context(), userID, filter)
 	if err != nil {
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -237,6 +238,7 @@ func (h *Handler) getCard(ctx *gin.Context) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "card not found"})
 			return
 		}
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -263,6 +265,7 @@ func (h *Handler) createCard(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "storage_id does not reference an existing storage"})
 			return
 		}
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -299,6 +302,7 @@ func (h *Handler) updateCard(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "storage_id does not reference an existing storage"})
 			return
 		}
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -324,6 +328,7 @@ func (h *Handler) deleteCard(ctx *gin.Context) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "card not found"})
 			return
 		}
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

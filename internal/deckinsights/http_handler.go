@@ -84,6 +84,7 @@ func (h *Handler) respondError(ctx *gin.Context, err error) {
 	case errors.Is(err, ErrScryfallUnavailable):
 		ctx.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 	default:
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	}
 }

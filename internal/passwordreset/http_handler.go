@@ -83,16 +83,19 @@ func (h *Handler) resetPassword(ctx *gin.Context) {
 			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired reset token"})
 			return
 		}
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	if err := h.users.SetPassword(ctx.Request.Context(), userID, req.NewPassword); err != nil {
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	if err := h.tokens.RevokeAllForUser(ctx.Request.Context(), userID); err != nil {
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

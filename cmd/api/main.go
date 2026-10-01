@@ -16,6 +16,7 @@ import (
 	"Melrakkiie/Tamiyo/internal/deck"
 	"Melrakkiie/Tamiyo/internal/deckinsights"
 	"Melrakkiie/Tamiyo/internal/health"
+	"Melrakkiie/Tamiyo/internal/httplog"
 	"Melrakkiie/Tamiyo/internal/mail"
 	"Melrakkiie/Tamiyo/internal/passwordreset"
 	"Melrakkiie/Tamiyo/internal/ratelimit"
@@ -96,7 +97,9 @@ func main() {
 
 	authLimiter := ratelimit.NewLimiter(cfg.AuthRateLimitMax, cfg.AuthRateLimitWindow)
 
-	router := gin.Default()
+	router := gin.New()
+	router.Use(httplog.Recovery(logger))
+	router.Use(httplog.Middleware(logger))
 	router.Use(security.Headers())
 	router.Use(cors.Middleware(cfg.CORSAllowedOrigins))
 

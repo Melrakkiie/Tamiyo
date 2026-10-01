@@ -57,12 +57,14 @@ func (h *Handler) refresh(ctx *gin.Context) {
 			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired refresh token"})
 			return
 		}
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	accessToken, err := auth.GenerateToken(h.jwtSecret, userID, h.accessTokenTTL)
 	if err != nil {
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -78,6 +80,7 @@ func (h *Handler) logout(ctx *gin.Context) {
 	}
 
 	if err := h.service.Revoke(ctx.Request.Context(), req.RefreshToken); err != nil {
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

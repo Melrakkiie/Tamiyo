@@ -199,6 +199,7 @@ func (h *Handler) getDecks(ctx *gin.Context) {
 
 	decks, total, err := h.service.GetAllDecks(ctx.Request.Context(), userID, filter)
 	if err != nil {
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -241,6 +242,7 @@ func (h *Handler) getDeck(ctx *gin.Context) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
 			return
 		}
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -267,6 +269,7 @@ func (h *Handler) createDeck(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "commander_id does not reference an existing card"})
 			return
 		}
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -303,6 +306,7 @@ func (h *Handler) updateDeck(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "commander_id does not reference an existing card"})
 			return
 		}
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -328,6 +332,7 @@ func (h *Handler) deleteDeck(ctx *gin.Context) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
 			return
 		}
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -354,6 +359,7 @@ func (h *Handler) getDeckCards(ctx *gin.Context) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
 			return
 		}
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -391,6 +397,7 @@ func (h *Handler) putCardInDeck(ctx *gin.Context) {
 		case errors.Is(err, ErrCardNotFound):
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "card not found"})
 		default:
+			_ = ctx.Error(err)
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
 		return
@@ -423,6 +430,7 @@ func (h *Handler) removeCardFromDeck(ctx *gin.Context) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
 			return
 		}
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

@@ -83,6 +83,7 @@ func (h *Handler) register(ctx *gin.Context) {
 			ctx.JSON(http.StatusConflict, gin.H{"error": "email already registered"})
 			return
 		}
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -103,6 +104,7 @@ func (h *Handler) login(ctx *gin.Context) {
 			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid email or password"})
 			return
 		}
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -113,12 +115,14 @@ func (h *Handler) login(ctx *gin.Context) {
 func (h *Handler) respondWithTokenPair(ctx *gin.Context, userID string, status int) {
 	accessToken, err := auth.GenerateToken(h.jwtSecret, userID, h.accessTokenTTL)
 	if err != nil {
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	refreshToken, err := h.tokens.IssueRefreshToken(ctx.Request.Context(), userID)
 	if err != nil {
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -148,11 +152,13 @@ func (h *Handler) changePassword(ctx *gin.Context) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 			return
 		}
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	if err := h.tokens.RevokeAllForUser(ctx.Request.Context(), userID); err != nil {
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

@@ -151,6 +151,7 @@ func (h *Handler) getStorages(ctx *gin.Context) {
 
 	storages, total, err := h.service.GetAllStorages(ctx.Request.Context(), userID, filter)
 	if err != nil {
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -193,6 +194,7 @@ func (h *Handler) getStorage(ctx *gin.Context) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "storage not found"})
 			return
 		}
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -215,6 +217,7 @@ func (h *Handler) createStorage(ctx *gin.Context) {
 
 	created, err := h.service.CreateStorage(ctx.Request.Context(), userID, req.toDomain())
 	if err != nil {
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -247,6 +250,7 @@ func (h *Handler) updateStorage(ctx *gin.Context) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "storage not found"})
 			return
 		}
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -272,6 +276,7 @@ func (h *Handler) deleteStorage(ctx *gin.Context) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "storage not found"})
 			return
 		}
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
