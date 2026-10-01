@@ -9,6 +9,7 @@ type Config struct {
 	PGPassword string `mapstructure:"PGPASSWORD"`
 	PGDatabase string `mapstructure:"PGDATABASE"`
 	AppPort    string `mapstructure:"APP_PORT"`
+	JWTSecret  string `mapstructure:"JWT_SECRET"`
 }
 
 func Load() (*Config, error) {
@@ -22,6 +23,7 @@ func Load() (*Config, error) {
 		PGPassword: viper.GetString("PGPASSWORD"),
 		PGDatabase: viper.GetString("PGDATABASE"),
 		AppPort:    viper.GetString("APP_PORT"),
+		JWTSecret:  viper.GetString("JWT_SECRET"),
 	}
 
 	return cfg, nil
