@@ -56,7 +56,7 @@ func (r updateStorageRequest) applyTo(s Storage) Storage {
 }
 
 type storageService interface {
-	GetAllStorages(ctx context.Context, userID string) ([]Storage, error)
+	GetAllStorages(ctx context.Context, userID string, filter Filter) ([]Storage, error)
 	GetStorage(ctx context.Context, userID string, id int) (Storage, error)
 	CreateStorage(ctx context.Context, userID string, storage Storage) (Storage, error)
 	UpdateStorage(ctx context.Context, userID string, id int, req updateStorageRequest) (Storage, error)
@@ -86,7 +86,9 @@ func (h *Handler) getStorages(ctx *gin.Context) {
 		return
 	}
 
-	storages, err := h.service.GetAllStorages(ctx.Request.Context(), userID)
+	filter := Filter{Type: ctx.Query("type")}
+
+	storages, err := h.service.GetAllStorages(ctx.Request.Context(), userID, filter)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

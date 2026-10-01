@@ -236,6 +236,17 @@ A **storage** represents a physical place where cards live — a binder, a deckb
 
 List all storages, each annotated with its current card count.
 
+**Query parameters**
+
+| Param | Type | Required | Description |
+|---|---|---|---|
+| `type` | string | No | Only return storages of this type. Exact match, case-insensitive. |
+
+**Example**
+```
+GET /storage?type=binder
+```
+
 **Response `200 OK`**
 ```json
 [
@@ -318,6 +329,17 @@ Delete a storage. Any card currently in this storage has its `storage_id` set to
 ### `GET /deck`
 
 List all decks, each annotated with its current card count.
+
+**Query parameters**
+
+| Param | Type | Required | Description |
+|---|---|---|---|
+| `format` | string | No | Only return decks of this format. Exact match, case-insensitive. |
+
+**Example**
+```
+GET /deck?format=commander
+```
 
 **Response `200 OK`**
 ```json

@@ -18,6 +18,7 @@ type fakeService struct {
 	decks      []Deck
 	getAllErr  error
 	lastUserID string
+	lastFilter Filter
 
 	getDeck    Deck
 	getDeckErr error
@@ -36,8 +37,9 @@ type fakeService struct {
 	removeCardErr error
 }
 
-func (f *fakeService) GetAllDecks(ctx context.Context, userID string) ([]Deck, error) {
+func (f *fakeService) GetAllDecks(ctx context.Context, userID string, filter Filter) ([]Deck, error) {
 	f.lastUserID = userID
+	f.lastFilter = filter
 	return f.decks, f.getAllErr
 }
 
@@ -118,6 +120,30 @@ func TestHandler_GetDecks_PassesUserIDToService(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, response, 1)
 	assert.Equal(t, "Otterly Playful", response[0].Name)
+}
+
+func TestHandler_GetDecks_PassesFormatFilterToService(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck?format=commander", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, Filter{Format: "commander"}, service.lastFilter)
+}
+
+func TestHandler_GetDecks_PassesEmptyFilterWhenNoFormatQueryParam(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, Filter{}, service.lastFilter)
 }
 
 func TestHandler_GetDecks_ReturnsErrorOnServiceFailure(t *testing.T) {

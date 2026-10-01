@@ -47,7 +47,7 @@ func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
 	return &PostgresRepository{db: db}
 }
 
-func (r *PostgresRepository) FindAll(ctx context.Context, userID string) ([]Storage, error) {
+func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter Filter) ([]Storage, error) {
 	query := `
 		SELECT
 		    tamiyo.storage.id AS id,
@@ -59,12 +59,21 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string) ([]Stor
 		FROM tamiyo.storage
 		LEFT JOIN tamiyo.cards ON tamiyo.storage.id = tamiyo.cards.storage_id AND tamiyo.cards.user_id = $1
 		WHERE tamiyo.storage.user_id = $1
+	`
+	args := []interface{}{userID}
+
+	if filter.Type != "" {
+		query += ` AND tamiyo.storage.type ILIKE $2`
+		args = append(args, filter.Type)
+	}
+
+	query += `
 		GROUP BY tamiyo.storage.id, tamiyo.storage.name, tamiyo.storage.type, tamiyo.storage.added, tamiyo.storage.updated
 		ORDER BY tamiyo.storage.updated DESC
 	`
 
 	var rows []storageRow
-	if err := r.db.SelectContext(ctx, &rows, query, userID); err != nil {
+	if err := r.db.SelectContext(ctx, &rows, query, args...); err != nil {
 		return nil, err
 	}
 

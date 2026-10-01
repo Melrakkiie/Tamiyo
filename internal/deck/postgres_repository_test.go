@@ -142,7 +142,7 @@ func TestPostgresRepository_FindAll_ReturnsAllDecks(t *testing.T) {
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userID)
 
-	result, err := repo.FindAll(context.Background(), userID)
+	result, err := repo.FindAll(context.Background(), userID, Filter{})
 
 	require.NoError(t, err)
 	assert.Len(t, result, 2)
@@ -155,7 +155,7 @@ func TestPostgresRepository_FindAll_DoesNotReturnOtherUsersDecks(t *testing.T) {
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userA)
 
-	result, err := repo.FindAll(context.Background(), userB)
+	result, err := repo.FindAll(context.Background(), userB, Filter{})
 
 	require.NoError(t, err)
 	assert.Empty(t, result)
@@ -170,7 +170,7 @@ func TestPostgresRepository_FindAll_ReturnsCorrectCardCount(t *testing.T) {
 
 	linkCardToDeck(t, db, 1, 1)
 
-	result, err := repo.FindAll(context.Background(), userID)
+	result, err := repo.FindAll(context.Background(), userID, Filter{})
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -182,6 +182,44 @@ func TestPostgresRepository_FindAll_ReturnsCorrectCardCount(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, otters.CardCount)
+}
+
+func TestPostgresRepository_FindAll_FiltersByFormat(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userID) // 'Otterly Playful'/modern, 'Izzet Prowess'/standard
+
+	result, err := repo.FindAll(context.Background(), userID, Filter{Format: "modern"})
+
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, "Otterly Playful", result[0].Name)
+}
+
+func TestPostgresRepository_FindAll_FormatFilterIsCaseInsensitive(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userID)
+
+	result, err := repo.FindAll(context.Background(), userID, Filter{Format: "MODERN"})
+
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, "Otterly Playful", result[0].Name)
+}
+
+func TestPostgresRepository_FindAll_FormatFilterReturnsEmptyWhenNoMatch(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userID)
+
+	result, err := repo.FindAll(context.Background(), userID, Filter{Format: "legacy"})
+
+	require.NoError(t, err)
+	assert.Empty(t, result)
 }
 
 func TestPostgresRepository_FindByID_ReturnsDeck(t *testing.T) {
@@ -231,7 +269,7 @@ func TestPostgresRepository_Create_InsertsAndReturnsDeckWithID(t *testing.T) {
 	assert.NotZero(t, created.ID)
 	assert.Equal(t, "Otterly Playful", created.Name)
 
-	all, err := repo.FindAll(context.Background(), userID)
+	all, err := repo.FindAll(context.Background(), userID, Filter{})
 	require.NoError(t, err)
 	require.Len(t, all, 1)
 	assert.Equal(t, created.ID, all[0].ID)

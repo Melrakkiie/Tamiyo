@@ -16,6 +16,7 @@ type fakeRepository struct {
 	decks      []Deck
 	findAllErr error
 	lastUserID string
+	lastFilter Filter
 
 	findByIDDeck Deck
 	findByIDErr  error
@@ -35,8 +36,9 @@ type fakeRepository struct {
 	unlinkErr error
 }
 
-func (f *fakeRepository) FindAll(ctx context.Context, userID string) ([]Deck, error) {
+func (f *fakeRepository) FindAll(ctx context.Context, userID string, filter Filter) ([]Deck, error) {
 	f.lastUserID = userID
+	f.lastFilter = filter
 	return f.decks, f.findAllErr
 }
 
@@ -94,10 +96,20 @@ func TestService_GetAllDecks_PassesUserIDToRepository(t *testing.T) {
 	repo := &fakeRepository{}
 	service := NewService(repo)
 
-	_, err := service.GetAllDecks(context.Background(), testUserID)
+	_, err := service.GetAllDecks(context.Background(), testUserID, Filter{})
 
 	require.NoError(t, err)
 	assert.Equal(t, testUserID, repo.lastUserID)
+}
+
+func TestService_GetAllDecks_PassesFilterToRepository(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	_, err := service.GetAllDecks(context.Background(), testUserID, Filter{Format: "commander"})
+
+	require.NoError(t, err)
+	assert.Equal(t, Filter{Format: "commander"}, repo.lastFilter)
 }
 
 func TestService_GetAllDecks_ReturnsDecksFromRepository(t *testing.T) {
@@ -108,7 +120,7 @@ func TestService_GetAllDecks_ReturnsDecksFromRepository(t *testing.T) {
 	repo := &fakeRepository{decks: expected}
 	service := NewService(repo)
 
-	result, err := service.GetAllDecks(context.Background(), testUserID)
+	result, err := service.GetAllDecks(context.Background(), testUserID, Filter{})
 
 	require.NoError(t, err)
 	assert.Equal(t, expected, result)
@@ -118,7 +130,7 @@ func TestService_GetAllDecks_PropagatesRepositoryError(t *testing.T) {
 	repo := &fakeRepository{findAllErr: errors.New("connection lost")}
 	service := NewService(repo)
 
-	result, err := service.GetAllDecks(context.Background(), testUserID)
+	result, err := service.GetAllDecks(context.Background(), testUserID, Filter{})
 
 	assert.Error(t, err)
 	assert.Nil(t, result)

@@ -278,6 +278,13 @@ paths:
     get:
       tags: [storage]
       summary: List storages
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Only return storages of this type (exact match, case-insensitive).
       responses:
         "200":
           description: OK
@@ -377,6 +384,13 @@ paths:
     get:
       tags: [decks]
       summary: List decks
+      parameters:
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Only return decks of this format (exact match, case-insensitive).
       responses:
         "200":
           description: OK

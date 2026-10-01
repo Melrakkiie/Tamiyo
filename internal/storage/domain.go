@@ -17,8 +17,12 @@ type Storage struct {
 	Updated   time.Time
 }
 
+type Filter struct {
+	Type string
+}
+
 type Repository interface {
-	FindAll(ctx context.Context, userID string) ([]Storage, error)
+	FindAll(ctx context.Context, userID string, filter Filter) ([]Storage, error)
 	FindByID(ctx context.Context, userID string, id int) (Storage, error)
 	Create(ctx context.Context, userID string, storage Storage) (Storage, error)
 	Update(ctx context.Context, userID string, storage Storage) (Storage, error)

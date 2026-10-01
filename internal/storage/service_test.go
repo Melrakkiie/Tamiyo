@@ -16,6 +16,7 @@ type fakeRepository struct {
 	storages   []Storage
 	findAllErr error
 	lastUserID string
+	lastFilter Filter
 
 	findByIDStorage Storage
 	findByIDErr     error
@@ -29,8 +30,9 @@ type fakeRepository struct {
 	deleteErr error
 }
 
-func (f *fakeRepository) FindAll(ctx context.Context, userID string) ([]Storage, error) {
+func (f *fakeRepository) FindAll(ctx context.Context, userID string, filter Filter) ([]Storage, error) {
 	f.lastUserID = userID
+	f.lastFilter = filter
 	return f.storages, f.findAllErr
 }
 
@@ -70,10 +72,20 @@ func TestService_GetAllStorages_PassesUserIDToRepository(t *testing.T) {
 	repo := &fakeRepository{}
 	service := NewService(repo)
 
-	_, err := service.GetAllStorages(context.Background(), testUserID)
+	_, err := service.GetAllStorages(context.Background(), testUserID, Filter{})
 
 	require.NoError(t, err)
 	assert.Equal(t, testUserID, repo.lastUserID)
+}
+
+func TestService_GetAllStorages_PassesFilterToRepository(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	_, err := service.GetAllStorages(context.Background(), testUserID, Filter{Type: "binder"})
+
+	require.NoError(t, err)
+	assert.Equal(t, Filter{Type: "binder"}, repo.lastFilter)
 }
 
 func TestService_GetAllStorages_ReturnsStoragesFromRepository(t *testing.T) {
@@ -81,7 +93,7 @@ func TestService_GetAllStorages_ReturnsStoragesFromRepository(t *testing.T) {
 	repo := &fakeRepository{storages: expected}
 	service := NewService(repo)
 
-	result, err := service.GetAllStorages(context.Background(), testUserID)
+	result, err := service.GetAllStorages(context.Background(), testUserID, Filter{})
 
 	require.NoError(t, err)
 	assert.Equal(t, expected, result)
@@ -91,7 +103,7 @@ func TestService_GetAllStorages_PropagatesRepositoryError(t *testing.T) {
 	repo := &fakeRepository{findAllErr: errors.New("connection lost")}
 	service := NewService(repo)
 
-	result, err := service.GetAllStorages(context.Background(), testUserID)
+	result, err := service.GetAllStorages(context.Background(), testUserID, Filter{})
 
 	assert.Error(t, err)
 	assert.Nil(t, result)

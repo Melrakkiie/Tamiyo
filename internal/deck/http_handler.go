@@ -96,7 +96,7 @@ func toDeckCardResponse(dc DeckCard) deckCardResponse {
 }
 
 type deckService interface {
-	GetAllDecks(ctx context.Context, userID string) ([]Deck, error)
+	GetAllDecks(ctx context.Context, userID string, filter Filter) ([]Deck, error)
 	GetDeck(ctx context.Context, userID string, id int) (Deck, error)
 	CreateDeck(ctx context.Context, userID string, d Deck) (Deck, error)
 	UpdateDeck(ctx context.Context, userID string, id int, req updateDeckRequest) (Deck, error)
@@ -134,7 +134,9 @@ func (h *Handler) getDecks(ctx *gin.Context) {
 		return
 	}
 
-	decks, err := h.service.GetAllDecks(ctx.Request.Context(), userID)
+	filter := Filter{Format: ctx.Query("format")}
+
+	decks, err := h.service.GetAllDecks(ctx.Request.Context(), userID, filter)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

@@ -32,8 +32,12 @@ type DeckCard struct {
 	Updated         time.Time
 }
 
+type Filter struct {
+	Format string
+}
+
 type Repository interface {
-	FindAll(ctx context.Context, userID string) ([]Deck, error)
+	FindAll(ctx context.Context, userID string, filter Filter) ([]Deck, error)
 	FindByID(ctx context.Context, userID string, id int) (Deck, error)
 	Create(ctx context.Context, userID string, d Deck) (Deck, error)
 	Update(ctx context.Context, userID string, d Deck) (Deck, error)

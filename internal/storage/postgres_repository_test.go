@@ -119,7 +119,7 @@ func TestPostgresRepository_FindAll_ReturnsAllStorages(t *testing.T) {
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db, userID)
 
-	result, err := repo.FindAll(context.Background(), userID)
+	result, err := repo.FindAll(context.Background(), userID, Filter{})
 
 	require.NoError(t, err)
 	assert.Len(t, result, 2)
@@ -132,7 +132,7 @@ func TestPostgresRepository_FindAll_DoesNotReturnOtherUsersStorages(t *testing.T
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db, userA)
 
-	result, err := repo.FindAll(context.Background(), userB)
+	result, err := repo.FindAll(context.Background(), userB, Filter{})
 
 	require.NoError(t, err)
 	assert.Empty(t, result)
@@ -150,7 +150,7 @@ func TestPostgresRepository_FindAll_ReturnsCorrectCardCount(t *testing.T) {
 	`, userID)
 	require.NoError(t, errCard)
 
-	result, err := repo.FindAll(context.Background(), userID)
+	result, err := repo.FindAll(context.Background(), userID, Filter{})
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -170,7 +170,7 @@ func TestPostgresRepository_FindAll_ReturnsZeroCardCountForEmptyStorage(t *testi
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db, userID)
 
-	result, err := repo.FindAll(context.Background(), userID)
+	result, err := repo.FindAll(context.Background(), userID, Filter{})
 
 	require.NoError(t, err)
 	for _, s := range result {
@@ -184,20 +184,63 @@ func TestPostgresRepository_FindAll_DoesNotCountAnotherUsersCards(t *testing.T) 
 	userB := seedUser(t, db, "bob@example.com")
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db, userA)
+	seedStorages(t, db, userB) // userB's own storages: ids 3 and 4
 
+	// userB's card lives in userB's own storage (id 3) — the
+	// check_card_storage_ownership trigger forbids a card from pointing
+	// at another user's storage, so this must reference a storage userB
+	// actually owns for the insert to succeed.
 	_, err := db.Exec(`
 		INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id)
-		VALUES ($1, 'Black Lotus', 'bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd', 'lea', '232', false, 1)
+		VALUES ($1, 'Black Lotus', 'bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd', 'lea', '232', false, 3)
 	`, userB)
 	require.NoError(t, err)
 
-	result, err := repo.FindAll(context.Background(), userA)
+	result, err := repo.FindAll(context.Background(), userA, Filter{})
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
 	for _, s := range result {
 		assert.Equal(t, 0, s.CardCount)
 	}
+}
+
+func TestPostgresRepository_FindAll_FiltersByType(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userID) // 'Vintage Collection'/binder, 'Red Deck Wins'/deckbox
+
+	result, err := repo.FindAll(context.Background(), userID, Filter{Type: "binder"})
+
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, "Vintage Collection", result[0].Name)
+}
+
+func TestPostgresRepository_FindAll_TypeFilterIsCaseInsensitive(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userID)
+
+	result, err := repo.FindAll(context.Background(), userID, Filter{Type: "BINDER"})
+
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, "Vintage Collection", result[0].Name)
+}
+
+func TestPostgresRepository_FindAll_TypeFilterReturnsEmptyWhenNoMatch(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userID)
+
+	result, err := repo.FindAll(context.Background(), userID, Filter{Type: "box"})
+
+	require.NoError(t, err)
+	assert.Empty(t, result)
 }
 
 func TestPostgresRepository_FindByID_ReturnsStorage(t *testing.T) {
@@ -247,7 +290,7 @@ func TestPostgresRepository_Create_InsertsAndReturnsStorageWithID(t *testing.T) 
 	assert.NotZero(t, created.ID)
 	assert.Equal(t, "Vintage Collection", created.Name)
 
-	all, err := repo.FindAll(context.Background(), userID)
+	all, err := repo.FindAll(context.Background(), userID, Filter{})
 	require.NoError(t, err)
 	require.Len(t, all, 1)
 	assert.Equal(t, created.ID, all[0].ID)
@@ -370,7 +413,7 @@ func TestPostgresRepository_Delete_DoesNotAffectOtherStorages(t *testing.T) {
 	err := repo.Delete(context.Background(), userID, 1)
 	require.NoError(t, err)
 
-	remaining, err := repo.FindAll(context.Background(), userID)
+	remaining, err := repo.FindAll(context.Background(), userID, Filter{})
 	require.NoError(t, err)
 	require.Len(t, remaining, 1)
 	assert.Equal(t, "Red Deck Wins", remaining[0].Name)

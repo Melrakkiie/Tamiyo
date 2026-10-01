@@ -18,6 +18,7 @@ type fakeService struct {
 	storages   []Storage
 	getAllErr  error
 	lastUserID string
+	lastFilter Filter
 
 	getStorage    Storage
 	getStorageErr error
@@ -30,8 +31,9 @@ type fakeService struct {
 	deleteErr error
 }
 
-func (f *fakeService) GetAllStorages(ctx context.Context, userID string) ([]Storage, error) {
+func (f *fakeService) GetAllStorages(ctx context.Context, userID string, filter Filter) ([]Storage, error) {
 	f.lastUserID = userID
+	f.lastFilter = filter
 	return f.storages, f.getAllErr
 }
 
@@ -86,6 +88,30 @@ func TestHandler_GetStorages_PassesUserIDToService(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, testUserID, service.lastUserID)
+}
+
+func TestHandler_GetStorages_PassesTypeFilterToService(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/storage?type=binder", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, Filter{Type: "binder"}, service.lastFilter)
+}
+
+func TestHandler_GetStorages_PassesEmptyFilterWhenNoTypeQueryParam(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/storage", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, Filter{}, service.lastFilter)
 }
 
 func TestHandler_GetStorages_ReturnsErrorOnServiceFailure(t *testing.T) {
