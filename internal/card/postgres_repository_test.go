@@ -369,6 +369,28 @@ func TestPostgresRepository_Create_ReturnsErrStorageNotFoundOnInvalidStorageID(t
 	assert.ErrorIs(t, err, ErrStorageNotFound)
 }
 
+func TestPostgresRepository_Create_ReturnsErrStorageNotFoundWhenStorageBelongsToAnotherUser(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userA)
+
+	storageID := 1
+	newCard := Card{
+		Name:            "Sol Ring",
+		ScryfallID:      "f2c8b1a0-1e2d-4c3b-9a8f-7e6d5c4b3a2f",
+		SetCode:         "cmr",
+		CollectorNumber: "322",
+		Foil:            false,
+		StorageID:       &storageID,
+	}
+
+	_, err := repo.Create(context.Background(), userB, newCard)
+
+	assert.ErrorIs(t, err, ErrStorageNotFound)
+}
+
 func TestPostgresRepository_Update_UpdatesAndReturnsCard(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db, "alice@example.com")
@@ -462,6 +484,27 @@ func TestPostgresRepository_Update_RefreshesUpdatedTimestamp(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, updated.Updated.After(existing.Updated))
+}
+
+func TestPostgresRepository_Update_ReturnsErrStorageNotFoundWhenStorageBelongsToAnotherUser(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userA)
+
+	seedCards(t, db, userB, []Card{
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false},
+	})
+
+	existing, err := repo.FindByID(context.Background(), userB, 1)
+	require.NoError(t, err)
+
+	storageID := 1
+	existing.StorageID = &storageID
+	_, err = repo.Update(context.Background(), userB, existing)
+
+	assert.ErrorIs(t, err, ErrStorageNotFound)
 }
 
 func TestPostgresRepository_Delete_RemovesCard(t *testing.T) {

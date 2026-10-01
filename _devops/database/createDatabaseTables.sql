@@ -93,3 +93,48 @@ CREATE TRIGGER update_cards_modtime
 CREATE TRIGGER update_deck_modtime
     BEFORE UPDATE ON tamiyo.deck
     FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+
+-------------------------------------
+---- CROSS-OWNERSHIP ENFORCEMENT ----
+-------------------------------------
+
+CREATE OR REPLACE FUNCTION check_card_storage_ownership()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.storage_id IS NOT NULL THEN
+        IF NOT EXISTS (
+            SELECT 1 FROM tamiyo.storage
+            WHERE id = NEW.storage_id AND user_id = NEW.user_id
+        ) THEN
+            RAISE EXCEPTION 'storage % does not belong to user %', NEW.storage_id, NEW.user_id
+                USING ERRCODE = 'foreign_key_violation';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE 'plpgsql';
+
+CREATE TRIGGER check_cards_storage_ownership
+    BEFORE INSERT OR UPDATE ON tamiyo.cards
+    FOR EACH ROW EXECUTE FUNCTION check_card_storage_ownership();
+
+
+CREATE OR REPLACE FUNCTION check_deck_commander_ownership()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.commander_id IS NOT NULL THEN
+        IF NOT EXISTS (
+            SELECT 1 FROM tamiyo.cards
+            WHERE id = NEW.commander_id AND user_id = NEW.user_id
+        ) THEN
+            RAISE EXCEPTION 'card % does not belong to user %', NEW.commander_id, NEW.user_id
+                USING ERRCODE = 'foreign_key_violation';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE 'plpgsql';
+
+CREATE TRIGGER check_deck_commander_ownership
+    BEFORE INSERT OR UPDATE ON tamiyo.deck
+    FOR EACH ROW EXECUTE FUNCTION check_deck_commander_ownership();

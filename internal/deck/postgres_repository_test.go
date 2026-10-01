@@ -266,6 +266,21 @@ func TestPostgresRepository_Create_ReturnsErrCommanderNotFoundOnInvalidCommander
 	assert.ErrorIs(t, err, ErrCommanderNotFound)
 }
 
+func TestPostgresRepository_Create_ReturnsErrCommanderNotFoundWhenCardBelongsToAnotherUser(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	seedCardsWithoutStorage(t, db, userA)
+
+	commanderID := 1
+	newDeck := Deck{Name: "Kess Commander", Format: "commander", CommanderID: &commanderID}
+
+	_, err := repo.Create(context.Background(), userB, newDeck)
+
+	assert.ErrorIs(t, err, ErrCommanderNotFound)
+}
+
 func TestPostgresRepository_Update_UpdatesAndReturnsDeck(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db, "alice@example.com")
@@ -347,6 +362,24 @@ func TestPostgresRepository_Update_RefreshesUpdatedTimestamp(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, updated.Updated.After(existing.Updated))
+}
+
+func TestPostgresRepository_Update_ReturnsErrCommanderNotFoundWhenCardBelongsToAnotherUser(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userB)
+	seedCardsWithoutStorage(t, db, userA)
+
+	existing, err := repo.FindByID(context.Background(), userB, 1)
+	require.NoError(t, err)
+
+	commanderID := 1
+	existing.CommanderID = &commanderID
+	_, err = repo.Update(context.Background(), userB, existing)
+
+	assert.ErrorIs(t, err, ErrCommanderNotFound)
 }
 
 func TestPostgresRepository_Delete_RemovesDeck(t *testing.T) {
