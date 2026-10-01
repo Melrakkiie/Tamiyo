@@ -15,6 +15,7 @@ Tamiyo is a REST API for managing a Magic: The Gathering card collection — car
 - [Storage](#storage)
 - [Decks](#decks)
 - [Deck ↔ Card relationship](#deck--card-relationship)
+- [Deck Insights](#deck-insights)
 - [Bulk Import](#bulk-import)
 - [Bulk Export](#bulk-export)
 - [Error reference](#error-reference)
@@ -644,6 +645,67 @@ Remove a card from a deck. **Idempotent** — always returns success, whether or
 
 ---
 
+## Deck Insights
+
+Two read-only routes analyze a deck's cards — nothing here persists anything, every call is computed fresh from Scryfall data at request time. Both are purely about playing the game: there's no notion of card price or collection value anywhere in Tamiyo.
+
+**Errors common to both**
+- `400` — `:id` is not a valid integer, or the deck's own `format` field isn't a format Scryfall recognizes (so legality/stats can't be computed against it)
+- `401` — unauthenticated
+- `404` — no deck with that id exists for this account
+- `502` — Scryfall couldn't be reached
+- `500` — unexpected failure
+
+---
+
+### `GET /deck/:id/legality`
+
+Checks every card in the deck against the deck's own `format` (lowercased, matched against Scryfall's per-card `legalities`). A card that's `not_legal`, `restricted` or `banned` for that format is reported as an issue; a card whose Scryfall ID can't be resolved is reported too (legality can't be verified), rather than silently ignored.
+
+For the `commander` format specifically, two deck-construction rules Scryfall's per-card legality can't express are checked as well:
+- **Singleton** — at most one copy of each card by name, except basic lands.
+- **Color identity** — every card's color identity must be contained in the commander's (the deck's `commander_id`, if set).
+
+**Known limitations:** only `commander` itself gets these extra checks (not singleton siblings like `oathbreaker` or `brawl`); named singleton exceptions (e.g. Shadowborn Apostle, Relentless Rats) aren't recognized, only the basic-land exemption; partner/background commanders aren't handled.
+
+**Response `200 OK`**
+```json
+{
+  "format": "commander",
+  "legal": false,
+  "issues": [
+    { "card_id": 42, "card_name": "Channel", "reason": "banned in commander" },
+    { "card_name": "Mountain", "reason": "singleton violation: 2 copies in deck (commander allows only 1, except basic lands)" }
+  ]
+}
+```
+`issues` is omitted entirely when the deck is legal.
+
+### `GET /deck/:id/stats`
+
+Summarizes the deck's composition: mana curve, color breakdown, and primary card types — all computed from Scryfall data, nothing stored by Tamiyo itself. Lands are excluded from the mana curve, color breakdown, and average mana value (a land's mana value is always 0 and it has no casting colors, so including it would just dilute what the deck actually casts) but are still counted in `card_count`, `land_count`, and `type_breakdown`.
+
+**Response `200 OK`**
+```json
+{
+  "card_count": 100,
+  "land_count": 38,
+  "nonland_count": 62,
+  "average_mana_value": 2.74,
+  "mana_curve": [
+    { "mana_value": 0, "count": 3 },
+    { "mana_value": 1, "count": 12 },
+    { "mana_value": 2, "count": 20 }
+  ],
+  "color_breakdown": { "W": 10, "U": 8, "C": 5 },
+  "type_breakdown": { "Land": 38, "Creature": 30, "Instant": 12, "Sorcery": 10, "Artifact": 10 }
+}
+```
+
+A multicolor card counts once per color it has in `color_breakdown`; a dual-typed permanent (e.g. "Artifact Creature") counts once under a single primary type in `type_breakdown` — Creature takes precedence over Artifact/Enchantment, matching how most deckbuilding sites categorize it.
+
+---
+
 ## Bulk Import
 
 Three routes create cards (and, where the source supports it, storages/decks) in bulk from a collection or decklist export produced by a third-party tool, instead of one `POST /cards` call per card. All three are `multipart/form-data` requests (not JSON) with the file itself in a field named `file`.
@@ -772,7 +834,7 @@ All error responses share the same shape:
 | `409 Conflict` | Email already registered (`/auth/register`). |
 | `429 Too Many Requests` | Rate limit exceeded on `/auth/register` or `/auth/login` (see [rate limiting](#rate-limiting)). |
 | `500 Internal Server Error` | Unexpected failure (database unreachable, etc). |
-| `502 Bad Gateway` | A bulk import (see [Bulk Import](#bulk-import)) couldn't reach or parse a response from the Scryfall API. |
+| `502 Bad Gateway` | A bulk import (see [Bulk Import](#bulk-import)) or deck insight (see [Deck Insights](#deck-insights)) couldn't reach or parse a response from the Scryfall API. |
 
 ### Validation rules summary
 

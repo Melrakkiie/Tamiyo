@@ -839,6 +839,86 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /deck/{id}/legality:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    get:
+      tags: [deck-insights]
+      summary: Check a deck's legality for its own format
+      description: >
+        Checks every card in the deck against the deck's own format field,
+        using each card's Scryfall legalities. For the "commander" format
+        specifically, also checks singleton (one copy of each card by
+        name, basic lands excepted) and color identity (every card within
+        the commander's color identity). Nothing is persisted — computed
+        fresh from Scryfall data on every call.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LegalityReport"
+        "400":
+          description: >
+            id is not a valid integer, or the deck's format isn't one
+            Scryfall recognizes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found, or not owned by the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
+  /deck/{id}/stats:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    get:
+      tags: [deck-insights]
+      summary: Summarize a deck's composition
+      description: >
+        Mana curve, color breakdown and primary card types, computed from
+        Scryfall data. Lands are excluded from the mana curve, color
+        breakdown and average mana value, but still counted in
+        card_count, land_count and type_breakdown.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeckStats"
+        "400":
+          description: >
+            id is not a valid integer, or the deck's format isn't one
+            Scryfall recognizes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found, or not owned by the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
   /import/manabox:
     post:
       tags: [bulk-import]
@@ -1199,6 +1279,64 @@ components:
             $ref: "#/components/schemas/Error"
 
   schemas:
+    LegalityIssue:
+      type: object
+      properties:
+        card_id:
+          type: integer
+        card_name:
+          type: string
+        reason:
+          type: string
+      required: [card_name, reason]
+
+    LegalityReport:
+      type: object
+      properties:
+        format:
+          type: string
+        legal:
+          type: boolean
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/LegalityIssue"
+      required: [format, legal]
+
+    ManaCurveBucket:
+      type: object
+      properties:
+        mana_value:
+          type: integer
+        count:
+          type: integer
+      required: [mana_value, count]
+
+    DeckStats:
+      type: object
+      properties:
+        card_count:
+          type: integer
+        land_count:
+          type: integer
+        nonland_count:
+          type: integer
+        average_mana_value:
+          type: number
+        mana_curve:
+          type: array
+          items:
+            $ref: "#/components/schemas/ManaCurveBucket"
+        color_breakdown:
+          type: object
+          additionalProperties:
+            type: integer
+        type_breakdown:
+          type: object
+          additionalProperties:
+            type: integer
+      required: [card_count, land_count, nonland_count, average_mana_value, mana_curve, color_breakdown, type_breakdown]
+
     Error:
       type: object
       properties:

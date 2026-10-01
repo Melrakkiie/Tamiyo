@@ -21,6 +21,8 @@ tamiyo/
 │   ├── storage/          # storage domain (binders, boxes, deckboxes)
 │   ├── deck/             # deck domain, including deck ↔ card relationship
 │   ├── bulk/             # bulk import/export routes (ManaBox, Moxfield)
+│   ├── deckinsights/     # deck legality + stats routes
+│   ├── scryfall/         # shared Scryfall API client (used by bulk and deckinsights)
 │   └── config/           # environment configuration
 ├── _devops/database/     # SQL schema
 ├── .githooks/            # versioned git hooks (see Code Quality)
@@ -161,6 +163,20 @@ curl -X GET localhost:8080/export/manabox \
 curl -X GET localhost:8080/export/moxfield/deck/1 \
   -H "Authorization: Bearer <token>" \
   -o Moxfield_Deck_export.txt
+```
+
+## Deck Insights
+
+Two read-only, player-facing routes analyze a deck — nothing financial, nothing persisted, computed fresh from [Scryfall](https://scryfall.com/) data on every call (see [`internal/scryfall`](./internal/scryfall) for the shared client, also used by Bulk Import):
+
+- `GET /deck/:id/legality` — checks every card against the deck's own format; for `commander` specifically, also checks singleton (one copy per card name, basic lands excepted) and color identity against the deck's commander.
+- `GET /deck/:id/stats` — mana curve, color breakdown and card types (lands excluded from the curve/colors/average, since they skew every one of those without adding anything).
+
+See [`doc/API.md`](./doc/API.md#deck-insights) for the exact response shapes and known limitations (e.g. no partner commanders, no named singleton exceptions like Relentless Rats).
+
+```bash
+curl localhost:8080/deck/1/legality -H "Authorization: Bearer <token>"
+curl localhost:8080/deck/1/stats -H "Authorization: Bearer <token>"
 ```
 
 ### Importing a ManaBox Collection via script (alternative)

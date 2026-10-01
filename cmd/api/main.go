@@ -14,10 +14,12 @@ import (
 	"Melrakkiie/Tamiyo/internal/config"
 	"Melrakkiie/Tamiyo/internal/cors"
 	"Melrakkiie/Tamiyo/internal/deck"
+	"Melrakkiie/Tamiyo/internal/deckinsights"
 	"Melrakkiie/Tamiyo/internal/health"
 	"Melrakkiie/Tamiyo/internal/mail"
 	"Melrakkiie/Tamiyo/internal/passwordreset"
 	"Melrakkiie/Tamiyo/internal/ratelimit"
+	"Melrakkiie/Tamiyo/internal/scryfall"
 	"Melrakkiie/Tamiyo/internal/security"
 	"Melrakkiie/Tamiyo/internal/storage"
 	"Melrakkiie/Tamiyo/internal/token"
@@ -87,6 +89,9 @@ func main() {
 	importService := bulk.NewService(cardService, storageService, deckService, bulk.NewScryfallClient())
 	importHandler := bulk.NewHandler(importService)
 
+	insightsService := deckinsights.NewService(deckService, scryfall.NewClient())
+	insightsHandler := deckinsights.NewHandler(insightsService)
+
 	healthHandler := health.NewHandler(db)
 
 	authLimiter := ratelimit.NewLimiter(cfg.AuthRateLimitMax, cfg.AuthRateLimitWindow)
@@ -106,6 +111,7 @@ func main() {
 	storageHandler.RegisterRoutes(protected)
 	deckHandler.RegisterRoutes(protected)
 	importHandler.RegisterRoutes(protected)
+	insightsHandler.RegisterRoutes(protected)
 	userHandler.RegisterProtectedRoutes(protected)
 
 	logger.Info("starting server", zap.String("port", cfg.AppPort))
