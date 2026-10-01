@@ -84,6 +84,23 @@ CREATE TABLE IF NOT EXISTS tamiyo.refresh_tokens
     revoked_at TIMESTAMP WITH TIME ZONE
 );
 
+-------------------------------------
+---- PASSWORD_RESET_TOKENS TABLE ----
+-------------------------------------
+-- Same shape and rationale as refresh_tokens (only the hash is stored), but
+-- for "forgot password" recovery: a token is single-use (used_at set once
+-- consumed by POST /auth/reset-password) and short-lived (see
+-- PASSWORD_RESET_TOKEN_TTL_MINUTES, internal/passwordreset).
+CREATE TABLE IF NOT EXISTS tamiyo.password_reset_tokens
+(
+    id         UUID                        PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    UUID                        NOT NULL REFERENCES tamiyo.users(id) ON DELETE CASCADE,
+    token_hash text                        NOT NULL UNIQUE,
+    added      TIMESTAMP WITH TIME ZONE    NOT NULL DEFAULT now(),
+    expires_at TIMESTAMP WITH TIME ZONE    NOT NULL,
+    used_at    TIMESTAMP WITH TIME ZONE
+);
+
 -------------------------
 ---- UPDATED TRIGGER ----
 -------------------------
@@ -195,3 +212,7 @@ CREATE INDEX IF NOT EXISTS idx_card_deck_deck_id
 -- revoked in bulk by user_id (password change, reuse detection).
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id
     ON tamiyo.refresh_tokens (user_id);
+
+-- password_reset_tokens: same rationale as refresh_tokens above.
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_id
+    ON tamiyo.password_reset_tokens (user_id);

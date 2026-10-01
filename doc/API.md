@@ -21,28 +21,45 @@ Tamiyo is a REST API for managing a Magic: The Gathering card collection — car
 
 ## Authentication
 
-Tamiyo is multi-tenant. `/health`, `/auth/register`, `/auth/login`, `/auth/refresh`, and `/auth/logout` are public; every other endpoint — including `/auth/password` — requires a Bearer token and is scoped to the authenticated account. You only ever see or modify your own cards, storages, and decks.
+Tamiyo is multi-tenant: every account has its own cards, storages, and decks, completely isolated from other accounts.
 
-### `POST /auth/register`
-
-Create an account.
-
-**Body**
-
-| Field | Type | Required | Notes |
-|---|---|---|---|
-| `email` | string | Yes | Must be a valid email. |
-| `password` | string | Yes | Minimum 8 characters. |
-
-**Response `201 Created`**
-```json
-{
-  "token": "eyJhbGciOi...",
-  "refresh_token": "Z3f8K1m..."
-}
+1. **Register** an account:
+```bash
+   curl -X POST localhost:8080/auth/register \
+     -H "Content-Type: application/json" \
+     -d '{"email": "you@example.com", "password": "at-least-8-chars"}'
+```
+2. **Log in** (or reuse the pair from registration):
+```bash
+   curl -X POST localhost:8080/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email": "you@example.com", "password": "at-least-8-chars"}'
+```
+   Both return `{"token": "...", "refresh_token": "..."}`.
+3. Send the access token on every other request:
+```bash
+   curl localhost:8080/cards -H "Authorization: Bearer <token>"
+```
+4. Access tokens are short-lived (15 minutes by default). Use the refresh token to get a new pair without logging in again:
+```bash
+   curl -X POST localhost:8080/auth/refresh \
+     -H "Content-Type: application/json" \
+     -d '{"refresh_token": "<refresh_token>"}'
 ```
 
-**Errors:** `400` missing/invalid field · `409` email already registered (`"email already registered"`) · `429` too many requests (see [rate limiting](#rate-limiting))
+`/health`, `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/forgot-password`, and `/auth/reset-password` are the only public routes — everything else (`/cards`, `/storage`, `/deck`, `/auth/password`) requires a valid Bearer token and only ever returns or modifies that account's own data.
+
+`/auth/register` and `/auth/login` are rate-limited per client IP (5 requests/minute by default) to blunt brute-force attempts.
+
+### Forgotten password
+
+```bash
+curl -X POST localhost:8080/auth/forgot-password \
+  -H "Content-Type: application/json" \
+  -d '{"email": "you@example.com"}'
+```
+
+Without an `SMTP_HOST` configured, the reset email is logged to stdout instead of sent — the token is right there in the container logs, no real mail server needed for local development. See [`openapi.yaml`](./doc/openapi.yaml) for every auth-related environment variable (`JWT_*`, `AUTH_RATE_LIMIT_*`, `PASSWORD_RESET_*`, `SMTP_*`).
 
 ---
 
@@ -138,9 +155,46 @@ Change the authenticated account's password. **Requires `Authorization: Bearer <
 
 > On success, **every** refresh token belonging to the account is revoked — all other sessions (and this one, once its current access token expires) must log in again.
 
+### `POST /auth/forgot-password`
+
+Request a password reset email.
+
+**Body**
+
+| Field | Type | Required |
+|---|---|---|
+| `email` | string | Yes |
+
+**Response `204 No Content`**
+
+**Errors:** `400` missing/invalid email · `429` too many requests (see [rate limiting](#rate-limiting))
+
+> Always returns `204`, whether or not the email belongs to an account — this prevents using the endpoint to discover which emails are registered. If the account exists, a single-use reset token is emailed to it, valid for 30 minutes by default (`PASSWORD_RESET_TOKEN_TTL_MINUTES`). Without `SMTP_HOST` configured, the email is logged by the server instead of sent — handy for local development.
+
+---
+
+### `POST /auth/reset-password`
+
+Set a new password using the token from the forgot-password email.
+
+**Body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `token` | string | Yes | From the forgot-password email. |
+| `new_password` | string | Yes | Minimum 8 characters. |
+
+**Response `204 No Content`**
+
+**Errors:** `400` missing field / `new_password` too short · `401` invalid, expired, or already-used token
+
+> On success, **every** refresh token belonging to the account is revoked, same as `/auth/password`.
+
+---
+
 ### Rate limiting
 
-`POST /auth/register` and `POST /auth/login` share a per-client-IP limit: 5 requests per 60-second window by default (`AUTH_RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns:
+`POST /auth/register`, `POST /auth/login`, and `POST /auth/forgot-password` share a per-client-IP limit: 5 requests per 60-second window by default (`AUTH_RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns:
 
 **Response `429 Too Many Requests`**
 ```json
@@ -576,7 +630,7 @@ All error responses share the same shape:
 | Status | Meaning |
 |---|---|
 | `400 Bad Request` | Malformed input: invalid id, invalid JSON body, failed field validation, or a referenced resource ID (`storage_id`, `commander_id`) doesn't exist — including when that ID belongs to another account. |
-| `401 Unauthorized` | Missing/malformed `Authorization` header, invalid or expired access token, invalid/expired/reused refresh token, incorrect `current_password`, or (on `/auth/login`) wrong email/password. |
+| `401 Unauthorized` | Missing/malformed `Authorization` header, invalid or expired access token, invalid/expired/reused refresh token, invalid/expired/used password-reset token, incorrect `current_password`, or (on `/auth/login`) wrong email/password. |
 | `404 Not Found` | The resource identified by the URL doesn't exist for the authenticated account. A resource that exists but belongs to another account also returns `404`, not `403` — this avoids confirming that an ID exists at all. |
 | `409 Conflict` | Email already registered (`/auth/register`). |
 | `429 Too Many Requests` | Rate limit exceeded on `/auth/register` or `/auth/login` (see [rate limiting](#rate-limiting)). |

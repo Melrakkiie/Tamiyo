@@ -227,6 +227,69 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /auth/forgot-password:
+    post:
+      tags: [auth]
+      summary: Request a password reset email
+      description: >
+        Always responds 204, whether or not the email belongs to an
+        account — this prevents an attacker from using the endpoint to
+        discover which emails are registered. When the account exists, a
+        single-use reset token is emailed to it (valid for
+        PASSWORD_RESET_TOKEN_TTL_MINUTES, 30 minutes by default). Shares
+        the same rate limiter as /auth/register and /auth/login.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForgotPasswordRequest"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Missing or invalid email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /auth/reset-password:
+    post:
+      tags: [auth]
+      summary: Reset a password using a token from the forgot-password email
+      description: >
+        Consumes a single-use reset token and sets a new password. On
+        success, every refresh token belonging to the account is revoked —
+        all other sessions must log in again, same as /auth/password.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordRequest"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Missing token, or new_password shorter than 8 characters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Invalid, expired, or already-used reset token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /cards:
     get:
       tags: [cards]
@@ -777,10 +840,11 @@ components:
             $ref: "#/components/schemas/Error"
     TooManyRequests:
       description: >
-        Too many requests from this client IP on /auth/register and
-        /auth/login combined (AUTH_RATE_LIMIT_MAX per
-        AUTH_RATE_LIMIT_WINDOW_SECONDS, 5 per 60s by default). A
-        Retry-After header (seconds) indicates when to retry.
+        Too many requests from this client IP on /auth/register,
+        /auth/login, and /auth/forgot-password combined
+        (AUTH_RATE_LIMIT_MAX per AUTH_RATE_LIMIT_WINDOW_SECONDS, 5 per 60s
+        by default). A Retry-After header (seconds) indicates when to
+        retry.
       headers:
         Retry-After:
           schema:
@@ -856,6 +920,24 @@ components:
           type: string
           minLength: 8
       required: [current_password, new_password]
+
+    ForgotPasswordRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+      required: [email]
+
+    ResetPasswordRequest:
+      type: object
+      properties:
+        token:
+          type: string
+        new_password:
+          type: string
+          minLength: 8
+      required: [token, new_password]
 
     Card:
       type: object

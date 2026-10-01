@@ -13,6 +13,8 @@ import (
 	"Melrakkiie/Tamiyo/internal/config"
 	"Melrakkiie/Tamiyo/internal/deck"
 	"Melrakkiie/Tamiyo/internal/health"
+	"Melrakkiie/Tamiyo/internal/mail"
+	"Melrakkiie/Tamiyo/internal/passwordreset"
 	"Melrakkiie/Tamiyo/internal/ratelimit"
 	"Melrakkiie/Tamiyo/internal/storage"
 	"Melrakkiie/Tamiyo/internal/token"
@@ -56,6 +58,17 @@ func main() {
 	userService := user.NewService(userRepo)
 	userHandler := user.NewHandler(userService, cfg.JWTSecret, cfg.JWTAccessTokenTTL, tokenService)
 
+	var mailer mail.Mailer
+	if cfg.SMTPHost != "" {
+		mailer = mail.NewSMTPMailer(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom, cfg.PasswordResetURLTemplate)
+	} else {
+		mailer = mail.NewLoggingMailer(logger)
+	}
+
+	passwordResetRepo := passwordreset.NewPostgresRepository(db)
+	passwordResetService := passwordreset.NewService(passwordResetRepo, cfg.PasswordResetTokenTTL)
+	passwordResetHandler := passwordreset.NewHandler(passwordResetService, userService, tokenService, mailer)
+
 	cardRepo := card.NewPostgresRepository(db)
 	cardService := card.NewService(cardRepo)
 	cardHandler := card.NewHandler(cardService)
@@ -77,6 +90,7 @@ func main() {
 	healthHandler.RegisterRoutes(router)
 	userHandler.RegisterRoutes(router, ratelimit.Middleware(authLimiter))
 	tokenHandler.RegisterRoutes(router)
+	passwordResetHandler.RegisterRoutes(router, ratelimit.Middleware(authLimiter))
 
 	protected := router.Group("/")
 	protected.Use(auth.RequireAuth(cfg.JWTSecret))

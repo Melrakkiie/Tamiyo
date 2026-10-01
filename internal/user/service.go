@@ -59,3 +59,19 @@ func (s *Service) ChangePassword(ctx context.Context, userID, currentPassword, n
 
 	return s.repo.UpdatePassword(ctx, userID, string(hash))
 }
+
+func (s *Service) FindIDByEmail(ctx context.Context, email string) (string, error) {
+	u, err := s.repo.FindByEmail(ctx, email)
+	if err != nil {
+		return "", err
+	}
+	return u.ID, nil
+}
+
+func (s *Service) SetPassword(ctx context.Context, userID, newPassword string) error {
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	return s.repo.UpdatePassword(ctx, userID, string(hash))
+}

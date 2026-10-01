@@ -150,3 +150,42 @@ func TestService_ChangePassword_PropagatesUpdatePasswordError(t *testing.T) {
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
+
+func TestService_FindIDByEmail_ReturnsIDOnSuccess(t *testing.T) {
+	repo := &fakeRepository{findByEmailUser: User{ID: "fake-id", Email: "alice@example.com"}}
+	service := NewService(repo)
+
+	id, err := service.FindIDByEmail(context.Background(), "alice@example.com")
+
+	require.NoError(t, err)
+	assert.Equal(t, "fake-id", id)
+}
+
+func TestService_FindIDByEmail_PropagatesErrNotFound(t *testing.T) {
+	repo := &fakeRepository{findByEmailErr: ErrNotFound}
+	service := NewService(repo)
+
+	_, err := service.FindIDByEmail(context.Background(), "unknown@example.com")
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestService_SetPassword_UpdatesHashWithoutCheckingCurrentPassword(t *testing.T) {
+	repo := &fakeRepository{findByIDUser: User{ID: "fake-id", PasswordHash: "irrelevant-old-hash"}}
+	service := NewService(repo)
+
+	err := service.SetPassword(context.Background(), "fake-id", "brandnewpassword")
+
+	require.NoError(t, err)
+	assert.Equal(t, "fake-id", repo.updatePasswordID)
+	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(repo.updatePasswordHash), []byte("brandnewpassword")))
+}
+
+func TestService_SetPassword_PropagatesUpdatePasswordError(t *testing.T) {
+	repo := &fakeRepository{updatePasswordErr: ErrNotFound}
+	service := NewService(repo)
+
+	err := service.SetPassword(context.Background(), "unknown-id", "brandnewpassword")
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
