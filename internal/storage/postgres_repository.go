@@ -63,7 +63,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 	args := []interface{}{userID}
 
 	if filter.Type != "" {
-		query += ` AND tamiyo.storage.type ILIKE $2`
+		query += ` AND lower(tamiyo.storage.type) = lower($2)`
 		args = append(args, filter.Type)
 	}
 

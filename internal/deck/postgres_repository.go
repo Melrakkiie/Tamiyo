@@ -94,7 +94,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 	args := []interface{}{userID}
 
 	if filter.Format != "" {
-		query += ` AND d.format ILIKE $2`
+		query += ` AND lower(d.format) = lower($2)`
 		args = append(args, filter.Format)
 	}
 

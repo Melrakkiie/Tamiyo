@@ -138,3 +138,36 @@ $$ LANGUAGE 'plpgsql';
 CREATE TRIGGER check_deck_commander_ownership
     BEFORE INSERT OR UPDATE ON tamiyo.deck
     FOR EACH ROW EXECUTE FUNCTION check_deck_commander_ownership();
+
+-----------------
+---- INDEXES ----
+-----------------
+-- Every query in every repository filters on user_id (multi-tenant
+-- scoping), so it is the single highest-value index across the schema.
+-- Composite indexes below put user_id first so they also serve plain
+-- "WHERE user_id = $1" lookups (leftmost-prefix rule), not just the
+-- combination with a second filter.
+
+-- storage: scoped by user_id, optionally filtered by type (GET /storage?type=)
+CREATE INDEX IF NOT EXISTS idx_storage_user_id_type
+    ON tamiyo.storage (user_id, lower(type));
+
+-- deck: scoped by user_id, optionally filtered by format (GET /deck?format=)
+CREATE INDEX IF NOT EXISTS idx_deck_user_id_format
+    ON tamiyo.deck (user_id, lower(format));
+
+-- cards: scoped by user_id on every card query, and joined on storage_id
+-- by storage.FindAll's card_count LEFT JOIN.
+CREATE INDEX IF NOT EXISTS idx_cards_user_id
+    ON tamiyo.cards (user_id);
+
+CREATE INDEX IF NOT EXISTS idx_cards_storage_id
+    ON tamiyo.cards (storage_id)
+    WHERE storage_id IS NOT NULL;
+
+-- card_deck: the primary key (card_id, deck_id) only accelerates lookups
+-- by card_id (or both columns). deck.FindAll's card_count and
+-- FindCardsByDeckID both filter by deck_id alone, which needs its own
+-- index since deck_id is not the leftmost PK column.
+CREATE INDEX IF NOT EXISTS idx_card_deck_deck_id
+    ON tamiyo.card_deck (deck_id);
