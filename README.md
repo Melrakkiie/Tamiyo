@@ -1,4 +1,5 @@
 # Tamiyo
+[![codecov](https://codecov.io/github/Melrakkiie/Tamiyo/graph/badge.svg?token=JQKBS058ZW)](https://codecov.io/github/Melrakkiie/Tamiyo)
 
 A REST API for managing a Magic: The Gathering card collection — cards, physical storage (binders, boxes, deckboxes), and decks.
 
