@@ -28,6 +28,14 @@ func (r userRow) toDomain() User {
 	}
 }
 
+func toUserRow(u User) userRow {
+	return userRow{
+		ID:           u.ID,
+		Email:        u.Email,
+		PasswordHash: u.PasswordHash,
+	}
+}
+
 type PostgresRepository struct {
 	db *sqlx.DB
 }
@@ -37,6 +45,7 @@ func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
 }
 
 func (r *PostgresRepository) Create(ctx context.Context, u User) (User, error) {
+	row := toUserRow(u)
 	query := `
 		INSERT INTO tamiyo.users (email, password_hash)
 		VALUES (:email, :password_hash)
@@ -50,7 +59,7 @@ func (r *PostgresRepository) Create(ctx context.Context, u User) (User, error) {
 	defer stmt.Close()
 
 	var created userRow
-	if err := stmt.GetContext(ctx, &created, u); err != nil {
+	if err := stmt.GetContext(ctx, &created, row); err != nil {
 		var pqErr *pq.Error
 		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
 			return User{}, ErrEmailAlreadyTaken
