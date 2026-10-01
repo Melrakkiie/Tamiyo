@@ -8,15 +8,25 @@ For each row:
   - Creates one Card per physical copy ("Quantity"), attached to the storage.
   - If the row belongs to a deck, links each created card to that deck.
 
+Tamiyo is multi-tenant: every endpoint except /health, /auth/register and
+/auth/login requires a Bearer token. This script takes an account's email
+and password, uses them to register a new account (or log in if that
+account already exists), and sends the resulting JWT on every request it
+makes. Everything it creates ends up scoped to that one account.
+
 Usage:
     pip install requests
-    python3 import_manabox.py path/to/ManaBox_Collection.csv
-    python3 import_manabox.py path/to/ManaBox_Collection.csv --dry-run
-    TAMIYO_API_URL=http://localhost:8080 python3 import_manabox.py collection.csv
+    python3 import_manabox.py path/to/ManaBox_Collection.csv --email you@example.com --password "at-least-8-chars"
+    python3 import_manabox.py path/to/ManaBox_Collection.csv --email you@example.com --password "..." --dry-run
+    TAMIYO_API_URL=http://localhost:8080 python3 import_manabox.py collection.csv --email you@example.com --password "..."
+
+    # Omit --password to be prompted for it interactively (not echoed, not left in shell history):
+    python3 import_manabox.py path/to/ManaBox_Collection.csv --email you@example.com
 """
 
 import argparse
 import csv
+import getpass
 import os
 import sys
 
@@ -32,6 +42,56 @@ class TamiyoClient:
         self.base_url = base_url.rstrip("/")
         self.dry_run = dry_run
         self.session = requests.Session()
+
+    def authenticate(self, email: str, password: str) -> None:
+        """
+        Get a JWT for (email, password) and attach it to every subsequent
+        request on this session.
+
+        Tries to register the account first; if it already exists (409),
+        falls back to logging in with the same credentials. This lets the
+        same command be re-run safely without having to remember whether
+        the account was already created on a previous run.
+        """
+        if self.dry_run:
+            print(f"[dry-run] would authenticate as {email}")
+            return
+
+        token = None
+
+        resp = self.session.post(
+            f"{self.base_url}/auth/register",
+            json={"email": email, "password": password},
+        )
+        if resp.status_code == 201:
+            token = resp.json()["token"]
+            print(f"Registered new account for {email}.")
+        elif resp.status_code == 409:
+            # Account already exists: fall back to logging in.
+            resp = self.session.post(
+                f"{self.base_url}/auth/login",
+                json={"email": email, "password": password},
+            )
+            if resp.status_code == 200:
+                token = resp.json()["token"]
+                print(f"Account {email} already exists, logged in instead.")
+            else:
+                print(
+                    f"ERROR: could not log in as {email} "
+                    f"(account already exists, but login failed with "
+                    f"{resp.status_code}: {resp.text}).",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+        else:
+            print(
+                f"ERROR: could not register {email} "
+                f"({resp.status_code}: {resp.text}).",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        self.session.headers["Authorization"] = f"Bearer {token}"
 
     def _post(self, path: str, json: dict) -> dict:
         if self.dry_run:
@@ -116,9 +176,28 @@ def main():
         action="store_true",
         help="Parse the CSV and print what would happen, without calling the API.",
     )
+    parser.add_argument(
+        "--email",
+        required=True,
+        help="Email of the Tamiyo account to import into. "
+        "Registers this account if it doesn't exist yet, otherwise logs in.",
+    )
+    parser.add_argument(
+        "--password",
+        default=None,
+        help="Password for --email. If omitted, you'll be prompted for it "
+        "(recommended, so it doesn't end up in your shell history).",
+    )
     args = parser.parse_args()
 
+    password = args.password
+    if password is None and not args.dry_run:
+        password = getpass.getpass(f"Password for {args.email}: ")
+    elif password is None:
+        password = "dry-run-placeholder"
+
     client = TamiyoClient(args.api_url, dry_run=args.dry_run)
+    client.authenticate(args.email, password)
 
     print(f"Loading existing storages/decks from {args.api_url} ...")
     storage_cache = {s["name"]: s["id"] for s in client.list_storages()} if not args.dry_run else {}

@@ -12,11 +12,15 @@ servers:
 
 tags:
   - name: health
+  - name: auth
   - name: cards
   - name: storage
   - name: decks
   - name: deck-cards
     description: Deck ↔ card relationship
+
+security:
+  - bearerAuth: []
 
 paths:
   /health:
@@ -24,6 +28,7 @@ paths:
       tags: [health]
       summary: Health check
       description: Checks that the API can reach the database.
+      security: []
       responses:
         "200":
           description: The database is reachable.
@@ -49,6 +54,68 @@ paths:
                   error:
                     type: string
                 required: [status, error]
+
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Register a new account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Missing/invalid email, or password shorter than 8 characters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Email is already registered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Log in and obtain a JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Missing/invalid email or password.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Invalid email or password.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /cards:
     get:
@@ -482,6 +549,17 @@ paths:
           $ref: "#/components/responses/InternalError"
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        All endpoints except /health, /auth/register and /auth/login require
+        a Bearer token obtained from /auth/login or /auth/register. Every
+        resource (cards, storage, decks) is scoped to the authenticated
+        user — accounts never see or affect each other's data.
+
   parameters:
     CardID:
       name: id
@@ -533,6 +611,35 @@ components:
         error:
           type: string
       required: [error]
+
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+      required: [email, password]
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required: [email, password]
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: "JWT to send as `Authorization: Bearer <token>` on subsequent requests."
+      required: [token]
 
     Card:
       type: object
