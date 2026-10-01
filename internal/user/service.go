@@ -41,3 +41,21 @@ func (s *Service) Authenticate(ctx context.Context, email, password string) (Use
 
 	return u, nil
 }
+
+func (s *Service) ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error {
+	u, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(currentPassword)); err != nil {
+		return ErrIncorrectPassword
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	return s.repo.UpdatePassword(ctx, userID, string(hash))
+}

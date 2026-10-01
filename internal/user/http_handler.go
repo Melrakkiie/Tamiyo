@@ -21,6 +21,11 @@ type loginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
+type changePasswordRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required,min=8"`
+}
+
 type authResponse struct {
 	Token string `json:"token"`
 }
@@ -28,6 +33,7 @@ type authResponse struct {
 type userService interface {
 	Register(ctx context.Context, email, password string) (User, error)
 	Authenticate(ctx context.Context, email, password string) (User, error)
+	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
 }
 
 type Handler struct {
@@ -50,6 +56,10 @@ func (h *Handler) RegisterRoutes(router *gin.Engine, authMiddleware ...gin.Handl
 
 	router.POST("/auth/register", registerHandlers...)
 	router.POST("/auth/login", loginHandlers...)
+}
+
+func (h *Handler) RegisterProtectedRoutes(router gin.IRoutes) {
+	router.POST("/auth/password", h.changePassword)
 }
 
 func (h *Handler) register(ctx *gin.Context) {
@@ -102,4 +112,34 @@ func (h *Handler) login(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, authResponse{Token: token})
+}
+
+func (h *Handler) changePassword(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "missing or malformed Authorization header"})
+		return
+	}
+
+	var req changePasswordRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := h.service.ChangePassword(ctx.Request.Context(), userID, req.CurrentPassword, req.NewPassword)
+	if err != nil {
+		if errors.Is(err, ErrIncorrectPassword) {
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "incorrect current password"})
+			return
+		}
+		if errors.Is(err, ErrNotFound) {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.Status(http.StatusNoContent)
 }

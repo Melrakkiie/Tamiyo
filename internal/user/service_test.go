@@ -15,6 +15,13 @@ type fakeRepository struct {
 
 	findByEmailUser User
 	findByEmailErr  error
+
+	findByIDUser User
+	findByIDErr  error
+
+	updatePasswordID   string
+	updatePasswordHash string
+	updatePasswordErr  error
 }
 
 func (f *fakeRepository) Create(ctx context.Context, u User) (User, error) {
@@ -31,6 +38,22 @@ func (f *fakeRepository) FindByEmail(ctx context.Context, email string) (User, e
 		return User{}, f.findByEmailErr
 	}
 	return f.findByEmailUser, nil
+}
+
+func (f *fakeRepository) FindByID(ctx context.Context, id string) (User, error) {
+	if f.findByIDErr != nil {
+		return User{}, f.findByIDErr
+	}
+	return f.findByIDUser, nil
+}
+
+func (f *fakeRepository) UpdatePassword(ctx context.Context, id string, passwordHash string) error {
+	if f.updatePasswordErr != nil {
+		return f.updatePasswordErr
+	}
+	f.updatePasswordID = id
+	f.updatePasswordHash = passwordHash
+	return nil
 }
 
 func TestService_Register_HashesPasswordBeforeStoring(t *testing.T) {
@@ -81,4 +104,49 @@ func TestService_Authenticate_FailsWithUnknownEmail(t *testing.T) {
 	_, err := service.Authenticate(context.Background(), "unknown@example.com", "anything")
 
 	assert.ErrorIs(t, err, ErrInvalidCredentials)
+}
+
+func TestService_ChangePassword_UpdatesHashWhenCurrentPasswordIsCorrect(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("oldpassword"), bcrypt.DefaultCost)
+	repo := &fakeRepository{findByIDUser: User{ID: "fake-id", PasswordHash: string(hash)}}
+	service := NewService(repo)
+
+	err := service.ChangePassword(context.Background(), "fake-id", "oldpassword", "newpassword")
+
+	require.NoError(t, err)
+	assert.Equal(t, "fake-id", repo.updatePasswordID)
+	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(repo.updatePasswordHash), []byte("newpassword")))
+}
+
+func TestService_ChangePassword_FailsWithIncorrectCurrentPassword(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("oldpassword"), bcrypt.DefaultCost)
+	repo := &fakeRepository{findByIDUser: User{ID: "fake-id", PasswordHash: string(hash)}}
+	service := NewService(repo)
+
+	err := service.ChangePassword(context.Background(), "fake-id", "wrongpassword", "newpassword")
+
+	assert.ErrorIs(t, err, ErrIncorrectPassword)
+	assert.Empty(t, repo.updatePasswordHash, "password must not be updated when the current one is wrong")
+}
+
+func TestService_ChangePassword_PropagatesFindByIDError(t *testing.T) {
+	repo := &fakeRepository{findByIDErr: ErrNotFound}
+	service := NewService(repo)
+
+	err := service.ChangePassword(context.Background(), "unknown-id", "whatever", "newpassword")
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestService_ChangePassword_PropagatesUpdatePasswordError(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("oldpassword"), bcrypt.DefaultCost)
+	repo := &fakeRepository{
+		findByIDUser:      User{ID: "fake-id", PasswordHash: string(hash)},
+		updatePasswordErr: ErrNotFound,
+	}
+	service := NewService(repo)
+
+	err := service.ChangePassword(context.Background(), "fake-id", "oldpassword", "newpassword")
+
+	assert.ErrorIs(t, err, ErrNotFound)
 }

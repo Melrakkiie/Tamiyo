@@ -7,11 +7,16 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"Melrakkiie/Tamiyo/internal/auth"
 )
+
+const testJWTSecret = "test-secret"
 
 type fakeService struct {
 	registerUser User
@@ -19,6 +24,12 @@ type fakeService struct {
 
 	authUser User
 	authErr  error
+
+	changePasswordErr error
+
+	changePasswordCalledWithUserID string
+	changePasswordCalledWithOld    string
+	changePasswordCalledWithNew    string
 }
 
 func (f *fakeService) Register(ctx context.Context, email, password string) (User, error) {
@@ -35,11 +46,35 @@ func (f *fakeService) Authenticate(ctx context.Context, email, password string) 
 	return f.authUser, nil
 }
 
+func (f *fakeService) ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error {
+	f.changePasswordCalledWithUserID = userID
+	f.changePasswordCalledWithOld = currentPassword
+	f.changePasswordCalledWithNew = newPassword
+	return f.changePasswordErr
+}
+
 func setupRouter(service userService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	NewHandler(service, "test-secret").RegisterRoutes(router)
+	NewHandler(service, testJWTSecret).RegisterRoutes(router)
 	return router
+}
+
+func setupProtectedRouter(service userService) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	protected := router.Group("/")
+	protected.Use(auth.RequireAuth(testJWTSecret))
+	NewHandler(service, testJWTSecret).RegisterProtectedRoutes(protected)
+	return router
+}
+
+func authenticatedRequest(method, path, body, userID string) *http.Request {
+	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	token, _ := auth.GenerateToken(testJWTSecret, userID, time.Hour)
+	req.Header.Set("Authorization", "Bearer "+token)
+	return req
 }
 
 func TestHandler_Register_ReturnsTokenOnSuccess(t *testing.T) {
@@ -138,7 +173,7 @@ func TestHandler_RegisterRoutes_AppliesGivenMiddlewareToBothAuthRoutes(t *testin
 		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests, please try again later"})
 	}
 
-	NewHandler(&fakeService{}, "test-secret").RegisterRoutes(router, blockAll)
+	NewHandler(&fakeService{}, testJWTSecret).RegisterRoutes(router, blockAll)
 
 	for _, path := range []string{"/auth/register", "/auth/login"} {
 		body := `{"email": "alice@example.com", "password": "supersecret"}`
@@ -149,4 +184,80 @@ func TestHandler_RegisterRoutes_AppliesGivenMiddlewareToBothAuthRoutes(t *testin
 
 		assert.Equal(t, http.StatusTooManyRequests, w.Code, "path %s should go through the middleware", path)
 	}
+}
+
+func TestHandler_ChangePassword_ReturnsNoContentOnSuccess(t *testing.T) {
+	service := &fakeService{}
+	router := setupProtectedRouter(service)
+
+	body := `{"current_password": "oldpassword", "new_password": "newpassword"}`
+	req := authenticatedRequest(http.MethodPost, "/auth/password", body, "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Equal(t, "11111111-1111-1111-1111-111111111111", service.changePasswordCalledWithUserID)
+	assert.Equal(t, "oldpassword", service.changePasswordCalledWithOld)
+	assert.Equal(t, "newpassword", service.changePasswordCalledWithNew)
+}
+
+func TestHandler_ChangePassword_ReturnsUnauthorizedOnIncorrectCurrentPassword(t *testing.T) {
+	service := &fakeService{changePasswordErr: ErrIncorrectPassword}
+	router := setupProtectedRouter(service)
+
+	body := `{"current_password": "wrongpassword", "new_password": "newpassword"}`
+	req := authenticatedRequest(http.MethodPost, "/auth/password", body, "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestHandler_ChangePassword_ReturnsNotFoundWhenUserNoLongerExists(t *testing.T) {
+	service := &fakeService{changePasswordErr: ErrNotFound}
+	router := setupProtectedRouter(service)
+
+	body := `{"current_password": "oldpassword", "new_password": "newpassword"}`
+	req := authenticatedRequest(http.MethodPost, "/auth/password", body, "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestHandler_ChangePassword_ReturnsBadRequestOnShortNewPassword(t *testing.T) {
+	service := &fakeService{}
+	router := setupProtectedRouter(service)
+
+	body := `{"current_password": "oldpassword", "new_password": "short"}`
+	req := authenticatedRequest(http.MethodPost, "/auth/password", body, "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_ChangePassword_ReturnsBadRequestWhenCurrentPasswordMissing(t *testing.T) {
+	service := &fakeService{}
+	router := setupProtectedRouter(service)
+
+	body := `{"new_password": "newpassword"}`
+	req := authenticatedRequest(http.MethodPost, "/auth/password", body, "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_ChangePassword_ReturnsUnauthorizedWithoutToken(t *testing.T) {
+	service := &fakeService{}
+	router := setupProtectedRouter(service)
+
+	body := `{"current_password": "oldpassword", "new_password": "newpassword"}`
+	req := httptest.NewRequest(http.MethodPost, "/auth/password", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }

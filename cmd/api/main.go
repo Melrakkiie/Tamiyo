@@ -77,6 +77,7 @@ func main() {
 	cardHandler.RegisterRoutes(protected)
 	storageHandler.RegisterRoutes(protected)
 	deckHandler.RegisterRoutes(protected)
+	userHandler.RegisterProtectedRoutes(protected)
 
 	logger.Info("starting server", zap.String("port", cfg.AppPort))
 	if err := router.Run(":" + cfg.AppPort); err != nil {

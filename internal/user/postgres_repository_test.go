@@ -189,3 +189,77 @@ func TestPostgresRepository_FindByEmail_ReturnsErrNotFoundWhenMissing(t *testing
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
+
+func TestPostgresRepository_FindByID_ReturnsUser(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	created, err := repo.Create(context.Background(), User{
+		Email:        "alice@example.com",
+		PasswordHash: "fake-hash",
+	})
+	require.NoError(t, err)
+
+	result, err := repo.FindByID(context.Background(), created.ID)
+
+	require.NoError(t, err)
+	assert.Equal(t, created.ID, result.ID)
+	assert.Equal(t, "alice@example.com", result.Email)
+	assert.Equal(t, "fake-hash", result.PasswordHash)
+}
+
+func TestPostgresRepository_FindByID_ReturnsErrNotFoundWhenMissing(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	_, err := repo.FindByID(context.Background(), "00000000-0000-0000-0000-000000000000")
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestPostgresRepository_UpdatePassword_UpdatesTheStoredHash(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	created, err := repo.Create(context.Background(), User{
+		Email:        "alice@example.com",
+		PasswordHash: "old-hash",
+	})
+	require.NoError(t, err)
+
+	err = repo.UpdatePassword(context.Background(), created.ID, "new-hash")
+	require.NoError(t, err)
+
+	result, err := repo.FindByID(context.Background(), created.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "new-hash", result.PasswordHash)
+}
+
+func TestPostgresRepository_UpdatePassword_BumpsUpdatedTimestamp(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	created, err := repo.Create(context.Background(), User{
+		Email:        "alice@example.com",
+		PasswordHash: "old-hash",
+	})
+	require.NoError(t, err)
+
+	time.Sleep(10 * time.Millisecond)
+
+	err = repo.UpdatePassword(context.Background(), created.ID, "new-hash")
+	require.NoError(t, err)
+
+	result, err := repo.FindByID(context.Background(), created.ID)
+	require.NoError(t, err)
+	assert.True(t, result.Updated.After(created.Updated))
+}
+
+func TestPostgresRepository_UpdatePassword_ReturnsErrNotFoundWhenMissing(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	err := repo.UpdatePassword(context.Background(), "00000000-0000-0000-0000-000000000000", "new-hash")
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}

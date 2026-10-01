@@ -83,3 +83,41 @@ func (r *PostgresRepository) FindByEmail(ctx context.Context, email string) (Use
 
 	return row.toDomain(), nil
 }
+
+func (r *PostgresRepository) FindByID(ctx context.Context, id string) (User, error) {
+	query := `
+		SELECT id, email, password_hash, added, updated
+		FROM tamiyo.users
+		WHERE id = $1
+	`
+
+	var row userRow
+	if err := r.db.GetContext(ctx, &row, query, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return User{}, ErrNotFound
+		}
+		return User{}, err
+	}
+
+	return row.toDomain(), nil
+}
+
+func (r *PostgresRepository) UpdatePassword(ctx context.Context, id string, passwordHash string) error {
+	query := `UPDATE tamiyo.users SET password_hash = $1 WHERE id = $2`
+
+	result, err := r.db.ExecContext(ctx, query, passwordHash, id)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}
