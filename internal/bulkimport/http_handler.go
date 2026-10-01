@@ -1,0 +1,175 @@
+package bulkimport
+
+import (
+	"context"
+	"errors"
+	"io"
+	"net/http"
+	"strconv"
+
+	"github.com/gin-gonic/gin"
+
+	"Melrakkiie/Tamiyo/internal/auth"
+)
+
+type importService interface {
+	ImportManaBox(ctx context.Context, userID string, r io.Reader) (Summary, error)
+	ImportMoxfieldCollection(ctx context.Context, userID string, storageID int, r io.Reader) (Summary, error)
+	ImportMoxfieldDeck(ctx context.Context, userID string, req MoxfieldDeckImportRequest, r io.Reader) (Summary, error)
+}
+
+type Handler struct {
+	service importService
+}
+
+func NewHandler(service importService) *Handler {
+	return &Handler{service: service}
+}
+
+func (h *Handler) RegisterRoutes(router gin.IRoutes) {
+	router.POST("/import/manabox", h.importManaBox)
+	router.POST("/import/moxfield/collection", h.importMoxfieldCollection)
+	router.POST("/import/moxfield/deck", h.importMoxfieldDeck)
+}
+
+func (h *Handler) importManaBox(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
+	file, err := openUploadedFile(ctx, "file")
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	summary, err := h.service.ImportManaBox(ctx.Request.Context(), userID, file)
+	h.respondImport(ctx, summary, err)
+}
+
+func (h *Handler) importMoxfieldCollection(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
+	storageID, err := strconv.Atoi(ctx.PostForm("storage_id"))
+	if err != nil || storageID < 1 {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "storage_id is required and must be a positive integer"})
+		return
+	}
+
+	file, err := openUploadedFile(ctx, "file")
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	summary, err := h.service.ImportMoxfieldCollection(ctx.Request.Context(), userID, storageID, file)
+	h.respondImport(ctx, summary, err)
+}
+
+func (h *Handler) importMoxfieldDeck(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
+	name := ctx.PostForm("name")
+	if name == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+		return
+	}
+
+	format := ctx.PostForm("format")
+	if format == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "format is required"})
+		return
+	}
+
+	req := MoxfieldDeckImportRequest{
+		Name:                   name,
+		Format:                 format,
+		CommanderFromFirstLine: true,
+	}
+
+	if raw := ctx.PostForm("commander_from_first_line"); raw != "" {
+		parsed, err := strconv.ParseBool(raw)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "commander_from_first_line must be a boolean"})
+			return
+		}
+		req.CommanderFromFirstLine = parsed
+	}
+
+	if raw := ctx.PostForm("storage_id"); raw != "" {
+		storageID, err := strconv.Atoi(raw)
+		if err != nil || storageID < 1 {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "storage_id must be a positive integer"})
+			return
+		}
+		req.StorageID = &storageID
+	}
+
+	file, err := openUploadedFile(ctx, "file")
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	summary, err := h.service.ImportMoxfieldDeck(ctx.Request.Context(), userID, req, file)
+	h.respondImport(ctx, summary, err)
+}
+
+func (h *Handler) respondImport(ctx *gin.Context, summary Summary, err error) {
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidFile):
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, ErrTargetStorageNotFound):
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "storage_id does not reference an existing storage"})
+		case errors.Is(err, ErrScryfallUnavailable):
+			ctx.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		default:
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	ctx.IndentedJSON(http.StatusOK, summary)
+}
+
+func openUploadedFile(ctx *gin.Context, field string) (multipartFile, error) {
+	header, err := ctx.FormFile(field)
+	if err != nil {
+		return nil, errMissingFile
+	}
+	f, err := header.Open()
+	if err != nil {
+		return nil, errUnreadableFile
+	}
+	return f, nil
+}
+
+type multipartFile interface {
+	io.Reader
+	io.Closer
+}
+
+var (
+	errMissingFile    = errors.New("a file is required (multipart field \"file\")")
+	errUnreadableFile = errors.New("could not read the uploaded file")
+)

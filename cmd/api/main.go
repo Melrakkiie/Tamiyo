@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"Melrakkiie/Tamiyo/internal/auth"
+	"Melrakkiie/Tamiyo/internal/bulkimport"
 	"Melrakkiie/Tamiyo/internal/card"
 	"Melrakkiie/Tamiyo/internal/config"
 	"Melrakkiie/Tamiyo/internal/cors"
@@ -83,6 +84,9 @@ func main() {
 	deckService := deck.NewService(deckRepo)
 	deckHandler := deck.NewHandler(deckService)
 
+	importService := bulkimport.NewService(cardService, storageService, deckService, bulkimport.NewScryfallClient())
+	importHandler := bulkimport.NewHandler(importService)
+
 	healthHandler := health.NewHandler(db)
 
 	authLimiter := ratelimit.NewLimiter(cfg.AuthRateLimitMax, cfg.AuthRateLimitWindow)
@@ -101,6 +105,7 @@ func main() {
 	cardHandler.RegisterRoutes(protected)
 	storageHandler.RegisterRoutes(protected)
 	deckHandler.RegisterRoutes(protected)
+	importHandler.RegisterRoutes(protected)
 	userHandler.RegisterProtectedRoutes(protected)
 
 	logger.Info("starting server", zap.String("port", cfg.AppPort))

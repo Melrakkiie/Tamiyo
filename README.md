@@ -20,6 +20,7 @@ tamiyo/
 │   ├── card/             # card domain: model, service, repository, HTTP handler
 │   ├── storage/          # storage domain (binders, boxes, deckboxes)
 │   ├── deck/             # deck domain, including deck ↔ card relationship
+│   ├── bulkimport/       # bulk import routes (ManaBox, Moxfield)
 │   └── config/           # environment configuration
 ├── _devops/database/     # SQL schema
 ├── .githooks/            # versioned git hooks (see Code Quality)
@@ -123,11 +124,28 @@ docker exec -i tamiyo-db psql -U login -d tamiyo_db < _devops/database/seedTestD
 
 Log in as the seeded account with `seed@tamiyo.local` / `password123` (see `POST /auth/login` above) to see the sample data. The script enables `pgcrypto` to hash that password the same way the API does (bcrypt).
 
-## Importing a ManaBox Collection
+## Bulk Import
 
-[`_devops/utils/import_manabox.py`](./_devops/utils/import_manabox.py) imports a collection exported from the [ManaBox](https://manabox.app/) app (CSV format) into a running Tamiyo instance via the API.
+Three authenticated routes import a collection or decklist export produced by a third-party tool in one request, instead of one `POST /cards` call per card — see [`openapi.yaml`](./openapi.yaml) and [`doc/API.md`](./doc/API.md#bulk-import) for the full request/response shapes:
 
-For each row, it gets or creates the matching Storage (and, if the binder type is `deck`, a Deck too), creates one Card per physical copy, and links deck cards accordingly.
+- `POST /import/manabox` — a [ManaBox](https://manabox.app/) collection CSV export. Carries its own storage/binder and Scryfall ID, so nothing else is needed.
+- `POST /import/moxfield/collection` — a [Moxfield](https://www.moxfield.com/) "Export Collection" CSV. Has no storage concept, so every imported card is assigned to an existing `storage_id` you pass in; has no Scryfall ID either, so each row is resolved by set + collector number against the [Scryfall API](https://scryfall.com/docs/api/cards/collection).
+- `POST /import/moxfield/deck` — a Moxfield deck's plain-text export (deck page → **More → Export → Plain Text**). The format has no section headers, so by convention the first line is treated as the commander unless `commander_from_first_line=false` is passed.
+
+All three are `multipart/form-data` requests with the file in a field named `file`, e.g.:
+
+```bash
+curl -X POST localhost:8080/import/moxfield/collection \
+  -H "Authorization: Bearer <token>" \
+  -F "file=@moxfield_collection.csv" \
+  -F "storage_id=1"
+```
+
+A bulk import never fails outright over a single bad row — it returns `200 OK` with a summary (`cards_created`, `cards_skipped`, `storages_created`, `decks_created`, and a `warnings` list for anything skipped).
+
+### Importing a ManaBox Collection via script (alternative)
+
+[`_devops/utils/import_manabox.py`](./_devops/utils/import_manabox.py) does the same ManaBox import as `POST /import/manabox` above, but as an external script driving the HTTP API instead of a native route — useful if you'd rather not upload the CSV directly, or want to see a dry run of what would be created before calling the API at all.
 
 Since the API is multi-tenant, the script needs an account to import into: pass `--email` (and optionally `--password`, otherwise you're prompted for it). It registers that account on first use, or logs in if it already exists, then sends the resulting token on every request — everything it creates belongs to that one account.
 

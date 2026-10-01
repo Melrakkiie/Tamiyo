@@ -839,6 +839,175 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /import/manabox:
+    post:
+      tags: [bulk-import]
+      summary: Bulk import a ManaBox collection export
+      description: >
+        Imports a ManaBox_Collection.csv export. For each row, gets or
+        creates the matching storage (Binder Name/Binder Type), gets or
+        creates a deck too if Binder Type is "deck" (format defaults to
+        "commander" — correct it afterwards with PATCH /deck/:id if
+        needed), creates one card per physical copy (Quantity), and links
+        deck cards accordingly. The export already carries the Scryfall ID
+        directly, so this route never calls Scryfall and never returns 502.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: >
+                    The ManaBox_Collection.csv file. Required columns:
+                    Binder Name, Binder Type, Name, Set code, Scryfall ID,
+                    Collector number, Foil, Quantity (order doesn't matter).
+      responses:
+        "200":
+          description: >
+            Import finished (possibly with some rows skipped — see
+            ImportSummary.warnings).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportSummary"
+        "400":
+          description: No file field, or the file couldn't be parsed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /import/moxfield/collection:
+    post:
+      tags: [bulk-import]
+      summary: Bulk import a Moxfield collection export
+      description: >
+        Imports a Moxfield "Export Collection" CSV. Moxfield's export has
+        no storage concept, so every created card is assigned to the
+        existing storage given by storage_id. It also has no Scryfall ID,
+        so each row is resolved by (set, collector number) against the
+        Scryfall API (https://scryfall.com/docs/api/cards/collection).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, storage_id]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: >
+                    The Moxfield collection CSV export. Required columns:
+                    Count, Name, Edition, Foil, Collector Number (order
+                    doesn't matter).
+                storage_id:
+                  type: integer
+                  minimum: 1
+                  description: Must reference an existing storage for this account.
+      responses:
+        "200":
+          description: >
+            Import finished (possibly with some rows skipped — see
+            ImportSummary.warnings).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportSummary"
+        "400":
+          description: >
+            No file field, the file couldn't be parsed, or storage_id does
+            not reference an existing storage.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
+  /import/moxfield/deck:
+    post:
+      tags: [bulk-import]
+      summary: Bulk import a Moxfield deck export
+      description: >
+        Imports a Moxfield deck's plain-text export (deck page -> More ->
+        Export -> Plain Text). Creates one new deck and one card per
+        physical copy listed, linked to it. Each line is resolved by (set,
+        collector number) against Scryfall, same as the collection route.
+        The plain-text format has no section headers, so by convention the
+        first line is treated as the commander unless
+        commander_from_first_line is set to false; an unresolvable
+        commander is skipped (counted in cards_skipped) and the deck is
+        still created without one.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, name, format]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: >
+                    The deck's plain-text export. Each line looks like
+                    "1 Sol Ring (SLD) 1011 *F*".
+                name:
+                  type: string
+                  description: The new deck's name — the file itself doesn't carry one.
+                format:
+                  type: string
+                  description: The new deck's format (e.g. commander, modern).
+                commander_from_first_line:
+                  type: boolean
+                  default: true
+                  description: Treat the first card line as the deck's commander.
+                storage_id:
+                  type: integer
+                  minimum: 1
+                  description: >
+                    Must reference an existing storage for this account if
+                    provided. Left unset, imported cards have no storage.
+      responses:
+        "200":
+          description: >
+            Import finished (possibly with some rows skipped — see
+            ImportSummary.warnings).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportSummary"
+        "400":
+          description: >
+            Missing file/name/format, the file couldn't be parsed,
+            commander_from_first_line or storage_id is invalid, or
+            storage_id does not reference an existing storage.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -912,6 +1081,14 @@ components:
           schema:
             type: integer
           description: Seconds until the rate limit window resets.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    BadGateway:
+      description: >
+        A bulk import couldn't reach or parse a response from the
+        Scryfall API while resolving Moxfield rows.
       content:
         application/json:
           schema:
@@ -1210,3 +1387,24 @@ components:
         clear_commander_id:
           type: boolean
           description: Set to true to explicitly clear commander_id (set it to null).
+
+    ImportSummary:
+      type: object
+      description: >
+        Result of a bulk import. A malformed or unresolvable row never
+        aborts the whole import — it's recorded as a skipped card with a
+        warning instead.
+      properties:
+        cards_created:
+          type: integer
+        cards_skipped:
+          type: integer
+        storages_created:
+          type: integer
+        decks_created:
+          type: integer
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Omitted entirely when there are no warnings.

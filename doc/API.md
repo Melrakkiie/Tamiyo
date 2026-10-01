@@ -15,6 +15,7 @@ Tamiyo is a REST API for managing a Magic: The Gathering card collection — car
 - [Storage](#storage)
 - [Decks](#decks)
 - [Deck ↔ Card relationship](#deck--card-relationship)
+- [Bulk Import](#bulk-import)
 - [Error reference](#error-reference)
 
 ---
@@ -642,6 +643,83 @@ Remove a card from a deck. **Idempotent** — always returns success, whether or
 
 ---
 
+## Bulk Import
+
+Three routes create cards (and, where the source supports it, storages/decks) in bulk from a collection or decklist export produced by a third-party tool, instead of one `POST /cards` call per card. All three are `multipart/form-data` requests (not JSON) with the file itself in a field named `file`.
+
+A bulk import never fails outright just because some rows couldn't be resolved: a request that parses successfully always returns `200 OK` with a summary of what happened, including a `warnings` list for any row that was skipped (card not found on Scryfall, a duplicate, a transient error). The import only fails as a whole (non-`200`) when the file itself can't be parsed, a referenced `storage_id` doesn't exist, or Scryfall couldn't be reached at all.
+
+**Response shape (all three routes)**
+```json
+{
+  "cards_created": 182,
+  "cards_skipped": 3,
+  "storages_created": 1,
+  "decks_created": 0,
+  "warnings": [
+    "line 47: \"Mystery Card\" (xyz #999) not found on scryfall"
+  ]
+}
+```
+`warnings` is omitted entirely when empty.
+
+**Errors common to all three**
+- `400` — no `file` field, or the file couldn't be parsed (wrong columns, malformed line) — message explains what's wrong
+- `400` — a `storage_id` field doesn't reference an existing storage for this account
+- `502` — Scryfall (used to resolve Moxfield rows — see below) couldn't be reached or returned an unexpected response after retrying; a rate-limited (`429`) response from Scryfall is retried automatically (honoring its `Retry-After` header when present) before this is returned
+- `401` — unauthenticated, like every other route under this section
+
+---
+
+### `POST /import/manabox`
+
+Import a [ManaBox](https://manabox.app/) collection export (`ManaBox_Collection.csv`). For each row: gets or creates the storage matching `Binder Name` (type = `Binder Type`); if `Binder Type` is `deck`, also gets or creates a deck with the same name (format defaults to `commander` — the export has no format column, so correct it afterwards with `PATCH /deck/:id` if needed); creates one card per physical copy (`Quantity`); links each card to the deck if applicable. ManaBox's export already carries the Scryfall ID directly, so no external lookups are needed — this route never returns `502`.
+
+**Form fields**
+
+| Field | Required | Notes |
+|---|---|---|
+| `file` | Yes | The `ManaBox_Collection.csv` file. |
+
+**Required CSV columns:** `Binder Name`, `Binder Type`, `Name`, `Set code`, `Scryfall ID`, `Collector number`, `Foil`, `Quantity` (column order doesn't matter).
+
+---
+
+### `POST /import/moxfield/collection`
+
+Import a Moxfield "Export Collection" CSV. Moxfield's own export has no storage/binder concept, so every created card is assigned to an existing storage you choose — and no Scryfall ID either, so each row is resolved by (set, collector number) against the [Scryfall API](https://scryfall.com/docs/api/cards/collection).
+
+**Form fields**
+
+| Field | Required | Notes |
+|---|---|---|
+| `file` | Yes | The Moxfield collection CSV export. |
+| `storage_id` | Yes | Must reference an existing storage for this account. Every imported card is assigned here. |
+
+**Required CSV columns:** `Count`, `Name`, `Edition`, `Foil`, `Collector Number` (column order doesn't matter — Moxfield itself documents that only the names are checked).
+
+---
+
+### `POST /import/moxfield/deck`
+
+Import a Moxfield deck's plain-text export (deck page → **More → Export → Plain Text**). Creates one new deck and one card per physical copy listed, linked to it. Like the collection route, each line is resolved by (set, collector number) against Scryfall.
+
+The plain-text format has no section headers (no `Commander`/`Sideboard` markers) — by convention, the first line of the file is treated as the deck's commander unless `commander_from_first_line` is set to `false`. A commander that can't be resolved on Scryfall is skipped (counted in `cards_skipped`, noted in `warnings`) and the deck is still created without one.
+
+**Form fields**
+
+| Field | Required | Notes |
+|---|---|---|
+| `file` | Yes | The deck's plain-text export. |
+| `name` | Yes | The new deck's name — the file itself doesn't carry one. |
+| `format` | Yes | The new deck's format (e.g. `commander`, `modern`) — also not in the file. |
+| `commander_from_first_line` | No | `true` or `false`. Defaults to `true`. |
+| `storage_id` | No | Must reference an existing storage for this account if provided. Left unset, imported cards have no storage (`storage_id: null`) — reasonable for a decklist, which isn't tied to a physical location the way a binder is. |
+
+**Expected line format:** `<quantity> <name> (<set code>) <collector number>[ *F*]`, e.g. `1 Sol Ring (SLD) 1011 *F*`. Cards with two names (e.g. double-faced cards) keep both, separated by ` / `.
+
+---
+
 ## Error reference
 
 All error responses share the same shape:
@@ -657,6 +735,7 @@ All error responses share the same shape:
 | `409 Conflict` | Email already registered (`/auth/register`). |
 | `429 Too Many Requests` | Rate limit exceeded on `/auth/register` or `/auth/login` (see [rate limiting](#rate-limiting)). |
 | `500 Internal Server Error` | Unexpected failure (database unreachable, etc). |
+| `502 Bad Gateway` | A bulk import (see [Bulk Import](#bulk-import)) couldn't reach or parse a response from the Scryfall API. |
 
 ### Validation rules summary
 
