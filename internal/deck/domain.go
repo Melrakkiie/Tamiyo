@@ -34,10 +34,13 @@ type DeckCard struct {
 
 type Filter struct {
 	Format string
+
+	Page  int
+	Limit int
 }
 
 type Repository interface {
-	FindAll(ctx context.Context, userID string, filter Filter) ([]Deck, error)
+	FindAll(ctx context.Context, userID string, filter Filter) ([]Deck, int, error)
 	FindByID(ctx context.Context, userID string, id int) (Deck, error)
 	Create(ctx context.Context, userID string, d Deck) (Deck, error)
 	Update(ctx context.Context, userID string, d Deck) (Deck, error)

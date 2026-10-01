@@ -113,16 +113,21 @@ func seedStorages(t *testing.T, db *sqlx.DB, userID string) {
 	require.NoError(t, err)
 }
 
+func defaultFilter() Filter {
+	return Filter{Page: 1, Limit: 25}
+}
+
 func TestPostgresRepository_FindAll_ReturnsAllStorages(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db, userID)
 
-	result, err := repo.FindAll(context.Background(), userID, Filter{})
+	result, total, err := repo.FindAll(context.Background(), userID, defaultFilter())
 
 	require.NoError(t, err)
 	assert.Len(t, result, 2)
+	assert.Equal(t, 2, total)
 }
 
 func TestPostgresRepository_FindAll_DoesNotReturnOtherUsersStorages(t *testing.T) {
@@ -132,10 +137,11 @@ func TestPostgresRepository_FindAll_DoesNotReturnOtherUsersStorages(t *testing.T
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db, userA)
 
-	result, err := repo.FindAll(context.Background(), userB, Filter{})
+	result, total, err := repo.FindAll(context.Background(), userB, defaultFilter())
 
 	require.NoError(t, err)
 	assert.Empty(t, result)
+	assert.Zero(t, total)
 }
 
 func TestPostgresRepository_FindAll_ReturnsCorrectCardCount(t *testing.T) {
@@ -150,7 +156,7 @@ func TestPostgresRepository_FindAll_ReturnsCorrectCardCount(t *testing.T) {
 	`, userID)
 	require.NoError(t, errCard)
 
-	result, err := repo.FindAll(context.Background(), userID, Filter{})
+	result, _, err := repo.FindAll(context.Background(), userID, defaultFilter())
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -170,7 +176,7 @@ func TestPostgresRepository_FindAll_ReturnsZeroCardCountForEmptyStorage(t *testi
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db, userID)
 
-	result, err := repo.FindAll(context.Background(), userID, Filter{})
+	result, _, err := repo.FindAll(context.Background(), userID, defaultFilter())
 
 	require.NoError(t, err)
 	for _, s := range result {
@@ -196,10 +202,11 @@ func TestPostgresRepository_FindAll_DoesNotCountAnotherUsersCards(t *testing.T) 
 	`, userB)
 	require.NoError(t, err)
 
-	result, err := repo.FindAll(context.Background(), userA, Filter{})
+	result, total, err := repo.FindAll(context.Background(), userA, defaultFilter())
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
+	assert.Equal(t, 2, total)
 	for _, s := range result {
 		assert.Equal(t, 0, s.CardCount)
 	}
@@ -211,10 +218,11 @@ func TestPostgresRepository_FindAll_FiltersByType(t *testing.T) {
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db, userID) // 'Vintage Collection'/binder, 'Red Deck Wins'/deckbox
 
-	result, err := repo.FindAll(context.Background(), userID, Filter{Type: "binder"})
+	result, total, err := repo.FindAll(context.Background(), userID, Filter{Type: "binder", Page: 1, Limit: 25})
 
 	require.NoError(t, err)
 	require.Len(t, result, 1)
+	assert.Equal(t, 1, total)
 	assert.Equal(t, "Vintage Collection", result[0].Name)
 }
 
@@ -224,7 +232,7 @@ func TestPostgresRepository_FindAll_TypeFilterIsCaseInsensitive(t *testing.T) {
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db, userID)
 
-	result, err := repo.FindAll(context.Background(), userID, Filter{Type: "BINDER"})
+	result, _, err := repo.FindAll(context.Background(), userID, Filter{Type: "BINDER", Page: 1, Limit: 25})
 
 	require.NoError(t, err)
 	require.Len(t, result, 1)
@@ -237,10 +245,53 @@ func TestPostgresRepository_FindAll_TypeFilterReturnsEmptyWhenNoMatch(t *testing
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db, userID)
 
-	result, err := repo.FindAll(context.Background(), userID, Filter{Type: "box"})
+	result, total, err := repo.FindAll(context.Background(), userID, Filter{Type: "box", Page: 1, Limit: 25})
 
 	require.NoError(t, err)
 	assert.Empty(t, result)
+	assert.Zero(t, total)
+}
+
+func TestPostgresRepository_FindAll_ReturnsOnlyOnePageAtATime(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userID) // 2 storages total
+
+	result, total, err := repo.FindAll(context.Background(), userID, Filter{Page: 1, Limit: 1})
+
+	require.NoError(t, err)
+	assert.Len(t, result, 1, "limit must cap the page size")
+	assert.Equal(t, 2, total, "total must reflect all matching rows, not just this page")
+}
+
+func TestPostgresRepository_FindAll_ReturnsSecondPage(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userID) // 2 storages total
+
+	page1, _, err := repo.FindAll(context.Background(), userID, Filter{Page: 1, Limit: 1})
+	require.NoError(t, err)
+	page2, _, err := repo.FindAll(context.Background(), userID, Filter{Page: 2, Limit: 1})
+	require.NoError(t, err)
+
+	require.Len(t, page1, 1)
+	require.Len(t, page2, 1)
+	assert.NotEqual(t, page1[0].ID, page2[0].ID, "different pages must return different rows")
+}
+
+func TestPostgresRepository_FindAll_ReturnsEmptyPageBeyondLastPage(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userID) // 2 storages total
+
+	result, total, err := repo.FindAll(context.Background(), userID, Filter{Page: 3, Limit: 25})
+
+	require.NoError(t, err)
+	assert.Empty(t, result)
+	assert.Equal(t, 2, total)
 }
 
 func TestPostgresRepository_FindByID_ReturnsStorage(t *testing.T) {
@@ -290,7 +341,7 @@ func TestPostgresRepository_Create_InsertsAndReturnsStorageWithID(t *testing.T) 
 	assert.NotZero(t, created.ID)
 	assert.Equal(t, "Vintage Collection", created.Name)
 
-	all, err := repo.FindAll(context.Background(), userID, Filter{})
+	all, _, err := repo.FindAll(context.Background(), userID, defaultFilter())
 	require.NoError(t, err)
 	require.Len(t, all, 1)
 	assert.Equal(t, created.ID, all[0].ID)
@@ -413,7 +464,7 @@ func TestPostgresRepository_Delete_DoesNotAffectOtherStorages(t *testing.T) {
 	err := repo.Delete(context.Background(), userID, 1)
 	require.NoError(t, err)
 
-	remaining, err := repo.FindAll(context.Background(), userID, Filter{})
+	remaining, _, err := repo.FindAll(context.Background(), userID, defaultFilter())
 	require.NoError(t, err)
 	require.Len(t, remaining, 1)
 	assert.Equal(t, "Red Deck Wins", remaining[0].Name)

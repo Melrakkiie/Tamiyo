@@ -3,12 +3,19 @@ package storage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 
 	"Melrakkiie/Tamiyo/internal/auth"
+)
+
+const (
+	defaultPage  = 1
+	defaultLimit = 25
+	maxLimit     = 100
 )
 
 type storageResponse struct {
@@ -29,6 +36,14 @@ func toResponse(s Storage) storageResponse {
 		Added:     s.Added.Format("2006-01-02 15:04:05"),
 		Updated:   s.Updated.Format("2006-01-02 15:04:05"),
 	}
+}
+
+type paginatedStorageResponse struct {
+	Data       []storageResponse `json:"data"`
+	Page       int               `json:"page"`
+	Limit      int               `json:"limit"`
+	Total      int               `json:"total"`
+	TotalPages int               `json:"total_pages"`
 }
 
 type createStorageRequest struct {
@@ -56,7 +71,7 @@ func (r updateStorageRequest) applyTo(s Storage) Storage {
 }
 
 type storageService interface {
-	GetAllStorages(ctx context.Context, userID string, filter Filter) ([]Storage, error)
+	GetAllStorages(ctx context.Context, userID string, filter Filter) ([]Storage, int, error)
 	GetStorage(ctx context.Context, userID string, id int) (Storage, error)
 	CreateStorage(ctx context.Context, userID string, storage Storage) (Storage, error)
 	UpdateStorage(ctx context.Context, userID string, id int, req updateStorageRequest) (Storage, error)
@@ -86,9 +101,33 @@ func (h *Handler) getStorages(ctx *gin.Context) {
 		return
 	}
 
-	filter := Filter{Type: ctx.Query("type")}
+	page := defaultPage
+	if raw := ctx.Query("page"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "page must be a positive integer"})
+			return
+		}
+		page = parsed
+	}
 
-	storages, err := h.service.GetAllStorages(ctx.Request.Context(), userID, filter)
+	limit := defaultLimit
+	if raw := ctx.Query("limit"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > maxLimit {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("limit must be an integer between 1 and %d", maxLimit)})
+			return
+		}
+		limit = parsed
+	}
+
+	filter := Filter{
+		Type:  ctx.Query("type"),
+		Page:  page,
+		Limit: limit,
+	}
+
+	storages, total, err := h.service.GetAllStorages(ctx.Request.Context(), userID, filter)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -98,7 +137,19 @@ func (h *Handler) getStorages(ctx *gin.Context) {
 	for _, s := range storages {
 		response = append(response, toResponse(s))
 	}
-	ctx.IndentedJSON(http.StatusOK, response)
+
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + limit - 1) / limit
+	}
+
+	ctx.IndentedJSON(http.StatusOK, paginatedStorageResponse{
+		Data:       response,
+		Page:       page,
+		Limit:      limit,
+		Total:      total,
+		TotalPages: totalPages,
+	})
 }
 
 func (h *Handler) getStorage(ctx *gin.Context) {

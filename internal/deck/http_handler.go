@@ -3,12 +3,19 @@ package deck
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 
 	"Melrakkiie/Tamiyo/internal/auth"
+)
+
+const (
+	defaultPage  = 1
+	defaultLimit = 25
+	maxLimit     = 100
 )
 
 type deckResponse struct {
@@ -31,6 +38,14 @@ func toResponse(d Deck) deckResponse {
 		Added:       d.Added.Format("2006-01-02 15:04:05"),
 		Updated:     d.Updated.Format("2006-01-02 15:04:05"),
 	}
+}
+
+type paginatedDecksResponse struct {
+	Data       []deckResponse `json:"data"`
+	Page       int            `json:"page"`
+	Limit      int            `json:"limit"`
+	Total      int            `json:"total"`
+	TotalPages int            `json:"total_pages"`
 }
 
 type createDeckRequest struct {
@@ -96,7 +111,7 @@ func toDeckCardResponse(dc DeckCard) deckCardResponse {
 }
 
 type deckService interface {
-	GetAllDecks(ctx context.Context, userID string, filter Filter) ([]Deck, error)
+	GetAllDecks(ctx context.Context, userID string, filter Filter) ([]Deck, int, error)
 	GetDeck(ctx context.Context, userID string, id int) (Deck, error)
 	CreateDeck(ctx context.Context, userID string, d Deck) (Deck, error)
 	UpdateDeck(ctx context.Context, userID string, id int, req updateDeckRequest) (Deck, error)
@@ -134,9 +149,33 @@ func (h *Handler) getDecks(ctx *gin.Context) {
 		return
 	}
 
-	filter := Filter{Format: ctx.Query("format")}
+	page := defaultPage
+	if raw := ctx.Query("page"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "page must be a positive integer"})
+			return
+		}
+		page = parsed
+	}
 
-	decks, err := h.service.GetAllDecks(ctx.Request.Context(), userID, filter)
+	limit := defaultLimit
+	if raw := ctx.Query("limit"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > maxLimit {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("limit must be an integer between 1 and %d", maxLimit)})
+			return
+		}
+		limit = parsed
+	}
+
+	filter := Filter{
+		Format: ctx.Query("format"),
+		Page:   page,
+		Limit:  limit,
+	}
+
+	decks, total, err := h.service.GetAllDecks(ctx.Request.Context(), userID, filter)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -146,7 +185,19 @@ func (h *Handler) getDecks(ctx *gin.Context) {
 	for _, d := range decks {
 		response = append(response, toResponse(d))
 	}
-	ctx.IndentedJSON(http.StatusOK, response)
+
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + limit - 1) / limit
+	}
+
+	ctx.IndentedJSON(http.StatusOK, paginatedDecksResponse{
+		Data:       response,
+		Page:       page,
+		Limit:      limit,
+		Total:      total,
+		TotalPages: totalPages,
+	})
 }
 
 func (h *Handler) getDeck(ctx *gin.Context) {

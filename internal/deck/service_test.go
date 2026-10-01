@@ -13,10 +13,11 @@ const testUserID = "11111111-1111-1111-1111-111111111111"
 const otherUserID = "22222222-2222-2222-2222-222222222222"
 
 type fakeRepository struct {
-	decks      []Deck
-	findAllErr error
-	lastUserID string
-	lastFilter Filter
+	decks        []Deck
+	findAllTotal int
+	findAllErr   error
+	lastUserID   string
+	lastFilter   Filter
 
 	findByIDDeck Deck
 	findByIDErr  error
@@ -36,10 +37,10 @@ type fakeRepository struct {
 	unlinkErr error
 }
 
-func (f *fakeRepository) FindAll(ctx context.Context, userID string, filter Filter) ([]Deck, error) {
+func (f *fakeRepository) FindAll(ctx context.Context, userID string, filter Filter) ([]Deck, int, error) {
 	f.lastUserID = userID
 	f.lastFilter = filter
-	return f.decks, f.findAllErr
+	return f.decks, f.findAllTotal, f.findAllErr
 }
 
 func (f *fakeRepository) FindByID(ctx context.Context, userID string, id int) (Deck, error) {
@@ -96,7 +97,7 @@ func TestService_GetAllDecks_PassesUserIDToRepository(t *testing.T) {
 	repo := &fakeRepository{}
 	service := NewService(repo)
 
-	_, err := service.GetAllDecks(context.Background(), testUserID, Filter{})
+	_, _, err := service.GetAllDecks(context.Background(), testUserID, Filter{})
 
 	require.NoError(t, err)
 	assert.Equal(t, testUserID, repo.lastUserID)
@@ -106,34 +107,36 @@ func TestService_GetAllDecks_PassesFilterToRepository(t *testing.T) {
 	repo := &fakeRepository{}
 	service := NewService(repo)
 
-	_, err := service.GetAllDecks(context.Background(), testUserID, Filter{Format: "commander"})
+	_, _, err := service.GetAllDecks(context.Background(), testUserID, Filter{Format: "commander", Page: 1, Limit: 25})
 
 	require.NoError(t, err)
-	assert.Equal(t, Filter{Format: "commander"}, repo.lastFilter)
+	assert.Equal(t, Filter{Format: "commander", Page: 1, Limit: 25}, repo.lastFilter)
 }
 
-func TestService_GetAllDecks_ReturnsDecksFromRepository(t *testing.T) {
+func TestService_GetAllDecks_ReturnsDecksAndTotalFromRepository(t *testing.T) {
 	expected := []Deck{
 		{ID: 1, Name: "Otterly Playful", Format: "commander"},
 		{ID: 2, Name: "Cutelings Everywhere", Format: "commander"},
 	}
-	repo := &fakeRepository{decks: expected}
+	repo := &fakeRepository{decks: expected, findAllTotal: 2}
 	service := NewService(repo)
 
-	result, err := service.GetAllDecks(context.Background(), testUserID, Filter{})
+	result, total, err := service.GetAllDecks(context.Background(), testUserID, Filter{})
 
 	require.NoError(t, err)
 	assert.Equal(t, expected, result)
+	assert.Equal(t, 2, total)
 }
 
 func TestService_GetAllDecks_PropagatesRepositoryError(t *testing.T) {
 	repo := &fakeRepository{findAllErr: errors.New("connection lost")}
 	service := NewService(repo)
 
-	result, err := service.GetAllDecks(context.Background(), testUserID, Filter{})
+	result, total, err := service.GetAllDecks(context.Background(), testUserID, Filter{})
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
+	assert.Zero(t, total)
 }
 
 func TestService_GetDeck_PassesUserIDToRepository(t *testing.T) {

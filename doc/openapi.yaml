@@ -463,7 +463,7 @@ paths:
     get:
       tags: [storage]
       summary: List storages
-      description: List the authenticated user's storages, with optional filtering.
+      description: List the authenticated user's storages, with optional filtering and pagination.
       parameters:
         - name: type
           in: query
@@ -472,15 +472,36 @@ paths:
             type: string
           description: >
             Only return storages whose type exactly matches (case-insensitive).
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 1-based page number.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+          description: Number of storages per page (max 100).
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Storage"
+                $ref: "#/components/schemas/PaginatedStorages"
+        "400":
+          description: page or limit is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
     post:
@@ -581,7 +602,7 @@ paths:
     get:
       tags: [decks]
       summary: List decks
-      description: List the authenticated user's decks, with optional filtering.
+      description: List the authenticated user's decks, with optional filtering and pagination.
       parameters:
         - name: format
           in: query
@@ -590,15 +611,36 @@ paths:
             type: string
           description: >
             Only return decks whose format exactly matches (case-insensitive).
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 1-based page number.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+          description: Number of decks per page (max 100).
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Deck"
+                $ref: "#/components/schemas/PaginatedDecks"
+        "400":
+          description: page or limit is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
     post:
@@ -1050,6 +1092,23 @@ components:
           type: string
       required: [id, name, type, card_count, added, updated]
 
+    PaginatedStorages:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Storage"
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+      required: [data, page, limit, total, total_pages]
+
     CreateStorageRequest:
       type: object
       properties:
@@ -1087,6 +1146,23 @@ components:
         updated:
           type: string
       required: [id, name, format, card_count, added, updated]
+
+    PaginatedDecks:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Deck"
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+      required: [data, page, limit, total, total_pages]
 
     CreateDeckRequest:
       type: object

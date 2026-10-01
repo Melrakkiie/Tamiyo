@@ -15,10 +15,11 @@ import (
 )
 
 type fakeService struct {
-	decks      []Deck
-	getAllErr  error
-	lastUserID string
-	lastFilter Filter
+	decks       []Deck
+	getAllTotal int
+	getAllErr   error
+	lastUserID  string
+	lastFilter  Filter
 
 	getDeck    Deck
 	getDeckErr error
@@ -37,10 +38,10 @@ type fakeService struct {
 	removeCardErr error
 }
 
-func (f *fakeService) GetAllDecks(ctx context.Context, userID string, filter Filter) ([]Deck, error) {
+func (f *fakeService) GetAllDecks(ctx context.Context, userID string, filter Filter) ([]Deck, int, error) {
 	f.lastUserID = userID
 	f.lastFilter = filter
-	return f.decks, f.getAllErr
+	return f.decks, f.getAllTotal, f.getAllErr
 }
 
 func (f *fakeService) GetDeck(ctx context.Context, userID string, id int) (Deck, error) {
@@ -104,7 +105,8 @@ func setupRouter(service deckService) *gin.Engine {
 
 func TestHandler_GetDecks_PassesUserIDToService(t *testing.T) {
 	service := &fakeService{
-		decks: []Deck{{ID: 1, Name: "Otterly Playful", Format: "commander"}},
+		decks:       []Deck{{ID: 1, Name: "Otterly Playful", Format: "commander"}},
+		getAllTotal: 1,
 	}
 	router := setupRouter(service)
 
@@ -115,11 +117,11 @@ func TestHandler_GetDecks_PassesUserIDToService(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, testUserID, service.lastUserID)
 
-	var response []deckResponse
+	var response paginatedDecksResponse
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	require.Len(t, response, 1)
-	assert.Equal(t, "Otterly Playful", response[0].Name)
+	require.Len(t, response.Data, 1)
+	assert.Equal(t, "Otterly Playful", response.Data[0].Name)
 }
 
 func TestHandler_GetDecks_PassesFormatFilterToService(t *testing.T) {
@@ -131,10 +133,10 @@ func TestHandler_GetDecks_PassesFormatFilterToService(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, Filter{Format: "commander"}, service.lastFilter)
+	assert.Equal(t, "commander", service.lastFilter.Format)
 }
 
-func TestHandler_GetDecks_PassesEmptyFilterWhenNoFormatQueryParam(t *testing.T) {
+func TestHandler_GetDecks_DefaultsPageAndLimitWhenNotProvided(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)
 
@@ -143,7 +145,65 @@ func TestHandler_GetDecks_PassesEmptyFilterWhenNoFormatQueryParam(t *testing.T) 
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, Filter{}, service.lastFilter)
+	assert.Equal(t, defaultPage, service.lastFilter.Page)
+	assert.Equal(t, defaultLimit, service.lastFilter.Limit)
+}
+
+func TestHandler_GetDecks_PassesPageAndLimitToService(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck?page=2&limit=10", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, 2, service.lastFilter.Page)
+	assert.Equal(t, 10, service.lastFilter.Limit)
+}
+
+func TestHandler_GetDecks_ReturnsBadRequestOnInvalidPage(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck?page=0", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_GetDecks_ReturnsBadRequestOnLimitAboveMax(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck?limit=101", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_GetDecks_ReturnsPaginationEnvelope(t *testing.T) {
+	service := &fakeService{
+		decks:       []Deck{{ID: 1, Name: "Otterly Playful", Format: "commander"}},
+		getAllTotal: 1,
+	}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var response paginatedDecksResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Equal(t, defaultPage, response.Page)
+	assert.Equal(t, defaultLimit, response.Limit)
+	assert.Equal(t, 1, response.Total)
+	assert.Equal(t, 1, response.TotalPages)
 }
 
 func TestHandler_GetDecks_ReturnsErrorOnServiceFailure(t *testing.T) {

@@ -136,16 +136,21 @@ func linkCardToDeck(t *testing.T, db *sqlx.DB, cardID, deckID int) {
 	require.NoError(t, err)
 }
 
+func defaultFilter() Filter {
+	return Filter{Page: 1, Limit: 25}
+}
+
 func TestPostgresRepository_FindAll_ReturnsAllDecks(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userID)
 
-	result, err := repo.FindAll(context.Background(), userID, Filter{})
+	result, total, err := repo.FindAll(context.Background(), userID, defaultFilter())
 
 	require.NoError(t, err)
 	assert.Len(t, result, 2)
+	assert.Equal(t, 2, total)
 }
 
 func TestPostgresRepository_FindAll_DoesNotReturnOtherUsersDecks(t *testing.T) {
@@ -155,10 +160,11 @@ func TestPostgresRepository_FindAll_DoesNotReturnOtherUsersDecks(t *testing.T) {
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userA)
 
-	result, err := repo.FindAll(context.Background(), userB, Filter{})
+	result, total, err := repo.FindAll(context.Background(), userB, defaultFilter())
 
 	require.NoError(t, err)
 	assert.Empty(t, result)
+	assert.Zero(t, total)
 }
 
 func TestPostgresRepository_FindAll_ReturnsCorrectCardCount(t *testing.T) {
@@ -170,7 +176,7 @@ func TestPostgresRepository_FindAll_ReturnsCorrectCardCount(t *testing.T) {
 
 	linkCardToDeck(t, db, 1, 1)
 
-	result, err := repo.FindAll(context.Background(), userID, Filter{})
+	result, _, err := repo.FindAll(context.Background(), userID, defaultFilter())
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -190,10 +196,11 @@ func TestPostgresRepository_FindAll_FiltersByFormat(t *testing.T) {
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userID) // 'Otterly Playful'/modern, 'Izzet Prowess'/standard
 
-	result, err := repo.FindAll(context.Background(), userID, Filter{Format: "modern"})
+	result, total, err := repo.FindAll(context.Background(), userID, Filter{Format: "modern", Page: 1, Limit: 25})
 
 	require.NoError(t, err)
 	require.Len(t, result, 1)
+	assert.Equal(t, 1, total)
 	assert.Equal(t, "Otterly Playful", result[0].Name)
 }
 
@@ -203,7 +210,7 @@ func TestPostgresRepository_FindAll_FormatFilterIsCaseInsensitive(t *testing.T) 
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userID)
 
-	result, err := repo.FindAll(context.Background(), userID, Filter{Format: "MODERN"})
+	result, _, err := repo.FindAll(context.Background(), userID, Filter{Format: "MODERN", Page: 1, Limit: 25})
 
 	require.NoError(t, err)
 	require.Len(t, result, 1)
@@ -216,10 +223,53 @@ func TestPostgresRepository_FindAll_FormatFilterReturnsEmptyWhenNoMatch(t *testi
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userID)
 
-	result, err := repo.FindAll(context.Background(), userID, Filter{Format: "legacy"})
+	result, total, err := repo.FindAll(context.Background(), userID, Filter{Format: "legacy", Page: 1, Limit: 25})
 
 	require.NoError(t, err)
 	assert.Empty(t, result)
+	assert.Zero(t, total)
+}
+
+func TestPostgresRepository_FindAll_ReturnsOnlyOnePageAtATime(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userID) // 2 decks total
+
+	result, total, err := repo.FindAll(context.Background(), userID, Filter{Page: 1, Limit: 1})
+
+	require.NoError(t, err)
+	assert.Len(t, result, 1, "limit must cap the page size")
+	assert.Equal(t, 2, total, "total must reflect all matching rows, not just this page")
+}
+
+func TestPostgresRepository_FindAll_ReturnsSecondPage(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userID) // 2 decks total
+
+	page1, _, err := repo.FindAll(context.Background(), userID, Filter{Page: 1, Limit: 1})
+	require.NoError(t, err)
+	page2, _, err := repo.FindAll(context.Background(), userID, Filter{Page: 2, Limit: 1})
+	require.NoError(t, err)
+
+	require.Len(t, page1, 1)
+	require.Len(t, page2, 1)
+	assert.NotEqual(t, page1[0].ID, page2[0].ID, "different pages must return different rows")
+}
+
+func TestPostgresRepository_FindAll_ReturnsEmptyPageBeyondLastPage(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userID) // 2 decks total
+
+	result, total, err := repo.FindAll(context.Background(), userID, Filter{Page: 3, Limit: 25})
+
+	require.NoError(t, err)
+	assert.Empty(t, result)
+	assert.Equal(t, 2, total)
 }
 
 func TestPostgresRepository_FindByID_ReturnsDeck(t *testing.T) {
@@ -269,7 +319,7 @@ func TestPostgresRepository_Create_InsertsAndReturnsDeckWithID(t *testing.T) {
 	assert.NotZero(t, created.ID)
 	assert.Equal(t, "Otterly Playful", created.Name)
 
-	all, err := repo.FindAll(context.Background(), userID, Filter{})
+	all, _, err := repo.FindAll(context.Background(), userID, defaultFilter())
 	require.NoError(t, err)
 	require.Len(t, all, 1)
 	assert.Equal(t, created.ID, all[0].ID)

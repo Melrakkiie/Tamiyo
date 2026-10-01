@@ -15,10 +15,11 @@ import (
 )
 
 type fakeService struct {
-	storages   []Storage
-	getAllErr  error
-	lastUserID string
-	lastFilter Filter
+	storages    []Storage
+	getAllTotal int
+	getAllErr   error
+	lastUserID  string
+	lastFilter  Filter
 
 	getStorage    Storage
 	getStorageErr error
@@ -31,10 +32,10 @@ type fakeService struct {
 	deleteErr error
 }
 
-func (f *fakeService) GetAllStorages(ctx context.Context, userID string, filter Filter) ([]Storage, error) {
+func (f *fakeService) GetAllStorages(ctx context.Context, userID string, filter Filter) ([]Storage, int, error) {
 	f.lastUserID = userID
 	f.lastFilter = filter
-	return f.storages, f.getAllErr
+	return f.storages, f.getAllTotal, f.getAllErr
 }
 
 func (f *fakeService) GetStorage(ctx context.Context, userID string, id int) (Storage, error) {
@@ -99,10 +100,10 @@ func TestHandler_GetStorages_PassesTypeFilterToService(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, Filter{Type: "binder"}, service.lastFilter)
+	assert.Equal(t, "binder", service.lastFilter.Type)
 }
 
-func TestHandler_GetStorages_PassesEmptyFilterWhenNoTypeQueryParam(t *testing.T) {
+func TestHandler_GetStorages_DefaultsPageAndLimitWhenNotProvided(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)
 
@@ -111,7 +112,66 @@ func TestHandler_GetStorages_PassesEmptyFilterWhenNoTypeQueryParam(t *testing.T)
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, Filter{}, service.lastFilter)
+	assert.Equal(t, defaultPage, service.lastFilter.Page)
+	assert.Equal(t, defaultLimit, service.lastFilter.Limit)
+}
+
+func TestHandler_GetStorages_PassesPageAndLimitToService(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/storage?page=2&limit=10", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, 2, service.lastFilter.Page)
+	assert.Equal(t, 10, service.lastFilter.Limit)
+}
+
+func TestHandler_GetStorages_ReturnsBadRequestOnInvalidPage(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/storage?page=0", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_GetStorages_ReturnsBadRequestOnLimitAboveMax(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/storage?limit=101", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_GetStorages_ReturnsPaginationEnvelope(t *testing.T) {
+	service := &fakeService{
+		storages:    []Storage{{ID: 1, Name: "Vintage Collection", Type: "binder"}},
+		getAllTotal: 1,
+	}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/storage", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var response paginatedStorageResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Len(t, response.Data, 1)
+	assert.Equal(t, defaultPage, response.Page)
+	assert.Equal(t, defaultLimit, response.Limit)
+	assert.Equal(t, 1, response.Total)
+	assert.Equal(t, 1, response.TotalPages)
 }
 
 func TestHandler_GetStorages_ReturnsErrorOnServiceFailure(t *testing.T) {

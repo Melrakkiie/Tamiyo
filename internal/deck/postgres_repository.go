@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -67,7 +69,27 @@ func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
 	return &PostgresRepository{db: db}
 }
 
-func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter Filter) ([]Deck, error) {
+func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter Filter) ([]Deck, int, error) {
+	conditions := []string{"d.user_id = $1"}
+	args := []interface{}{userID}
+	argPos := 2
+
+	if filter.Format != "" {
+		conditions = append(conditions, fmt.Sprintf("lower(d.format) = lower($%d)", argPos))
+		args = append(args, filter.Format)
+		argPos++
+	}
+
+	whereClause := " WHERE " + strings.Join(conditions, " AND ")
+
+	countQuery := `SELECT COUNT(*) FROM tamiyo.deck d` + whereClause
+	var total int
+	if err := r.db.GetContext(ctx, &total, countQuery, args...); err != nil {
+		return nil, 0, err
+	}
+
+	offset := (filter.Page - 1) * filter.Limit
+
 	query := `
 		SELECT
 		    d.id AS id,
@@ -79,23 +101,16 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		    COUNT(cd.card_id) AS card_count
 		FROM tamiyo.deck d
 		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id
-		WHERE d.user_id = $1
-	`
-	args := []interface{}{userID}
-
-	if filter.Format != "" {
-		query += ` AND lower(d.format) = lower($2)`
-		args = append(args, filter.Format)
-	}
-
-	query += `
+	` + whereClause + `
 		GROUP BY d.id, d.name, d.format, d.commander_id, d.added, d.updated
-		ORDER BY d.updated DESC
-	`
+		ORDER BY d.updated DESC, d.id DESC
+	` + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
+
+	pagedArgs := append(args, filter.Limit, offset)
 
 	var rows []deckRow
-	if err := r.db.SelectContext(ctx, &rows, query, args...); err != nil {
-		return nil, err
+	if err := r.db.SelectContext(ctx, &rows, query, pagedArgs...); err != nil {
+		return nil, 0, err
 	}
 
 	decks := make([]Deck, 0, len(rows))
@@ -103,7 +118,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		decks = append(decks, row.toDomain())
 	}
 
-	return decks, nil
+	return decks, total, nil
 }
 
 func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int) (Deck, error) {

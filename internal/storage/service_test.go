@@ -13,10 +13,11 @@ const testUserID = "11111111-1111-1111-1111-111111111111"
 const otherUserID = "22222222-2222-2222-2222-222222222222"
 
 type fakeRepository struct {
-	storages   []Storage
-	findAllErr error
-	lastUserID string
-	lastFilter Filter
+	storages     []Storage
+	findAllTotal int
+	findAllErr   error
+	lastUserID   string
+	lastFilter   Filter
 
 	findByIDStorage Storage
 	findByIDErr     error
@@ -30,10 +31,10 @@ type fakeRepository struct {
 	deleteErr error
 }
 
-func (f *fakeRepository) FindAll(ctx context.Context, userID string, filter Filter) ([]Storage, error) {
+func (f *fakeRepository) FindAll(ctx context.Context, userID string, filter Filter) ([]Storage, int, error) {
 	f.lastUserID = userID
 	f.lastFilter = filter
-	return f.storages, f.findAllErr
+	return f.storages, f.findAllTotal, f.findAllErr
 }
 
 func (f *fakeRepository) FindByID(ctx context.Context, userID string, id int) (Storage, error) {
@@ -72,7 +73,7 @@ func TestService_GetAllStorages_PassesUserIDToRepository(t *testing.T) {
 	repo := &fakeRepository{}
 	service := NewService(repo)
 
-	_, err := service.GetAllStorages(context.Background(), testUserID, Filter{})
+	_, _, err := service.GetAllStorages(context.Background(), testUserID, Filter{})
 
 	require.NoError(t, err)
 	assert.Equal(t, testUserID, repo.lastUserID)
@@ -82,31 +83,33 @@ func TestService_GetAllStorages_PassesFilterToRepository(t *testing.T) {
 	repo := &fakeRepository{}
 	service := NewService(repo)
 
-	_, err := service.GetAllStorages(context.Background(), testUserID, Filter{Type: "binder"})
+	_, _, err := service.GetAllStorages(context.Background(), testUserID, Filter{Type: "binder", Page: 1, Limit: 25})
 
 	require.NoError(t, err)
-	assert.Equal(t, Filter{Type: "binder"}, repo.lastFilter)
+	assert.Equal(t, Filter{Type: "binder", Page: 1, Limit: 25}, repo.lastFilter)
 }
 
-func TestService_GetAllStorages_ReturnsStoragesFromRepository(t *testing.T) {
+func TestService_GetAllStorages_ReturnsStoragesAndTotalFromRepository(t *testing.T) {
 	expected := []Storage{{ID: 1, Name: "Vintage Collection", Type: "binder"}}
-	repo := &fakeRepository{storages: expected}
+	repo := &fakeRepository{storages: expected, findAllTotal: 1}
 	service := NewService(repo)
 
-	result, err := service.GetAllStorages(context.Background(), testUserID, Filter{})
+	result, total, err := service.GetAllStorages(context.Background(), testUserID, Filter{})
 
 	require.NoError(t, err)
 	assert.Equal(t, expected, result)
+	assert.Equal(t, 1, total)
 }
 
 func TestService_GetAllStorages_PropagatesRepositoryError(t *testing.T) {
 	repo := &fakeRepository{findAllErr: errors.New("connection lost")}
 	service := NewService(repo)
 
-	result, err := service.GetAllStorages(context.Background(), testUserID, Filter{})
+	result, total, err := service.GetAllStorages(context.Background(), testUserID, Filter{})
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
+	assert.Zero(t, total)
 }
 
 func TestService_GetStorage_PassesUserIDToRepository(t *testing.T) {

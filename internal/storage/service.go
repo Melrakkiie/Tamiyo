@@ -10,7 +10,7 @@ func NewService(repo Repository) *Service {
 	return &Service{repo: repo}
 }
 
-func (s *Service) GetAllStorages(ctx context.Context, userID string, filter Filter) ([]Storage, error) {
+func (s *Service) GetAllStorages(ctx context.Context, userID string, filter Filter) ([]Storage, int, error) {
 	return s.repo.FindAll(ctx, userID, filter)
 }
 

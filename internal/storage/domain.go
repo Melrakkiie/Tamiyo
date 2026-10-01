@@ -19,10 +19,13 @@ type Storage struct {
 
 type Filter struct {
 	Type string
+
+	Page  int
+	Limit int
 }
 
 type Repository interface {
-	FindAll(ctx context.Context, userID string, filter Filter) ([]Storage, error)
+	FindAll(ctx context.Context, userID string, filter Filter) ([]Storage, int, error)
 	FindByID(ctx context.Context, userID string, id int) (Storage, error)
 	Create(ctx context.Context, userID string, storage Storage) (Storage, error)
 	Update(ctx context.Context, userID string, storage Storage) (Storage, error)

@@ -10,7 +10,7 @@ func NewService(repo Repository) *Service {
 	return &Service{repo: repo}
 }
 
-func (s *Service) GetAllDecks(ctx context.Context, userID string, filter Filter) ([]Deck, error) {
+func (s *Service) GetAllDecks(ctx context.Context, userID string, filter Filter) ([]Deck, int, error) {
 	return s.repo.FindAll(ctx, userID, filter)
 }
 

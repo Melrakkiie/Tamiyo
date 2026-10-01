@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -47,7 +49,27 @@ func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
 	return &PostgresRepository{db: db}
 }
 
-func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter Filter) ([]Storage, error) {
+func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter Filter) ([]Storage, int, error) {
+	conditions := []string{"tamiyo.storage.user_id = $1"}
+	args := []interface{}{userID}
+	argPos := 2
+
+	if filter.Type != "" {
+		conditions = append(conditions, fmt.Sprintf("lower(tamiyo.storage.type) = lower($%d)", argPos))
+		args = append(args, filter.Type)
+		argPos++
+	}
+
+	whereClause := " WHERE " + strings.Join(conditions, " AND ")
+
+	countQuery := `SELECT COUNT(*) FROM tamiyo.storage` + whereClause
+	var total int
+	if err := r.db.GetContext(ctx, &total, countQuery, args...); err != nil {
+		return nil, 0, err
+	}
+
+	offset := (filter.Page - 1) * filter.Limit
+
 	query := `
 		SELECT
 		    tamiyo.storage.id AS id,
@@ -58,23 +80,16 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		    COUNT(tamiyo.cards.id) AS card_count
 		FROM tamiyo.storage
 		LEFT JOIN tamiyo.cards ON tamiyo.storage.id = tamiyo.cards.storage_id AND tamiyo.cards.user_id = $1
-		WHERE tamiyo.storage.user_id = $1
-	`
-	args := []interface{}{userID}
-
-	if filter.Type != "" {
-		query += ` AND lower(tamiyo.storage.type) = lower($2)`
-		args = append(args, filter.Type)
-	}
-
-	query += `
+	` + whereClause + `
 		GROUP BY tamiyo.storage.id, tamiyo.storage.name, tamiyo.storage.type, tamiyo.storage.added, tamiyo.storage.updated
-		ORDER BY tamiyo.storage.updated DESC
-	`
+		ORDER BY tamiyo.storage.updated DESC, tamiyo.storage.id DESC
+	` + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
+
+	pagedArgs := append(args, filter.Limit, offset)
 
 	var rows []storageRow
-	if err := r.db.SelectContext(ctx, &rows, query, args...); err != nil {
-		return nil, err
+	if err := r.db.SelectContext(ctx, &rows, query, pagedArgs...); err != nil {
+		return nil, 0, err
 	}
 
 	storages := make([]Storage, 0, len(rows))
@@ -82,7 +97,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		storages = append(storages, row.toDomain())
 	}
 
-	return storages, nil
+	return storages, total, nil
 }
 
 func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int) (Storage, error) {

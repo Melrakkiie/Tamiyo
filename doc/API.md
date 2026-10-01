@@ -21,7 +21,7 @@ Tamiyo is a REST API for managing a Magic: The Gathering card collection — car
 
 ## Authentication
 
-Tamiyo is multi-tenant: every account has its own cards, storages, and decks, completely isolated from other accounts.
+Tamiyo is multi-tenant. `/health`, `/auth/register`, `/auth/login`, `/auth/refresh`, and `/auth/logout` are public; every other endpoint — including `/auth/password` — requires a Bearer token and is scoped to the authenticated account. You only ever see or modify your own cards, storages, and decks.
 
 1. **Register** an account:
 ```bash
@@ -377,32 +377,42 @@ A **storage** represents a physical place where cards live — a binder, a deckb
 
 ### `GET /storage`
 
-List all storages, each annotated with its current card count.
+List all storages, each annotated with its current card count. Supports optional filtering and pagination.
 
 **Query parameters**
 
 | Param | Type | Required | Description |
 |---|---|---|---|
 | `type` | string | No | Only return storages of this type. Exact match, case-insensitive. |
+| `page` | int | No | 1-based page number. Defaults to `1`. |
+| `limit` | int | No | Storages per page, max `100`. Defaults to `25`. |
 
 **Example**
 ```
-GET /storage?type=binder
+GET /storage?type=binder&page=1&limit=25
 ```
 
 **Response `200 OK`**
 ```json
-[
-  {
-    "id": 1,
-    "name": "Vintage Collection",
-    "type": "binder",
-    "card_count": 3,
-    "added": "2026-01-15 10:30:00",
-    "updated": "2026-01-15 10:30:00"
-  }
-]
+{
+  "data": [
+    {
+      "id": 1,
+      "name": "Vintage Collection",
+      "type": "binder",
+      "card_count": 3,
+      "added": "2026-01-15 10:30:00",
+      "updated": "2026-01-15 10:30:00"
+    }
+  ],
+  "page": 1,
+  "limit": 25,
+  "total": 1,
+  "total_pages": 1
+}
 ```
+
+**Errors:** `400` if `page` or `limit` is not a valid integer, or `limit` is outside `1..100`.
 
 ---
 
@@ -471,33 +481,43 @@ Delete a storage. Any card currently in this storage has its `storage_id` set to
 
 ### `GET /deck`
 
-List all decks, each annotated with its current card count.
+List all decks, each annotated with its current card count. Supports optional filtering and pagination.
 
 **Query parameters**
 
 | Param | Type | Required | Description |
 |---|---|---|---|
 | `format` | string | No | Only return decks of this format. Exact match, case-insensitive. |
+| `page` | int | No | 1-based page number. Defaults to `1`. |
+| `limit` | int | No | Decks per page, max `100`. Defaults to `25`. |
 
 **Example**
 ```
-GET /deck?format=commander
+GET /deck?format=commander&page=1&limit=25
 ```
 
 **Response `200 OK`**
 ```json
-[
-  {
-    "id": 1,
-    "name": "Kess Commander",
-    "format": "commander",
-    "commander_id": 12,
-    "card_count": 4,
-    "added": "2026-01-15 10:30:00",
-    "updated": "2026-01-15 10:30:00"
-  }
-]
+{
+  "data": [
+    {
+      "id": 1,
+      "name": "Kess Commander",
+      "format": "commander",
+      "commander_id": 12,
+      "card_count": 4,
+      "added": "2026-01-15 10:30:00",
+      "updated": "2026-01-15 10:30:00"
+    }
+  ],
+  "page": 1,
+  "limit": 25,
+  "total": 1,
+  "total_pages": 1
+}
 ```
+
+**Errors:** `400` if `page` or `limit` is not a valid integer, or `limit` is outside `1..100`.
 
 ---
 
