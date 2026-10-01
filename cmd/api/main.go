@@ -15,6 +15,7 @@ import (
 	"Melrakkiie/Tamiyo/internal/health"
 	"Melrakkiie/Tamiyo/internal/ratelimit"
 	"Melrakkiie/Tamiyo/internal/storage"
+	"Melrakkiie/Tamiyo/internal/token"
 	"Melrakkiie/Tamiyo/internal/user"
 )
 
@@ -47,9 +48,13 @@ func main() {
 		}
 	}()
 
+	tokenRepo := token.NewPostgresRepository(db)
+	tokenService := token.NewService(tokenRepo, cfg.JWTRefreshTokenTTL)
+	tokenHandler := token.NewHandler(tokenService, cfg.JWTSecret, cfg.JWTAccessTokenTTL)
+
 	userRepo := user.NewPostgresRepository(db)
 	userService := user.NewService(userRepo)
-	userHandler := user.NewHandler(userService, cfg.JWTSecret)
+	userHandler := user.NewHandler(userService, cfg.JWTSecret, cfg.JWTAccessTokenTTL, tokenService)
 
 	cardRepo := card.NewPostgresRepository(db)
 	cardService := card.NewService(cardRepo)
@@ -71,6 +76,7 @@ func main() {
 
 	healthHandler.RegisterRoutes(router)
 	userHandler.RegisterRoutes(router, ratelimit.Middleware(authLimiter))
+	tokenHandler.RegisterRoutes(router)
 
 	protected := router.Group("/")
 	protected.Use(auth.RequireAuth(cfg.JWTSecret))

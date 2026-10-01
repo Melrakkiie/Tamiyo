@@ -67,6 +67,23 @@ CREATE TABLE IF NOT EXISTS tamiyo.card_deck
     CONSTRAINT card_deck_pkey              PRIMARY KEY (card_id, deck_id)
 );
 
+----------------------------
+---- REFRESH_TOKENS TABLE ----
+----------------------------
+-- One row per issued refresh token. Only the SHA-256 hash of the token is
+-- stored — the plaintext is returned to the client once, at issuance, and
+-- never persisted. A token is used at most once: refreshing revokes the
+-- old row (revoked_at set) and inserts a new one (see internal/token).
+CREATE TABLE IF NOT EXISTS tamiyo.refresh_tokens
+(
+    id         UUID                        PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    UUID                        NOT NULL REFERENCES tamiyo.users(id) ON DELETE CASCADE,
+    token_hash text                        NOT NULL UNIQUE,
+    added      TIMESTAMP WITH TIME ZONE    NOT NULL DEFAULT now(),
+    expires_at TIMESTAMP WITH TIME ZONE    NOT NULL,
+    revoked_at TIMESTAMP WITH TIME ZONE
+);
+
 -------------------------
 ---- UPDATED TRIGGER ----
 -------------------------
@@ -171,3 +188,10 @@ CREATE INDEX IF NOT EXISTS idx_cards_storage_id
 -- index since deck_id is not the leftmost PK column.
 CREATE INDEX IF NOT EXISTS idx_card_deck_deck_id
     ON tamiyo.card_deck (deck_id);
+
+-- refresh_tokens: looked up by its hash on every /auth/refresh and
+-- /auth/logout call (token_hash is already UNIQUE, which Postgres backs
+-- with an index automatically, but it's listed here for visibility), and
+-- revoked in bulk by user_id (password change, reuse detection).
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id
+    ON tamiyo.refresh_tokens (user_id);

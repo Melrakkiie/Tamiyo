@@ -27,7 +27,8 @@ type changePasswordRequest struct {
 }
 
 type authResponse struct {
-	Token string `json:"token"`
+	Token        string `json:"token"`
+	RefreshToken string `json:"refresh_token"`
 }
 
 type userService interface {
@@ -36,17 +37,24 @@ type userService interface {
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
 }
 
-type Handler struct {
-	service   userService
-	jwtSecret string
-	tokenTTL  time.Duration
+type refreshTokenService interface {
+	IssueRefreshToken(ctx context.Context, userID string) (string, error)
+	RevokeAllForUser(ctx context.Context, userID string) error
 }
 
-func NewHandler(service userService, jwtSecret string) *Handler {
+type Handler struct {
+	service        userService
+	jwtSecret      string
+	accessTokenTTL time.Duration
+	tokens         refreshTokenService
+}
+
+func NewHandler(service userService, jwtSecret string, accessTokenTTL time.Duration, tokens refreshTokenService) *Handler {
 	return &Handler{
-		service:   service,
-		jwtSecret: jwtSecret,
-		tokenTTL:  7 * 24 * time.Hour, // 7 jours
+		service:        service,
+		jwtSecret:      jwtSecret,
+		accessTokenTTL: accessTokenTTL,
+		tokens:         tokens,
 	}
 }
 
@@ -79,13 +87,7 @@ func (h *Handler) register(ctx *gin.Context) {
 		return
 	}
 
-	token, err := auth.GenerateToken(h.jwtSecret, created.ID, h.tokenTTL)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	ctx.JSON(http.StatusCreated, authResponse{Token: token})
+	h.respondWithTokenPair(ctx, created.ID, http.StatusCreated)
 }
 
 func (h *Handler) login(ctx *gin.Context) {
@@ -105,13 +107,23 @@ func (h *Handler) login(ctx *gin.Context) {
 		return
 	}
 
-	token, err := auth.GenerateToken(h.jwtSecret, authenticated.ID, h.tokenTTL)
+	h.respondWithTokenPair(ctx, authenticated.ID, http.StatusOK)
+}
+
+func (h *Handler) respondWithTokenPair(ctx *gin.Context, userID string, status int) {
+	accessToken, err := auth.GenerateToken(h.jwtSecret, userID, h.accessTokenTTL)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, authResponse{Token: token})
+	refreshToken, err := h.tokens.IssueRefreshToken(ctx.Request.Context(), userID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(status, authResponse{Token: accessToken, RefreshToken: refreshToken})
 }
 
 func (h *Handler) changePassword(ctx *gin.Context) {
@@ -127,8 +139,7 @@ func (h *Handler) changePassword(ctx *gin.Context) {
 		return
 	}
 
-	err := h.service.ChangePassword(ctx.Request.Context(), userID, req.CurrentPassword, req.NewPassword)
-	if err != nil {
+	if err := h.service.ChangePassword(ctx.Request.Context(), userID, req.CurrentPassword, req.NewPassword); err != nil {
 		if errors.Is(err, ErrIncorrectPassword) {
 			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "incorrect current password"})
 			return
@@ -137,6 +148,11 @@ func (h *Handler) changePassword(ctx *gin.Context) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 			return
 		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.tokens.RevokeAllForUser(ctx.Request.Context(), userID); err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

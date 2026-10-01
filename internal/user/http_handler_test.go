@@ -17,6 +17,7 @@ import (
 )
 
 const testJWTSecret = "test-secret"
+const testAccessTokenTTL = time.Hour
 
 type fakeService struct {
 	registerUser User
@@ -53,19 +54,44 @@ func (f *fakeService) ChangePassword(ctx context.Context, userID, currentPasswor
 	return f.changePasswordErr
 }
 
-func setupRouter(service userService) *gin.Engine {
+type fakeTokenService struct {
+	issuedRefreshToken    string
+	issueErr              error
+	issueCalledWithUserID string
+
+	revokeAllErr              error
+	revokeAllCalledWithUserID string
+}
+
+func (f *fakeTokenService) IssueRefreshToken(ctx context.Context, userID string) (string, error) {
+	f.issueCalledWithUserID = userID
+	if f.issueErr != nil {
+		return "", f.issueErr
+	}
+	if f.issuedRefreshToken == "" {
+		return "fake-refresh-token", nil
+	}
+	return f.issuedRefreshToken, nil
+}
+
+func (f *fakeTokenService) RevokeAllForUser(ctx context.Context, userID string) error {
+	f.revokeAllCalledWithUserID = userID
+	return f.revokeAllErr
+}
+
+func setupRouter(service userService, tokens refreshTokenService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	NewHandler(service, testJWTSecret).RegisterRoutes(router)
+	NewHandler(service, testJWTSecret, testAccessTokenTTL, tokens).RegisterRoutes(router)
 	return router
 }
 
-func setupProtectedRouter(service userService) *gin.Engine {
+func setupProtectedRouter(service userService, tokens refreshTokenService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	protected := router.Group("/")
 	protected.Use(auth.RequireAuth(testJWTSecret))
-	NewHandler(service, testJWTSecret).RegisterProtectedRoutes(protected)
+	NewHandler(service, testJWTSecret, testAccessTokenTTL, tokens).RegisterProtectedRoutes(protected)
 	return router
 }
 
@@ -77,9 +103,10 @@ func authenticatedRequest(method, path, body, userID string) *http.Request {
 	return req
 }
 
-func TestHandler_Register_ReturnsTokenOnSuccess(t *testing.T) {
+func TestHandler_Register_ReturnsTokenPairOnSuccess(t *testing.T) {
 	service := &fakeService{registerUser: User{ID: "11111111-1111-1111-1111-111111111111", Email: "alice@example.com"}}
-	router := setupRouter(service)
+	tokens := &fakeTokenService{issuedRefreshToken: "a-refresh-token"}
+	router := setupRouter(service, tokens)
 
 	body := `{"email": "alice@example.com", "password": "supersecret"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(body))
@@ -93,11 +120,13 @@ func TestHandler_Register_ReturnsTokenOnSuccess(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 	assert.NotEmpty(t, response["token"])
+	assert.Equal(t, "a-refresh-token", response["refresh_token"])
+	assert.Equal(t, "11111111-1111-1111-1111-111111111111", tokens.issueCalledWithUserID)
 }
 
 func TestHandler_Register_ReturnsBadRequestOnInvalidEmail(t *testing.T) {
 	service := &fakeService{}
-	router := setupRouter(service)
+	router := setupRouter(service, &fakeTokenService{})
 
 	body := `{"email": "not-an-email", "password": "supersecret"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(body))
@@ -110,7 +139,7 @@ func TestHandler_Register_ReturnsBadRequestOnInvalidEmail(t *testing.T) {
 
 func TestHandler_Register_ReturnsBadRequestOnShortPassword(t *testing.T) {
 	service := &fakeService{}
-	router := setupRouter(service)
+	router := setupRouter(service, &fakeTokenService{})
 
 	body := `{"email": "alice@example.com", "password": "short"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(body))
@@ -123,7 +152,7 @@ func TestHandler_Register_ReturnsBadRequestOnShortPassword(t *testing.T) {
 
 func TestHandler_Register_ReturnsConflictWhenEmailAlreadyTaken(t *testing.T) {
 	service := &fakeService{registerErr: ErrEmailAlreadyTaken}
-	router := setupRouter(service)
+	router := setupRouter(service, &fakeTokenService{})
 
 	body := `{"email": "alice@example.com", "password": "supersecret"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(body))
@@ -134,9 +163,24 @@ func TestHandler_Register_ReturnsConflictWhenEmailAlreadyTaken(t *testing.T) {
 	assert.Equal(t, http.StatusConflict, w.Code)
 }
 
-func TestHandler_Login_ReturnsTokenOnSuccess(t *testing.T) {
+func TestHandler_Register_ReturnsInternalServerErrorWhenIssuingRefreshTokenFails(t *testing.T) {
+	service := &fakeService{registerUser: User{ID: "11111111-1111-1111-1111-111111111111"}}
+	tokens := &fakeTokenService{issueErr: assertAnError}
+	router := setupRouter(service, tokens)
+
+	body := `{"email": "alice@example.com", "password": "supersecret"}`
+	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestHandler_Login_ReturnsTokenPairOnSuccess(t *testing.T) {
 	service := &fakeService{authUser: User{ID: "11111111-1111-1111-1111-111111111111", Email: "alice@example.com"}}
-	router := setupRouter(service)
+	tokens := &fakeTokenService{issuedRefreshToken: "a-refresh-token"}
+	router := setupRouter(service, tokens)
 
 	body := `{"email": "alice@example.com", "password": "supersecret"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewBufferString(body))
@@ -150,11 +194,12 @@ func TestHandler_Login_ReturnsTokenOnSuccess(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 	assert.NotEmpty(t, response["token"])
+	assert.Equal(t, "a-refresh-token", response["refresh_token"])
 }
 
 func TestHandler_Login_ReturnsUnauthorizedOnInvalidCredentials(t *testing.T) {
 	service := &fakeService{authErr: ErrInvalidCredentials}
-	router := setupRouter(service)
+	router := setupRouter(service, &fakeTokenService{})
 
 	body := `{"email": "alice@example.com", "password": "wrongpassword"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewBufferString(body))
@@ -173,7 +218,7 @@ func TestHandler_RegisterRoutes_AppliesGivenMiddlewareToBothAuthRoutes(t *testin
 		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests, please try again later"})
 	}
 
-	NewHandler(&fakeService{}, testJWTSecret).RegisterRoutes(router, blockAll)
+	NewHandler(&fakeService{}, testJWTSecret, testAccessTokenTTL, &fakeTokenService{}).RegisterRoutes(router, blockAll)
 
 	for _, path := range []string{"/auth/register", "/auth/login"} {
 		body := `{"email": "alice@example.com", "password": "supersecret"}`
@@ -188,7 +233,7 @@ func TestHandler_RegisterRoutes_AppliesGivenMiddlewareToBothAuthRoutes(t *testin
 
 func TestHandler_ChangePassword_ReturnsNoContentOnSuccess(t *testing.T) {
 	service := &fakeService{}
-	router := setupProtectedRouter(service)
+	router := setupProtectedRouter(service, &fakeTokenService{})
 
 	body := `{"current_password": "oldpassword", "new_password": "newpassword"}`
 	req := authenticatedRequest(http.MethodPost, "/auth/password", body, "11111111-1111-1111-1111-111111111111")
@@ -201,9 +246,36 @@ func TestHandler_ChangePassword_ReturnsNoContentOnSuccess(t *testing.T) {
 	assert.Equal(t, "newpassword", service.changePasswordCalledWithNew)
 }
 
+func TestHandler_ChangePassword_RevokesAllRefreshTokensOnSuccess(t *testing.T) {
+	service := &fakeService{}
+	tokens := &fakeTokenService{}
+	router := setupProtectedRouter(service, tokens)
+
+	body := `{"current_password": "oldpassword", "new_password": "newpassword"}`
+	req := authenticatedRequest(http.MethodPost, "/auth/password", body, "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNoContent, w.Code)
+	assert.Equal(t, "11111111-1111-1111-1111-111111111111", tokens.revokeAllCalledWithUserID)
+}
+
+func TestHandler_ChangePassword_ReturnsInternalServerErrorWhenRevokeAllFails(t *testing.T) {
+	service := &fakeService{}
+	tokens := &fakeTokenService{revokeAllErr: assertAnError}
+	router := setupProtectedRouter(service, tokens)
+
+	body := `{"current_password": "oldpassword", "new_password": "newpassword"}`
+	req := authenticatedRequest(http.MethodPost, "/auth/password", body, "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
 func TestHandler_ChangePassword_ReturnsUnauthorizedOnIncorrectCurrentPassword(t *testing.T) {
 	service := &fakeService{changePasswordErr: ErrIncorrectPassword}
-	router := setupProtectedRouter(service)
+	router := setupProtectedRouter(service, &fakeTokenService{})
 
 	body := `{"current_password": "wrongpassword", "new_password": "newpassword"}`
 	req := authenticatedRequest(http.MethodPost, "/auth/password", body, "11111111-1111-1111-1111-111111111111")
@@ -215,7 +287,7 @@ func TestHandler_ChangePassword_ReturnsUnauthorizedOnIncorrectCurrentPassword(t 
 
 func TestHandler_ChangePassword_ReturnsNotFoundWhenUserNoLongerExists(t *testing.T) {
 	service := &fakeService{changePasswordErr: ErrNotFound}
-	router := setupProtectedRouter(service)
+	router := setupProtectedRouter(service, &fakeTokenService{})
 
 	body := `{"current_password": "oldpassword", "new_password": "newpassword"}`
 	req := authenticatedRequest(http.MethodPost, "/auth/password", body, "11111111-1111-1111-1111-111111111111")
@@ -227,7 +299,7 @@ func TestHandler_ChangePassword_ReturnsNotFoundWhenUserNoLongerExists(t *testing
 
 func TestHandler_ChangePassword_ReturnsBadRequestOnShortNewPassword(t *testing.T) {
 	service := &fakeService{}
-	router := setupProtectedRouter(service)
+	router := setupProtectedRouter(service, &fakeTokenService{})
 
 	body := `{"current_password": "oldpassword", "new_password": "short"}`
 	req := authenticatedRequest(http.MethodPost, "/auth/password", body, "11111111-1111-1111-1111-111111111111")
@@ -239,7 +311,7 @@ func TestHandler_ChangePassword_ReturnsBadRequestOnShortNewPassword(t *testing.T
 
 func TestHandler_ChangePassword_ReturnsBadRequestWhenCurrentPasswordMissing(t *testing.T) {
 	service := &fakeService{}
-	router := setupProtectedRouter(service)
+	router := setupProtectedRouter(service, &fakeTokenService{})
 
 	body := `{"new_password": "newpassword"}`
 	req := authenticatedRequest(http.MethodPost, "/auth/password", body, "11111111-1111-1111-1111-111111111111")
@@ -251,7 +323,7 @@ func TestHandler_ChangePassword_ReturnsBadRequestWhenCurrentPasswordMissing(t *t
 
 func TestHandler_ChangePassword_ReturnsUnauthorizedWithoutToken(t *testing.T) {
 	service := &fakeService{}
-	router := setupProtectedRouter(service)
+	router := setupProtectedRouter(service, &fakeTokenService{})
 
 	body := `{"current_password": "oldpassword", "new_password": "newpassword"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/password", bytes.NewBufferString(body))
@@ -261,3 +333,9 @@ func TestHandler_ChangePassword_ReturnsUnauthorizedWithoutToken(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
+
+var assertAnError = errAnError{}
+
+type errAnError struct{}
+
+func (errAnError) Error() string { return "boom" }

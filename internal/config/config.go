@@ -17,6 +17,9 @@ type Config struct {
 
 	AuthRateLimitMax    int
 	AuthRateLimitWindow time.Duration
+
+	JWTAccessTokenTTL  time.Duration
+	JWTRefreshTokenTTL time.Duration
 }
 
 func Load() (*Config, error) {
@@ -24,6 +27,8 @@ func Load() (*Config, error) {
 	viper.SetDefault("APP_PORT", "8080")
 	viper.SetDefault("AUTH_RATE_LIMIT_MAX", 5)
 	viper.SetDefault("AUTH_RATE_LIMIT_WINDOW_SECONDS", 60)
+	viper.SetDefault("JWT_ACCESS_TOKEN_TTL_MINUTES", 15)
+	viper.SetDefault("JWT_REFRESH_TOKEN_TTL_DAYS", 30)
 
 	cfg := &Config{
 		PGHost:              viper.GetString("PGHOST"),
@@ -35,6 +40,8 @@ func Load() (*Config, error) {
 		JWTSecret:           viper.GetString("JWT_SECRET"),
 		AuthRateLimitMax:    viper.GetInt("AUTH_RATE_LIMIT_MAX"),
 		AuthRateLimitWindow: time.Duration(viper.GetInt("AUTH_RATE_LIMIT_WINDOW_SECONDS")) * time.Second,
+		JWTAccessTokenTTL:   time.Duration(viper.GetInt("JWT_ACCESS_TOKEN_TTL_MINUTES")) * time.Minute,
+		JWTRefreshTokenTTL:  time.Duration(viper.GetInt("JWT_REFRESH_TOKEN_TTL_DAYS")) * 24 * time.Hour,
 	}
 
 	return cfg, nil
