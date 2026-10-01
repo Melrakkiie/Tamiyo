@@ -1,6 +1,18 @@
 CREATE SCHEMA IF NOT EXISTS tamiyo;
 
 ------------------------
+---- USERS TABLE    ----
+------------------------
+CREATE TABLE IF NOT EXISTS tamiyo.users
+(
+    id            UUID                        PRIMARY KEY DEFAULT gen_random_uuid(),
+    email         text                        NOT NULL UNIQUE,
+    password_hash text                        NOT NULL,
+    added         TIMESTAMP WITH TIME ZONE    NOT NULL DEFAULT now(),
+    updated       TIMESTAMP WITH TIME ZONE    NOT NULL DEFAULT now()
+);
+
+------------------------
 ---- STORAGE TABLE  ----
 ------------------------
 CREATE TABLE IF NOT EXISTS tamiyo.storage
@@ -63,6 +75,10 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE 'plpgsql';
+
+CREATE TRIGGER update_users_modtime
+    BEFORE UPDATE ON tamiyo.users
+    FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 
 CREATE TRIGGER update_storage_modtime
     BEFORE UPDATE ON tamiyo.storage
