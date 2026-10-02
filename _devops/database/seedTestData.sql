@@ -1,5 +1,7 @@
 -- Script de seed pour données de test / dev
--- À jouer après createDatabaseTables.sql, sur une base déjà initialisée
+-- À jouer sur une base déjà initialisée par les migrations goose
+-- (_devops/database/migrations/ — appliquées automatiquement au démarrage
+-- de l'API, voir cmd/api/main.go)
 -- (par exemple: docker exec -i tamiyo-db psql -U login -d tamiyo_db < seedTestData.sql)
 
 -- pgcrypto fournit crypt()/gen_salt('bf'), qui génère un hash bcrypt

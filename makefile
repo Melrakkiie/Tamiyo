@@ -1,4 +1,7 @@
-.PHONY: test test-unit test-integration test-all coverage coverage-all build vet lint govulncheck check install-hooks db-reset
+.PHONY: test test-unit test-integration test-all coverage coverage-all build vet lint govulncheck check install-hooks db-reset migrate-up migrate-down migrate-status
+
+GOOSE_DB_STRING := "host=localhost port=5432 user=login password=password dbname=tamiyo_db sslmode=disable"
+GOOSE_DIR := _devops/database/migrations
 
 install-hooks:
 	git config core.hooksPath .githooks
@@ -43,3 +46,16 @@ check: build vet lint govulncheck test-all
 db-reset:
 	docker compose down -v
 	docker compose up --build
+
+# Manual goose CLI usage against the Postgres started by `docker compose up`.
+# The app itself applies pending migrations automatically on boot
+# (cmd/api/main.go) — these targets are only for inspecting status or
+# rolling back by hand during local development.
+migrate-up:
+	go run github.com/pressly/goose/v3/cmd/goose@v3.27.0 -dir=$(GOOSE_DIR) postgres $(GOOSE_DB_STRING) up
+
+migrate-down:
+	go run github.com/pressly/goose/v3/cmd/goose@v3.27.0 -dir=$(GOOSE_DIR) postgres $(GOOSE_DB_STRING) down
+
+migrate-status:
+	go run github.com/pressly/goose/v3/cmd/goose@v3.27.0 -dir=$(GOOSE_DIR) postgres $(GOOSE_DB_STRING) status

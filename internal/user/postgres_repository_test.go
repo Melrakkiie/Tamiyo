@@ -5,15 +5,17 @@ package user
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
+	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
+
+	"Melrakkiie/Tamiyo/_devops/database/migrations"
 )
 
 var testDB *sqlx.DB
@@ -54,26 +56,17 @@ func TestMain(m *testing.M) {
 	}
 	defer db.Close()
 
-	schema, err := os.ReadFile(schemaFilePath())
-	if err != nil {
+	goose.SetBaseFS(migrations.FS)
+	if err := goose.SetDialect("postgres"); err != nil {
 		panic(err)
 	}
-	if _, err := db.Exec(string(schema)); err != nil {
+	if err := goose.Up(db.DB, "."); err != nil {
 		panic(err)
 	}
 
 	testDB = db
 
 	os.Exit(m.Run())
-}
-
-func schemaFilePath() string {
-	wd, err := os.Getwd()
-	if err != nil {
-		panic(err)
-	}
-	root := filepath.Join(wd, "..", "..")
-	return filepath.Join(root, "_devops", "database", "createDatabaseTables.sql")
 }
 
 func getTestDB(t *testing.T) *sqlx.DB {

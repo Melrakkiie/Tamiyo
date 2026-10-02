@@ -24,7 +24,7 @@ tamiyo/
 │   ├── deckinsights/     # deck legality + stats routes
 │   ├── scryfall/         # shared Scryfall API client (used by bulk and deckinsights)
 │   └── config/           # environment configuration
-├── _devops/database/     # SQL schema
+├── _devops/database/     # goose SQL migrations (embedded, applied on API boot)
 ├── .githooks/            # versioned git hooks (see Code Quality)
 ├── docker-compose.yml
 └── Dockerfile
@@ -48,9 +48,21 @@ docker compose up --build
 
 The API is available at `http://localhost:8080`. Code changes are picked up automatically via `docker compose watch` / air live-reload.
 
-### Reset the database
+### Database migrations
 
-Since the schema init script only runs on a fresh volume, use this whenever the schema changes:
+The schema lives in versioned [goose](https://github.com/pressly/goose) migrations under [`_devops/database/migrations/`](./_devops/database/migrations), embedded into the compiled binary via `go:embed`. The API applies any pending migrations automatically on boot (see `cmd/api/main.go`) — there is nothing to run manually after `docker compose up`.
+
+To add a schema change, add a new `NNNNN_description.sql` file in that directory with `-- +goose Up` / `-- +goose Down` sections (wrap multi-statement function bodies in `-- +goose StatementBegin` / `-- +goose StatementEnd`), then restart the app.
+
+Manual goose CLI usage (status, rollback, etc.), against the database started by `docker compose up`:
+
+```bash
+make migrate-status
+make migrate-up
+make migrate-down
+```
+
+### Reset the database
 
 ```bash
 make db-reset

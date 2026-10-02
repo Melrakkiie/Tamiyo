@@ -6,8 +6,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
+	"github.com/pressly/goose/v3"
 	"go.uber.org/zap"
 
+	"Melrakkiie/Tamiyo/_devops/database/migrations"
 	"Melrakkiie/Tamiyo/internal/auth"
 	"Melrakkiie/Tamiyo/internal/bulk"
 	"Melrakkiie/Tamiyo/internal/card"
@@ -50,6 +52,15 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to connect to database", zap.Error(err))
 	}
+	goose.SetBaseFS(migrations.FS)
+	if err := goose.SetDialect("postgres"); err != nil {
+		logger.Fatal("failed to set migration dialect", zap.Error(err))
+	}
+	if err := goose.Up(db.DB, "."); err != nil {
+		logger.Fatal("failed to apply database migrations", zap.Error(err))
+	}
+	logger.Info("database migrations applied")
+
 	defer func() {
 		if err := db.Close(); err != nil {
 			logger.Error("failed to close database connection", zap.Error(err))

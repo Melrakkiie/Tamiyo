@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- Étape de dev : live-reload avec air ----
-FROM golang:1.26.5 AS dev
+FROM golang:1.26.6 AS dev
 WORKDIR /app
 
 # Installer air pour le live-reload
@@ -18,7 +18,7 @@ EXPOSE 8080
 CMD ["air", "-c", ".air.toml"]
 
 # ---- Étape de build (prod) ----
-FROM golang:1.26.5 AS build-stage
+FROM golang:1.26.6 AS build-stage
 WORKDIR /app
 
 COPY go.mod go.sum ./

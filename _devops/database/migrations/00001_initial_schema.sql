@@ -1,3 +1,4 @@
+-- +goose Up
 CREATE SCHEMA IF NOT EXISTS tamiyo;
 
 ---------------------
@@ -104,6 +105,7 @@ CREATE TABLE IF NOT EXISTS tamiyo.password_reset_tokens
 -------------------------
 ---- UPDATED TRIGGER ----
 -------------------------
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION update_modified_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -111,6 +113,7 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE 'plpgsql';
+-- +goose StatementEnd
 
 CREATE TRIGGER update_users_modtime
     BEFORE UPDATE ON tamiyo.users
@@ -132,6 +135,7 @@ CREATE TRIGGER update_deck_modtime
 ---- CROSS-OWNERSHIP ENFORCEMENT ----
 -------------------------------------
 
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION check_card_storage_ownership()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -147,12 +151,13 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE 'plpgsql';
+-- +goose StatementEnd
 
 CREATE TRIGGER check_cards_storage_ownership
     BEFORE INSERT OR UPDATE ON tamiyo.cards
     FOR EACH ROW EXECUTE FUNCTION check_card_storage_ownership();
 
-
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION check_deck_commander_ownership()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -168,6 +173,7 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE 'plpgsql';
+-- +goose StatementEnd
 
 CREATE TRIGGER check_deck_commander_ownership
     BEFORE INSERT OR UPDATE ON tamiyo.deck
@@ -216,3 +222,15 @@ CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id
 -- password_reset_tokens: same rationale as refresh_tokens above.
 CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_id
     ON tamiyo.password_reset_tokens (user_id);
+
+-- +goose Down
+-- Dropping the schema cascades onto every table, index and the four
+-- update_*_modtime / ownership-check triggers (they belong to tables
+-- inside tamiyo). The three plpgsql functions themselves live in the
+-- default (public) schema — CREATE FUNCTION above has no schema prefix —
+-- so they're not covered by that cascade and are dropped explicitly below.
+DROP SCHEMA IF EXISTS tamiyo CASCADE;
+
+DROP FUNCTION IF EXISTS check_deck_commander_ownership();
+DROP FUNCTION IF EXISTS check_card_storage_ownership();
+DROP FUNCTION IF EXISTS update_modified_column();
