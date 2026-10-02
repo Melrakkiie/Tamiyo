@@ -29,7 +29,7 @@ type deckService interface {
 	GetDeck(ctx context.Context, userID string, id int) (deck.Deck, error)
 	CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error)
 	PutCardInDeck(ctx context.Context, userID string, deckID, cardID int) error
-	GetDeckCards(ctx context.Context, userID string, id int) ([]deck.DeckCard, error)
+	GetDeckCards(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]deck.DeckCard, error)
 }
 
 type Service struct {
@@ -67,7 +67,25 @@ func (s *Service) ImportManaBox(ctx context.Context, userID string, r io.Reader)
 		return Summary{}, fmt.Errorf("loading existing decks: %w", err)
 	}
 
+	manaValueByScryfallID := make(map[string]float64)
+	identifiers := make([]CardIdentifier, 0, len(rows))
+	for _, row := range rows {
+		if row.ScryfallID != "" {
+			identifiers = append(identifiers, CardIdentifier{ScryfallID: row.ScryfallID})
+		}
+	}
+	resolved, resolveErr := s.scryfall.Resolve(ctx, dedupeIdentifiers(identifiers))
+	if resolveErr != nil {
+		resolved = map[string]ResolvedCard{}
+	}
+	for _, rc := range resolved {
+		manaValueByScryfallID[rc.ScryfallID] = rc.ManaValue
+	}
+
 	var summary Summary
+	if resolveErr != nil {
+		summary.Warnings = append(summary.Warnings, fmt.Sprintf("could not resolve mana values against scryfall, imported cards default to mana_value 0: %v", resolveErr))
+	}
 
 	for _, row := range rows {
 		storageID, created, err := s.getOrCreateStorage(ctx, userID, storageCache, row.BinderName, row.BinderType)
@@ -98,6 +116,7 @@ func (s *Service) ImportManaBox(ctx context.Context, userID string, r io.Reader)
 				CollectorNumber: row.CollectorNumber,
 				Foil:            row.Foil,
 				StorageID:       &storageID,
+				ManaValue:       manaValueByScryfallID[row.ScryfallID],
 			})
 			if err != nil {
 				summary.CardsSkipped++
@@ -141,7 +160,7 @@ func (s *Service) ImportMoxfieldCollection(ctx context.Context, userID string, s
 
 	var summary Summary
 	for _, row := range rows {
-		scryfallID, ok := resolved[resolveKey(row.SetCode, row.CollectorNumber)]
+		resolvedCard, ok := resolved[resolveKey(row.SetCode, row.CollectorNumber)]
 		if !ok {
 			summary.CardsSkipped += row.Quantity
 			summary.Warnings = append(summary.Warnings, fmt.Sprintf(
@@ -153,11 +172,12 @@ func (s *Service) ImportMoxfieldCollection(ctx context.Context, userID string, s
 		for i := 0; i < row.Quantity; i++ {
 			if _, err := s.cards.CreateCard(ctx, userID, card.Card{
 				Name:            row.CardName,
-				ScryfallID:      scryfallID,
+				ScryfallID:      resolvedCard.ScryfallID,
 				SetCode:         row.SetCode,
 				CollectorNumber: row.CollectorNumber,
 				Foil:            row.Foil,
 				StorageID:       &storageID,
+				ManaValue:       resolvedCard.ManaValue,
 			}); err != nil {
 				summary.CardsSkipped++
 				summary.Warnings = append(summary.Warnings, fmt.Sprintf("line %d: could not create %q: %v", row.LineNo, row.CardName, err))
@@ -197,16 +217,17 @@ func (s *Service) ImportMoxfieldDeck(ctx context.Context, userID string, req Mox
 	var summary Summary
 	var commanderID *int
 
-	createLineCopies := func(line moxfieldDeckLine, scryfallID string) []int {
+	createLineCopies := func(line moxfieldDeckLine, resolvedCard ResolvedCard) []int {
 		ids := make([]int, 0, line.Quantity)
 		for i := 0; i < line.Quantity; i++ {
 			created, err := s.cards.CreateCard(ctx, userID, card.Card{
 				Name:            line.CardName,
-				ScryfallID:      scryfallID,
+				ScryfallID:      resolvedCard.ScryfallID,
 				SetCode:         line.SetCode,
 				CollectorNumber: line.CollectorNumber,
 				Foil:            line.Foil,
 				StorageID:       req.StorageID,
+				ManaValue:       resolvedCard.ManaValue,
 			})
 			if err != nil {
 				summary.CardsSkipped++
@@ -222,14 +243,14 @@ func (s *Service) ImportMoxfieldDeck(ctx context.Context, userID string, req Mox
 	startAt := 0
 	if req.CommanderFromFirstLine && len(lines) > 0 {
 		first := lines[0]
-		scryfallID, ok := resolved[resolveKey(first.SetCode, first.CollectorNumber)]
+		resolvedCard, ok := resolved[resolveKey(first.SetCode, first.CollectorNumber)]
 		if !ok {
 			summary.CardsSkipped += first.Quantity
 			summary.Warnings = append(summary.Warnings, fmt.Sprintf(
 				"line %d: commander %q (%s #%s) not found on scryfall", first.LineNo, first.CardName, first.SetCode, first.CollectorNumber,
 			))
 		} else {
-			ids := createLineCopies(first, scryfallID)
+			ids := createLineCopies(first, resolvedCard)
 			if len(ids) > 0 {
 				commanderID = &ids[0]
 			}
@@ -254,7 +275,7 @@ func (s *Service) ImportMoxfieldDeck(ctx context.Context, userID string, req Mox
 	}
 
 	for _, line := range lines[startAt:] {
-		scryfallID, ok := resolved[resolveKey(line.SetCode, line.CollectorNumber)]
+		resolvedCard, ok := resolved[resolveKey(line.SetCode, line.CollectorNumber)]
 		if !ok {
 			summary.CardsSkipped += line.Quantity
 			summary.Warnings = append(summary.Warnings, fmt.Sprintf(
@@ -263,7 +284,7 @@ func (s *Service) ImportMoxfieldDeck(ctx context.Context, userID string, req Mox
 			continue
 		}
 
-		for _, cardID := range createLineCopies(line, scryfallID) {
+		for _, cardID := range createLineCopies(line, resolvedCard) {
 			if err := s.decks.PutCardInDeck(ctx, userID, createdDeck.ID, cardID); err != nil {
 				summary.Warnings = append(summary.Warnings, fmt.Sprintf("line %d: could not link %q to deck: %v", line.LineNo, line.CardName, err))
 			}
@@ -368,6 +389,9 @@ func dedupeIdentifiers(identifiers []CardIdentifier) []CardIdentifier {
 	out := make([]CardIdentifier, 0, len(identifiers))
 	for _, id := range identifiers {
 		key := resolveKey(id.SetCode, id.CollectorNumber)
+		if id.ScryfallID != "" {
+			key = resolveKeyByID(id.ScryfallID)
+		}
 		if _, ok := seen[key]; ok {
 			continue
 		}

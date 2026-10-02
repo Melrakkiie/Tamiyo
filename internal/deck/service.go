@@ -37,11 +37,11 @@ func (s *Service) DeleteDeck(ctx context.Context, userID string, id int) error {
 	return s.repo.Delete(ctx, userID, id)
 }
 
-func (s *Service) GetDeckCards(ctx context.Context, userID string, id int) ([]DeckCard, error) {
+func (s *Service) GetDeckCards(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]DeckCard, error) {
 	if _, err := s.repo.FindByID(ctx, userID, id); err != nil {
 		return nil, err
 	}
-	return s.repo.FindCardsByDeckID(ctx, userID, id)
+	return s.repo.FindCardsByDeckID(ctx, userID, id, sortField, sortDesc)
 }
 
 func (s *Service) PutCardInDeck(ctx context.Context, userID string, deckID, cardID int) error {

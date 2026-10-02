@@ -11,7 +11,7 @@ import (
 
 type deckService interface {
 	GetDeck(ctx context.Context, userID string, id int) (deck.Deck, error)
-	GetDeckCards(ctx context.Context, userID string, id int) ([]deck.DeckCard, error)
+	GetDeckCards(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]deck.DeckCard, error)
 }
 
 type scryfallFetcher interface {
@@ -52,7 +52,7 @@ func (s *Service) loadDeckWithScryfallData(ctx context.Context, userID string, d
 		return deck.Deck{}, nil, nil, err
 	}
 
-	cards, err := s.decks.GetDeckCards(ctx, userID, deckID)
+	cards, err := s.decks.GetDeckCards(ctx, userID, deckID, "updated", true)
 	if err != nil {
 		return deck.Deck{}, nil, nil, fmt.Errorf("loading deck cards: %w", err)
 	}

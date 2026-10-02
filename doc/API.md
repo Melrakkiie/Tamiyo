@@ -241,7 +241,7 @@ List cards, with optional filtering, sorting, and pagination.
 | `name` | string | No | Case-insensitive partial match on the card name. |
 | `page` | int | No | 1-based page number. Defaults to `1`. |
 | `limit` | int | No | Cards per page, max `100`. Defaults to `25`. |
-| `sort` | string | No | One of `name`, `-name`, `added`, `-added`, `updated`, `-updated`. Defaults to `-updated`. A `-` prefix means descending. `id` is always used as a stable secondary tie-breaker. |
+| `sort` | string | No | One of `name`, `-name`, `added`, `-added`, `updated`, `-updated`, `mana_value`, `-mana_value`. Defaults to `-updated`. A `-` prefix means descending. `id` is always used as a stable secondary tie-breaker. |
 
 **Example**
 ```
@@ -260,6 +260,7 @@ GET /cards?storage_id=1&sort=-added&page=1&limit=25
       "collector_number": 232,
       "foil": false,
       "storage_id": 1,
+      "mana_value": 0,
       "added": "2026-01-15 10:30:00",
       "updated": "2026-01-15 10:30:00"
     }
@@ -289,6 +290,7 @@ Fetch a single card by ID.
   "collector_number": 232,
   "foil": false,
   "storage_id": 1,
+  "mana_value": 0,
   "added": "2026-01-15 10:30:00",
   "updated": "2026-01-15 10:30:00"
 }
@@ -312,6 +314,7 @@ Create a new card.
 | `collector_number` | int | Yes | Must be > 0. |
 | `foil` | bool | No | Defaults to `false`. |
 | `storage_id` | int | No | Must reference an existing storage if provided. |
+| `mana_value` | number | No | Converted mana cost (CMC). Must be >= 0 if provided. Defaults to `0`. Not fetched automatically from Scryfall — the client supplies it, same as `name` or `set_code`. |
 
 **Example**
 ```json
@@ -321,7 +324,8 @@ Create a new card.
   "set_code": "mh2",
   "collector_number": 267,
   "foil": false,
-  "storage_id": 1
+  "storage_id": 1,
+  "mana_value": 2
 }
 ```
 
@@ -346,6 +350,7 @@ Partially update a card. Any subset of the fields below can be sent.
 | `collector_number` | int | Must be > 0 if provided. |
 | `foil` | bool | |
 | `storage_id` | int | Must reference an existing storage if provided. |
+| `mana_value` | number | Must be >= 0 if provided. |
 
 > `scryfall_id`, `added`, and `updated` can never be modified after creation.
 
@@ -597,6 +602,17 @@ Delete a deck and all of its card associations (`card_deck` rows are removed via
 
 List every card currently in a deck.
 
+**Query parameters**
+
+| Param | Type | Required | Description |
+|---|---|---|---|
+| `sort` | string | No | One of `name`, `-name`, `added`, `-added`, `updated`, `-updated`, `mana_value`, `-mana_value`. Defaults to `-updated`. A `-` prefix means descending. `id` is always used as a stable secondary tie-breaker. |
+
+**Example**
+```
+GET /deck/1/cards?sort=mana_value
+```
+
 **Response `200 OK`**
 ```json
 [
@@ -608,6 +624,7 @@ List every card currently in a deck.
     "collector_number": 129,
     "foil": true,
     "storage_id": 2,
+    "mana_value": 1,
     "added": "2026-01-15 10:30:00",
     "updated": "2026-01-15 10:30:00"
   }
@@ -616,7 +633,7 @@ List every card currently in a deck.
 
 Returns an empty array `[]` if the deck has no cards.
 
-**Errors:** `400` invalid id · `404` deck not found
+**Errors:** `400` invalid id, or `sort` is not one of the allowed values · `404` deck not found
 
 ---
 

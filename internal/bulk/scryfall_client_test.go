@@ -27,17 +27,32 @@ func (f *fakeScryfallFetcher) Fetch(ctx context.Context, identifiers []scryfall.
 
 func TestScryfallClient_Resolve_TranslatesIdentifiersAndBuildsMap(t *testing.T) {
 	fetcher := &fakeScryfallFetcher{cards: []scryfall.Card{
-		{ID: "11111111-1111-1111-1111-111111111111", Set: "znr", CollectorNumber: "90"},
+		{ID: "11111111-1111-1111-1111-111111111111", Set: "znr", CollectorNumber: "90", CMC: 3},
 	}}
 	client := &ScryfallClient{client: fetcher}
 
 	resolved, err := client.Resolve(context.Background(), []CardIdentifier{{SetCode: "ZNR", CollectorNumber: "90"}})
 
 	require.NoError(t, err)
-	assert.Equal(t, "11111111-1111-1111-1111-111111111111", resolved[resolveKey("ZNR", "90")])
+	assert.Equal(t, ResolvedCard{ScryfallID: "11111111-1111-1111-1111-111111111111", ManaValue: 3}, resolved[resolveKey("ZNR", "90")])
+	assert.Equal(t, ResolvedCard{ScryfallID: "11111111-1111-1111-1111-111111111111", ManaValue: 3}, resolved[resolveKeyByID("11111111-1111-1111-1111-111111111111")])
 	require.Len(t, fetcher.lastRequest, 1)
 	assert.Equal(t, "ZNR", fetcher.lastRequest[0].Set)
 	assert.Equal(t, "90", fetcher.lastRequest[0].CollectorNumber)
+}
+
+func TestScryfallClient_Resolve_ResolvesByScryfallID(t *testing.T) {
+	fetcher := &fakeScryfallFetcher{cards: []scryfall.Card{
+		{ID: "11111111-1111-1111-1111-111111111111", Set: "znr", CollectorNumber: "90", CMC: 3},
+	}}
+	client := &ScryfallClient{client: fetcher}
+
+	resolved, err := client.Resolve(context.Background(), []CardIdentifier{{ScryfallID: "11111111-1111-1111-1111-111111111111"}})
+
+	require.NoError(t, err)
+	assert.Equal(t, float64(3), resolved[resolveKeyByID("11111111-1111-1111-1111-111111111111")].ManaValue)
+	require.Len(t, fetcher.lastRequest, 1)
+	assert.Equal(t, "11111111-1111-1111-1111-111111111111", fetcher.lastRequest[0].ID)
 }
 
 func TestScryfallClient_Resolve_OmitsCardsNotReturned(t *testing.T) {

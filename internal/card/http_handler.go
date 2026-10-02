@@ -20,15 +20,16 @@ const (
 )
 
 type cardResponse struct {
-	ID              int    `json:"id"`
-	Name            string `json:"name"`
-	ScryfallID      string `json:"scryfall_id"`
-	SetCode         string `json:"set_code"`
-	CollectorNumber string `json:"collector_number"`
-	Foil            bool   `json:"foil"`
-	StorageID       *int   `json:"storage_id"`
-	Added           string `json:"added"`
-	Updated         string `json:"updated"`
+	ID              int     `json:"id"`
+	Name            string  `json:"name"`
+	ScryfallID      string  `json:"scryfall_id"`
+	SetCode         string  `json:"set_code"`
+	CollectorNumber string  `json:"collector_number"`
+	Foil            bool    `json:"foil"`
+	StorageID       *int    `json:"storage_id"`
+	ManaValue       float64 `json:"mana_value"`
+	Added           string  `json:"added"`
+	Updated         string  `json:"updated"`
 }
 
 func toResponse(c Card) cardResponse {
@@ -40,6 +41,7 @@ func toResponse(c Card) cardResponse {
 		CollectorNumber: c.CollectorNumber,
 		Foil:            c.Foil,
 		StorageID:       c.StorageID,
+		ManaValue:       c.ManaValue,
 		Added:           c.Added.Format("2006-01-02 15:04:05"),
 		Updated:         c.Updated.Format("2006-01-02 15:04:05"),
 	}
@@ -54,12 +56,13 @@ type paginatedCardsResponse struct {
 }
 
 type createCardRequest struct {
-	Name            string `json:"name" binding:"required"`
-	ScryfallID      string `json:"scryfall_id" binding:"required,uuid"`
-	SetCode         string `json:"set_code" binding:"required"`
-	CollectorNumber string `json:"collector_number" binding:"required"`
-	Foil            bool   `json:"foil"`
-	StorageID       *int   `json:"storage_id" binding:"omitempty,gt=0"`
+	Name            string  `json:"name" binding:"required"`
+	ScryfallID      string  `json:"scryfall_id" binding:"required,uuid"`
+	SetCode         string  `json:"set_code" binding:"required"`
+	CollectorNumber string  `json:"collector_number" binding:"required"`
+	Foil            bool    `json:"foil"`
+	StorageID       *int    `json:"storage_id" binding:"omitempty,gt=0"`
+	ManaValue       float64 `json:"mana_value" binding:"omitempty,gte=0"`
 }
 
 func (r createCardRequest) toDomain() Card {
@@ -70,16 +73,18 @@ func (r createCardRequest) toDomain() Card {
 		CollectorNumber: r.CollectorNumber,
 		Foil:            r.Foil,
 		StorageID:       r.StorageID,
+		ManaValue:       r.ManaValue,
 	}
 }
 
 type updateCardRequest struct {
-	Name            *string `json:"name" binding:"omitempty"`
-	ScryfallID      *string `json:"scryfall_id" binding:"omitempty,uuid"`
-	SetCode         *string `json:"set_code" binding:"omitempty"`
-	CollectorNumber *string `json:"collector_number" binding:"omitempty"`
-	Foil            *bool   `json:"foil" binding:"omitempty"`
-	StorageID       *int    `json:"storage_id" binding:"omitempty,gt=0"`
+	Name            *string  `json:"name" binding:"omitempty"`
+	ScryfallID      *string  `json:"scryfall_id" binding:"omitempty,uuid"`
+	SetCode         *string  `json:"set_code" binding:"omitempty"`
+	CollectorNumber *string  `json:"collector_number" binding:"omitempty"`
+	Foil            *bool    `json:"foil" binding:"omitempty"`
+	StorageID       *int     `json:"storage_id" binding:"omitempty,gt=0"`
+	ManaValue       *float64 `json:"mana_value" binding:"omitempty,gte=0"`
 }
 
 func (r updateCardRequest) applyTo(c Card) Card {
@@ -97,6 +102,9 @@ func (r updateCardRequest) applyTo(c Card) Card {
 	}
 	if r.Foil != nil {
 		c.Foil = *r.Foil
+	}
+	if r.ManaValue != nil {
+		c.ManaValue = *r.ManaValue
 	}
 	if r.StorageID != nil {
 		c.StorageID = r.StorageID
@@ -175,11 +183,11 @@ func (h *Handler) getCards(ctx *gin.Context) {
 			field = raw[1:]
 		}
 		switch field {
-		case "name", "added", "updated":
+		case "name", "added", "updated", "mana_value":
 			sortField = field
 			sortDesc = desc
 		default:
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "sort must be one of: name, -name, added, -added, updated, -updated"})
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "sort must be one of: name, -name, added, -added, updated, -updated, mana_value, -mana_value"})
 			return
 		}
 	}

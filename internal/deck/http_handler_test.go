@@ -31,8 +31,10 @@ type fakeService struct {
 
 	deleteErr error
 
-	getDeckCards    []DeckCard
-	getDeckCardsErr error
+	getDeckCards          []DeckCard
+	getDeckCardsErr       error
+	lastDeckCardsSort     string
+	lastDeckCardsSortDesc bool
 
 	putCardErr    error
 	removeCardErr error
@@ -74,8 +76,10 @@ func (f *fakeService) DeleteDeck(ctx context.Context, userID string, id int) err
 	return f.deleteErr
 }
 
-func (f *fakeService) GetDeckCards(ctx context.Context, userID string, id int) ([]DeckCard, error) {
+func (f *fakeService) GetDeckCards(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]DeckCard, error) {
 	f.lastUserID = userID
+	f.lastDeckCardsSort = sortField
+	f.lastDeckCardsSortDesc = sortDesc
 	if f.getDeckCardsErr != nil {
 		return nil, f.getDeckCardsErr
 	}
@@ -537,6 +541,30 @@ func TestHandler_GetDeckCards_ReturnsCardsAsJSON(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, response, 1)
 	assert.Equal(t, "Black Lotus", response[0].Name)
+}
+
+func TestHandler_GetDeckCards_PassesManaValueSortToService(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck/1/cards?sort=-mana_value", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "mana_value", service.lastDeckCardsSort)
+	assert.True(t, service.lastDeckCardsSortDesc)
+}
+
+func TestHandler_GetDeckCards_ReturnsBadRequestOnInvalidSort(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck/1/cards?sort=price", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 func TestHandler_GetDeckCards_ReturnsBadRequestOnInvalidID(t *testing.T) {

@@ -330,7 +330,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [name, -name, added, -added, updated, -updated]
+            enum: [name, -name, added, -added, updated, -updated, mana_value, -mana_value]
             default: -updated
           description: >
             Sort field, with an optional "-" prefix for descending order.
@@ -769,6 +769,17 @@ paths:
     get:
       tags: [deck-cards]
       summary: List the cards in a deck
+      parameters:
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [name, -name, added, -added, updated, -updated, mana_value, -mana_value]
+            default: -updated
+          description: >
+            Sort field, with an optional "-" prefix for descending order.
+            id is always used as a secondary tie-breaker for a stable order.
       responses:
         "200":
           description: OK (empty array if the deck has no cards)
@@ -1439,6 +1450,9 @@ components:
         storage_id:
           type: integer
           nullable: true
+        mana_value:
+          type: number
+          description: Converted mana cost (CMC).
         added:
           type: string
         updated:
@@ -1450,6 +1464,7 @@ components:
         - set_code
         - collector_number
         - foil
+        - mana_value
         - added
         - updated
 
@@ -1489,6 +1504,13 @@ components:
           type: integer
           nullable: true
           minimum: 1
+        mana_value:
+          type: number
+          minimum: 0
+          default: 0
+          description: >
+            Converted mana cost (CMC). Not fetched automatically from
+            Scryfall — supplied by the client, same as name or set_code.
       required:
         - name
         - scryfall_id
@@ -1513,6 +1535,9 @@ components:
         storage_id:
           type: integer
           minimum: 1
+        mana_value:
+          type: number
+          minimum: 0
 
     Storage:
       type: object

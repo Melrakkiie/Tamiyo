@@ -121,7 +121,7 @@ func (f *fakeDeckService) GetDeck(ctx context.Context, userID string, id int) (d
 	return deck.Deck{}, deck.ErrNotFound
 }
 
-func (f *fakeDeckService) GetDeckCards(ctx context.Context, userID string, id int) ([]deck.DeckCard, error) {
+func (f *fakeDeckService) GetDeckCards(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]deck.DeckCard, error) {
 	if f.getDeckCardsErr != nil {
 		return nil, f.getDeckCardsErr
 	}
@@ -151,17 +151,20 @@ func (f *fakeDeckService) PutCardInDeck(ctx context.Context, userID string, deck
 }
 
 type fakeResolver struct {
-	resolved map[string]string
+	resolved map[string]ResolvedCard
 	err      error
 }
 
-func (f *fakeResolver) Resolve(ctx context.Context, identifiers []CardIdentifier) (map[string]string, error) {
+func (f *fakeResolver) Resolve(ctx context.Context, identifiers []CardIdentifier) (map[string]ResolvedCard, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
-	out := make(map[string]string)
+	out := make(map[string]ResolvedCard)
 	for _, id := range identifiers {
 		key := resolveKey(id.SetCode, id.CollectorNumber)
+		if id.ScryfallID != "" {
+			key = resolveKeyByID(id.ScryfallID)
+		}
 		if v, ok := f.resolved[key]; ok {
 			out[key] = v
 		}
@@ -190,6 +193,45 @@ Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,2
 	assert.Equal(t, "Sol Ring", cards.created[0].Name)
 	require.NotNil(t, cards.created[0].StorageID)
 	assert.Equal(t, storages.created[0].ID, *cards.created[0].StorageID)
+}
+
+func TestImportManaBox_ResolvesManaValueFromScryfallByID(t *testing.T) {
+	csv := `Binder Name,Binder Type,Name,Set code,Scryfall ID,Collector number,Foil,Quantity
+Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
+`
+	cards := &fakeCardService{}
+	storages := &fakeStorageService{}
+	decks := &fakeDeckService{}
+	resolver := &fakeResolver{resolved: map[string]ResolvedCard{
+		resolveKeyByID("aaaaaaaa-0000-0000-0000-000000000000"): {ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000", ManaValue: 1},
+	}}
+	svc := NewService(cards, storages, decks, resolver)
+
+	_, err := svc.ImportManaBox(context.Background(), testUserID, strings.NewReader(csv))
+
+	require.NoError(t, err)
+	require.Len(t, cards.created, 1)
+	assert.Equal(t, 1.0, cards.created[0].ManaValue)
+}
+
+func TestImportManaBox_DefaultsManaValueToZeroWhenScryfallUnavailable(t *testing.T) {
+	csv := `Binder Name,Binder Type,Name,Set code,Scryfall ID,Collector number,Foil,Quantity
+Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
+`
+	cards := &fakeCardService{}
+	storages := &fakeStorageService{}
+	decks := &fakeDeckService{}
+	resolver := &fakeResolver{err: errors.New("scryfall unreachable")}
+	svc := NewService(cards, storages, decks, resolver)
+
+	summary, err := svc.ImportManaBox(context.Background(), testUserID, strings.NewReader(csv))
+
+	require.NoError(t, err, "a scryfall outage must not break a manabox import, which never depended on it before")
+	require.Len(t, cards.created, 1)
+	assert.Equal(t, 1, summary.CardsCreated)
+	assert.Equal(t, 0.0, cards.created[0].ManaValue)
+	require.Len(t, summary.Warnings, 1)
+	assert.Contains(t, summary.Warnings[0], "mana value")
 }
 
 func TestImportManaBox_ReusesExistingStorageByName(t *testing.T) {
@@ -293,7 +335,7 @@ func TestImportMoxfieldCollection_ResolvesAndCreatesCards(t *testing.T) {
 `
 	cards := &fakeCardService{}
 	storages := &fakeStorageService{storages: []storage.Storage{{ID: 7, Name: "Binder", Type: "binder"}}}
-	resolver := &fakeResolver{resolved: map[string]string{resolveKey("sld", "1011"): "cccccccc-0000-0000-0000-000000000000"}}
+	resolver := &fakeResolver{resolved: map[string]ResolvedCard{resolveKey("sld", "1011"): {ScryfallID: "cccccccc-0000-0000-0000-000000000000", ManaValue: 1}}}
 	svc := NewService(cards, storages, &fakeDeckService{}, resolver)
 
 	summary, err := svc.ImportMoxfieldCollection(context.Background(), testUserID, 7, strings.NewReader(csv))
@@ -304,6 +346,7 @@ func TestImportMoxfieldCollection_ResolvesAndCreatesCards(t *testing.T) {
 	require.Len(t, cards.created, 2)
 	assert.Equal(t, "cccccccc-0000-0000-0000-000000000000", cards.created[0].ScryfallID)
 	assert.Equal(t, 7, *cards.created[0].StorageID)
+	assert.Equal(t, 1.0, cards.created[0].ManaValue)
 }
 
 func TestImportMoxfieldCollection_SkipsUnresolvedCards(t *testing.T) {
@@ -351,9 +394,9 @@ func TestImportMoxfieldDeck_FirstLineBecomesCommander(t *testing.T) {
 	decklist := "1 Atraxa, Praetors' Voice (CMR) 1\n1 Sol Ring (SLD) 1011\n"
 	cards := &fakeCardService{}
 	decks := &fakeDeckService{}
-	resolver := &fakeResolver{resolved: map[string]string{
-		resolveKey("CMR", "1"):    "11111111-0000-0000-0000-000000000000",
-		resolveKey("SLD", "1011"): "22222222-0000-0000-0000-000000000000",
+	resolver := &fakeResolver{resolved: map[string]ResolvedCard{
+		resolveKey("CMR", "1"):    {ScryfallID: "11111111-0000-0000-0000-000000000000", ManaValue: 4},
+		resolveKey("SLD", "1011"): {ScryfallID: "22222222-0000-0000-0000-000000000000", ManaValue: 1},
 	}}
 	svc := NewService(cards, &fakeStorageService{}, decks, resolver)
 
@@ -368,6 +411,8 @@ func TestImportMoxfieldDeck_FirstLineBecomesCommander(t *testing.T) {
 	require.NotNil(t, decks.created[0].CommanderID)
 	assert.Equal(t, cards.created[0].ID, *decks.created[0].CommanderID)
 	assert.Equal(t, "Atraxa, Praetors' Voice", cards.created[0].Name)
+	assert.Equal(t, 4.0, cards.created[0].ManaValue)
+	assert.Equal(t, 1.0, cards.created[1].ManaValue)
 	assert.ElementsMatch(t, []int{cards.created[0].ID, cards.created[1].ID}, decks.linkedCards[decks.created[0].ID])
 }
 
@@ -375,7 +420,7 @@ func TestImportMoxfieldDeck_WithoutCommanderFlag(t *testing.T) {
 	decklist := "1 Sol Ring (SLD) 1011\n"
 	cards := &fakeCardService{}
 	decks := &fakeDeckService{}
-	resolver := &fakeResolver{resolved: map[string]string{resolveKey("SLD", "1011"): "22222222-0000-0000-0000-000000000000"}}
+	resolver := &fakeResolver{resolved: map[string]ResolvedCard{resolveKey("SLD", "1011"): {ScryfallID: "22222222-0000-0000-0000-000000000000"}}}
 	svc := NewService(cards, &fakeStorageService{}, decks, resolver)
 
 	summary, err := svc.ImportMoxfieldDeck(context.Background(), testUserID, MoxfieldDeckImportRequest{
@@ -391,7 +436,7 @@ func TestImportMoxfieldDeck_AssignsStorageWhenProvided(t *testing.T) {
 	decklist := "1 Sol Ring (SLD) 1011\n"
 	cards := &fakeCardService{}
 	storages := &fakeStorageService{storages: []storage.Storage{{ID: 9}}}
-	resolver := &fakeResolver{resolved: map[string]string{resolveKey("SLD", "1011"): "22222222-0000-0000-0000-000000000000"}}
+	resolver := &fakeResolver{resolved: map[string]ResolvedCard{resolveKey("SLD", "1011"): {ScryfallID: "22222222-0000-0000-0000-000000000000"}}}
 	svc := NewService(cards, storages, &fakeDeckService{}, resolver)
 
 	storageID := 9
@@ -408,7 +453,7 @@ func TestImportMoxfieldDeck_UnresolvedCommanderIsSkippedButDeckStillCreated(t *t
 	decklist := "1 Mystery Commander (XXX) 999\n1 Sol Ring (SLD) 1011\n"
 	cards := &fakeCardService{}
 	decks := &fakeDeckService{}
-	resolver := &fakeResolver{resolved: map[string]string{resolveKey("SLD", "1011"): "22222222-0000-0000-0000-000000000000"}}
+	resolver := &fakeResolver{resolved: map[string]ResolvedCard{resolveKey("SLD", "1011"): {ScryfallID: "22222222-0000-0000-0000-000000000000"}}}
 	svc := NewService(cards, &fakeStorageService{}, decks, resolver)
 
 	summary, err := svc.ImportMoxfieldDeck(context.Background(), testUserID, MoxfieldDeckImportRequest{
@@ -425,7 +470,7 @@ func TestImportMoxfieldDeck_ReturnsErrorWhenTargetStorageDoesNotExist(t *testing
 	decklist := "1 Sol Ring (SLD) 1011\n"
 	cards := &fakeCardService{}
 	storages := &fakeStorageService{} // no storages registered
-	resolver := &fakeResolver{resolved: map[string]string{resolveKey("SLD", "1011"): "22222222-0000-0000-0000-000000000000"}}
+	resolver := &fakeResolver{resolved: map[string]ResolvedCard{resolveKey("SLD", "1011"): {ScryfallID: "22222222-0000-0000-0000-000000000000"}}}
 	svc := NewService(cards, storages, &fakeDeckService{}, resolver)
 
 	missingStorageID := 999
@@ -453,7 +498,7 @@ func TestImportMoxfieldDeck_SkipsLineAndWarnsWhenCardCreationFails(t *testing.T)
 	decklist := "1 Sol Ring (SLD) 1011\n"
 	cards := &fakeCardService{createErr: errors.New("db is down")}
 	decks := &fakeDeckService{}
-	resolver := &fakeResolver{resolved: map[string]string{resolveKey("SLD", "1011"): "22222222-0000-0000-0000-000000000000"}}
+	resolver := &fakeResolver{resolved: map[string]ResolvedCard{resolveKey("SLD", "1011"): {ScryfallID: "22222222-0000-0000-0000-000000000000"}}}
 	svc := NewService(cards, &fakeStorageService{}, decks, resolver)
 
 	summary, err := svc.ImportMoxfieldDeck(context.Background(), testUserID, MoxfieldDeckImportRequest{
@@ -470,7 +515,7 @@ func TestImportMoxfieldDeck_ReturnsErrorWhenDeckCreationFails(t *testing.T) {
 	decklist := "1 Sol Ring (SLD) 1011\n"
 	cards := &fakeCardService{}
 	decks := &fakeDeckService{createDeckErr: errors.New("db is down")}
-	resolver := &fakeResolver{resolved: map[string]string{resolveKey("SLD", "1011"): "22222222-0000-0000-0000-000000000000"}}
+	resolver := &fakeResolver{resolved: map[string]ResolvedCard{resolveKey("SLD", "1011"): {ScryfallID: "22222222-0000-0000-0000-000000000000"}}}
 	svc := NewService(cards, &fakeStorageService{}, decks, resolver)
 
 	_, err := svc.ImportMoxfieldDeck(context.Background(), testUserID, MoxfieldDeckImportRequest{
@@ -484,7 +529,7 @@ func TestImportMoxfieldDeck_WarnsWhenLinkingCommanderToDeckFails(t *testing.T) {
 	decklist := "1 Atraxa, Praetors' Voice (CMR) 1\n"
 	cards := &fakeCardService{}
 	decks := &fakeDeckService{linkErr: errors.New("link failed")}
-	resolver := &fakeResolver{resolved: map[string]string{resolveKey("CMR", "1"): "11111111-0000-0000-0000-000000000000"}}
+	resolver := &fakeResolver{resolved: map[string]ResolvedCard{resolveKey("CMR", "1"): {ScryfallID: "11111111-0000-0000-0000-000000000000"}}}
 	svc := NewService(cards, &fakeStorageService{}, decks, resolver)
 
 	summary, err := svc.ImportMoxfieldDeck(context.Background(), testUserID, MoxfieldDeckImportRequest{
@@ -499,7 +544,7 @@ func TestImportMoxfieldDeck_WarnsWhenLinkingRegularCardToDeckFails(t *testing.T)
 	decklist := "1 Sol Ring (SLD) 1011\n"
 	cards := &fakeCardService{}
 	decks := &fakeDeckService{linkErr: errors.New("link failed")}
-	resolver := &fakeResolver{resolved: map[string]string{resolveKey("SLD", "1011"): "22222222-0000-0000-0000-000000000000"}}
+	resolver := &fakeResolver{resolved: map[string]ResolvedCard{resolveKey("SLD", "1011"): {ScryfallID: "22222222-0000-0000-0000-000000000000"}}}
 	svc := NewService(cards, &fakeStorageService{}, decks, resolver)
 
 	summary, err := svc.ImportMoxfieldDeck(context.Background(), testUserID, MoxfieldDeckImportRequest{

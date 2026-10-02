@@ -110,11 +110,11 @@ func seedCardsWithoutStorage(t *testing.T, db *sqlx.DB, userID string) {
 	t.Helper()
 
 	_, err := db.Exec(`
-		INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id)
+		INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value)
 		VALUES
-		    ($1, 'Black Lotus', 'bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd', 'lea', '232', false, null),
-		    ($1, 'Lightning Bolt', '9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d', '2xm', '129', true, null),
-		    ($1, 'Counterspell', '1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f', 'mh2', '267', false, null);
+		    ($1, 'Black Lotus', 'bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd', 'lea', '232', false, null, 0),
+		    ($1, 'Lightning Bolt', '9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d', '2xm', '129', true, null, 1),
+		    ($1, 'Counterspell', '1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f', 'mh2', '267', false, null, 2);
 	`, userID)
 	require.NoError(t, err)
 }
@@ -513,7 +513,7 @@ func TestPostgresRepository_FindCardsByDeckID_ReturnsCardsInDeck(t *testing.T) {
 	linkCardToDeck(t, db, 1, 1)
 	linkCardToDeck(t, db, 2, 1)
 
-	result, err := repo.FindCardsByDeckID(context.Background(), userID, 1)
+	result, err := repo.FindCardsByDeckID(context.Background(), userID, 1, "updated", true)
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -529,7 +529,7 @@ func TestPostgresRepository_FindCardsByDeckID_ReturnsEmptySliceWhenDeckHasNoCard
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userID)
 
-	result, err := repo.FindCardsByDeckID(context.Background(), userID, 1)
+	result, err := repo.FindCardsByDeckID(context.Background(), userID, 1, "updated", true)
 
 	require.NoError(t, err)
 	assert.Empty(t, result)
@@ -546,11 +546,33 @@ func TestPostgresRepository_FindCardsByDeckID_OnlyReturnsCardsFromRequestedDeck(
 	linkCardToDeck(t, db, 2, 2)
 	linkCardToDeck(t, db, 3, 2)
 
-	result, err := repo.FindCardsByDeckID(context.Background(), userID, 1)
+	result, err := repo.FindCardsByDeckID(context.Background(), userID, 1, "updated", true)
 
 	require.NoError(t, err)
 	require.Len(t, result, 1)
 	assert.Equal(t, "Black Lotus", result[0].Name)
+}
+
+func TestPostgresRepository_FindCardsByDeckID_SortsByManaValue(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userID)
+	seedCardsWithoutStorage(t, db, userID)
+
+	linkCardToDeck(t, db, 1, 1) // Black Lotus, mana_value 0
+	linkCardToDeck(t, db, 2, 1) // Lightning Bolt, mana_value 1
+	linkCardToDeck(t, db, 3, 1) // Counterspell, mana_value 2
+
+	ascending, err := repo.FindCardsByDeckID(context.Background(), userID, 1, "mana_value", false)
+	require.NoError(t, err)
+	require.Len(t, ascending, 3)
+	assert.Equal(t, []string{"Black Lotus", "Lightning Bolt", "Counterspell"}, []string{ascending[0].Name, ascending[1].Name, ascending[2].Name})
+
+	descending, err := repo.FindCardsByDeckID(context.Background(), userID, 1, "mana_value", true)
+	require.NoError(t, err)
+	require.Len(t, descending, 3)
+	assert.Equal(t, []string{"Counterspell", "Lightning Bolt", "Black Lotus"}, []string{descending[0].Name, descending[1].Name, descending[2].Name})
 }
 
 func TestPostgresRepository_LinkCardToDeck_CreatesLink(t *testing.T) {
@@ -564,7 +586,7 @@ func TestPostgresRepository_LinkCardToDeck_CreatesLink(t *testing.T) {
 
 	require.NoError(t, err)
 
-	cards, err := repo.FindCardsByDeckID(context.Background(), userID, 1)
+	cards, err := repo.FindCardsByDeckID(context.Background(), userID, 1, "updated", true)
 	require.NoError(t, err)
 	require.Len(t, cards, 1)
 	assert.Equal(t, "Black Lotus", cards[0].Name)
@@ -583,7 +605,7 @@ func TestPostgresRepository_LinkCardToDeck_IsIdempotent(t *testing.T) {
 	err2 := repo.LinkCardToDeck(context.Background(), userID, 1, 1)
 	require.NoError(t, err2)
 
-	cards, err := repo.FindCardsByDeckID(context.Background(), userID, 1)
+	cards, err := repo.FindCardsByDeckID(context.Background(), userID, 1, "updated", true)
 	require.NoError(t, err)
 	assert.Len(t, cards, 1)
 }
@@ -622,7 +644,7 @@ func TestPostgresRepository_LinkCardToDeck_DoesNotAffectOtherDecks(t *testing.T)
 	err := repo.LinkCardToDeck(context.Background(), userID, 1, 1)
 	require.NoError(t, err)
 
-	cardsInDeck2, err := repo.FindCardsByDeckID(context.Background(), userID, 2)
+	cardsInDeck2, err := repo.FindCardsByDeckID(context.Background(), userID, 2, "updated", true)
 	require.NoError(t, err)
 	assert.Empty(t, cardsInDeck2)
 }
@@ -639,7 +661,7 @@ func TestPostgresRepository_UnlinkCardFromDeck_RemovesLink(t *testing.T) {
 
 	require.NoError(t, err)
 
-	cards, err := repo.FindCardsByDeckID(context.Background(), userID, 1)
+	cards, err := repo.FindCardsByDeckID(context.Background(), userID, 1, "updated", true)
 	require.NoError(t, err)
 	assert.Empty(t, cards)
 }
@@ -668,7 +690,7 @@ func TestPostgresRepository_UnlinkCardFromDeck_DoesNotRemoveLinkWhenDeckBelongsT
 	err := repo.UnlinkCardFromDeck(context.Background(), userB, 1, 1)
 	require.NoError(t, err) // idempotent, pas d'erreur, mais rien ne doit changer
 
-	cards, err := repo.FindCardsByDeckID(context.Background(), userA, 1)
+	cards, err := repo.FindCardsByDeckID(context.Background(), userA, 1, "updated", true)
 	require.NoError(t, err)
 	require.Len(t, cards, 1)
 }

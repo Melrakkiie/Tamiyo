@@ -75,7 +75,7 @@ func (f *fakeRepository) Delete(ctx context.Context, userID string, id int) erro
 	return f.deleteErr
 }
 
-func (f *fakeRepository) FindCardsByDeckID(ctx context.Context, userID string, id int) ([]DeckCard, error) {
+func (f *fakeRepository) FindCardsByDeckID(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]DeckCard, error) {
 	f.lastUserID = userID
 	if f.getDeckCardsErr != nil {
 		return nil, f.getDeckCardsErr
@@ -295,7 +295,7 @@ func TestService_GetDeckCards_PassesUserIDToRepository(t *testing.T) {
 	repo := &fakeRepository{findByIDDeck: Deck{ID: 1}}
 	service := NewService(repo)
 
-	_, err := service.GetDeckCards(context.Background(), testUserID, 1)
+	_, err := service.GetDeckCards(context.Background(), testUserID, 1, "updated", true)
 
 	require.NoError(t, err)
 	assert.Equal(t, testUserID, repo.lastUserID)
@@ -309,7 +309,7 @@ func TestService_GetDeckCards_ReturnsCardsFromRepository(t *testing.T) {
 	repo := &fakeRepository{findByIDDeck: Deck{ID: 1}, getDeckCards: expected}
 	service := NewService(repo)
 
-	result, err := service.GetDeckCards(context.Background(), testUserID, 1)
+	result, err := service.GetDeckCards(context.Background(), testUserID, 1, "updated", true)
 
 	require.NoError(t, err)
 	assert.Equal(t, expected, result)
@@ -319,7 +319,7 @@ func TestService_GetDeckCards_ReturnsNotFoundWhenDeckDoesNotBelongToUser(t *test
 	repo := &fakeRepository{findByIDErr: ErrNotFound}
 	service := NewService(repo)
 
-	_, err := service.GetDeckCards(context.Background(), otherUserID, 999)
+	_, err := service.GetDeckCards(context.Background(), otherUserID, 999, "updated", true)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
@@ -328,7 +328,7 @@ func TestService_GetDeckCards_PropagatesRepositoryError(t *testing.T) {
 	repo := &fakeRepository{findByIDDeck: Deck{ID: 1}, getDeckCardsErr: errors.New("connection lost")}
 	service := NewService(repo)
 
-	result, err := service.GetDeckCards(context.Background(), testUserID, 1)
+	result, err := service.GetDeckCards(context.Background(), testUserID, 1, "updated", true)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)

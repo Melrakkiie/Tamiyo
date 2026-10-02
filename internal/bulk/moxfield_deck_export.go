@@ -19,7 +19,7 @@ func (s *Service) ExportMoxfieldDeck(ctx context.Context, userID string, deckID 
 		return err
 	}
 
-	cards, err := s.decks.GetDeckCards(ctx, userID, deckID)
+	cards, err := s.decks.GetDeckCards(ctx, userID, deckID, "updated", true)
 	if err != nil {
 		return fmt.Errorf("loading deck cards: %w", err)
 	}

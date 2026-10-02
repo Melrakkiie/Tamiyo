@@ -28,6 +28,7 @@ type DeckCard struct {
 	CollectorNumber string
 	Foil            bool
 	StorageID       *int
+	ManaValue       float64
 	Added           time.Time
 	Updated         time.Time
 }
@@ -49,7 +50,7 @@ type Repository interface {
 	Update(ctx context.Context, userID string, d Deck) (Deck, error)
 	Delete(ctx context.Context, userID string, id int) error
 
-	FindCardsByDeckID(ctx context.Context, userID string, id int) ([]DeckCard, error)
+	FindCardsByDeckID(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]DeckCard, error)
 	LinkCardToDeck(ctx context.Context, userID string, deckID int, cardID int) error
 	UnlinkCardFromDeck(ctx context.Context, userID string, deckID int, cardID int) error
 }

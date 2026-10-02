@@ -142,6 +142,19 @@ func TestHandler_GetCards_PassesSortToService(t *testing.T) {
 	assert.True(t, service.lastFilter.SortDesc)
 }
 
+func TestHandler_GetCards_PassesManaValueSortToService(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/cards?sort=-mana_value", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "mana_value", service.lastFilter.SortField)
+	assert.True(t, service.lastFilter.SortDesc)
+}
+
 func TestHandler_GetCards_ReturnsBadRequestOnInvalidSort(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)

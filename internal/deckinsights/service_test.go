@@ -36,7 +36,7 @@ func (f *fakeDeckService) GetDeck(ctx context.Context, userID string, id int) (d
 	return d, nil
 }
 
-func (f *fakeDeckService) GetDeckCards(ctx context.Context, userID string, id int) ([]deck.DeckCard, error) {
+func (f *fakeDeckService) GetDeckCards(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]deck.DeckCard, error) {
 	if f.getDeckCardsErr != nil {
 		return nil, f.getDeckCardsErr
 	}

@@ -53,6 +53,7 @@ type cardRow struct {
 	CollectorNumber string    `db:"collector_number"`
 	Foil            bool      `db:"foil"`
 	StorageID       *int      `db:"storage_id"`
+	ManaValue       float64   `db:"mana_value"`
 	Added           time.Time `db:"added"`
 	Updated         time.Time `db:"updated"`
 }
@@ -135,6 +136,26 @@ func orderByClause(filter Filter) string {
 		return fmt.Sprintf(" ORDER BY d.updated %s, d.id %s", dir, dir)
 	default:
 		return " ORDER BY d.updated DESC, d.id DESC"
+	}
+}
+
+func deckCardOrderByClause(sortField string, sortDesc bool) string {
+	dir := "ASC"
+	if sortDesc {
+		dir = "DESC"
+	}
+
+	switch sortField {
+	case "name":
+		return fmt.Sprintf(" ORDER BY c.name %s, c.id %s", dir, dir)
+	case "added":
+		return fmt.Sprintf(" ORDER BY c.added %s, c.id %s", dir, dir)
+	case "updated":
+		return fmt.Sprintf(" ORDER BY c.updated %s, c.id %s", dir, dir)
+	case "mana_value":
+		return fmt.Sprintf(" ORDER BY c.mana_value %s, c.id %s", dir, dir)
+	default:
+		return " ORDER BY c.updated DESC, c.id DESC"
 	}
 }
 
@@ -244,13 +265,13 @@ func (r *PostgresRepository) Delete(ctx context.Context, userID string, id int) 
 	return nil
 }
 
-func (r *PostgresRepository) FindCardsByDeckID(ctx context.Context, userID string, id int) ([]DeckCard, error) {
+func (r *PostgresRepository) FindCardsByDeckID(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]DeckCard, error) {
 	query := `
-		SELECT c.id, c.name, c.scryfall_id, c.set_code, c.collector_number, c.foil, c.storage_id, c.added, c.updated
+		SELECT c.id, c.name, c.scryfall_id, c.set_code, c.collector_number, c.foil, c.storage_id, c.mana_value, c.added, c.updated
 		FROM tamiyo.cards c
 		JOIN tamiyo.card_deck cd ON c.id = cd.card_id
 		WHERE cd.deck_id = $1 AND c.user_id = $2
-	`
+	` + deckCardOrderByClause(sortField, sortDesc)
 
 	var rows []cardRow
 	if err := r.db.SelectContext(ctx, &rows, query, id, userID); err != nil {

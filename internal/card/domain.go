@@ -17,6 +17,7 @@ type Card struct {
 	CollectorNumber string
 	Foil            bool
 	StorageID       *int
+	ManaValue       float64
 	Added           time.Time
 	Updated         time.Time
 }

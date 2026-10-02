@@ -23,14 +23,24 @@ type Summary struct {
 }
 
 type CardIdentifier struct {
+	ScryfallID      string
 	SetCode         string
 	CollectorNumber string
 }
 
+type ResolvedCard struct {
+	ScryfallID string
+	ManaValue  float64
+}
+
 type ScryfallResolver interface {
-	Resolve(ctx context.Context, identifiers []CardIdentifier) (map[string]string, error)
+	Resolve(ctx context.Context, identifiers []CardIdentifier) (map[string]ResolvedCard, error)
 }
 
 func resolveKey(setCode, collectorNumber string) string {
-	return strings.ToLower(setCode) + "#" + collectorNumber
+	return "sc:" + strings.ToLower(setCode) + "#" + collectorNumber
+}
+
+func resolveKeyByID(scryfallID string) string {
+	return "id:" + strings.ToLower(scryfallID)
 }

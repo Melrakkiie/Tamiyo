@@ -111,9 +111,9 @@ func seedCards(t *testing.T, db *sqlx.DB, userID string, cards []Card) {
 
 	for _, c := range cards {
 		_, err := db.Exec(`
-			INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-		`, userID, c.Name, c.ScryfallID, c.SetCode, c.CollectorNumber, c.Foil, c.StorageID)
+			INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`, userID, c.Name, c.ScryfallID, c.SetCode, c.CollectorNumber, c.Foil, c.StorageID, c.ManaValue)
 		require.NoError(t, err)
 	}
 }
@@ -193,6 +193,28 @@ func TestPostgresRepository_FindAll_FiltersByNameCaseInsensitive(t *testing.T) {
 	names := []string{result[0].Name, result[1].Name}
 	assert.Contains(t, names, "Lightning Bolt")
 	assert.Contains(t, names, "Lightning Helix")
+}
+
+func TestPostgresRepository_FindAll_SortsByManaValue(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+
+	seedCards(t, db, userID, []Card{
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false, ManaValue: 0},
+		{Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: "129", Foil: true, ManaValue: 1},
+		{Name: "Counterspell", ScryfallID: "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f", SetCode: "mh2", CollectorNumber: "267", Foil: false, ManaValue: 2},
+	})
+
+	ascending, _, err := repo.FindAll(context.Background(), userID, CardFilter{SortField: "mana_value", Page: 1, Limit: 25})
+	require.NoError(t, err)
+	require.Len(t, ascending, 3)
+	assert.Equal(t, []string{"Black Lotus", "Lightning Bolt", "Counterspell"}, []string{ascending[0].Name, ascending[1].Name, ascending[2].Name})
+
+	descending, _, err := repo.FindAll(context.Background(), userID, CardFilter{SortField: "mana_value", SortDesc: true, Page: 1, Limit: 25})
+	require.NoError(t, err)
+	require.Len(t, descending, 3)
+	assert.Equal(t, []string{"Counterspell", "Lightning Bolt", "Black Lotus"}, []string{descending[0].Name, descending[1].Name, descending[2].Name})
 }
 
 func TestPostgresRepository_FindAll_PaginatesResults(t *testing.T) {
@@ -282,6 +304,7 @@ func TestPostgresRepository_Create_InsertsAndReturnsCardWithID(t *testing.T) {
 		CollectorNumber: "322",
 		Foil:            false,
 		StorageID:       &testID,
+		ManaValue:       1,
 	}
 
 	created, err := repo.Create(context.Background(), userID, newCard)
@@ -289,6 +312,7 @@ func TestPostgresRepository_Create_InsertsAndReturnsCardWithID(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotZero(t, created.ID)
 	assert.Equal(t, "Sol Ring", created.Name)
+	assert.Equal(t, 1.0, created.ManaValue)
 
 	all, total, err := repo.FindAll(context.Background(), userID, CardFilter{StorageID: &testID, Page: 1, Limit: 25})
 	require.NoError(t, err)

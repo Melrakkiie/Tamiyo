@@ -21,6 +21,7 @@ type cardRow struct {
 	CollectorNumber string    `db:"collector_number"`
 	Foil            bool      `db:"foil"`
 	StorageID       *int      `db:"storage_id"`
+	ManaValue       float64   `db:"mana_value"`
 	Added           time.Time `db:"added"`
 	Updated         time.Time `db:"updated"`
 }
@@ -34,6 +35,7 @@ func (r cardRow) toDomain() Card {
 		CollectorNumber: r.CollectorNumber,
 		Foil:            r.Foil,
 		StorageID:       r.StorageID,
+		ManaValue:       r.ManaValue,
 		Added:           r.Added,
 		Updated:         r.Updated,
 	}
@@ -49,6 +51,7 @@ func toCardRow(userID string, c Card) cardRow {
 		CollectorNumber: c.CollectorNumber,
 		Foil:            c.Foil,
 		StorageID:       c.StorageID,
+		ManaValue:       c.ManaValue,
 	}
 }
 
@@ -88,7 +91,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 	offset := (filter.Page - 1) * filter.Limit
 
 	query := `
-	    SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, added, updated
+	    SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, added, updated
 	    FROM tamiyo.cards
 	` + whereClause + orderByClause(filter) + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 
@@ -120,6 +123,8 @@ func orderByClause(filter CardFilter) string {
 		return fmt.Sprintf(" ORDER BY added %s, id %s", dir, dir)
 	case "updated":
 		return fmt.Sprintf(" ORDER BY updated %s, id %s", dir, dir)
+	case "mana_value":
+		return fmt.Sprintf(" ORDER BY mana_value %s, id %s", dir, dir)
 	default:
 		return " ORDER BY updated DESC, id DESC"
 	}
@@ -127,7 +132,7 @@ func orderByClause(filter CardFilter) string {
 
 func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int) (Card, error) {
 	query := `
-		SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, added, updated
+		SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, added, updated
 	    FROM tamiyo.cards
 		WHERE id = $1 AND user_id = $2
 	`
@@ -146,9 +151,9 @@ func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int
 func (r *PostgresRepository) Create(ctx context.Context, userID string, c Card) (Card, error) {
 	row := toCardRow(userID, c)
 	query := `
-    	INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id)
-     	VALUES (:user_id, :name, :scryfall_id, :set_code, :collector_number, :foil, :storage_id)
-      	RETURNING id, name, scryfall_id, set_code, collector_number, foil, storage_id, added, updated
+    	INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value)
+     	VALUES (:user_id, :name, :scryfall_id, :set_code, :collector_number, :foil, :storage_id, :mana_value)
+      	RETURNING id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, added, updated
 	`
 
 	stmt, err := r.db.PrepareNamedContext(ctx, query)
@@ -175,9 +180,9 @@ func (r *PostgresRepository) Update(ctx context.Context, userID string, c Card) 
 	row := toCardRow(userID, c)
 	query := `
 		UPDATE tamiyo.cards
-		SET name = :name, scryfall_id = :scryfall_id, set_code = :set_code, collector_number = :collector_number, foil = :foil, storage_id = :storage_id
+		SET name = :name, scryfall_id = :scryfall_id, set_code = :set_code, collector_number = :collector_number, foil = :foil, storage_id = :storage_id, mana_value = :mana_value
 		WHERE id = :id AND user_id = :user_id
-		RETURNING id, name, scryfall_id, set_code, collector_number, foil, storage_id, added, updated
+		RETURNING id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, added, updated
 	`
 
 	stmt, err := r.db.PrepareNamedContext(ctx, query)
