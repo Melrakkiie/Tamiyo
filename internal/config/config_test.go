@@ -2,17 +2,24 @@ package config
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoad_ReadsValuesFromEnvironment(t *testing.T) {
+func setRequiredEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("JWT_SECRET", "test-secret")
 	t.Setenv("PGHOST", "db")
-	t.Setenv("PGPORT", "5432")
 	t.Setenv("PGUSER", "login")
 	t.Setenv("PGPASSWORD", "password")
 	t.Setenv("PGDATABASE", "tamiyo_db")
+}
+
+func TestLoad_ReadsValuesFromEnvironment(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("PGPORT", "5432")
 	t.Setenv("APP_PORT", "9090")
 
 	cfg, err := Load()
@@ -27,11 +34,7 @@ func TestLoad_ReadsValuesFromEnvironment(t *testing.T) {
 }
 
 func TestLoad_DefaultsAppPortWhenNotSet(t *testing.T) {
-	t.Setenv("PGHOST", "db")
-	t.Setenv("PGPORT", "5432")
-	t.Setenv("PGUSER", "login")
-	t.Setenv("PGPASSWORD", "password")
-	t.Setenv("PGDATABASE", "tamiyo_db")
+	setRequiredEnv(t)
 	// APP_PORT is missing
 
 	cfg, err := Load()
@@ -40,7 +43,19 @@ func TestLoad_DefaultsAppPortWhenNotSet(t *testing.T) {
 	assert.Equal(t, "8080", cfg.AppPort)
 }
 
+func TestLoad_DefaultsPGPortWhenNotSet(t *testing.T) {
+	setRequiredEnv(t)
+	// PGPORT is missing
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, "5432", cfg.PGPort)
+}
+
 func TestLoad_DefaultsCORSAllowedOriginsToEmptyWhenNotSet(t *testing.T) {
+	setRequiredEnv(t)
+
 	cfg, err := Load()
 
 	require.NoError(t, err)
@@ -48,6 +63,7 @@ func TestLoad_DefaultsCORSAllowedOriginsToEmptyWhenNotSet(t *testing.T) {
 }
 
 func TestLoad_ParsesCORSAllowedOriginsFromCommaSeparatedList(t *testing.T) {
+	setRequiredEnv(t)
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,https://tamiyo.example.com")
 
 	cfg, err := Load()
@@ -57,6 +73,7 @@ func TestLoad_ParsesCORSAllowedOriginsFromCommaSeparatedList(t *testing.T) {
 }
 
 func TestLoad_TrimsWhitespaceAroundEachCORSOrigin(t *testing.T) {
+	setRequiredEnv(t)
 	t.Setenv("CORS_ALLOWED_ORIGINS", " http://localhost:5173 , https://tamiyo.example.com ")
 
 	cfg, err := Load()
@@ -66,10 +83,105 @@ func TestLoad_TrimsWhitespaceAroundEachCORSOrigin(t *testing.T) {
 }
 
 func TestLoad_DropsEmptyEntriesInCORSAllowedOrigins(t *testing.T) {
+	setRequiredEnv(t)
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,,https://tamiyo.example.com,")
 
 	cfg, err := Load()
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"http://localhost:5173", "https://tamiyo.example.com"}, cfg.CORSAllowedOrigins)
+}
+
+func TestLoad_DefaultsPGSSLModeToDisable(t *testing.T) {
+	setRequiredEnv(t)
+	// PGSSLMODE is missing
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, "disable", cfg.PGSSLMode)
+}
+
+func TestLoad_ReadsPGSSLModeFromEnvironment(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("PGSSLMODE", "require")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, "require", cfg.PGSSLMode)
+}
+
+func TestLoad_DefaultsDBConnectionPoolSettings(t *testing.T) {
+	setRequiredEnv(t)
+	// DB_MAX_OPEN_CONNS / DB_MAX_IDLE_CONNS / DB_CONN_MAX_LIFETIME_MINUTES are missing
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, 10, cfg.DBMaxOpenConns)
+	assert.Equal(t, 5, cfg.DBMaxIdleConns)
+	assert.Equal(t, 5*time.Minute, cfg.DBConnMaxLifetime)
+}
+
+func TestLoad_ReadsDBConnectionPoolSettingsFromEnvironment(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("DB_MAX_OPEN_CONNS", "20")
+	t.Setenv("DB_MAX_IDLE_CONNS", "8")
+	t.Setenv("DB_CONN_MAX_LIFETIME_MINUTES", "15")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, 20, cfg.DBMaxOpenConns)
+	assert.Equal(t, 8, cfg.DBMaxIdleConns)
+	assert.Equal(t, 15*time.Minute, cfg.DBConnMaxLifetime)
+}
+
+func TestLoad_DefaultsShutdownTimeoutWhenNotSet(t *testing.T) {
+	setRequiredEnv(t)
+	// SHUTDOWN_TIMEOUT_SECONDS is missing
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, 10*time.Second, cfg.ShutdownTimeout)
+}
+
+func TestLoad_ReadsShutdownTimeoutFromEnvironment(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("SHUTDOWN_TIMEOUT_SECONDS", "30")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, 30*time.Second, cfg.ShutdownTimeout)
+}
+
+func TestLoad_ReturnsErrorWhenJWTSecretMissing(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("JWT_SECRET", "")
+
+	cfg, err := Load()
+
+	require.Error(t, err)
+	assert.Nil(t, cfg)
+	assert.Contains(t, err.Error(), "JWT_SECRET")
+}
+
+func TestLoad_ReturnsErrorWhenRequiredPGVarsMissing(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("PGHOST", "")
+	t.Setenv("PGUSER", "")
+	t.Setenv("PGPASSWORD", "")
+	t.Setenv("PGDATABASE", "")
+
+	cfg, err := Load()
+
+	require.Error(t, err)
+	assert.Nil(t, cfg)
+	assert.Contains(t, err.Error(), "PGHOST")
+	assert.Contains(t, err.Error(), "PGUSER")
+	assert.Contains(t, err.Error(), "PGPASSWORD")
+	assert.Contains(t, err.Error(), "PGDATABASE")
 }

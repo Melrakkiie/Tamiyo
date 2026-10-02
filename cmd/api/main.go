@@ -1,7 +1,13 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"net/http"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -44,14 +50,18 @@ func main() {
 	}
 
 	connStr := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		cfg.PGHost, cfg.PGPort, cfg.PGUser, cfg.PGPassword, cfg.PGDatabase,
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		cfg.PGHost, cfg.PGPort, cfg.PGUser, cfg.PGPassword, cfg.PGDatabase, cfg.PGSSLMode,
 	)
 
 	db, err := sqlx.Connect("postgres", connStr)
 	if err != nil {
 		logger.Fatal("failed to connect to database", zap.Error(err))
 	}
+	db.SetMaxOpenConns(cfg.DBMaxOpenConns)
+	db.SetMaxIdleConns(cfg.DBMaxIdleConns)
+	db.SetConnMaxLifetime(cfg.DBConnMaxLifetime)
+
 	goose.SetBaseFS(migrations.FS)
 	if err := goose.SetDialect("postgres"); err != nil {
 		logger.Fatal("failed to set migration dialect", zap.Error(err))
@@ -128,8 +138,32 @@ func main() {
 	insightsHandler.RegisterRoutes(protected)
 	userHandler.RegisterProtectedRoutes(protected)
 
-	logger.Info("starting server", zap.String("port", cfg.AppPort))
-	if err := router.Run(":" + cfg.AppPort); err != nil {
-		logger.Fatal("server failed", zap.Error(err))
+	srv := &http.Server{
+		Addr:              ":" + cfg.AppPort,
+		Handler:           router,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	go func() {
+		logger.Info("starting server", zap.String("port", cfg.AppPort))
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Fatal("server failed", zap.Error(err))
+		}
+	}()
+
+	// Block until SIGINT/SIGTERM (e.g. a platform redeploy or `docker stop`),
+	// then stop accepting new connections and give in-flight requests a
+	// chance to finish before the process exits.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	<-ctx.Done()
+	stop()
+
+	logger.Info("shutting down server")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.Error("graceful shutdown did not complete cleanly", zap.Error(err))
 	}
 }
