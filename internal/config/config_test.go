@@ -92,6 +92,44 @@ func TestLoad_DropsEmptyEntriesInCORSAllowedOrigins(t *testing.T) {
 	assert.Equal(t, []string{"http://localhost:5173", "https://tamiyo.example.com"}, cfg.CORSAllowedOrigins)
 }
 
+func TestLoad_DefaultsAPIBasePathToEmpty(t *testing.T) {
+	setRequiredEnv(t)
+	// API_BASE_PATH is missing
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, "", cfg.APIBasePath)
+}
+
+func TestLoad_NormalizesAPIBasePath(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{"already normalized", "/api", "/api"},
+		{"missing leading slash", "api", "/api"},
+		{"trailing slash", "/api/", "/api"},
+		{"surrounding whitespace", " /api ", "/api"},
+		{"nested path", "/v1/api/", "/v1/api"},
+		{"only a slash", "/", ""},
+		{"blank", "   ", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setRequiredEnv(t)
+			t.Setenv("API_BASE_PATH", tt.raw)
+
+			cfg, err := Load()
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, cfg.APIBasePath)
+		})
+	}
+}
+
 func TestLoad_DefaultsPGSSLModeToDisable(t *testing.T) {
 	setRequiredEnv(t)
 	// PGSSLMODE is missing

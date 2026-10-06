@@ -20,7 +20,7 @@ func NewHandler(db pinger) *Handler {
 	return &Handler{db: db}
 }
 
-func (h *Handler) RegisterRoutes(router *gin.Engine) {
+func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.GET("/health", h.check)
 }
 

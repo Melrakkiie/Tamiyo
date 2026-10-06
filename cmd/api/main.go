@@ -124,12 +124,18 @@ func main() {
 	router.Use(security.Headers())
 	router.Use(cors.Middleware(cfg.CORSAllowedOrigins))
 
-	healthHandler.RegisterRoutes(router)
-	userHandler.RegisterRoutes(router, ratelimit.Middleware(authLimiter))
-	tokenHandler.RegisterRoutes(router)
-	passwordResetHandler.RegisterRoutes(router, ratelimit.Middleware(authLimiter))
+	api := router.Group(cfg.APIBasePath)
 
-	protected := router.Group("/")
+	healthHandler.RegisterRoutes(router)
+	if cfg.APIBasePath != "" {
+		healthHandler.RegisterRoutes(api)
+	}
+
+	userHandler.RegisterRoutes(api, ratelimit.Middleware(authLimiter))
+	tokenHandler.RegisterRoutes(api)
+	passwordResetHandler.RegisterRoutes(api, ratelimit.Middleware(authLimiter))
+
+	protected := api.Group("")
 	protected.Use(auth.RequireAuth(cfg.JWTSecret))
 	cardHandler.RegisterRoutes(protected)
 	storageHandler.RegisterRoutes(protected)

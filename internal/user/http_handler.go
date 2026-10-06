@@ -58,7 +58,7 @@ func NewHandler(service userService, jwtSecret string, accessTokenTTL time.Durat
 	}
 }
 
-func (h *Handler) RegisterRoutes(router *gin.Engine, authMiddleware ...gin.HandlerFunc) {
+func (h *Handler) RegisterRoutes(router gin.IRoutes, authMiddleware ...gin.HandlerFunc) {
 	registerHandlers := append(append([]gin.HandlerFunc{}, authMiddleware...), h.register)
 	loginHandlers := append(append([]gin.HandlerFunc{}, authMiddleware...), h.login)
 

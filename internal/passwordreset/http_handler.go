@@ -47,7 +47,7 @@ func NewHandler(service resetService, users userLookup, tokens sessionRevoker, m
 	return &Handler{service: service, users: users, tokens: tokens, mailer: mailer}
 }
 
-func (h *Handler) RegisterRoutes(router *gin.Engine, authMiddleware ...gin.HandlerFunc) {
+func (h *Handler) RegisterRoutes(router gin.IRoutes, authMiddleware ...gin.HandlerFunc) {
 	forgotHandlers := append(append([]gin.HandlerFunc{}, authMiddleware...), h.forgotPassword)
 	resetHandlers := append(append([]gin.HandlerFunc{}, authMiddleware...), h.resetPassword)
 

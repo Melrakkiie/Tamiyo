@@ -39,7 +39,7 @@ func NewHandler(service tokenService, jwtSecret string, accessTokenTTL time.Dura
 	return &Handler{service: service, jwtSecret: jwtSecret, accessTokenTTL: accessTokenTTL}
 }
 
-func (h *Handler) RegisterRoutes(router *gin.Engine) {
+func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.POST("/auth/refresh", h.refresh)
 	router.POST("/auth/logout", h.logout)
 }

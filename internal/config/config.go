@@ -18,6 +18,8 @@ type Config struct {
 	AppPort    string `mapstructure:"APP_PORT"`
 	JWTSecret  string `mapstructure:"JWT_SECRET"`
 
+	APIBasePath string
+
 	AuthRateLimitMax    int
 	AuthRateLimitWindow time.Duration
 
@@ -68,6 +70,7 @@ func Load() (*Config, error) {
 		PGSSLMode:           viper.GetString("PGSSLMODE"),
 		AppPort:             viper.GetString("APP_PORT"),
 		JWTSecret:           viper.GetString("JWT_SECRET"),
+		APIBasePath:         normalizeBasePath(viper.GetString("API_BASE_PATH")),
 		AuthRateLimitMax:    viper.GetInt("AUTH_RATE_LIMIT_MAX"),
 		AuthRateLimitWindow: time.Duration(viper.GetInt("AUTH_RATE_LIMIT_WINDOW_SECONDS")) * time.Second,
 		JWTAccessTokenTTL:   time.Duration(viper.GetInt("JWT_ACCESS_TOKEN_TTL_MINUTES")) * time.Minute,
@@ -137,6 +140,15 @@ func validate(cfg *Config) error {
 	}
 
 	return nil
+}
+
+func normalizeBasePath(raw string) string {
+	trimmed := strings.Trim(strings.TrimSpace(raw), "/")
+	if trimmed == "" {
+		return ""
+	}
+
+	return "/" + trimmed
 }
 
 func parseOrigins(raw string) []string {
