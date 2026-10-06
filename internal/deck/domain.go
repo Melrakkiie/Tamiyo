@@ -58,4 +58,6 @@ type Repository interface {
 	FindCardsByDeckID(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]DeckCard, error)
 	LinkCardToDeck(ctx context.Context, userID string, deckID int, cardID int) error
 	UnlinkCardFromDeck(ctx context.Context, userID string, deckID int, cardID int) error
+
+	PendingRepository
 }

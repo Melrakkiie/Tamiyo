@@ -807,3 +807,45 @@ func TestPostgresRepository_ReturnsCommanderScryfallID(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, updated.CommanderScryfallID)
 }
+
+func TestPostgresRepository_PendingCards(t *testing.T) {
+	db := getTestDB(t)
+	alice := seedUser(t, db, "alice@example.com")
+	bob := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, alice)
+
+	colors := "R"
+	created, err := repo.CreatePendingCard(context.Background(), alice, PendingCard{
+		DeckID: 1, Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d",
+		SetCode: "2xm", CollectorNumber: "129", Quantity: 2, ManaValue: 1, Colors: &colors,
+	})
+	require.NoError(t, err)
+	assert.NotZero(t, created.ID)
+	assert.Equal(t, 2, created.Quantity)
+	require.NotNil(t, created.Colors)
+	assert.Equal(t, "R", *created.Colors)
+
+	_, err = repo.CreatePendingCard(context.Background(), alice, PendingCard{
+		DeckID: 1, Name: "Abrade", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1e", SetCode: "dmu", CollectorNumber: "116", Quantity: 1,
+	})
+	require.NoError(t, err)
+
+	found, err := repo.FindPendingCards(context.Background(), alice, 1)
+	require.NoError(t, err)
+	require.Len(t, found, 2)
+	assert.Equal(t, "Abrade", found[0].Name)
+
+	others, err := repo.FindPendingCards(context.Background(), bob, 1)
+	require.NoError(t, err)
+	assert.Empty(t, others)
+
+	assert.ErrorIs(t, repo.DeletePendingCard(context.Background(), bob, 1, created.ID), ErrPendingCardNotFound)
+	require.NoError(t, repo.DeletePendingCard(context.Background(), alice, 1, created.ID))
+	assert.ErrorIs(t, repo.DeletePendingCard(context.Background(), alice, 1, created.ID), ErrPendingCardNotFound)
+
+	require.NoError(t, repo.Delete(context.Background(), alice, 1))
+	found, err = repo.FindPendingCards(context.Background(), alice, 1)
+	require.NoError(t, err)
+	assert.Empty(t, found)
+}

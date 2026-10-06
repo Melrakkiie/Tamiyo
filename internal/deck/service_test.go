@@ -35,6 +35,29 @@ type fakeRepository struct {
 
 	linkErr   error
 	unlinkErr error
+
+	pending          []PendingCard
+	createdPending   PendingCard
+	deletePendingErr error
+	lastPendingID    int
+}
+
+func (f *fakeRepository) FindPendingCards(ctx context.Context, userID string, deckID int) ([]PendingCard, error) {
+	f.lastUserID = userID
+	return f.pending, nil
+}
+
+func (f *fakeRepository) CreatePendingCard(ctx context.Context, userID string, p PendingCard) (PendingCard, error) {
+	f.lastUserID = userID
+	f.createdPending = p
+	p.ID = 7
+	return p, nil
+}
+
+func (f *fakeRepository) DeletePendingCard(ctx context.Context, userID string, deckID, id int) error {
+	f.lastUserID = userID
+	f.lastPendingID = id
+	return f.deletePendingErr
 }
 
 func (f *fakeRepository) FindAll(ctx context.Context, userID string, filter Filter) ([]Deck, int, error) {
@@ -437,4 +460,41 @@ func TestService_RemoveCardFromDeck_PropagatesRepositoryError(t *testing.T) {
 	err := service.RemoveCardFromDeck(context.Background(), testUserID, 1, 4)
 
 	assert.Error(t, err)
+}
+
+func TestService_AddPendingCard_SetsTheDeck(t *testing.T) {
+	repo := &fakeRepository{findByIDDeck: Deck{ID: 3}}
+	service := NewService(repo)
+
+	created, err := service.AddPendingCard(context.Background(), testUserID, 3, PendingCard{Name: "Sol Ring", Quantity: 1})
+
+	require.NoError(t, err)
+	assert.Equal(t, 7, created.ID)
+	assert.Equal(t, 3, repo.createdPending.DeckID)
+	assert.Equal(t, testUserID, repo.lastUserID)
+}
+
+func TestService_PendingCards_RequireTheDeckToBelongToTheUser(t *testing.T) {
+	repo := &fakeRepository{findByIDErr: ErrNotFound}
+	service := NewService(repo)
+
+	_, err := service.GetPendingCards(context.Background(), testUserID, 3)
+	assert.ErrorIs(t, err, ErrNotFound)
+
+	_, err = service.AddPendingCard(context.Background(), testUserID, 3, PendingCard{Name: "Sol Ring"})
+	assert.ErrorIs(t, err, ErrNotFound)
+
+	err = service.RemovePendingCard(context.Background(), testUserID, 3, 1)
+	assert.ErrorIs(t, err, ErrNotFound)
+	assert.Zero(t, repo.lastPendingID)
+}
+
+func TestService_RemovePendingCard_PropagatesNotFound(t *testing.T) {
+	repo := &fakeRepository{findByIDDeck: Deck{ID: 3}, deletePendingErr: ErrPendingCardNotFound}
+	service := NewService(repo)
+
+	err := service.RemovePendingCard(context.Background(), testUserID, 3, 9)
+
+	assert.ErrorIs(t, err, ErrPendingCardNotFound)
+	assert.Equal(t, 9, repo.lastPendingID)
 }

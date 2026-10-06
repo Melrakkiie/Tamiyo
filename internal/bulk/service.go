@@ -33,6 +33,8 @@ type deckService interface {
 	CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error)
 	PutCardInDeck(ctx context.Context, userID string, deckID, cardID int) error
 	GetDeckCards(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]deck.DeckCard, error)
+	GetPendingCards(ctx context.Context, userID string, deckID int) ([]deck.PendingCard, error)
+	RemovePendingCard(ctx context.Context, userID string, deckID, id int) error
 }
 
 type Service struct {

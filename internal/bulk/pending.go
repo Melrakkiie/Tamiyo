@@ -1,0 +1,112 @@
+package bulk
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"strconv"
+
+	"github.com/gin-gonic/gin"
+
+	"Melrakkiie/Tamiyo/internal/apierr"
+	"Melrakkiie/Tamiyo/internal/auth"
+	"Melrakkiie/Tamiyo/internal/card"
+	"Melrakkiie/Tamiyo/internal/deck"
+	"Melrakkiie/Tamiyo/internal/storage"
+)
+
+type PendingCommitSummary struct {
+	CardsCreated int `json:"cards_created"`
+}
+
+func (s *Service) CommitPendingCards(ctx context.Context, userID string, deckID int, storageID *int) (PendingCommitSummary, error) {
+	var summary PendingCommitSummary
+
+	pending, err := s.decks.GetPendingCards(ctx, userID, deckID)
+	if err != nil {
+		if errors.Is(err, deck.ErrNotFound) {
+			return summary, ErrDeckNotFound
+		}
+		return summary, err
+	}
+
+	if storageID != nil {
+		if _, err := s.storages.GetStorage(ctx, userID, *storageID); err != nil {
+			if errors.Is(err, storage.ErrNotFound) {
+				return summary, ErrTargetStorageNotFound
+			}
+			return summary, err
+		}
+	}
+
+	for _, p := range pending {
+		for i := 0; i < p.Quantity; i++ {
+			created, err := s.cards.CreateCard(ctx, userID, card.Card{
+				Name:            p.Name,
+				ScryfallID:      p.ScryfallID,
+				SetCode:         p.SetCode,
+				CollectorNumber: p.CollectorNumber,
+				Foil:            p.Foil,
+				StorageID:       storageID,
+				ManaValue:       p.ManaValue,
+				Colors:          p.Colors,
+				CardType:        p.CardType,
+				ColorIdentity:   p.ColorIdentity,
+			})
+			if err != nil {
+				return summary, fmt.Errorf("creating %q: %w", p.Name, err)
+			}
+			summary.CardsCreated++
+			if err := s.decks.PutCardInDeck(ctx, userID, deckID, created.ID); err != nil {
+				return summary, fmt.Errorf("adding %q to the deck: %w", p.Name, err)
+			}
+		}
+		if err := s.decks.RemovePendingCard(ctx, userID, deckID, p.ID); err != nil {
+			return summary, fmt.Errorf("clearing %q from the pending list: %w", p.Name, err)
+		}
+	}
+
+	return summary, nil
+}
+
+type commitPendingRequest struct {
+	StorageID *int `json:"storage_id" binding:"omitempty,gt=0"`
+}
+
+func (h *Handler) commitPendingCards(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+	deckID, err := strconv.Atoi(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	var req commitPendingRequest
+	if ctx.Request.ContentLength != 0 {
+		if err := json.NewDecoder(ctx.Request.Body).Decode(&req); err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+			return
+		}
+		if req.StorageID != nil && *req.StorageID <= 0 {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "storage_id must be a positive integer"})
+			return
+		}
+	}
+
+	summary, err := h.service.CommitPendingCards(ctx.Request.Context(), userID, deckID, req.StorageID)
+	if err != nil {
+		apierr.Respond(ctx, err,
+			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
+			apierr.Mapping{Err: ErrTargetStorageNotFound, Status: http.StatusBadRequest, Message: "storage_id does not reference an existing storage"},
+		)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, summary)
+}

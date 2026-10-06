@@ -966,6 +966,138 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /deck/{id}/pending:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    get:
+      tags: [deck-cards]
+      summary: List the cards waiting to be added to the collection for this deck
+      description: >
+        Cards picked on Scryfall for this deck but not in the collection yet,
+        sorted by name. POST /deck/{id}/pending/commit creates them in the
+        collection and puts them in the deck.
+      responses:
+        "200":
+          description: OK (empty array when nothing is pending)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PendingCard"
+        "400":
+          $ref: "#/components/responses/InvalidID"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found, or not owned by the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      tags: [deck-cards]
+      summary: Add a card to the deck's pending list
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddPendingCardRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PendingCard"
+        "400":
+          description: Invalid id or body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found, or not owned by the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /deck/{id}/pending/{pending_id}:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+      - name: pending_id
+        in: path
+        required: true
+        schema:
+          type: integer
+        description: Pending card ID
+    delete:
+      tags: [deck-cards]
+      summary: Remove a card from the deck's pending list
+      responses:
+        "204":
+          description: No Content
+        "400":
+          $ref: "#/components/responses/InvalidID"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck or pending card not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /deck/{id}/pending/commit:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    post:
+      tags: [deck-cards]
+      summary: Create the pending cards in the collection and put them in the deck
+      description: >
+        Creates one card per copy of every pending card, in the given storage
+        (or without storage), adds each one to the deck, and clears the
+        pending list. Items are handled one at a time: if something fails,
+        the items already handled stay done and the rest stay pending.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                storage_id:
+                  type: integer
+                  minimum: 1
+                  nullable: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PendingCommitSummary"
+        "400":
+          description: Invalid id or body, or storage_id doesn't reference an existing storage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found, or not owned by the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /deck/{id}/legality:
     parameters:
       - $ref: "#/components/parameters/DeckID"
@@ -1638,6 +1770,85 @@ components:
         - mana_value
         - added
         - updated
+
+    PendingCard:
+      type: object
+      properties:
+        id:
+          type: integer
+        deck_id:
+          type: integer
+        name:
+          type: string
+        scryfall_id:
+          type: string
+          format: uuid
+        set_code:
+          type: string
+        collector_number:
+          type: string
+        foil:
+          type: boolean
+        quantity:
+          type: integer
+        mana_value:
+          type: number
+        colors:
+          type: string
+          nullable: true
+        card_type:
+          type: string
+          nullable: true
+          enum: [Creature, Planeswalker, Battle, Instant, Sorcery, Artifact, Enchantment, Land, Other]
+        color_identity:
+          type: string
+          nullable: true
+        added:
+          type: string
+      required: [id, deck_id, name, scryfall_id, set_code, collector_number, foil, quantity, mana_value, added]
+
+    AddPendingCardRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        scryfall_id:
+          type: string
+          format: uuid
+        set_code:
+          type: string
+        collector_number:
+          type: string
+        foil:
+          type: boolean
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 1
+        mana_value:
+          type: number
+          minimum: 0
+        colors:
+          type: string
+          nullable: true
+          pattern: "^[WUBRGwubrg]*$"
+        card_type:
+          type: string
+          nullable: true
+          enum: [Creature, Planeswalker, Battle, Instant, Sorcery, Artifact, Enchantment, Land, Other]
+        color_identity:
+          type: string
+          nullable: true
+          pattern: "^[WUBRGwubrg]*$"
+      required: [name, scryfall_id, set_code, collector_number]
+
+    PendingCommitSummary:
+      type: object
+      properties:
+        cards_created:
+          type: integer
+      required: [cards_created]
 
     DetailsRefreshSummary:
       type: object

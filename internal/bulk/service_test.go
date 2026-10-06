@@ -127,6 +127,21 @@ type fakeDeckService struct {
 	getDeckErr      error
 	getDeckCardsErr error
 	createDeckErr   error
+
+	pending        []deck.PendingCard
+	removedPending []int
+}
+
+func (f *fakeDeckService) GetPendingCards(ctx context.Context, userID string, deckID int) ([]deck.PendingCard, error) {
+	if f.getDeckErr != nil {
+		return nil, f.getDeckErr
+	}
+	return f.pending, nil
+}
+
+func (f *fakeDeckService) RemovePendingCard(ctx context.Context, userID string, deckID, id int) error {
+	f.removedPending = append(f.removedPending, id)
+	return nil
 }
 
 func (f *fakeDeckService) GetAllDecks(ctx context.Context, userID string, filter deck.Filter) ([]deck.Deck, int, error) {
@@ -683,4 +698,63 @@ func TestRefreshCardDetails_ReturnsScryfallUnavailable(t *testing.T) {
 	_, err := svc.RefreshCardDetails(context.Background(), testUserID, 0)
 
 	assert.ErrorIs(t, err, ErrScryfallUnavailable)
+}
+
+func TestCommitPendingCards_CreatesEachCopyAndPutsItInTheDeck(t *testing.T) {
+	colors := "R"
+	cards := &fakeCardService{}
+	decks := &fakeDeckService{pending: []deck.PendingCard{
+		{ID: 1, Name: "Lightning Bolt", ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000", SetCode: "2xm", CollectorNumber: "129", Quantity: 2, ManaValue: 1, Colors: &colors},
+		{ID: 2, Name: "Sol Ring", ScryfallID: "bbbbbbbb-0000-0000-0000-000000000000", SetCode: "c21", CollectorNumber: "263", Quantity: 1, Foil: true},
+	}}
+	storages := &fakeStorageService{storages: []storage.Storage{{ID: 4, Name: "Binder"}}}
+	svc := NewService(cards, storages, decks, &fakeResolver{})
+	storageID := 4
+
+	summary, err := svc.CommitPendingCards(context.Background(), testUserID, 9, &storageID)
+
+	require.NoError(t, err)
+	assert.Equal(t, 3, summary.CardsCreated)
+	require.Len(t, cards.created, 3)
+	assert.Equal(t, "Lightning Bolt", cards.created[0].Name)
+	require.NotNil(t, cards.created[0].Colors)
+	assert.Equal(t, "R", *cards.created[0].Colors)
+	require.NotNil(t, cards.created[0].StorageID)
+	assert.Equal(t, 4, *cards.created[0].StorageID)
+	assert.True(t, cards.created[2].Foil)
+	assert.Len(t, decks.linkedCards[9], 3)
+	assert.Equal(t, []int{1, 2}, decks.removedPending)
+}
+
+func TestCommitPendingCards_RejectsAnUnknownStorage(t *testing.T) {
+	cards := &fakeCardService{}
+	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 1, Name: "Sol Ring", Quantity: 1}}}
+	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	storageID := 42
+
+	_, err := svc.CommitPendingCards(context.Background(), testUserID, 9, &storageID)
+
+	assert.ErrorIs(t, err, ErrTargetStorageNotFound)
+	assert.Empty(t, cards.created)
+	assert.Empty(t, decks.removedPending)
+}
+
+func TestCommitPendingCards_ReturnsDeckNotFound(t *testing.T) {
+	decks := &fakeDeckService{getDeckErr: deck.ErrNotFound}
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+
+	_, err := svc.CommitPendingCards(context.Background(), testUserID, 9, nil)
+
+	assert.ErrorIs(t, err, ErrDeckNotFound)
+}
+
+func TestCommitPendingCards_KeepsTheItemWhenCreationFails(t *testing.T) {
+	cards := &fakeCardService{createErr: errors.New("database down")}
+	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 1, Name: "Sol Ring", Quantity: 1}}}
+	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+
+	_, err := svc.CommitPendingCards(context.Background(), testUserID, 9, nil)
+
+	assert.Error(t, err)
+	assert.Empty(t, decks.removedPending)
 }

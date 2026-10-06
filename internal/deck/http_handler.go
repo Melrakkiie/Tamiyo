@@ -142,6 +142,10 @@ type deckService interface {
 	GetDeckCards(ctx context.Context, userID string, deckID int, sortField string, sortDesc bool) ([]DeckCard, error)
 	PutCardInDeck(ctx context.Context, userID string, deckID int, cardID int) error
 	RemoveCardFromDeck(ctx context.Context, userID string, deckID int, cardID int) error
+
+	GetPendingCards(ctx context.Context, userID string, deckID int) ([]PendingCard, error)
+	AddPendingCard(ctx context.Context, userID string, deckID int, p PendingCard) (PendingCard, error)
+	RemovePendingCard(ctx context.Context, userID string, deckID, id int) error
 }
 
 type Handler struct {
@@ -162,6 +166,10 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.GET("/deck/:id/cards", h.getDeckCards)
 	router.PUT("/deck/:id/cards/:card_id", h.putCardInDeck)
 	router.DELETE("/deck/:id/cards/:card_id", h.removeCardFromDeck)
+
+	router.GET("/deck/:id/pending", h.getPendingCards)
+	router.POST("/deck/:id/pending", h.addPendingCard)
+	router.DELETE("/deck/:id/pending/:pending_id", h.removePendingCard)
 }
 
 func (h *Handler) getDecks(ctx *gin.Context) {

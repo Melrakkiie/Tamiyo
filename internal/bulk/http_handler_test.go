@@ -31,6 +31,19 @@ type fakeImportService struct {
 
 	refreshSummary DetailsRefreshSummary
 	lastAfterID    int
+
+	commitSummary PendingCommitSummary
+	lastDeckID    int
+	lastStorageID *int
+	commitCalled  bool
+}
+
+func (f *fakeImportService) CommitPendingCards(ctx context.Context, userID string, deckID int, storageID *int) (PendingCommitSummary, error) {
+	f.lastUserID = userID
+	f.lastDeckID = deckID
+	f.lastStorageID = storageID
+	f.commitCalled = true
+	return f.commitSummary, f.err
 }
 
 func (f *fakeImportService) ImportManaBox(ctx context.Context, userID string, r io.Reader) (Summary, error) {
@@ -456,4 +469,56 @@ func TestHandler_RefreshCardDetails_ReturnsBadGatewayWhenScryfallIsDown(t *testi
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadGateway, w.Code)
+}
+
+func TestHandler_CommitPendingCards(t *testing.T) {
+	service := &fakeImportService{commitSummary: PendingCommitSummary{CardsCreated: 3}}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPost, "/deck/9/pending/commit", bytes.NewBufferString(`{"storage_id": 4}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.JSONEq(t, `{"cards_created": 3}`, w.Body.String())
+	assert.Equal(t, 9, service.lastDeckID)
+	require.NotNil(t, service.lastStorageID)
+	assert.Equal(t, 4, *service.lastStorageID)
+}
+
+func TestHandler_CommitPendingCards_WorksWithoutABody(t *testing.T) {
+	service := &fakeImportService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPost, "/deck/9/pending/commit", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Nil(t, service.lastStorageID)
+}
+
+func TestHandler_CommitPendingCards_MapsErrors(t *testing.T) {
+	cases := map[error]int{ErrDeckNotFound: http.StatusNotFound, ErrTargetStorageNotFound: http.StatusBadRequest}
+	for commitErr, expected := range cases {
+		router := setupRouter(&fakeImportService{err: commitErr})
+		req := httptest.NewRequest(http.MethodPost, "/deck/9/pending/commit", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		assert.Equal(t, expected, w.Code)
+	}
+}
+
+func TestHandler_CommitPendingCards_RejectsABadStorageID(t *testing.T) {
+	service := &fakeImportService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPost, "/deck/9/pending/commit", bytes.NewBufferString(`{"storage_id": 0}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.False(t, service.commitCalled)
 }

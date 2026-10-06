@@ -24,6 +24,7 @@ type importService interface {
 	ExportMoxfieldDeck(ctx context.Context, userID string, deckID int, w io.Writer) error
 
 	RefreshCardDetails(ctx context.Context, userID string, afterID int) (DetailsRefreshSummary, error)
+	CommitPendingCards(ctx context.Context, userID string, deckID int, storageID *int) (PendingCommitSummary, error)
 }
 
 type Handler struct {
@@ -44,6 +45,7 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.GET("/export/moxfield/deck/:id", h.exportMoxfieldDeck)
 
 	router.POST("/cards/refresh-details", h.refreshCardDetails)
+	router.POST("/deck/:id/pending/commit", h.commitPendingCards)
 }
 
 func (h *Handler) refreshCardDetails(ctx *gin.Context) {

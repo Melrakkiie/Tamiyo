@@ -38,6 +38,32 @@ type fakeService struct {
 
 	putCardErr    error
 	removeCardErr error
+
+	pending          []PendingCard
+	pendingErr       error
+	addedPending     PendingCard
+	removePendingErr error
+}
+
+func (f *fakeService) GetPendingCards(ctx context.Context, userID string, deckID int) ([]PendingCard, error) {
+	f.lastUserID = userID
+	return f.pending, f.pendingErr
+}
+
+func (f *fakeService) AddPendingCard(ctx context.Context, userID string, deckID int, p PendingCard) (PendingCard, error) {
+	f.lastUserID = userID
+	if f.pendingErr != nil {
+		return PendingCard{}, f.pendingErr
+	}
+	p.ID = 5
+	p.DeckID = deckID
+	f.addedPending = p
+	return p, nil
+}
+
+func (f *fakeService) RemovePendingCard(ctx context.Context, userID string, deckID, id int) error {
+	f.lastUserID = userID
+	return f.removePendingErr
 }
 
 func (f *fakeService) GetAllDecks(ctx context.Context, userID string, filter Filter) ([]Deck, int, error) {
@@ -786,4 +812,77 @@ func TestHandler_RemoveCardFromDeck_ReturnsErrorOnServiceFailure(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestHandler_GetPendingCards_ReturnsTheList(t *testing.T) {
+	service := &fakeService{pending: []PendingCard{{ID: 1, DeckID: 2, Name: "Sol Ring", Quantity: 2}}}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck/2/pending", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var response []pendingCardResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.Len(t, response, 1)
+	assert.Equal(t, "Sol Ring", response[0].Name)
+	assert.Equal(t, 2, response[0].Quantity)
+}
+
+func TestHandler_GetPendingCards_ReturnsNotFoundForAnotherUsersDeck(t *testing.T) {
+	router := setupRouter(&fakeService{pendingErr: ErrNotFound})
+
+	req := httptest.NewRequest(http.MethodGet, "/deck/2/pending", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestHandler_AddPendingCard_NormalizesAndDefaultsQuantity(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	body := `{"name": "Lightning Helix", "scryfall_id": "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f", "set_code": "rav", "collector_number": "213", "colors": "rw", "color_identity": "rw", "card_type": "Instant", "mana_value": 2}`
+	req := httptest.NewRequest(http.MethodPost, "/deck/2/pending", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	assert.Equal(t, 1, service.addedPending.Quantity)
+	assert.Equal(t, 2, service.addedPending.DeckID)
+	assert.Equal(t, "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f", service.addedPending.ScryfallID)
+	require.NotNil(t, service.addedPending.Colors)
+	assert.Equal(t, "WR", *service.addedPending.Colors)
+}
+
+func TestHandler_AddPendingCard_RejectsInvalidBodies(t *testing.T) {
+	bodies := []string{
+		`{"scryfall_id": "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f", "set_code": "rav", "collector_number": "213"}`,
+		`{"name": "X", "scryfall_id": "nope", "set_code": "rav", "collector_number": "213"}`,
+		`{"name": "X", "scryfall_id": "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f", "set_code": "rav", "collector_number": "213", "quantity": 0}`,
+		`{"name": "X", "scryfall_id": "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f", "set_code": "rav", "collector_number": "213", "colors": "WX"}`,
+		`{"name": "X", "scryfall_id": "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f", "set_code": "rav", "collector_number": "213", "card_type": "Tribal"}`,
+	}
+	for _, body := range bodies {
+		router := setupRouter(&fakeService{})
+		req := httptest.NewRequest(http.MethodPost, "/deck/2/pending", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusBadRequest, w.Code, body)
+	}
+}
+
+func TestHandler_RemovePendingCard(t *testing.T) {
+	cases := map[error]int{nil: http.StatusNoContent, ErrPendingCardNotFound: http.StatusNotFound, ErrNotFound: http.StatusNotFound}
+	for removeErr, expected := range cases {
+		router := setupRouter(&fakeService{removePendingErr: removeErr})
+		req := httptest.NewRequest(http.MethodDelete, "/deck/2/pending/4", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		assert.Equal(t, expected, w.Code)
+	}
 }
