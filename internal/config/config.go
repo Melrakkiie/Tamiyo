@@ -46,7 +46,6 @@ type Config struct {
 func Load() (*Config, error) {
 	viper.AutomaticEnv()
 	viper.SetDefault("APP_PORT", "8080")
-	viper.SetDefault("PGPORT", "5432")
 	viper.SetDefault("PGSSLMODE", "disable")
 	viper.SetDefault("AUTH_RATE_LIMIT_MAX", 5)
 	viper.SetDefault("AUTH_RATE_LIMIT_WINDOW_SECONDS", 60)
@@ -61,11 +60,11 @@ func Load() (*Config, error) {
 	viper.SetDefault("SHUTDOWN_TIMEOUT_SECONDS", 10)
 
 	cfg := &Config{
-		PGHost:              viper.GetString("PGHOST"),
-		PGPort:              viper.GetString("PGPORT"),
-		PGUser:              viper.GetString("PGUSER"),
-		PGPassword:          viper.GetString("PGPASSWORD"),
-		PGDatabase:          viper.GetString("PGDATABASE"),
+		PGHost:              firstNonEmpty(viper.GetString("PGHOST"), viper.GetString("POSTGRESQL_ADDON_HOST")),
+		PGPort:              firstNonEmpty(viper.GetString("PGPORT"), viper.GetString("POSTGRESQL_ADDON_PORT"), "5432"),
+		PGUser:              firstNonEmpty(viper.GetString("PGUSER"), viper.GetString("POSTGRESQL_ADDON_USER")),
+		PGPassword:          firstNonEmpty(viper.GetString("PGPASSWORD"), viper.GetString("POSTGRESQL_ADDON_PASSWORD")),
+		PGDatabase:          firstNonEmpty(viper.GetString("PGDATABASE"), viper.GetString("POSTGRESQL_ADDON_DB")),
 		PGSSLMode:           viper.GetString("PGSSLMODE"),
 		AppPort:             viper.GetString("APP_PORT"),
 		JWTSecret:           viper.GetString("JWT_SECRET"),
@@ -98,6 +97,20 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// firstNonEmpty returns the first non-empty value. It is how the PG*
+// settings fall back to the POSTGRESQL_ADDON_* variables that a Clever Cloud
+// PostgreSQL add-on injects into a linked application, so the app works there
+// without duplicating every value by hand. An explicit PG* variable always
+// wins over the add-on one.
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func validate(cfg *Config) error {

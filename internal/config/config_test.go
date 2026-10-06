@@ -185,3 +185,56 @@ func TestLoad_ReturnsErrorWhenRequiredPGVarsMissing(t *testing.T) {
 	assert.Contains(t, err.Error(), "PGPASSWORD")
 	assert.Contains(t, err.Error(), "PGDATABASE")
 }
+
+func TestLoad_FallsBackToPostgreSQLAddonVariablesWhenPGVarsMissing(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("PGHOST", "")
+	t.Setenv("PGPORT", "")
+	t.Setenv("PGUSER", "")
+	t.Setenv("PGPASSWORD", "")
+	t.Setenv("PGDATABASE", "")
+	t.Setenv("POSTGRESQL_ADDON_HOST", "addon-host.example.com")
+	t.Setenv("POSTGRESQL_ADDON_PORT", "5433")
+	t.Setenv("POSTGRESQL_ADDON_USER", "addon-user")
+	t.Setenv("POSTGRESQL_ADDON_PASSWORD", "addon-password")
+	t.Setenv("POSTGRESQL_ADDON_DB", "addon_db")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, "addon-host.example.com", cfg.PGHost)
+	assert.Equal(t, "5433", cfg.PGPort)
+	assert.Equal(t, "addon-user", cfg.PGUser)
+	assert.Equal(t, "addon-password", cfg.PGPassword)
+	assert.Equal(t, "addon_db", cfg.PGDatabase)
+}
+
+func TestLoad_ExplicitPGVarsTakePrecedenceOverPostgreSQLAddonVariables(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("PGPORT", "5432")
+	t.Setenv("POSTGRESQL_ADDON_HOST", "addon-host.example.com")
+	t.Setenv("POSTGRESQL_ADDON_PORT", "5433")
+	t.Setenv("POSTGRESQL_ADDON_USER", "addon-user")
+	t.Setenv("POSTGRESQL_ADDON_PASSWORD", "addon-password")
+	t.Setenv("POSTGRESQL_ADDON_DB", "addon_db")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, "db", cfg.PGHost)
+	assert.Equal(t, "5432", cfg.PGPort)
+	assert.Equal(t, "login", cfg.PGUser)
+	assert.Equal(t, "password", cfg.PGPassword)
+	assert.Equal(t, "tamiyo_db", cfg.PGDatabase)
+}
+
+func TestLoad_DefaultsPGPortWhenNeitherPGPortNorAddonPortIsSet(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("PGPORT", "")
+	t.Setenv("POSTGRESQL_ADDON_PORT", "")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, "5432", cfg.PGPort)
+}
