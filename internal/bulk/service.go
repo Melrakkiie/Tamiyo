@@ -16,6 +16,8 @@ const defaultManaBoxDeckFormat = "commander"
 type cardService interface {
 	CreateCard(ctx context.Context, userID string, c card.Card) (card.Card, error)
 	GetAllCards(ctx context.Context, userID string, filter card.CardFilter) ([]card.Card, int, error)
+	GetCardsMissingDetails(ctx context.Context, userID string) ([]card.Card, error)
+	SetCardDetails(ctx context.Context, userID string, id int, details card.Details) error
 }
 
 type storageService interface {
@@ -67,7 +69,7 @@ func (s *Service) ImportManaBox(ctx context.Context, userID string, r io.Reader)
 		return Summary{}, fmt.Errorf("loading existing decks: %w", err)
 	}
 
-	manaValueByScryfallID := make(map[string]float64)
+	resolvedByScryfallID := make(map[string]ResolvedCard)
 	identifiers := make([]CardIdentifier, 0, len(rows))
 	for _, row := range rows {
 		if row.ScryfallID != "" {
@@ -79,7 +81,7 @@ func (s *Service) ImportManaBox(ctx context.Context, userID string, r io.Reader)
 		resolved = map[string]ResolvedCard{}
 	}
 	for _, rc := range resolved {
-		manaValueByScryfallID[rc.ScryfallID] = rc.ManaValue
+		resolvedByScryfallID[rc.ScryfallID] = rc
 	}
 
 	var summary Summary
@@ -108,6 +110,12 @@ func (s *Service) ImportManaBox(ctx context.Context, userID string, r io.Reader)
 			deckID = &id
 		}
 
+		rc, resolvedOK := resolvedByScryfallID[row.ScryfallID]
+		var colors, cardType *string
+		if resolvedOK {
+			colors, cardType = rc.colorsAndType()
+		}
+
 		for i := 0; i < row.Quantity; i++ {
 			created, err := s.cards.CreateCard(ctx, userID, card.Card{
 				Name:            row.CardName,
@@ -116,7 +124,9 @@ func (s *Service) ImportManaBox(ctx context.Context, userID string, r io.Reader)
 				CollectorNumber: row.CollectorNumber,
 				Foil:            row.Foil,
 				StorageID:       &storageID,
-				ManaValue:       manaValueByScryfallID[row.ScryfallID],
+				ManaValue:       rc.ManaValue,
+				Colors:          colors,
+				CardType:        cardType,
 			})
 			if err != nil {
 				summary.CardsSkipped++
@@ -169,6 +179,7 @@ func (s *Service) ImportMoxfieldCollection(ctx context.Context, userID string, s
 			continue
 		}
 
+		colors, cardType := resolvedCard.colorsAndType()
 		for i := 0; i < row.Quantity; i++ {
 			if _, err := s.cards.CreateCard(ctx, userID, card.Card{
 				Name:            row.CardName,
@@ -178,6 +189,8 @@ func (s *Service) ImportMoxfieldCollection(ctx context.Context, userID string, s
 				Foil:            row.Foil,
 				StorageID:       &storageID,
 				ManaValue:       resolvedCard.ManaValue,
+				Colors:          colors,
+				CardType:        cardType,
 			}); err != nil {
 				summary.CardsSkipped++
 				summary.Warnings = append(summary.Warnings, fmt.Sprintf("line %d: could not create %q: %v", row.LineNo, row.CardName, err))
@@ -219,6 +232,7 @@ func (s *Service) ImportMoxfieldDeck(ctx context.Context, userID string, req Mox
 
 	createLineCopies := func(line moxfieldDeckLine, resolvedCard ResolvedCard) []int {
 		ids := make([]int, 0, line.Quantity)
+		colors, cardType := resolvedCard.colorsAndType()
 		for i := 0; i < line.Quantity; i++ {
 			created, err := s.cards.CreateCard(ctx, userID, card.Card{
 				Name:            line.CardName,
@@ -228,6 +242,8 @@ func (s *Service) ImportMoxfieldDeck(ctx context.Context, userID string, req Mox
 				Foil:            line.Foil,
 				StorageID:       req.StorageID,
 				ManaValue:       resolvedCard.ManaValue,
+				Colors:          colors,
+				CardType:        cardType,
 			})
 			if err != nil {
 				summary.CardsSkipped++
@@ -399,4 +415,39 @@ func dedupeIdentifiers(identifiers []CardIdentifier) []CardIdentifier {
 		out = append(out, id)
 	}
 	return out
+}
+
+func (s *Service) RefreshCardDetails(ctx context.Context, userID string) (DetailsRefreshSummary, error) {
+	cards, err := s.cards.GetCardsMissingDetails(ctx, userID)
+	if err != nil {
+		return DetailsRefreshSummary{}, err
+	}
+	if len(cards) == 0 {
+		return DetailsRefreshSummary{}, nil
+	}
+
+	identifiers := make([]CardIdentifier, 0, len(cards))
+	for _, c := range cards {
+		identifiers = append(identifiers, CardIdentifier{ScryfallID: c.ScryfallID})
+	}
+	resolved, err := s.scryfall.Resolve(ctx, dedupeIdentifiers(identifiers))
+	if err != nil {
+		return DetailsRefreshSummary{}, fmt.Errorf("%w: %v", ErrScryfallUnavailable, err)
+	}
+
+	var summary DetailsRefreshSummary
+	for _, c := range cards {
+		rc, ok := resolved[resolveKeyByID(c.ScryfallID)]
+		if !ok {
+			summary.NotFound++
+			continue
+		}
+		details := card.Details{Colors: rc.Colors, CardType: rc.CardType, ManaValue: rc.ManaValue}
+		if err := s.cards.SetCardDetails(ctx, userID, c.ID, details); err != nil {
+			return summary, err
+		}
+		summary.Updated++
+	}
+
+	return summary, nil
 }

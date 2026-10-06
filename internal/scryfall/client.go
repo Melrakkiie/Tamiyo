@@ -67,6 +67,46 @@ type wireCard struct {
 	Colors          []string          `json:"colors"`
 	ColorIdentity   []string          `json:"color_identity"`
 	Legalities      map[string]string `json:"legalities"`
+	CardFaces       []wireCardFace    `json:"card_faces"`
+}
+
+type wireCardFace struct {
+	Colors []string `json:"colors"`
+}
+
+func (w wireCard) toCard() Card {
+	colors := w.Colors
+	if colors == nil {
+		for _, face := range w.CardFaces {
+			colors = append(colors, face.Colors...)
+		}
+		colors = dedupe(colors)
+	}
+
+	return Card{
+		ID:              w.ID,
+		Name:            w.Name,
+		Set:             w.Set,
+		CollectorNumber: w.CollectorNumber,
+		ManaCost:        w.ManaCost,
+		CMC:             w.CMC,
+		TypeLine:        w.TypeLine,
+		Colors:          colors,
+		ColorIdentity:   w.ColorIdentity,
+		Legalities:      w.Legalities,
+	}
+}
+
+func dedupe(values []string) []string {
+	seen := make(map[string]bool, len(values))
+	unique := make([]string, 0, len(values))
+	for _, v := range values {
+		if !seen[v] {
+			seen[v] = true
+			unique = append(unique, v)
+		}
+	}
+	return unique
 }
 
 type collectionResponse struct {
@@ -161,7 +201,7 @@ func (c *Client) fetchBatch(ctx context.Context, batch []Identifier) ([]Card, er
 
 		cards := make([]Card, len(parsed.Data))
 		for i, wc := range parsed.Data {
-			cards[i] = Card(wc)
+			cards[i] = wc.toCard()
 		}
 		return cards, nil
 	}

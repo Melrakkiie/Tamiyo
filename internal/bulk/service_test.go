@@ -25,6 +25,21 @@ type fakeCardService struct {
 
 	allCards  []card.Card
 	getAllErr error
+
+	missingDetails []card.Card
+	setDetails     map[int]card.Details
+}
+
+func (f *fakeCardService) GetCardsMissingDetails(ctx context.Context, userID string) ([]card.Card, error) {
+	return f.missingDetails, nil
+}
+
+func (f *fakeCardService) SetCardDetails(ctx context.Context, userID string, id int, details card.Details) error {
+	if f.setDetails == nil {
+		f.setDetails = map[int]card.Details{}
+	}
+	f.setDetails[id] = details
+	return nil
 }
 
 func (f *fakeCardService) CreateCard(ctx context.Context, userID string, c card.Card) (card.Card, error) {
@@ -554,4 +569,82 @@ func TestImportMoxfieldDeck_WarnsWhenLinkingRegularCardToDeckFails(t *testing.T)
 	require.NoError(t, err)
 	assert.Equal(t, 1, summary.CardsCreated)
 	assert.NotEmpty(t, summary.Warnings)
+}
+
+func TestImportManaBox_StoresColorsAndTypeFromScryfall(t *testing.T) {
+	csv := `Binder Name,Binder Type,Name,Set code,Scryfall ID,Collector number,Foil,Quantity
+Main Binder,binder,Lightning Helix,RAV,aaaaaaaa-0000-0000-0000-000000000000,213,,1
+`
+	cards := &fakeCardService{}
+	resolver := &fakeResolver{resolved: map[string]ResolvedCard{
+		resolveKeyByID("aaaaaaaa-0000-0000-0000-000000000000"): {
+			ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000", ManaValue: 2, Colors: "WR", CardType: "Instant",
+		},
+	}}
+	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, resolver)
+
+	_, err := svc.ImportManaBox(context.Background(), testUserID, strings.NewReader(csv))
+
+	require.NoError(t, err)
+	require.Len(t, cards.created, 1)
+	require.NotNil(t, cards.created[0].Colors)
+	assert.Equal(t, "WR", *cards.created[0].Colors)
+	require.NotNil(t, cards.created[0].CardType)
+	assert.Equal(t, "Instant", *cards.created[0].CardType)
+}
+
+func TestImportManaBox_LeavesColorsAndTypeUnknownWhenScryfallMissesTheCard(t *testing.T) {
+	csv := `Binder Name,Binder Type,Name,Set code,Scryfall ID,Collector number,Foil,Quantity
+Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
+`
+	cards := &fakeCardService{}
+	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
+
+	_, err := svc.ImportManaBox(context.Background(), testUserID, strings.NewReader(csv))
+
+	require.NoError(t, err)
+	require.Len(t, cards.created, 1)
+	assert.Nil(t, cards.created[0].Colors)
+	assert.Nil(t, cards.created[0].CardType)
+}
+
+func TestRefreshCardDetails_FillsMissingDetailsFromScryfall(t *testing.T) {
+	cards := &fakeCardService{missingDetails: []card.Card{
+		{ID: 1, Name: "Sol Ring", ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000"},
+		{ID: 2, Name: "Ghost Card", ScryfallID: "bbbbbbbb-0000-0000-0000-000000000000"},
+	}}
+	resolver := &fakeResolver{resolved: map[string]ResolvedCard{
+		resolveKeyByID("aaaaaaaa-0000-0000-0000-000000000000"): {
+			ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000", ManaValue: 1, Colors: "", CardType: "Artifact",
+		},
+	}}
+	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, resolver)
+
+	summary, err := svc.RefreshCardDetails(context.Background(), testUserID)
+
+	require.NoError(t, err)
+	assert.Equal(t, DetailsRefreshSummary{Updated: 1, NotFound: 1}, summary)
+	assert.Equal(t, card.Details{Colors: "", CardType: "Artifact", ManaValue: 1}, cards.setDetails[1])
+	_, touched := cards.setDetails[2]
+	assert.False(t, touched)
+}
+
+func TestRefreshCardDetails_DoesNothingWhenNoCardIsMissingDetails(t *testing.T) {
+	resolver := &fakeResolver{err: errors.New("must not be called")}
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, resolver)
+
+	summary, err := svc.RefreshCardDetails(context.Background(), testUserID)
+
+	require.NoError(t, err)
+	assert.Equal(t, DetailsRefreshSummary{}, summary)
+}
+
+func TestRefreshCardDetails_ReturnsScryfallUnavailable(t *testing.T) {
+	cards := &fakeCardService{missingDetails: []card.Card{{ID: 1, ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000"}}}
+	resolver := &fakeResolver{err: errors.New("timeout")}
+	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, resolver)
+
+	_, err := svc.RefreshCardDetails(context.Background(), testUserID)
+
+	assert.ErrorIs(t, err, ErrScryfallUnavailable)
 }

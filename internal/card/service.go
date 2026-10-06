@@ -40,3 +40,11 @@ func (s *Service) DeleteCard(ctx context.Context, userID string, id int) error {
 func (s *Service) DeleteAllCards(ctx context.Context, userID string) (int, error) {
 	return s.repo.DeleteAll(ctx, userID)
 }
+
+func (s *Service) GetCardsMissingDetails(ctx context.Context, userID string) ([]Card, error) {
+	return s.repo.FindMissingDetails(ctx, userID)
+}
+
+func (s *Service) SetCardDetails(ctx context.Context, userID string, id int, details Details) error {
+	return s.repo.SetDetails(ctx, userID, id, details)
+}

@@ -18,6 +18,8 @@ type Card struct {
 	Foil            bool
 	StorageID       *int
 	ManaValue       float64
+	Colors          *string
+	CardType        *string
 	Added           time.Time
 	Updated         time.Time
 }
@@ -40,4 +42,12 @@ type Repository interface {
 	Update(ctx context.Context, userID string, c Card) (Card, error)
 	Delete(ctx context.Context, userID string, id int) error
 	DeleteAll(ctx context.Context, userID string) (int, error)
+	FindMissingDetails(ctx context.Context, userID string) ([]Card, error)
+	SetDetails(ctx context.Context, userID string, id int, details Details) error
+}
+
+type Details struct {
+	Colors    string
+	CardType  string
+	ManaValue float64
 }

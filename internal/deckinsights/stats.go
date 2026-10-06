@@ -2,15 +2,10 @@ package deckinsights
 
 import (
 	"sort"
-	"strings"
 
 	"Melrakkiie/Tamiyo/internal/deck"
 	"Melrakkiie/Tamiyo/internal/scryfall"
 )
-
-var typesByPrecedence = []string{
-	"Land", "Creature", "Planeswalker", "Battle", "Instant", "Sorcery", "Artifact", "Enchantment",
-}
 
 func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card) DeckStats {
 	stats := DeckStats{
@@ -32,7 +27,7 @@ func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card) 
 			continue
 		}
 
-		t := primaryType(sc.TypeLine)
+		t := scryfall.PrimaryType(sc.TypeLine)
 		stats.TypeBreakdown[t]++
 
 		if t == "Land" {
@@ -68,17 +63,4 @@ func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card) 
 	}
 
 	return stats
-}
-
-func primaryType(typeLine string) string {
-	types := typeLine
-	if idx := strings.Index(typeLine, "—"); idx >= 0 {
-		types = typeLine[:idx]
-	}
-	for _, t := range typesByPrecedence {
-		if strings.Contains(types, t) {
-			return t
-		}
-	}
-	return "Other"
 }

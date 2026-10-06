@@ -22,6 +22,8 @@ type importService interface {
 	ExportManaBox(ctx context.Context, userID string, w io.Writer) error
 	ExportMoxfieldCollection(ctx context.Context, userID string, w io.Writer) error
 	ExportMoxfieldDeck(ctx context.Context, userID string, deckID int, w io.Writer) error
+
+	RefreshCardDetails(ctx context.Context, userID string) (DetailsRefreshSummary, error)
 }
 
 type Handler struct {
@@ -40,6 +42,24 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.GET("/export/manabox", h.exportManaBox)
 	router.GET("/export/moxfield/collection", h.exportMoxfieldCollection)
 	router.GET("/export/moxfield/deck/:id", h.exportMoxfieldDeck)
+
+	router.POST("/cards/refresh-details", h.refreshCardDetails)
+}
+
+func (h *Handler) refreshCardDetails(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
+	summary, err := h.service.RefreshCardDetails(ctx.Request.Context(), userID)
+	if err != nil {
+		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, summary)
 }
 
 func (h *Handler) importManaBox(ctx *gin.Context) {

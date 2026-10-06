@@ -22,6 +22,8 @@ type cardRow struct {
 	Foil            bool      `db:"foil"`
 	StorageID       *int      `db:"storage_id"`
 	ManaValue       float64   `db:"mana_value"`
+	Colors          *string   `db:"colors"`
+	CardType        *string   `db:"card_type"`
 	Added           time.Time `db:"added"`
 	Updated         time.Time `db:"updated"`
 }
@@ -36,6 +38,8 @@ func (r cardRow) toDomain() Card {
 		Foil:            r.Foil,
 		StorageID:       r.StorageID,
 		ManaValue:       r.ManaValue,
+		Colors:          r.Colors,
+		CardType:        r.CardType,
 		Added:           r.Added,
 		Updated:         r.Updated,
 	}
@@ -52,6 +56,8 @@ func toCardRow(userID string, c Card) cardRow {
 		Foil:            c.Foil,
 		StorageID:       c.StorageID,
 		ManaValue:       c.ManaValue,
+		Colors:          c.Colors,
+		CardType:        c.CardType,
 	}
 }
 
@@ -91,7 +97,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 	offset := (filter.Page - 1) * filter.Limit
 
 	query := `
-	    SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, added, updated
+	    SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, added, updated
 	    FROM tamiyo.cards
 	` + whereClause + orderByClause(filter) + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 
@@ -110,6 +116,32 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 	return cards, total, nil
 }
 
+const colorGroupSQL = `CASE
+		WHEN card_type = 'Land' THEN 8
+		WHEN colors IS NULL THEN 9
+		WHEN colors = '' THEN 7
+		WHEN length(colors) > 1 THEN 6
+		WHEN colors = 'W' THEN 1
+		WHEN colors = 'U' THEN 2
+		WHEN colors = 'B' THEN 3
+		WHEN colors = 'R' THEN 4
+		WHEN colors = 'G' THEN 5
+		ELSE 9
+	END`
+
+const typeGroupSQL = `CASE card_type
+		WHEN 'Creature' THEN 1
+		WHEN 'Planeswalker' THEN 2
+		WHEN 'Battle' THEN 3
+		WHEN 'Instant' THEN 4
+		WHEN 'Sorcery' THEN 5
+		WHEN 'Artifact' THEN 6
+		WHEN 'Enchantment' THEN 7
+		WHEN 'Land' THEN 8
+		WHEN 'Other' THEN 9
+		ELSE 10
+	END`
+
 func orderByClause(filter CardFilter) string {
 	dir := "ASC"
 	if filter.SortDesc {
@@ -125,6 +157,10 @@ func orderByClause(filter CardFilter) string {
 		return fmt.Sprintf(" ORDER BY updated %s, id %s", dir, dir)
 	case "mana_value":
 		return fmt.Sprintf(" ORDER BY mana_value %s, id %s", dir, dir)
+	case "color":
+		return fmt.Sprintf(" ORDER BY %s %s, colors %s, name ASC, id ASC", colorGroupSQL, dir, dir)
+	case "type":
+		return fmt.Sprintf(" ORDER BY %s %s, name ASC, id ASC", typeGroupSQL, dir)
 	default:
 		return " ORDER BY updated DESC, id DESC"
 	}
@@ -132,7 +168,7 @@ func orderByClause(filter CardFilter) string {
 
 func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int) (Card, error) {
 	query := `
-		SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, added, updated
+		SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, added, updated
 	    FROM tamiyo.cards
 		WHERE id = $1 AND user_id = $2
 	`
@@ -151,9 +187,9 @@ func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int
 func (r *PostgresRepository) Create(ctx context.Context, userID string, c Card) (Card, error) {
 	row := toCardRow(userID, c)
 	query := `
-    	INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value)
-     	VALUES (:user_id, :name, :scryfall_id, :set_code, :collector_number, :foil, :storage_id, :mana_value)
-      	RETURNING id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, added, updated
+    	INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type)
+     	VALUES (:user_id, :name, :scryfall_id, :set_code, :collector_number, :foil, :storage_id, :mana_value, :colors, :card_type)
+      	RETURNING id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, added, updated
 	`
 
 	stmt, err := r.db.PrepareNamedContext(ctx, query)
@@ -180,9 +216,9 @@ func (r *PostgresRepository) Update(ctx context.Context, userID string, c Card) 
 	row := toCardRow(userID, c)
 	query := `
 		UPDATE tamiyo.cards
-		SET name = :name, scryfall_id = :scryfall_id, set_code = :set_code, collector_number = :collector_number, foil = :foil, storage_id = :storage_id, mana_value = :mana_value
+		SET name = :name, scryfall_id = :scryfall_id, set_code = :set_code, collector_number = :collector_number, foil = :foil, storage_id = :storage_id, mana_value = :mana_value, colors = :colors, card_type = :card_type
 		WHERE id = :id AND user_id = :user_id
-		RETURNING id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, added, updated
+		RETURNING id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, added, updated
 	`
 
 	stmt, err := r.db.PrepareNamedContext(ctx, query)
@@ -240,4 +276,33 @@ func (r *PostgresRepository) DeleteAll(ctx context.Context, userID string) (int,
 	}
 
 	return int(deleted), nil
+}
+
+func (r *PostgresRepository) FindMissingDetails(ctx context.Context, userID string) ([]Card, error) {
+	query := `
+		SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, added, updated
+		FROM tamiyo.cards
+		WHERE user_id = $1 AND (colors IS NULL OR card_type IS NULL)
+		ORDER BY id
+	`
+
+	var rows []cardRow
+	if err := r.db.SelectContext(ctx, &rows, query, userID); err != nil {
+		return nil, err
+	}
+
+	cards := make([]Card, 0, len(rows))
+	for _, row := range rows {
+		cards = append(cards, row.toDomain())
+	}
+	return cards, nil
+}
+
+func (r *PostgresRepository) SetDetails(ctx context.Context, userID string, id int, details Details) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE tamiyo.cards
+		SET colors = $1, card_type = $2, mana_value = $3
+		WHERE id = $4 AND user_id = $5
+	`, details.Colors, details.CardType, details.ManaValue, id, userID)
+	return err
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -653,4 +654,97 @@ func TestHandler_DeleteAllCards_ReturnsErrorOnServiceFailure(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestHandler_GetCards_AcceptsColorAndTypeSorts(t *testing.T) {
+	for _, sort := range []string{"color", "-color", "type", "-type"} {
+		service := &fakeService{}
+		router := setupRouter(service)
+
+		req := httptest.NewRequest(http.MethodGet, "/cards?sort="+sort, nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code, sort)
+		assert.Equal(t, strings.TrimPrefix(sort, "-"), service.lastFilter.SortField)
+		assert.Equal(t, strings.HasPrefix(sort, "-"), service.lastFilter.SortDesc)
+	}
+}
+
+func postCard(router *gin.Engine, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, "/cards", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	return w
+}
+
+const cardBodyPrefix = `"name": "Lightning Helix", "scryfall_id": "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f", "set_code": "rav", "collector_number": "213"`
+
+func TestHandler_CreateCard_NormalizesColorsAndKeepsType(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	w := postCard(router, `{`+cardBodyPrefix+`, "colors": "rw", "card_type": "Instant"}`)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	var response cardResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.NotNil(t, response.Colors)
+	assert.Equal(t, "WR", *response.Colors)
+	require.NotNil(t, response.CardType)
+	assert.Equal(t, "Instant", *response.CardType)
+}
+
+func TestHandler_CreateCard_AcceptsEmptyColorsForColorlessCards(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	w := postCard(router, `{`+cardBodyPrefix+`, "colors": "", "card_type": "Artifact"}`)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	var response cardResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.NotNil(t, response.Colors)
+	assert.Equal(t, "", *response.Colors)
+}
+
+func TestHandler_CreateCard_LeavesDetailsNullWhenAbsent(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	w := postCard(router, `{`+cardBodyPrefix+`}`)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	assert.Nil(t, response["colors"])
+	assert.Nil(t, response["card_type"])
+}
+
+func TestHandler_CreateCard_RejectsInvalidColors(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	w := postCard(router, `{`+cardBodyPrefix+`, "colors": "WX"}`)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_CreateCard_RejectsInvalidCardType(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	w := postCard(router, `{`+cardBodyPrefix+`, "card_type": "creature"}`)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_UpdateCard_RejectsInvalidColors(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	w := patchCard(router, `{"colors": "purple"}`)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }

@@ -31,6 +31,18 @@ type CardIdentifier struct {
 type ResolvedCard struct {
 	ScryfallID string
 	ManaValue  float64
+	Colors     string
+	CardType   string
+}
+
+func (rc ResolvedCard) colorsAndType() (*string, *string) {
+	colors, cardType := rc.Colors, rc.CardType
+	return &colors, &cardType
+}
+
+type DetailsRefreshSummary struct {
+	Updated  int `json:"updated"`
+	NotFound int `json:"not_found"`
 }
 
 type ScryfallResolver interface {

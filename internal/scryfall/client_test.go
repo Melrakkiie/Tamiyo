@@ -206,3 +206,22 @@ func TestClient_GivesUpAfterMaxRetries(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, maxRetries+1, requestCount)
 }
+
+func TestClient_TakesColorsFromFacesForDoubleFacedCards(t *testing.T) {
+	withFakeScryfall(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(collectionResponse{
+			Data: []wireCard{{
+				ID: "22222222-2222-2222-2222-222222222222", Name: "Delver of Secrets // Insectile Aberration",
+				TypeLine:  "Creature — Human Wizard // Creature — Human Insect",
+				CardFaces: []wireCardFace{{Colors: []string{"U"}}, {Colors: []string{"U"}}},
+			}},
+		})
+	})
+
+	cards, err := NewClient().Fetch(context.Background(), []Identifier{{ID: "22222222-2222-2222-2222-222222222222"}})
+
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	assert.Equal(t, []string{"U"}, cards[0].Colors)
+}

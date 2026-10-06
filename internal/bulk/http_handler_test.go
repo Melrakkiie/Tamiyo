@@ -28,6 +28,8 @@ type fakeImportService struct {
 	exportErr      error
 	lastExportUser string
 	lastExportDeck int
+
+	refreshSummary DetailsRefreshSummary
 }
 
 func (f *fakeImportService) ImportManaBox(ctx context.Context, userID string, r io.Reader) (Summary, error) {
@@ -48,6 +50,11 @@ func (f *fakeImportService) ImportMoxfieldDeck(ctx context.Context, userID strin
 	f.lastDeckRequest = req
 	f.readFile(r)
 	return f.summary, f.err
+}
+
+func (f *fakeImportService) RefreshCardDetails(ctx context.Context, userID string) (DetailsRefreshSummary, error) {
+	f.lastUserID = userID
+	return f.refreshSummary, f.err
 }
 
 func (f *fakeImportService) readFile(r io.Reader) {
@@ -394,4 +401,30 @@ func TestExportMoxfieldDeck_ServiceErrorReturnsInternalServerError(t *testing.T)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestHandler_RefreshCardDetails_ReturnsSummary(t *testing.T) {
+	service := &fakeImportService{refreshSummary: DetailsRefreshSummary{Updated: 3, NotFound: 1}}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPost, "/cards/refresh-details", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var summary DetailsRefreshSummary
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &summary))
+	assert.Equal(t, DetailsRefreshSummary{Updated: 3, NotFound: 1}, summary)
+	assert.Equal(t, testUserID, service.lastUserID)
+}
+
+func TestHandler_RefreshCardDetails_ReturnsBadGatewayWhenScryfallIsDown(t *testing.T) {
+	service := &fakeImportService{err: ErrScryfallUnavailable}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPost, "/cards/refresh-details", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadGateway, w.Code)
 }

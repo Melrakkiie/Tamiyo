@@ -253,7 +253,7 @@ List cards, with optional filtering, sorting, and pagination.
 | `name` | string | No | Case-insensitive partial match on the card name. |
 | `page` | int | No | 1-based page number. Defaults to `1`. |
 | `limit` | int | No | Cards per page, max `100`. Defaults to `25`. |
-| `sort` | string | No | One of `name`, `-name`, `added`, `-added`, `updated`, `-updated`, `mana_value`, `-mana_value`. Defaults to `-updated`. A `-` prefix means descending. `id` is always used as a stable secondary tie-breaker. |
+| `sort` | string | No | One of `name`, `-name`, `added`, `-added`, `updated`, `-updated`, `mana_value`, `-mana_value`, `color`, `-color`, `type`, `-type`. Defaults to `-updated`. A `-` prefix means descending. `color` groups white, blue, black, red, green, multicolor, colorless, lands, then unknown; `type` groups by primary type (creature, planeswalker, battle, instant, sorcery, artifact, enchantment, land, other, unknown); both sort by name within a group. `id` is always used as a stable secondary tie-breaker. |
 
 **Example**
 ```
@@ -327,6 +327,8 @@ Create a new card.
 | `foil` | bool | No | Defaults to `false`. |
 | `storage_id` | int | No | Must reference an existing storage if provided. |
 | `mana_value` | number | No | Converted mana cost (CMC). Must be >= 0 if provided. Defaults to `0`. Not fetched automatically from Scryfall — the client supplies it, same as `name` or `set_code`. |
+| `colors` | string | No | The card's colors as WUBRG letters (any case or order, stored in WUBRG order, e.g. `WR`), empty string for colorless. Left unknown (`null`) when omitted. |
+| `card_type` | string | No | Primary type: `Creature`, `Planeswalker`, `Battle`, `Instant`, `Sorcery`, `Artifact`, `Enchantment`, `Land` or `Other`. Left unknown (`null`) when omitted. |
 
 **Example**
 ```json
@@ -386,6 +388,17 @@ Delete a card. If the card is linked to any decks (including as a commander), th
 **Response `204 No Content`**
 
 **Errors:** `400` invalid id · `404` card not found
+
+### `POST /cards/refresh-details`
+
+Look up on Scryfall every card whose `colors` or `card_type` is still unknown (cards created before those fields existed, or imported while Scryfall was unreachable), and store their colors, primary type and mana value. Imports and the web frontend fill these in on their own; this is for the backlog.
+
+**Response `200 OK`**
+```json
+{ "updated": 412, "not_found": 2 }
+```
+
+**Errors:** `502` Scryfall unreachable
 
 ### `DELETE /cards?confirm=true`
 

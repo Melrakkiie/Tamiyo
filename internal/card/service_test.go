@@ -32,6 +32,9 @@ type fakeRepository struct {
 
 	deleteAllCount int
 	deleteAllErr   error
+
+	missingDetails []Card
+	setDetails     map[int]Details
 }
 
 func (f *fakeRepository) FindAll(ctx context.Context, userID string, filter CardFilter) ([]Card, int, error) {
@@ -70,6 +73,20 @@ func (f *fakeRepository) Update(ctx context.Context, userID string, c Card) (Car
 func (f *fakeRepository) Delete(ctx context.Context, userID string, id int) error {
 	f.lastUserID = userID
 	return f.deleteErr
+}
+
+func (f *fakeRepository) FindMissingDetails(ctx context.Context, userID string) ([]Card, error) {
+	f.lastUserID = userID
+	return f.missingDetails, nil
+}
+
+func (f *fakeRepository) SetDetails(ctx context.Context, userID string, id int, details Details) error {
+	f.lastUserID = userID
+	if f.setDetails == nil {
+		f.setDetails = map[int]Details{}
+	}
+	f.setDetails[id] = details
+	return nil
 }
 
 func (f *fakeRepository) DeleteAll(ctx context.Context, userID string) (int, error) {
@@ -320,4 +337,41 @@ func TestService_DeleteAllCards_ReturnsDeletedCountForTheUser(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 3, deleted)
 	assert.Equal(t, testUserID, repo.lastUserID)
+}
+
+func TestService_UpdateCard_NormalizesColorsAndSetsType(t *testing.T) {
+	repo := &fakeRepository{findByIDCard: Card{ID: 1, Name: "Lightning Helix"}}
+	service := NewService(repo)
+	colors := "rw"
+	cardType := "Instant"
+
+	result, err := service.UpdateCard(context.Background(), testUserID, 1, updateCardRequest{Colors: &colors, CardType: &cardType})
+
+	require.NoError(t, err)
+	require.NotNil(t, result.Colors)
+	assert.Equal(t, "WR", *result.Colors)
+	require.NotNil(t, result.CardType)
+	assert.Equal(t, "Instant", *result.CardType)
+}
+
+func TestService_GetCardsMissingDetails_DelegatesToRepository(t *testing.T) {
+	repo := &fakeRepository{missingDetails: []Card{{ID: 4, Name: "Sol Ring"}}}
+	service := NewService(repo)
+
+	cards, err := service.GetCardsMissingDetails(context.Background(), testUserID)
+
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	assert.Equal(t, 4, cards[0].ID)
+	assert.Equal(t, testUserID, repo.lastUserID)
+}
+
+func TestService_SetCardDetails_DelegatesToRepository(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	err := service.SetCardDetails(context.Background(), testUserID, 4, Details{Colors: "", CardType: "Artifact", ManaValue: 1})
+
+	require.NoError(t, err)
+	assert.Equal(t, Details{Colors: "", CardType: "Artifact", ManaValue: 1}, repo.setDetails[4])
 }

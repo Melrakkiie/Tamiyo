@@ -597,3 +597,107 @@ func TestPostgresRepository_Delete_DoesNotAffectAnotherUsersCard(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Black Lotus", result.Name)
 }
+
+func strPtr(s string) *string { return &s }
+
+func createCardWithDetails(t *testing.T, repo *PostgresRepository, userID, name string, colors, cardType *string) Card {
+	t.Helper()
+	created, err := repo.Create(context.Background(), userID, Card{
+		Name:            name,
+		ScryfallID:      "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd",
+		SetCode:         "lea",
+		CollectorNumber: "1",
+		Colors:          colors,
+		CardType:        cardType,
+	})
+	require.NoError(t, err)
+	return created
+}
+
+func TestPostgresRepository_Create_PersistsColorsAndType(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+
+	created := createCardWithDetails(t, repo, userID, "Lightning Helix", strPtr("WR"), strPtr("Instant"))
+
+	found, err := repo.FindByID(context.Background(), userID, created.ID)
+	require.NoError(t, err)
+	require.NotNil(t, found.Colors)
+	assert.Equal(t, "WR", *found.Colors)
+	require.NotNil(t, found.CardType)
+	assert.Equal(t, "Instant", *found.CardType)
+}
+
+func TestPostgresRepository_FindAll_SortsByColorGroup(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+
+	createCardWithDetails(t, repo, userID, "Unknown Card", nil, nil)
+	createCardWithDetails(t, repo, userID, "Forest", strPtr(""), strPtr("Land"))
+	createCardWithDetails(t, repo, userID, "Sol Ring", strPtr(""), strPtr("Artifact"))
+	createCardWithDetails(t, repo, userID, "Lightning Helix", strPtr("WR"), strPtr("Instant"))
+	createCardWithDetails(t, repo, userID, "Llanowar Elves", strPtr("G"), strPtr("Creature"))
+	createCardWithDetails(t, repo, userID, "Counterspell", strPtr("U"), strPtr("Instant"))
+	createCardWithDetails(t, repo, userID, "Swords to Plowshares", strPtr("W"), strPtr("Instant"))
+
+	result, _, err := repo.FindAll(context.Background(), userID, CardFilter{SortField: "color", Page: 1, Limit: 25})
+
+	require.NoError(t, err)
+	names := make([]string, len(result))
+	for i, c := range result {
+		names[i] = c.Name
+	}
+	assert.Equal(t, []string{"Swords to Plowshares", "Counterspell", "Llanowar Elves", "Lightning Helix", "Sol Ring", "Forest", "Unknown Card"}, names)
+}
+
+func TestPostgresRepository_FindAll_SortsByTypeGroupThenName(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+
+	createCardWithDetails(t, repo, userID, "Forest", strPtr(""), strPtr("Land"))
+	createCardWithDetails(t, repo, userID, "Llanowar Elves", strPtr("G"), strPtr("Creature"))
+	createCardWithDetails(t, repo, userID, "Counterspell", strPtr("U"), strPtr("Instant"))
+	createCardWithDetails(t, repo, userID, "Birds of Paradise", strPtr("G"), strPtr("Creature"))
+
+	result, _, err := repo.FindAll(context.Background(), userID, CardFilter{SortField: "type", Page: 1, Limit: 25})
+
+	require.NoError(t, err)
+	names := make([]string, len(result))
+	for i, c := range result {
+		names[i] = c.Name
+	}
+	assert.Equal(t, []string{"Birds of Paradise", "Llanowar Elves", "Counterspell", "Forest"}, names)
+}
+
+func TestPostgresRepository_FindMissingDetails_AndSetDetails(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+
+	missing := createCardWithDetails(t, repo, userA, "Sol Ring", nil, nil)
+	createCardWithDetails(t, repo, userA, "Counterspell", strPtr("U"), strPtr("Instant"))
+	createCardWithDetails(t, repo, userB, "Other User Card", nil, nil)
+
+	found, err := repo.FindMissingDetails(context.Background(), userA)
+	require.NoError(t, err)
+	require.Len(t, found, 1)
+	assert.Equal(t, missing.ID, found[0].ID)
+
+	require.NoError(t, repo.SetDetails(context.Background(), userA, missing.ID, Details{Colors: "", CardType: "Artifact", ManaValue: 1}))
+
+	updated, err := repo.FindByID(context.Background(), userA, missing.ID)
+	require.NoError(t, err)
+	require.NotNil(t, updated.Colors)
+	assert.Equal(t, "", *updated.Colors)
+	require.NotNil(t, updated.CardType)
+	assert.Equal(t, "Artifact", *updated.CardType)
+	assert.Equal(t, 1.0, updated.ManaValue)
+
+	found, err = repo.FindMissingDetails(context.Background(), userA)
+	require.NoError(t, err)
+	assert.Empty(t, found)
+}

@@ -356,11 +356,16 @@ paths:
           required: false
           schema:
             type: string
-            enum: [name, -name, added, -added, updated, -updated, mana_value, -mana_value]
+            enum: [name, -name, added, -added, updated, -updated, mana_value, -mana_value, color, -color, type, -type]
             default: -updated
           description: >
             Sort field, with an optional "-" prefix for descending order.
             id is always used as a secondary tie-breaker for a stable order.
+            "color" groups cards as white, blue, black, red, green, multicolor,
+            colorless, lands, then cards whose colors aren't known yet; "type"
+            by primary type (creature, planeswalker, battle, instant, sorcery,
+            artifact, enchantment, land, other, unknown). Both sort by name
+            within a group.
       responses:
         "200":
           description: OK
@@ -439,6 +444,29 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/InternalError"
+
+  /cards/refresh-details:
+    post:
+      tags: [cards]
+      summary: Fill in missing colors and types from Scryfall
+      description: >
+        Looks up on Scryfall every card of the account whose colors or
+        card_type aren't known yet (cards created before they were stored,
+        or imported while Scryfall was unreachable), and stores its colors,
+        primary type and mana value.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetailsRefreshSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
 
   /cards/{id}:
     parameters:
@@ -1545,6 +1573,21 @@ components:
         mana_value:
           type: number
           description: Converted mana cost (CMC).
+        colors:
+          type: string
+          nullable: true
+          pattern: "^W?U?B?R?G?$"
+          description: >
+            The card's colors as WUBRG letters in that order ("WR" for a
+            Boros card), empty for a colorless card, null when not known yet
+            (see POST /cards/refresh-details).
+        card_type:
+          type: string
+          nullable: true
+          enum: [Creature, Planeswalker, Battle, Instant, Sorcery, Artifact, Enchantment, Land, Other]
+          description: >
+            Primary type, from the type line (lands first, then creatures,
+            planeswalkers...). null when not known yet.
         added:
           type: string
         updated:
@@ -1559,6 +1602,17 @@ components:
         - mana_value
         - added
         - updated
+
+    DetailsRefreshSummary:
+      type: object
+      properties:
+        updated:
+          type: integer
+          description: Cards whose details were filled in.
+        not_found:
+          type: integer
+          description: Cards Scryfall didn't know (their details stay unknown).
+      required: [updated, not_found]
 
     DeleteAllCardsResponse:
       type: object
@@ -1611,6 +1665,18 @@ components:
           description: >
             Converted mana cost (CMC). Not fetched automatically from
             Scryfall — supplied by the client, same as name or set_code.
+        colors:
+          type: string
+          nullable: true
+          pattern: "^W?U?B?R?G?$"
+          description: >
+            WUBRG letters (any case and order, normalized to WUBRG order),
+            empty for colorless. Optional: left unknown when omitted.
+        card_type:
+          type: string
+          nullable: true
+          enum: [Creature, Planeswalker, Battle, Instant, Sorcery, Artifact, Enchantment, Land, Other]
+          description: Primary type. Optional, left unknown when omitted.
       required:
         - name
         - scryfall_id
@@ -1642,6 +1708,12 @@ components:
         mana_value:
           type: number
           minimum: 0
+        colors:
+          type: string
+          pattern: "^[WUBRGwubrg]*$"
+        card_type:
+          type: string
+          enum: [Creature, Planeswalker, Battle, Instant, Sorcery, Artifact, Enchantment, Land, Other]
 
     Storage:
       type: object

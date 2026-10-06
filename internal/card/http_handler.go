@@ -13,6 +13,7 @@ import (
 
 	"Melrakkiie/Tamiyo/internal/apierr"
 	"Melrakkiie/Tamiyo/internal/auth"
+	"Melrakkiie/Tamiyo/internal/scryfall"
 )
 
 const (
@@ -30,6 +31,8 @@ type cardResponse struct {
 	Foil            bool    `json:"foil"`
 	StorageID       *int    `json:"storage_id"`
 	ManaValue       float64 `json:"mana_value"`
+	Colors          *string `json:"colors"`
+	CardType        *string `json:"card_type"`
 	Added           string  `json:"added"`
 	Updated         string  `json:"updated"`
 }
@@ -44,6 +47,8 @@ func toResponse(c Card) cardResponse {
 		Foil:            c.Foil,
 		StorageID:       c.StorageID,
 		ManaValue:       c.ManaValue,
+		Colors:          c.Colors,
+		CardType:        c.CardType,
 		Added:           c.Added.Format("2006-01-02 15:04:05"),
 		Updated:         c.Updated.Format("2006-01-02 15:04:05"),
 	}
@@ -65,6 +70,12 @@ type createCardRequest struct {
 	Foil            bool    `json:"foil"`
 	StorageID       *int    `json:"storage_id" binding:"omitempty,gt=0"`
 	ManaValue       float64 `json:"mana_value" binding:"omitempty,gte=0"`
+	Colors          *string `json:"colors"`
+	CardType        *string `json:"card_type"`
+}
+
+func (r createCardRequest) validate() error {
+	return validateDetails(r.Colors, r.CardType)
 }
 
 func (r createCardRequest) toDomain() Card {
@@ -76,7 +87,30 @@ func (r createCardRequest) toDomain() Card {
 		Foil:            r.Foil,
 		StorageID:       r.StorageID,
 		ManaValue:       r.ManaValue,
+		Colors:          normalizeColors(r.Colors),
+		CardType:        r.CardType,
 	}
+}
+
+var errInvalidColors = errors.New("colors must only contain the letters W, U, B, R and G")
+var errInvalidCardType = errors.New("card_type must be one of: Creature, Planeswalker, Battle, Instant, Sorcery, Artifact, Enchantment, Land, Other")
+
+func validateDetails(colors, cardType *string) error {
+	if colors != nil && strings.Trim(strings.ToUpper(*colors), "WUBRG") != "" {
+		return errInvalidColors
+	}
+	if cardType != nil && !scryfall.IsPrimaryType(*cardType) {
+		return errInvalidCardType
+	}
+	return nil
+}
+
+func normalizeColors(colors *string) *string {
+	if colors == nil {
+		return nil
+	}
+	normalized := scryfall.ColorCode(strings.Split(*colors, ""))
+	return &normalized
 }
 
 type updateCardRequest struct {
@@ -87,6 +121,8 @@ type updateCardRequest struct {
 	Foil            *bool             `json:"foil" binding:"omitempty"`
 	StorageID       optionalStorageID `json:"storage_id"`
 	ManaValue       *float64          `json:"mana_value" binding:"omitempty,gte=0"`
+	Colors          *string           `json:"colors"`
+	CardType        *string           `json:"card_type"`
 }
 
 type optionalStorageID struct {
@@ -115,7 +151,7 @@ func (r updateCardRequest) validate() error {
 	if r.StorageID.Value != nil && *r.StorageID.Value <= 0 {
 		return errInvalidStorageID
 	}
-	return nil
+	return validateDetails(r.Colors, r.CardType)
 }
 
 func (r updateCardRequest) applyTo(c Card) Card {
@@ -139,6 +175,12 @@ func (r updateCardRequest) applyTo(c Card) Card {
 	}
 	if r.StorageID.Set {
 		c.StorageID = r.StorageID.Value
+	}
+	if r.Colors != nil {
+		c.Colors = normalizeColors(r.Colors)
+	}
+	if r.CardType != nil {
+		c.CardType = r.CardType
 	}
 	return c
 }
@@ -220,11 +262,11 @@ func (h *Handler) getCards(ctx *gin.Context) {
 			field = raw[1:]
 		}
 		switch field {
-		case "name", "added", "updated", "mana_value":
+		case "name", "added", "updated", "mana_value", "color", "type":
 			sortField = field
 			sortDesc = desc
 		default:
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "sort must be one of: name, -name, added, -added, updated, -updated, mana_value, -mana_value"})
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "sort must be one of: name, -name, added, -added, updated, -updated, mana_value, -mana_value, color, -color, type, -type"})
 			return
 		}
 	}
@@ -294,6 +336,10 @@ func (h *Handler) createCard(ctx *gin.Context) {
 
 	var req createCardRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := req.validate(); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
