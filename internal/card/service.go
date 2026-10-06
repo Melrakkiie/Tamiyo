@@ -41,8 +41,12 @@ func (s *Service) DeleteAllCards(ctx context.Context, userID string) (int, error
 	return s.repo.DeleteAll(ctx, userID)
 }
 
-func (s *Service) GetCardsMissingDetails(ctx context.Context, userID string) ([]Card, error) {
-	return s.repo.FindMissingDetails(ctx, userID)
+func (s *Service) GetCardsMissingDetails(ctx context.Context, userID string, afterID int, limit int) ([]Card, error) {
+	return s.repo.FindMissingDetails(ctx, userID, afterID, limit)
+}
+
+func (s *Service) CountCardsMissingDetails(ctx context.Context, userID string, afterID int) (int, error) {
+	return s.repo.CountMissingDetails(ctx, userID, afterID)
 }
 
 func (s *Service) SetCardDetails(ctx context.Context, userID string, id int, details Details) error {

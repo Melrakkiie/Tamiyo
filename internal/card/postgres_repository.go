@@ -278,16 +278,17 @@ func (r *PostgresRepository) DeleteAll(ctx context.Context, userID string) (int,
 	return int(deleted), nil
 }
 
-func (r *PostgresRepository) FindMissingDetails(ctx context.Context, userID string) ([]Card, error) {
+func (r *PostgresRepository) FindMissingDetails(ctx context.Context, userID string, afterID int, limit int) ([]Card, error) {
 	query := `
 		SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, added, updated
 		FROM tamiyo.cards
-		WHERE user_id = $1 AND (colors IS NULL OR card_type IS NULL)
+		WHERE user_id = $1 AND id > $2 AND (colors IS NULL OR card_type IS NULL)
 		ORDER BY id
+		LIMIT $3
 	`
 
 	var rows []cardRow
-	if err := r.db.SelectContext(ctx, &rows, query, userID); err != nil {
+	if err := r.db.SelectContext(ctx, &rows, query, userID, afterID, limit); err != nil {
 		return nil, err
 	}
 
@@ -296,6 +297,15 @@ func (r *PostgresRepository) FindMissingDetails(ctx context.Context, userID stri
 		cards = append(cards, row.toDomain())
 	}
 	return cards, nil
+}
+
+func (r *PostgresRepository) CountMissingDetails(ctx context.Context, userID string, afterID int) (int, error) {
+	var count int
+	err := r.db.GetContext(ctx, &count, `
+		SELECT COUNT(*) FROM tamiyo.cards
+		WHERE user_id = $1 AND id > $2 AND (colors IS NULL OR card_type IS NULL)
+	`, userID, afterID)
+	return count, err
 }
 
 func (r *PostgresRepository) SetDetails(ctx context.Context, userID string, id int, details Details) error {

@@ -41,8 +41,10 @@ func (rc ResolvedCard) colorsAndType() (*string, *string) {
 }
 
 type DetailsRefreshSummary struct {
-	Updated  int `json:"updated"`
-	NotFound int `json:"not_found"`
+	Updated     int  `json:"updated"`
+	NotFound    int  `json:"not_found"`
+	Remaining   int  `json:"remaining"`
+	NextAfterID *int `json:"next_after_id"`
 }
 
 type ScryfallResolver interface {

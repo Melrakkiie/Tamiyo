@@ -26,12 +26,21 @@ type fakeCardService struct {
 	allCards  []card.Card
 	getAllErr error
 
-	missingDetails []card.Card
-	setDetails     map[int]card.Details
+	missingDetails     []card.Card
+	missingCountAfter  map[int]int
+	lastMissingAfterID int
+	lastMissingLimit   int
+	setDetails         map[int]card.Details
 }
 
-func (f *fakeCardService) GetCardsMissingDetails(ctx context.Context, userID string) ([]card.Card, error) {
+func (f *fakeCardService) GetCardsMissingDetails(ctx context.Context, userID string, afterID int, limit int) ([]card.Card, error) {
+	f.lastMissingAfterID = afterID
+	f.lastMissingLimit = limit
 	return f.missingDetails, nil
+}
+
+func (f *fakeCardService) CountCardsMissingDetails(ctx context.Context, userID string, afterID int) (int, error) {
+	return f.missingCountAfter[afterID], nil
 }
 
 func (f *fakeCardService) SetCardDetails(ctx context.Context, userID string, id int, details card.Details) error {
@@ -620,20 +629,45 @@ func TestRefreshCardDetails_FillsMissingDetailsFromScryfall(t *testing.T) {
 	}}
 	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, resolver)
 
-	summary, err := svc.RefreshCardDetails(context.Background(), testUserID)
+	summary, err := svc.RefreshCardDetails(context.Background(), testUserID, 0)
 
 	require.NoError(t, err)
 	assert.Equal(t, DetailsRefreshSummary{Updated: 1, NotFound: 1}, summary)
 	assert.Equal(t, card.Details{Colors: "", CardType: "Artifact", ManaValue: 1}, cards.setDetails[1])
 	_, touched := cards.setDetails[2]
 	assert.False(t, touched)
+	assert.Equal(t, 0, cards.lastMissingAfterID)
+	assert.Equal(t, RefreshDetailsChunkSize, cards.lastMissingLimit)
+}
+
+func TestRefreshCardDetails_ReturnsCursorWhenCardsRemain(t *testing.T) {
+	cards := &fakeCardService{
+		missingDetails: []card.Card{
+			{ID: 11, ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000"},
+			{ID: 14, ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000"},
+		},
+		missingCountAfter: map[int]int{14: 30},
+	}
+	resolver := &fakeResolver{resolved: map[string]ResolvedCard{
+		resolveKeyByID("aaaaaaaa-0000-0000-0000-000000000000"): {ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000", CardType: "Artifact"},
+	}}
+	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, resolver)
+
+	summary, err := svc.RefreshCardDetails(context.Background(), testUserID, 10)
+
+	require.NoError(t, err)
+	assert.Equal(t, 10, cards.lastMissingAfterID)
+	assert.Equal(t, 2, summary.Updated)
+	assert.Equal(t, 30, summary.Remaining)
+	require.NotNil(t, summary.NextAfterID)
+	assert.Equal(t, 14, *summary.NextAfterID)
 }
 
 func TestRefreshCardDetails_DoesNothingWhenNoCardIsMissingDetails(t *testing.T) {
 	resolver := &fakeResolver{err: errors.New("must not be called")}
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, resolver)
 
-	summary, err := svc.RefreshCardDetails(context.Background(), testUserID)
+	summary, err := svc.RefreshCardDetails(context.Background(), testUserID, 0)
 
 	require.NoError(t, err)
 	assert.Equal(t, DetailsRefreshSummary{}, summary)
@@ -644,7 +678,7 @@ func TestRefreshCardDetails_ReturnsScryfallUnavailable(t *testing.T) {
 	resolver := &fakeResolver{err: errors.New("timeout")}
 	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, resolver)
 
-	_, err := svc.RefreshCardDetails(context.Background(), testUserID)
+	_, err := svc.RefreshCardDetails(context.Background(), testUserID, 0)
 
 	assert.ErrorIs(t, err, ErrScryfallUnavailable)
 }

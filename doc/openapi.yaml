@@ -450,10 +450,21 @@ paths:
       tags: [cards]
       summary: Fill in missing colors and types from Scryfall
       description: >
-        Looks up on Scryfall every card of the account whose colors or
+        Looks up on Scryfall the cards of the account whose colors or
         card_type aren't known yet (cards created before they were stored,
-        or imported while Scryfall was unreachable), and stores its colors,
-        primary type and mana value.
+        or imported while Scryfall was unreachable), and stores their colors,
+        primary type and mana value. Works through at most 750 cards per
+        call, in id order, so a call stays short: while next_after_id is
+        not null, call again with after_id set to it.
+      parameters:
+        - name: after_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Only look at cards with a greater id (the next_after_id of the previous call).
       responses:
         "200":
           description: OK
@@ -461,6 +472,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DetailsRefreshSummary"
+        "400":
+          description: after_id is not a non-negative integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "500":
@@ -1612,7 +1629,14 @@ components:
         not_found:
           type: integer
           description: Cards Scryfall didn't know (their details stay unknown).
-      required: [updated, not_found]
+        remaining:
+          type: integer
+          description: Cards still missing details after this batch.
+        next_after_id:
+          type: integer
+          nullable: true
+          description: after_id to send on the next call, null when there is nothing left.
+      required: [updated, not_found, remaining, next_after_id]
 
     DeleteAllCardsResponse:
       type: object

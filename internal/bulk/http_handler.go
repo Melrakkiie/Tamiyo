@@ -23,7 +23,7 @@ type importService interface {
 	ExportMoxfieldCollection(ctx context.Context, userID string, w io.Writer) error
 	ExportMoxfieldDeck(ctx context.Context, userID string, deckID int, w io.Writer) error
 
-	RefreshCardDetails(ctx context.Context, userID string) (DetailsRefreshSummary, error)
+	RefreshCardDetails(ctx context.Context, userID string, afterID int) (DetailsRefreshSummary, error)
 }
 
 type Handler struct {
@@ -53,7 +53,17 @@ func (h *Handler) refreshCardDetails(ctx *gin.Context) {
 		return
 	}
 
-	summary, err := h.service.RefreshCardDetails(ctx.Request.Context(), userID)
+	afterID := 0
+	if raw := ctx.Query("after_id"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 0 {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "after_id must be a non-negative integer"})
+			return
+		}
+		afterID = parsed
+	}
+
+	summary, err := h.service.RefreshCardDetails(ctx.Request.Context(), userID, afterID)
 	if err != nil {
 		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway})
 		return

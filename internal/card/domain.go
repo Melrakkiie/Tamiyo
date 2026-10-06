@@ -42,7 +42,8 @@ type Repository interface {
 	Update(ctx context.Context, userID string, c Card) (Card, error)
 	Delete(ctx context.Context, userID string, id int) error
 	DeleteAll(ctx context.Context, userID string) (int, error)
-	FindMissingDetails(ctx context.Context, userID string) ([]Card, error)
+	FindMissingDetails(ctx context.Context, userID string, afterID int, limit int) ([]Card, error)
+	CountMissingDetails(ctx context.Context, userID string, afterID int) (int, error)
 	SetDetails(ctx context.Context, userID string, id int, details Details) error
 }
 

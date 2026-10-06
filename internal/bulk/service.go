@@ -16,7 +16,8 @@ const defaultManaBoxDeckFormat = "commander"
 type cardService interface {
 	CreateCard(ctx context.Context, userID string, c card.Card) (card.Card, error)
 	GetAllCards(ctx context.Context, userID string, filter card.CardFilter) ([]card.Card, int, error)
-	GetCardsMissingDetails(ctx context.Context, userID string) ([]card.Card, error)
+	GetCardsMissingDetails(ctx context.Context, userID string, afterID int, limit int) ([]card.Card, error)
+	CountCardsMissingDetails(ctx context.Context, userID string, afterID int) (int, error)
 	SetCardDetails(ctx context.Context, userID string, id int, details card.Details) error
 }
 
@@ -417,8 +418,10 @@ func dedupeIdentifiers(identifiers []CardIdentifier) []CardIdentifier {
 	return out
 }
 
-func (s *Service) RefreshCardDetails(ctx context.Context, userID string) (DetailsRefreshSummary, error) {
-	cards, err := s.cards.GetCardsMissingDetails(ctx, userID)
+const RefreshDetailsChunkSize = 750
+
+func (s *Service) RefreshCardDetails(ctx context.Context, userID string, afterID int) (DetailsRefreshSummary, error) {
+	cards, err := s.cards.GetCardsMissingDetails(ctx, userID, afterID, RefreshDetailsChunkSize)
 	if err != nil {
 		return DetailsRefreshSummary{}, err
 	}
@@ -447,6 +450,16 @@ func (s *Service) RefreshCardDetails(ctx context.Context, userID string) (Detail
 			return summary, err
 		}
 		summary.Updated++
+	}
+
+	lastID := cards[len(cards)-1].ID
+	remaining, err := s.cards.CountCardsMissingDetails(ctx, userID, lastID)
+	if err != nil {
+		return summary, err
+	}
+	summary.Remaining = remaining
+	if remaining > 0 {
+		summary.NextAfterID = &lastID
 	}
 
 	return summary, nil

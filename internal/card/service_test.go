@@ -34,6 +34,9 @@ type fakeRepository struct {
 	deleteAllErr   error
 
 	missingDetails []Card
+	missingCount   int
+	lastAfterID    int
+	lastLimit      int
 	setDetails     map[int]Details
 }
 
@@ -75,9 +78,17 @@ func (f *fakeRepository) Delete(ctx context.Context, userID string, id int) erro
 	return f.deleteErr
 }
 
-func (f *fakeRepository) FindMissingDetails(ctx context.Context, userID string) ([]Card, error) {
+func (f *fakeRepository) FindMissingDetails(ctx context.Context, userID string, afterID int, limit int) ([]Card, error) {
 	f.lastUserID = userID
+	f.lastAfterID = afterID
+	f.lastLimit = limit
 	return f.missingDetails, nil
+}
+
+func (f *fakeRepository) CountMissingDetails(ctx context.Context, userID string, afterID int) (int, error) {
+	f.lastUserID = userID
+	f.lastAfterID = afterID
+	return f.missingCount, nil
 }
 
 func (f *fakeRepository) SetDetails(ctx context.Context, userID string, id int, details Details) error {
@@ -358,12 +369,25 @@ func TestService_GetCardsMissingDetails_DelegatesToRepository(t *testing.T) {
 	repo := &fakeRepository{missingDetails: []Card{{ID: 4, Name: "Sol Ring"}}}
 	service := NewService(repo)
 
-	cards, err := service.GetCardsMissingDetails(context.Background(), testUserID)
+	cards, err := service.GetCardsMissingDetails(context.Background(), testUserID, 3, 50)
 
 	require.NoError(t, err)
 	require.Len(t, cards, 1)
 	assert.Equal(t, 4, cards[0].ID)
 	assert.Equal(t, testUserID, repo.lastUserID)
+	assert.Equal(t, 3, repo.lastAfterID)
+	assert.Equal(t, 50, repo.lastLimit)
+}
+
+func TestService_CountCardsMissingDetails_DelegatesToRepository(t *testing.T) {
+	repo := &fakeRepository{missingCount: 12}
+	service := NewService(repo)
+
+	count, err := service.CountCardsMissingDetails(context.Background(), testUserID, 7)
+
+	require.NoError(t, err)
+	assert.Equal(t, 12, count)
+	assert.Equal(t, 7, repo.lastAfterID)
 }
 
 func TestService_SetCardDetails_DelegatesToRepository(t *testing.T) {

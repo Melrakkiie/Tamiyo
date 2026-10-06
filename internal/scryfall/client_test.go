@@ -21,6 +21,8 @@ func withFakeScryfall(t *testing.T, handler http.HandlerFunc) {
 	original := collectionURL
 	collectionURL = server.URL
 	t.Cleanup(func() { collectionURL = original })
+
+	withRequestInterval(t, 0)
 }
 
 func withFastRetries(t *testing.T) {

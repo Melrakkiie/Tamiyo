@@ -682,10 +682,14 @@ func TestPostgresRepository_FindMissingDetails_AndSetDetails(t *testing.T) {
 	createCardWithDetails(t, repo, userA, "Counterspell", strPtr("U"), strPtr("Instant"))
 	createCardWithDetails(t, repo, userB, "Other User Card", nil, nil)
 
-	found, err := repo.FindMissingDetails(context.Background(), userA)
+	found, err := repo.FindMissingDetails(context.Background(), userA, 0, 10)
 	require.NoError(t, err)
 	require.Len(t, found, 1)
 	assert.Equal(t, missing.ID, found[0].ID)
+
+	count, err := repo.CountMissingDetails(context.Background(), userA, 0)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
 
 	require.NoError(t, repo.SetDetails(context.Background(), userA, missing.ID, Details{Colors: "", CardType: "Artifact", ManaValue: 1}))
 
@@ -697,7 +701,32 @@ func TestPostgresRepository_FindMissingDetails_AndSetDetails(t *testing.T) {
 	assert.Equal(t, "Artifact", *updated.CardType)
 	assert.Equal(t, 1.0, updated.ManaValue)
 
-	found, err = repo.FindMissingDetails(context.Background(), userA)
+	found, err = repo.FindMissingDetails(context.Background(), userA, 0, 10)
 	require.NoError(t, err)
 	assert.Empty(t, found)
+}
+
+func TestPostgresRepository_FindMissingDetails_PagesByID(t *testing.T) {
+	db := getTestDB(t)
+	user := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+
+	first := createCardWithDetails(t, repo, user, "Sol Ring", nil, nil)
+	second := createCardWithDetails(t, repo, user, "Arcane Signet", nil, nil)
+	third := createCardWithDetails(t, repo, user, "Mind Stone", nil, nil)
+
+	page, err := repo.FindMissingDetails(context.Background(), user, 0, 2)
+	require.NoError(t, err)
+	require.Len(t, page, 2)
+	assert.Equal(t, first.ID, page[0].ID)
+	assert.Equal(t, second.ID, page[1].ID)
+
+	remaining, err := repo.CountMissingDetails(context.Background(), user, second.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, remaining)
+
+	page, err = repo.FindMissingDetails(context.Background(), user, second.ID, 2)
+	require.NoError(t, err)
+	require.Len(t, page, 1)
+	assert.Equal(t, third.ID, page[0].ID)
 }

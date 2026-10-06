@@ -30,6 +30,7 @@ type fakeImportService struct {
 	lastExportDeck int
 
 	refreshSummary DetailsRefreshSummary
+	lastAfterID    int
 }
 
 func (f *fakeImportService) ImportManaBox(ctx context.Context, userID string, r io.Reader) (Summary, error) {
@@ -52,8 +53,9 @@ func (f *fakeImportService) ImportMoxfieldDeck(ctx context.Context, userID strin
 	return f.summary, f.err
 }
 
-func (f *fakeImportService) RefreshCardDetails(ctx context.Context, userID string) (DetailsRefreshSummary, error) {
+func (f *fakeImportService) RefreshCardDetails(ctx context.Context, userID string, afterID int) (DetailsRefreshSummary, error) {
 	f.lastUserID = userID
+	f.lastAfterID = afterID
 	return f.refreshSummary, f.err
 }
 
@@ -416,6 +418,33 @@ func TestHandler_RefreshCardDetails_ReturnsSummary(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &summary))
 	assert.Equal(t, DetailsRefreshSummary{Updated: 3, NotFound: 1}, summary)
 	assert.Equal(t, testUserID, service.lastUserID)
+	assert.Equal(t, 0, service.lastAfterID)
+}
+
+func TestHandler_RefreshCardDetails_PassesTheCursor(t *testing.T) {
+	next := 42
+	service := &fakeImportService{refreshSummary: DetailsRefreshSummary{Updated: 750, Remaining: 10, NextAfterID: &next}}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPost, "/cards/refresh-details?after_id=17", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, 17, service.lastAfterID)
+	assert.JSONEq(t, `{"updated":750,"not_found":0,"remaining":10,"next_after_id":42}`, w.Body.String())
+}
+
+func TestHandler_RefreshCardDetails_RejectsInvalidCursor(t *testing.T) {
+	for _, raw := range []string{"abc", "-1"} {
+		router := setupRouter(&fakeImportService{})
+
+		req := httptest.NewRequest(http.MethodPost, "/cards/refresh-details?after_id="+raw, nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code, raw)
+	}
 }
 
 func TestHandler_RefreshCardDetails_ReturnsBadGatewayWhenScryfallIsDown(t *testing.T) {

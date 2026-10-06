@@ -16,7 +16,6 @@ var retryBaseDelay = 1 * time.Second
 
 const (
 	batchSize  = 75
-	batchDelay = 150 * time.Millisecond
 	maxRetries = 5
 )
 
@@ -133,10 +132,6 @@ func (c *Client) Fetch(ctx context.Context, identifiers []Identifier) ([]Card, e
 			end = len(identifiers)
 		}
 
-		if start > 0 {
-			time.Sleep(batchDelay)
-		}
-
 		batch, err := c.fetchBatch(ctx, identifiers[start:end])
 		if err != nil {
 			return nil, err
@@ -168,6 +163,10 @@ func (c *Client) fetchBatch(ctx context.Context, batch []Identifier) ([]Card, er
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			}
+		}
+
+		if err := collectionPacer.wait(ctx); err != nil {
+			return nil, err
 		}
 
 		resp, err := c.doRequest(ctx, body)

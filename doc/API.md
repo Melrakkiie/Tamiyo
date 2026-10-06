@@ -391,14 +391,20 @@ Delete a card. If the card is linked to any decks (including as a commander), th
 
 ### `POST /cards/refresh-details`
 
-Look up on Scryfall every card whose `colors` or `card_type` is still unknown (cards created before those fields existed, or imported while Scryfall was unreachable), and store their colors, primary type and mana value. Imports and the web frontend fill these in on their own; this is for the backlog.
+Look up on Scryfall the cards whose `colors` or `card_type` is still unknown (cards created before those fields existed, or imported while Scryfall was unreachable), and store their colors, primary type and mana value. Imports and the web frontend fill these in on their own; this is for the backlog.
+
+Scryfall allows one `/cards/collection` call every 500 ms, so a large backlog takes a while. To keep each request short, a call handles at most 750 cards, in id order. While `next_after_id` is not `null`, call again with `?after_id=<next_after_id>`.
+
+| Query param | Description |
+|---|---|
+| `after_id` | Optional, default `0`: only look at cards with a greater id |
 
 **Response `200 OK`**
 ```json
-{ "updated": 412, "not_found": 2 }
+{ "updated": 748, "not_found": 2, "remaining": 1630, "next_after_id": 2214 }
 ```
 
-**Errors:** `502` Scryfall unreachable
+**Errors:** `400` invalid `after_id`, `502` Scryfall unreachable
 
 ### `DELETE /cards?confirm=true`
 
