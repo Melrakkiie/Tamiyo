@@ -21,7 +21,7 @@ type PendingCommitSummary struct {
 	CardsCreated int `json:"cards_created"`
 }
 
-func (s *Service) CommitPendingCards(ctx context.Context, userID string, deckID int, storageID *int) (PendingCommitSummary, error) {
+func (s *Service) CommitPendingCards(ctx context.Context, userID string, deckID int, storageID, pendingID *int) (PendingCommitSummary, error) {
 	var summary PendingCommitSummary
 
 	pending, err := s.decks.GetPendingCards(ctx, userID, deckID)
@@ -30,6 +30,13 @@ func (s *Service) CommitPendingCards(ctx context.Context, userID string, deckID 
 			return summary, ErrDeckNotFound
 		}
 		return summary, err
+	}
+
+	if pendingID != nil {
+		pending = onlyPendingCard(pending, *pendingID)
+		if len(pending) == 0 {
+			return summary, deck.ErrPendingCardNotFound
+		}
 	}
 
 	if storageID != nil {
@@ -71,8 +78,18 @@ func (s *Service) CommitPendingCards(ctx context.Context, userID string, deckID 
 	return summary, nil
 }
 
+func onlyPendingCard(pending []deck.PendingCard, id int) []deck.PendingCard {
+	for _, p := range pending {
+		if p.ID == id {
+			return []deck.PendingCard{p}
+		}
+	}
+	return nil
+}
+
 type commitPendingRequest struct {
-	StorageID *int `json:"storage_id" binding:"omitempty,gt=0"`
+	StorageID *int `json:"storage_id"`
+	PendingID *int `json:"pending_id"`
 }
 
 func (h *Handler) commitPendingCards(ctx *gin.Context) {
@@ -97,12 +114,17 @@ func (h *Handler) commitPendingCards(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "storage_id must be a positive integer"})
 			return
 		}
+		if req.PendingID != nil && *req.PendingID <= 0 {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "pending_id must be a positive integer"})
+			return
+		}
 	}
 
-	summary, err := h.service.CommitPendingCards(ctx.Request.Context(), userID, deckID, req.StorageID)
+	summary, err := h.service.CommitPendingCards(ctx.Request.Context(), userID, deckID, req.StorageID, req.PendingID)
 	if err != nil {
 		apierr.Respond(ctx, err,
 			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
+			apierr.Mapping{Err: deck.ErrPendingCardNotFound, Status: http.StatusNotFound, Message: "pending card not found"},
 			apierr.Mapping{Err: ErrTargetStorageNotFound, Status: http.StatusBadRequest, Message: "storage_id does not reference an existing storage"},
 		)
 		return

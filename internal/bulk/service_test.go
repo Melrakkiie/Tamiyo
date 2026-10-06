@@ -711,7 +711,7 @@ func TestCommitPendingCards_CreatesEachCopyAndPutsItInTheDeck(t *testing.T) {
 	svc := NewService(cards, storages, decks, &fakeResolver{})
 	storageID := 4
 
-	summary, err := svc.CommitPendingCards(context.Background(), testUserID, 9, &storageID)
+	summary, err := svc.CommitPendingCards(context.Background(), testUserID, 9, &storageID, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, 3, summary.CardsCreated)
@@ -732,7 +732,7 @@ func TestCommitPendingCards_RejectsAnUnknownStorage(t *testing.T) {
 	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 	storageID := 42
 
-	_, err := svc.CommitPendingCards(context.Background(), testUserID, 9, &storageID)
+	_, err := svc.CommitPendingCards(context.Background(), testUserID, 9, &storageID, nil)
 
 	assert.ErrorIs(t, err, ErrTargetStorageNotFound)
 	assert.Empty(t, cards.created)
@@ -743,7 +743,7 @@ func TestCommitPendingCards_ReturnsDeckNotFound(t *testing.T) {
 	decks := &fakeDeckService{getDeckErr: deck.ErrNotFound}
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
-	_, err := svc.CommitPendingCards(context.Background(), testUserID, 9, nil)
+	_, err := svc.CommitPendingCards(context.Background(), testUserID, 9, nil, nil)
 
 	assert.ErrorIs(t, err, ErrDeckNotFound)
 }
@@ -753,8 +753,38 @@ func TestCommitPendingCards_KeepsTheItemWhenCreationFails(t *testing.T) {
 	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 1, Name: "Sol Ring", Quantity: 1}}}
 	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
-	_, err := svc.CommitPendingCards(context.Background(), testUserID, 9, nil)
+	_, err := svc.CommitPendingCards(context.Background(), testUserID, 9, nil, nil)
 
 	assert.Error(t, err)
 	assert.Empty(t, decks.removedPending)
+}
+
+func TestCommitPendingCards_CanCommitASingleCard(t *testing.T) {
+	cards := &fakeCardService{}
+	decks := &fakeDeckService{pending: []deck.PendingCard{
+		{ID: 1, Name: "Lightning Bolt", Quantity: 1},
+		{ID: 2, Name: "Sol Ring", Quantity: 2},
+	}}
+	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	pendingID := 2
+
+	summary, err := svc.CommitPendingCards(context.Background(), testUserID, 9, nil, &pendingID)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, summary.CardsCreated)
+	require.Len(t, cards.created, 2)
+	assert.Equal(t, "Sol Ring", cards.created[0].Name)
+	assert.Equal(t, []int{2}, decks.removedPending)
+}
+
+func TestCommitPendingCards_ReturnsNotFoundForAnUnknownPendingCard(t *testing.T) {
+	cards := &fakeCardService{}
+	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 1, Name: "Lightning Bolt", Quantity: 1}}}
+	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	pendingID := 42
+
+	_, err := svc.CommitPendingCards(context.Background(), testUserID, 9, nil, &pendingID)
+
+	assert.ErrorIs(t, err, deck.ErrPendingCardNotFound)
+	assert.Empty(t, cards.created)
 }

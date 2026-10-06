@@ -13,6 +13,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"Melrakkiie/Tamiyo/internal/deck"
 )
 
 type fakeImportService struct {
@@ -35,13 +37,15 @@ type fakeImportService struct {
 	commitSummary PendingCommitSummary
 	lastDeckID    int
 	lastStorageID *int
+	lastPendingID *int
 	commitCalled  bool
 }
 
-func (f *fakeImportService) CommitPendingCards(ctx context.Context, userID string, deckID int, storageID *int) (PendingCommitSummary, error) {
+func (f *fakeImportService) CommitPendingCards(ctx context.Context, userID string, deckID int, storageID, pendingID *int) (PendingCommitSummary, error) {
 	f.lastUserID = userID
 	f.lastDeckID = deckID
 	f.lastStorageID = storageID
+	f.lastPendingID = pendingID
 	f.commitCalled = true
 	return f.commitSummary, f.err
 }
@@ -521,4 +525,30 @@ func TestHandler_CommitPendingCards_RejectsABadStorageID(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.False(t, service.commitCalled)
+}
+
+func TestHandler_CommitPendingCards_CanTargetOneCard(t *testing.T) {
+	service := &fakeImportService{commitSummary: PendingCommitSummary{CardsCreated: 1}}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPost, "/deck/9/pending/commit", bytes.NewBufferString(`{"pending_id": 5}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, service.lastPendingID)
+	assert.Equal(t, 5, *service.lastPendingID)
+	assert.Nil(t, service.lastStorageID)
+}
+
+func TestHandler_CommitPendingCards_ReturnsNotFoundForAnUnknownPendingCard(t *testing.T) {
+	router := setupRouter(&fakeImportService{err: deck.ErrPendingCardNotFound})
+
+	req := httptest.NewRequest(http.MethodPost, "/deck/9/pending/commit", bytes.NewBufferString(`{"pending_id": 5}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }

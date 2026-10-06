@@ -720,9 +720,9 @@ Cards wanted in a deck but not in the collection yet (typically picked on Scryfa
 - `GET /deck/:id/pending` — the list, sorted by name.
 - `POST /deck/:id/pending` — add one. Body: `name`, `scryfall_id`, `set_code`, `collector_number` (required), `foil`, `quantity` (1–100, default 1), `mana_value`, `colors`, `card_type`, `color_identity` (same rules as `POST /cards`). Returns `201` with the item.
 - `DELETE /deck/:id/pending/:pending_id` — remove one. `204`, or `404` if it doesn't exist.
-- `POST /deck/:id/pending/commit` — create every pending card in the collection (one card per copy, in `storage_id` if given), put each in the deck, and clear the list. Body optional: `{ "storage_id": 4 }`. Returns `{ "cards_created": 7 }`. Items are handled one by one: on a failure, those already handled stay done and the rest stay pending.
+- `POST /deck/:id/pending/commit` — create every pending card in the collection (one card per copy, in `storage_id` if given), put each in the deck, and clear the list. Body optional: `{ "storage_id": 4 }`, plus `"pending_id": 12` to only add that one pending card (all its copies). Returns `{ "cards_created": 7 }`. Items are handled one by one: on a failure, those already handled stay done and the rest stay pending.
 
-**Errors:** `400` invalid id or body, unknown `storage_id` · `404` deck (or pending card) not found
+**Errors:** `400` invalid id or body, unknown `storage_id` · `404` deck or pending card not found
 
 ---
 
