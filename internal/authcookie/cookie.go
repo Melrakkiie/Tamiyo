@@ -2,10 +2,17 @@ package authcookie
 
 import (
 	"net/http"
+	"strings"
 	"time"
 )
 
 const DefaultName = "tamiyo_refresh_token"
+
+const TransportHeader = "X-Refresh-Token-Transport"
+
+func CookieOnly(r *http.Request) bool {
+	return strings.EqualFold(r.Header.Get(TransportHeader), "cookie")
+}
 
 type RefreshCookie struct {
 	Name   string

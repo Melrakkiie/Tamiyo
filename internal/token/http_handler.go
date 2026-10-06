@@ -22,7 +22,7 @@ var errMissingRefreshToken = errors.New("refresh token is required (JSON body or
 
 type refreshResponse struct {
 	Token        string `json:"token"`
-	RefreshToken string `json:"refresh_token"`
+	RefreshToken string `json:"refresh_token,omitempty"`
 }
 
 type tokenService interface {
@@ -69,7 +69,11 @@ func (h *Handler) refresh(ctx *gin.Context) {
 	}
 
 	h.cookie.Set(ctx.Writer, newRefreshToken)
-	ctx.JSON(http.StatusOK, refreshResponse{Token: accessToken, RefreshToken: newRefreshToken})
+	response := refreshResponse{Token: accessToken, RefreshToken: newRefreshToken}
+	if authcookie.CookieOnly(ctx.Request) {
+		response.RefreshToken = ""
+	}
+	ctx.JSON(http.StatusOK, response)
 }
 
 func (h *Handler) logout(ctx *gin.Context) {

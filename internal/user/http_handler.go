@@ -29,7 +29,7 @@ type changePasswordRequest struct {
 
 type authResponse struct {
 	Token        string `json:"token"`
-	RefreshToken string `json:"refresh_token"`
+	RefreshToken string `json:"refresh_token,omitempty"`
 }
 
 type userService interface {
@@ -119,7 +119,11 @@ func (h *Handler) respondWithTokenPair(ctx *gin.Context, userID string, status i
 	}
 
 	h.cookie.Set(ctx.Writer, refreshToken)
-	ctx.JSON(status, authResponse{Token: accessToken, RefreshToken: refreshToken})
+	response := authResponse{Token: accessToken, RefreshToken: refreshToken}
+	if authcookie.CookieOnly(ctx.Request) {
+		response.RefreshToken = ""
+	}
+	ctx.JSON(status, response)
 }
 
 func (h *Handler) changePassword(ctx *gin.Context) {

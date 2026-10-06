@@ -236,6 +236,31 @@ func TestHandler_Login_SetsRefreshCookie(t *testing.T) {
 	assert.Equal(t, "a-refresh-token", cookie.Value)
 }
 
+func TestHandler_Login_OmitsRefreshTokenFromBodyForCookieOnlyClients(t *testing.T) {
+	service := &fakeService{authUser: User{ID: "11111111-1111-1111-1111-111111111111", Email: "alice@example.com"}}
+	tokens := &fakeTokenService{issuedRefreshToken: "a-refresh-token"}
+	router := setupRouter(service, tokens)
+
+	body := `{"email": "alice@example.com", "password": "supersecret"}`
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(authcookie.TransportHeader, "cookie")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	assert.NotEmpty(t, response["token"])
+	_, hasRefreshToken := response["refresh_token"]
+	assert.False(t, hasRefreshToken)
+
+	cookie := findCookie(w, authcookie.DefaultName)
+	require.NotNil(t, cookie)
+	assert.Equal(t, "a-refresh-token", cookie.Value)
+}
+
 func TestHandler_Login_DoesNotSetRefreshCookieOnInvalidCredentials(t *testing.T) {
 	service := &fakeService{authErr: ErrInvalidCredentials}
 	router := setupRouter(service, &fakeTokenService{})

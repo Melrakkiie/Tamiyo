@@ -103,9 +103,9 @@ Access tokens are short-lived — 15 minutes by default (`JWT_ACCESS_TOKEN_TTL_M
 
 - keep the access token in memory only (never `localStorage`),
 - call `/auth/refresh` and `/auth/logout` with no body: the browser sends the cookie on its own, and the token is read from it,
-- ignore `refresh_token` in the JSON responses.
+- send `X-Refresh-Token-Transport: cookie` on `/auth/register`, `/auth/login` and `/auth/refresh`: `refresh_token` is then left out of the JSON responses.
 
-JavaScript can't read an `HttpOnly` cookie, so an XSS bug can't steal the long-lived refresh token. API clients (curl, scripts) are unaffected: they keep sending `refresh_token` in the body, which takes precedence over the cookie.
+JavaScript can't read an `HttpOnly` cookie, and with that header the token never appears in a response body either, so an XSS bug can't steal the long-lived refresh token. API clients (curl, scripts) are unaffected: they keep sending `refresh_token` in the body, which takes precedence over the cookie.
 
 ### `POST /auth/refresh`
 

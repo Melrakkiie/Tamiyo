@@ -72,3 +72,16 @@ func TestRead_ReturnsEmptyWhenCookieMissing(t *testing.T) {
 
 	assert.Equal(t, "", c.Read(req))
 }
+
+func TestCookieOnly_TrueWhenHeaderAsksForCookie(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", nil)
+	req.Header.Set(TransportHeader, "Cookie")
+
+	assert.True(t, CookieOnly(req))
+}
+
+func TestCookieOnly_FalseWithoutHeader(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", nil)
+
+	assert.False(t, CookieOnly(req))
+}

@@ -219,3 +219,25 @@ func TestHandler_Logout_RevokesCookieTokenAndClearsCookie(t *testing.T) {
 	require.NotNil(t, cookie)
 	assert.Less(t, cookie.MaxAge, 0)
 }
+
+func TestHandler_Refresh_OmitsRefreshTokenFromBodyForCookieOnlyClients(t *testing.T) {
+	service := &fakeService{rotateUserID: "11111111-1111-1111-1111-111111111111", rotateNewPlaintext: "new-refresh-token"}
+	router := setupRouter(service)
+
+	req := cookieRequest("/auth/refresh", "cookie-refresh-token")
+	req.Header.Set(authcookie.TransportHeader, "cookie")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	assert.NotEmpty(t, response["token"])
+	_, hasRefreshToken := response["refresh_token"]
+	assert.False(t, hasRefreshToken)
+
+	cookie := findCookie(w, authcookie.DefaultName)
+	require.NotNil(t, cookie)
+	assert.Equal(t, "new-refresh-token", cookie.Value)
+}
