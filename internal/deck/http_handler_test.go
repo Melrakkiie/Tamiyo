@@ -575,7 +575,7 @@ func TestHandler_GetDeckCards_IncludesColorsAndType(t *testing.T) {
 	colors, cardType := "R", "Instant"
 	service := &fakeService{
 		getDeckCards: []DeckCard{
-			{ID: 1, Name: "Lightning Bolt", Colors: &colors, CardType: &cardType},
+			{ID: 1, Name: "Lightning Bolt", Colors: &colors, CardType: &cardType, ColorIdentity: &colors},
 			{ID: 2, Name: "Unknown Card"},
 		},
 	}
@@ -591,6 +591,8 @@ func TestHandler_GetDeckCards_IncludesColorsAndType(t *testing.T) {
 	require.Len(t, response, 2)
 	assert.Equal(t, "R", response[0]["colors"])
 	assert.Equal(t, "Instant", response[0]["card_type"])
+	assert.Equal(t, "R", response[0]["color_identity"])
+	assert.Nil(t, response[1]["color_identity"])
 	assert.Contains(t, response[1], "colors")
 	assert.Nil(t, response[1]["colors"])
 	assert.Nil(t, response[1]["card_type"])

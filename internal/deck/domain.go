@@ -33,6 +33,7 @@ type DeckCard struct {
 	ManaValue       float64
 	Colors          *string
 	CardType        *string
+	ColorIdentity   *string
 	Added           time.Time
 	Updated         time.Time
 }
