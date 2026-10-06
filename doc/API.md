@@ -557,6 +557,8 @@ GET /deck?format=commander&sort=-added&page=1&limit=25
       "name": "Kess Commander",
       "format": "commander",
       "commander_id": 12,
+      "background_scryfall_id": "436d6a84-4cea-4ca7-94aa-9d08280652af",
+      "commander_scryfall_id": "a0b4c5ad-14f7-4bcb-9a59-6c0ac4f1a5e0",
       "card_count": 4,
       "added": "2026-01-15 10:30:00",
       "updated": "2026-01-15 10:30:00"
@@ -568,6 +570,8 @@ GET /deck?format=commander&sort=-added&page=1&limit=25
   "total_pages": 1
 }
 ```
+
+`commander_scryfall_id` is read-only: the Scryfall id of the commander card, so a client can show its art without another call. `background_scryfall_id` is the art the user picked for the deck (`null` when none was chosen).
 
 **Errors:** `400` if `page` or `limit` is not a valid integer, `limit` is outside `1..100`, or `sort` is not one of the allowed values.
 
@@ -592,6 +596,7 @@ Create a new deck.
 | `name` | string | Yes | |
 | `format` | string | Yes | e.g. `commander`, `modern`, `standard`. |
 | `commander_id` | int | No | Must reference an existing card if provided. |
+| `background_scryfall_id` | uuid | No | Scryfall id of the printing whose art (`art_crop`) is shown behind the deck. Any printing works, it doesn't have to be in the deck. |
 
 **Example**
 ```json
@@ -616,6 +621,8 @@ Partially update a deck.
 | `format` | string | |
 | `commander_id` | int | Must reference an existing card if provided. |
 | `clear_commander_id` | bool | Set to `true` to explicitly remove the current commander (set `commander_id` to `null`). |
+| `background_scryfall_id` | uuid | Scryfall id of the printing whose art is shown behind the deck. |
+| `clear_background_scryfall_id` | bool | Set to `true` to remove the chosen art (set `background_scryfall_id` to `null`). |
 
 **Example — clear the commander**
 ```json
@@ -624,7 +631,7 @@ Partially update a deck.
 
 **Response `200 OK`** — the full, updated deck.
 
-**Errors:** `400` invalid id / invalid body / invalid `commander_id` · `404` deck not found
+**Errors:** `400` invalid id / invalid body / invalid `commander_id` / `background_scryfall_id` not a UUID · `404` deck not found
 
 ---
 

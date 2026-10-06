@@ -1803,6 +1803,19 @@ components:
         commander_id:
           type: integer
           nullable: true
+        background_scryfall_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            Scryfall id of the printing whose art (art_crop) is shown behind
+            the deck, null when none was chosen.
+        commander_scryfall_id:
+          type: string
+          format: uuid
+          nullable: true
+          readOnly: true
+          description: Scryfall id of the commander card, null without a commander.
         card_count:
           type: integer
         added:
@@ -1838,6 +1851,9 @@ components:
         commander_id:
           type: integer
           minimum: 1
+        background_scryfall_id:
+          type: string
+          format: uuid
       required: [name, format]
 
     UpdateDeckRequest:
@@ -1854,6 +1870,12 @@ components:
         clear_commander_id:
           type: boolean
           description: Set to true to explicitly clear commander_id (set it to null).
+        background_scryfall_id:
+          type: string
+          format: uuid
+        clear_background_scryfall_id:
+          type: boolean
+          description: Set to true to remove the chosen art (set background_scryfall_id to null).
 
     ImportSummary:
       type: object

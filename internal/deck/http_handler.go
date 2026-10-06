@@ -20,24 +20,28 @@ const (
 )
 
 type deckResponse struct {
-	ID          int    `json:"id"`
-	Name        string `json:"name"`
-	Format      string `json:"format"`
-	CommanderID *int   `json:"commander_id"`
-	CardCount   int    `json:"card_count"`
-	Added       string `json:"added"`
-	Updated     string `json:"updated"`
+	ID                   int     `json:"id"`
+	Name                 string  `json:"name"`
+	Format               string  `json:"format"`
+	CommanderID          *int    `json:"commander_id"`
+	BackgroundScryfallID *string `json:"background_scryfall_id"`
+	CommanderScryfallID  *string `json:"commander_scryfall_id"`
+	CardCount            int     `json:"card_count"`
+	Added                string  `json:"added"`
+	Updated              string  `json:"updated"`
 }
 
 func toResponse(d Deck) deckResponse {
 	return deckResponse{
-		ID:          d.ID,
-		Name:        d.Name,
-		Format:      d.Format,
-		CommanderID: d.CommanderID,
-		CardCount:   d.CardCount,
-		Added:       d.Added.Format("2006-01-02 15:04:05"),
-		Updated:     d.Updated.Format("2006-01-02 15:04:05"),
+		ID:                   d.ID,
+		Name:                 d.Name,
+		Format:               d.Format,
+		CommanderID:          d.CommanderID,
+		BackgroundScryfallID: d.BackgroundScryfallID,
+		CommanderScryfallID:  d.CommanderScryfallID,
+		CardCount:            d.CardCount,
+		Added:                d.Added.Format("2006-01-02 15:04:05"),
+		Updated:              d.Updated.Format("2006-01-02 15:04:05"),
 	}
 }
 
@@ -50,24 +54,28 @@ type paginatedDecksResponse struct {
 }
 
 type createDeckRequest struct {
-	Name        string `json:"name" binding:"required"`
-	Format      string `json:"format" binding:"required"`
-	CommanderID *int   `json:"commander_id" binding:"omitempty,gt=0"`
+	Name                 string  `json:"name" binding:"required"`
+	Format               string  `json:"format" binding:"required"`
+	CommanderID          *int    `json:"commander_id" binding:"omitempty,gt=0"`
+	BackgroundScryfallID *string `json:"background_scryfall_id" binding:"omitempty,uuid"`
 }
 
 func (r createDeckRequest) toDomain() Deck {
 	return Deck{
-		Name:        r.Name,
-		Format:      r.Format,
-		CommanderID: r.CommanderID,
+		Name:                 r.Name,
+		Format:               r.Format,
+		CommanderID:          r.CommanderID,
+		BackgroundScryfallID: r.BackgroundScryfallID,
 	}
 }
 
 type updateDeckRequest struct {
-	Name             *string `json:"name" binding:"omitempty"`
-	Format           *string `json:"format" binding:"omitempty"`
-	CommanderID      *int    `json:"commander_id" binding:"omitempty,gt=0"`
-	ClearCommanderID bool    `json:"clear_commander_id"`
+	Name                 *string `json:"name" binding:"omitempty"`
+	Format               *string `json:"format" binding:"omitempty"`
+	CommanderID          *int    `json:"commander_id" binding:"omitempty,gt=0"`
+	ClearCommanderID     bool    `json:"clear_commander_id"`
+	BackgroundScryfallID *string `json:"background_scryfall_id" binding:"omitempty,uuid"`
+	ClearBackground      bool    `json:"clear_background_scryfall_id"`
 }
 
 func (r updateDeckRequest) applyTo(d Deck) Deck {
@@ -81,6 +89,11 @@ func (r updateDeckRequest) applyTo(d Deck) Deck {
 		d.CommanderID = nil
 	} else if r.CommanderID != nil {
 		d.CommanderID = r.CommanderID
+	}
+	if r.ClearBackground {
+		d.BackgroundScryfallID = nil
+	} else if r.BackgroundScryfallID != nil {
+		d.BackgroundScryfallID = r.BackgroundScryfallID
 	}
 	return d
 }

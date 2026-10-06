@@ -318,6 +318,33 @@ func TestPostgresRepository_Create_InsertsAndReturnsDeckWithID(t *testing.T) {
 	assert.Equal(t, created.ID, all[0].ID)
 }
 
+func TestPostgresRepository_StoresBackgroundScryfallID(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+
+	background := "436d6a84-4cea-4ca7-94aa-9d08280652af"
+	created, err := repo.Create(context.Background(), userID, Deck{Name: "Otterly Playful", Format: "commander", BackgroundScryfallID: &background})
+	require.NoError(t, err)
+	require.NotNil(t, created.BackgroundScryfallID)
+	assert.Equal(t, background, *created.BackgroundScryfallID)
+
+	found, err := repo.FindByID(context.Background(), userID, created.ID)
+	require.NoError(t, err)
+	require.NotNil(t, found.BackgroundScryfallID)
+	assert.Equal(t, background, *found.BackgroundScryfallID)
+
+	all, _, err := repo.FindAll(context.Background(), userID, defaultFilter())
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	require.NotNil(t, all[0].BackgroundScryfallID)
+
+	found.BackgroundScryfallID = nil
+	updated, err := repo.Update(context.Background(), userID, found)
+	require.NoError(t, err)
+	assert.Nil(t, updated.BackgroundScryfallID)
+}
+
 func TestPostgresRepository_Create_GeneratesAddedAndUpdatedTimestamps(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db, "alice@example.com")
@@ -748,4 +775,32 @@ func TestPostgresRepository_CardLinks_RefreshUpdatedTimestamp(t *testing.T) {
 	afterUnlink, err := repo.FindByID(context.Background(), userID, 1)
 	require.NoError(t, err)
 	assert.True(t, afterUnlink.Updated.After(afterLink.Updated))
+}
+
+func TestPostgresRepository_ReturnsCommanderScryfallID(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedCardsWithoutStorage(t, db, userID)
+
+	commanderID := 1
+	created, err := repo.Create(context.Background(), userID, Deck{Name: "Lotus", Format: "commander", CommanderID: &commanderID})
+	require.NoError(t, err)
+	require.NotNil(t, created.CommanderScryfallID)
+	assert.Equal(t, "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", *created.CommanderScryfallID)
+
+	found, err := repo.FindByID(context.Background(), userID, created.ID)
+	require.NoError(t, err)
+	require.NotNil(t, found.CommanderScryfallID)
+	assert.Equal(t, "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", *found.CommanderScryfallID)
+
+	all, _, err := repo.FindAll(context.Background(), userID, defaultFilter())
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	require.NotNil(t, all[0].CommanderScryfallID)
+
+	found.CommanderID = nil
+	updated, err := repo.Update(context.Background(), userID, found)
+	require.NoError(t, err)
+	assert.Nil(t, updated.CommanderScryfallID)
 }

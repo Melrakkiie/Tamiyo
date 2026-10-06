@@ -238,6 +238,48 @@ func TestService_UpdateDeck_ClearsCommanderIDWhenRequested(t *testing.T) {
 	assert.Nil(t, result.CommanderID)
 }
 
+func TestService_UpdateDeck_SetsBackgroundScryfallID(t *testing.T) {
+	existing := Deck{ID: 1, Name: "Red Deck", Format: "commander"}
+	repo := &fakeRepository{findByIDDeck: existing}
+	service := NewService(repo)
+
+	background := "436d6a84-4cea-4ca7-94aa-9d08280652af"
+	req := updateDeckRequest{BackgroundScryfallID: &background}
+
+	result, err := service.UpdateDeck(context.Background(), testUserID, 1, req)
+
+	require.NoError(t, err)
+	require.NotNil(t, result.BackgroundScryfallID)
+	assert.Equal(t, "436d6a84-4cea-4ca7-94aa-9d08280652af", *result.BackgroundScryfallID)
+	assert.Equal(t, "Red Deck", result.Name)
+}
+
+func TestService_UpdateDeck_ClearsBackgroundWhenRequested(t *testing.T) {
+	background := "436d6a84-4cea-4ca7-94aa-9d08280652af"
+	existing := Deck{ID: 1, Name: "Red Deck", Format: "commander", BackgroundScryfallID: &background}
+	repo := &fakeRepository{findByIDDeck: existing}
+	service := NewService(repo)
+
+	result, err := service.UpdateDeck(context.Background(), testUserID, 1, updateDeckRequest{ClearBackground: true})
+
+	require.NoError(t, err)
+	assert.Nil(t, result.BackgroundScryfallID)
+}
+
+func TestService_UpdateDeck_KeepsBackgroundWhenNotMentioned(t *testing.T) {
+	background := "436d6a84-4cea-4ca7-94aa-9d08280652af"
+	existing := Deck{ID: 1, Name: "Red Deck", Format: "commander", BackgroundScryfallID: &background}
+	repo := &fakeRepository{findByIDDeck: existing}
+	service := NewService(repo)
+
+	newName := "Renamed"
+	result, err := service.UpdateDeck(context.Background(), testUserID, 1, updateDeckRequest{Name: &newName})
+
+	require.NoError(t, err)
+	require.NotNil(t, result.BackgroundScryfallID)
+	assert.Equal(t, background, *result.BackgroundScryfallID)
+}
+
 func TestService_UpdateDeck_ReturnsNotFoundWhenDeckDoesNotBelongToUser(t *testing.T) {
 	repo := &fakeRepository{findByIDErr: ErrNotFound}
 	service := NewService(repo)

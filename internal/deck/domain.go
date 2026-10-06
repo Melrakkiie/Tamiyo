@@ -11,13 +11,15 @@ var ErrCardNotFound = errors.New("referenced card does not exist")
 var ErrNotFound = errors.New("deck not found")
 
 type Deck struct {
-	ID          int
-	Name        string
-	Format      string
-	CommanderID *int
-	CardCount   int
-	Added       time.Time
-	Updated     time.Time
+	ID                   int
+	Name                 string
+	Format               string
+	CommanderID          *int
+	BackgroundScryfallID *string
+	CommanderScryfallID  *string
+	CardCount            int
+	Added                time.Time
+	Updated              time.Time
 }
 
 type DeckCard struct {

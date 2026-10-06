@@ -13,35 +13,40 @@ import (
 )
 
 type deckRow struct {
-	ID          int       `db:"id"`
-	UserID      string    `db:"user_id"`
-	Name        string    `db:"name"`
-	Format      string    `db:"format"`
-	CommanderID *int      `db:"commander_id"`
-	CardCount   int       `db:"card_count"`
-	Added       time.Time `db:"added"`
-	Updated     time.Time `db:"updated"`
+	ID                   int       `db:"id"`
+	UserID               string    `db:"user_id"`
+	Name                 string    `db:"name"`
+	Format               string    `db:"format"`
+	CommanderID          *int      `db:"commander_id"`
+	BackgroundScryfallID *string   `db:"background_scryfall_id"`
+	CommanderScryfallID  *string   `db:"commander_scryfall_id"`
+	CardCount            int       `db:"card_count"`
+	Added                time.Time `db:"added"`
+	Updated              time.Time `db:"updated"`
 }
 
 func (r deckRow) toDomain() Deck {
 	return Deck{
-		ID:          r.ID,
-		Name:        r.Name,
-		Format:      r.Format,
-		CommanderID: r.CommanderID,
-		CardCount:   r.CardCount,
-		Added:       r.Added,
-		Updated:     r.Updated,
+		ID:                   r.ID,
+		Name:                 r.Name,
+		Format:               r.Format,
+		CommanderID:          r.CommanderID,
+		BackgroundScryfallID: r.BackgroundScryfallID,
+		CommanderScryfallID:  r.CommanderScryfallID,
+		CardCount:            r.CardCount,
+		Added:                r.Added,
+		Updated:              r.Updated,
 	}
 }
 
 func toDeckRow(userID string, d Deck) deckRow {
 	return deckRow{
-		ID:          d.ID,
-		UserID:      userID,
-		Name:        d.Name,
-		Format:      d.Format,
-		CommanderID: d.CommanderID,
+		ID:                   d.ID,
+		UserID:               userID,
+		Name:                 d.Name,
+		Format:               d.Format,
+		CommanderID:          d.CommanderID,
+		BackgroundScryfallID: d.BackgroundScryfallID,
 	}
 }
 
@@ -99,13 +104,15 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		    d.name AS name,
 		    d.format AS format,
 			d.commander_id as commander_id,
+			d.background_scryfall_id AS background_scryfall_id,
+			(SELECT c.scryfall_id FROM tamiyo.cards c WHERE c.id = d.commander_id) AS commander_scryfall_id,
 		    d.added AS added,
 			d.updated as updated,
 		    COUNT(cd.card_id) AS card_count
 		FROM tamiyo.deck d
 		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id
 	` + whereClause + `
-		GROUP BY d.id, d.name, d.format, d.commander_id, d.added, d.updated
+		GROUP BY d.id, d.name, d.format, d.commander_id, d.background_scryfall_id, d.added, d.updated
 	` + orderByClause(filter) + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 
 	pagedArgs := append(args, filter.Limit, offset)
@@ -168,13 +175,15 @@ func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int
 		    d.name AS name,
 		    d.format AS format,
 			d.commander_id as commander_id,
+			d.background_scryfall_id AS background_scryfall_id,
+			(SELECT c.scryfall_id FROM tamiyo.cards c WHERE c.id = d.commander_id) AS commander_scryfall_id,
 		    d.added AS added,
 			d.updated as updated,
 		    COUNT(cd.card_id) AS card_count
 		FROM tamiyo.deck d
 		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id
 		WHERE d.id = $1 AND d.user_id = $2
-		GROUP BY d.id, d.name, d.format, d.commander_id, d.added, d.updated
+		GROUP BY d.id, d.name, d.format, d.commander_id, d.background_scryfall_id, d.added, d.updated
 	`
 
 	var row deckRow
@@ -191,9 +200,10 @@ func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int
 func (r *PostgresRepository) Create(ctx context.Context, userID string, d Deck) (Deck, error) {
 	row := toDeckRow(userID, d)
 	query := `
-    	INSERT INTO tamiyo.deck (user_id, name, format, commander_id)
-     	VALUES (:user_id, :name, :format, :commander_id)
-      	RETURNING id, name, format, commander_id, added, updated
+    	INSERT INTO tamiyo.deck (user_id, name, format, commander_id, background_scryfall_id)
+     	VALUES (:user_id, :name, :format, :commander_id, :background_scryfall_id)
+      	RETURNING id, name, format, commander_id, background_scryfall_id, added, updated,
+      	    (SELECT c.scryfall_id FROM tamiyo.cards c WHERE c.id = commander_id) AS commander_scryfall_id
 	`
 	stmt, err := r.db.PrepareNamedContext(ctx, query)
 	if err != nil {
@@ -219,9 +229,10 @@ func (r *PostgresRepository) Update(ctx context.Context, userID string, d Deck) 
 	row := toDeckRow(userID, d)
 	query := `
 		UPDATE tamiyo.deck
-		SET name = :name, format = :format, commander_id = :commander_id
+		SET name = :name, format = :format, commander_id = :commander_id, background_scryfall_id = :background_scryfall_id
 		WHERE id = :id AND user_id = :user_id
-		RETURNING id, name, format, commander_id, added, updated
+		RETURNING id, name, format, commander_id, background_scryfall_id, added, updated,
+		    (SELECT c.scryfall_id FROM tamiyo.cards c WHERE c.id = commander_id) AS commander_scryfall_id
 	`
 
 	stmt, err := r.db.PrepareNamedContext(ctx, query)

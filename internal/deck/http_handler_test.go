@@ -407,6 +407,34 @@ func TestHandler_UpdateDeck_ReturnsUpdatedDeck(t *testing.T) {
 	assert.Equal(t, "Renamed", response.Name)
 }
 
+func TestHandler_UpdateDeck_ReturnsBackgroundScryfallID(t *testing.T) {
+	background := "436d6a84-4cea-4ca7-94aa-9d08280652af"
+	service := &fakeService{updateDeck: Deck{ID: 1, Name: "Deck", Format: "commander", BackgroundScryfallID: &background}}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPatch, "/deck/1", bytes.NewBufferString(`{"background_scryfall_id": "`+background+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var response deckResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.NotNil(t, response.BackgroundScryfallID)
+	assert.Equal(t, background, *response.BackgroundScryfallID)
+}
+
+func TestHandler_UpdateDeck_RejectsInvalidBackgroundScryfallID(t *testing.T) {
+	router := setupRouter(&fakeService{})
+
+	req := httptest.NewRequest(http.MethodPatch, "/deck/1", bytes.NewBufferString(`{"background_scryfall_id": "not-a-uuid"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
 func TestHandler_UpdateDeck_ReturnsBadRequestOnInvalidID(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)
