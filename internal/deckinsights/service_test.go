@@ -303,6 +303,25 @@ func TestGetDeckStats_SeparatesLandsFromNonlands(t *testing.T) {
 	assert.Equal(t, 1, stats.ColorBreakdown["C"])
 }
 
+func TestGetDeckStats_ReturnsEmptyManaCurveForLandsOnlyDeck(t *testing.T) {
+	decks := &fakeDeckService{
+		decks: map[int]deck.Deck{1: {ID: 1, Name: "Lands", Format: "commander"}},
+		cardsByDeck: map[int][]deck.DeckCard{
+			1: {{ID: 10, Name: "Mountain", ScryfallID: "mtn"}},
+		},
+	}
+	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
+		"mtn": {ID: "mtn", TypeLine: "Basic Land — Mountain", CMC: 0},
+	}}
+	svc := NewService(decks, fetcher)
+
+	stats, err := svc.GetDeckStats(context.Background(), testUserID, 1)
+
+	require.NoError(t, err)
+	require.NotNil(t, stats.ManaCurve)
+	assert.Empty(t, stats.ManaCurve)
+}
+
 func TestGetDeckStats_BuildsManaCurveSortedByManaValue(t *testing.T) {
 	decks := &fakeDeckService{
 		decks: map[int]deck.Deck{1: {ID: 1, Format: "commander"}},

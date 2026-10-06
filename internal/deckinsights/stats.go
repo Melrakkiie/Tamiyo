@@ -14,6 +14,7 @@ var typesByPrecedence = []string{
 
 func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card) DeckStats {
 	stats := DeckStats{
+		ManaCurve:      []ManaCurveBucket{},
 		ColorBreakdown: make(map[string]int),
 		TypeBreakdown:  make(map[string]int),
 	}
