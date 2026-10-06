@@ -129,7 +129,7 @@ The new refresh token is also set in the cookie (see [the refresh cookie](#brows
 
 **Errors:** `400` refresh token in neither the body nor the cookie, or malformed body · `401` invalid, expired, or already-used refresh token (the cookie is cleared)
 
-> Refresh tokens are **single-use**: a successful call revokes the one you sent and returns a new one (token rotation). Submitting an already-used refresh token is treated as a possible theft — it revokes *every* refresh token belonging to that account, logging out all of its sessions.
+> Refresh tokens are **single-use**: a successful call revokes the one you sent and returns a new one (token rotation). Submitting an already-used refresh token is treated as a possible theft — it revokes *every* refresh token belonging to that account, logging out all of its sessions. One exception: a token rotated out less than 10 seconds ago is accepted once more (the client most likely never received the response, e.g. a page reloaded mid-refresh), as long as the token that replaced it is still valid.
 
 Refresh tokens are valid for 30 days by default (`JWT_REFRESH_TOKEN_TTL_DAYS`) unless revoked sooner by a refresh, a logout, a password change, or reuse detection.
 

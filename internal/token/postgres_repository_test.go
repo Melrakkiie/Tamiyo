@@ -159,6 +159,75 @@ func TestPostgresRepository_Revoke_SetsRevokedAt(t *testing.T) {
 	assert.NotNil(t, result.RevokedAt)
 }
 
+func TestPostgresRepository_FindByID_ReturnsToken(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db)
+	repo := NewPostgresRepository(db)
+
+	created, err := repo.Create(context.Background(), RefreshToken{
+		UserID:    userID,
+		TokenHash: "fake-hash",
+		ExpiresAt: time.Now().Add(time.Hour),
+	})
+	require.NoError(t, err)
+
+	result, err := repo.FindByID(context.Background(), created.ID)
+
+	require.NoError(t, err)
+	assert.Equal(t, "fake-hash", result.TokenHash)
+	assert.Nil(t, result.ReplacedBy)
+}
+
+func TestPostgresRepository_FindByID_ReturnsErrNotFoundWhenMissing(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	_, err := repo.FindByID(context.Background(), "00000000-0000-0000-0000-000000000000")
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestPostgresRepository_Replace_RevokesAndLinksToSuccessor(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db)
+	repo := NewPostgresRepository(db)
+
+	old, err := repo.Create(context.Background(), RefreshToken{UserID: userID, TokenHash: "hash-old", ExpiresAt: time.Now().Add(time.Hour)})
+	require.NoError(t, err)
+	successor, err := repo.Create(context.Background(), RefreshToken{UserID: userID, TokenHash: "hash-new", ExpiresAt: time.Now().Add(time.Hour)})
+	require.NoError(t, err)
+
+	err = repo.Replace(context.Background(), old.ID, successor.ID)
+	require.NoError(t, err)
+
+	result, err := repo.FindByID(context.Background(), old.ID)
+	require.NoError(t, err)
+	assert.NotNil(t, result.RevokedAt)
+	require.NotNil(t, result.ReplacedBy)
+	assert.Equal(t, successor.ID, *result.ReplacedBy)
+}
+
+func TestPostgresRepository_Replace_KeepsTheFirstSuccessor(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db)
+	repo := NewPostgresRepository(db)
+
+	old, err := repo.Create(context.Background(), RefreshToken{UserID: userID, TokenHash: "hash-old", ExpiresAt: time.Now().Add(time.Hour)})
+	require.NoError(t, err)
+	first, err := repo.Create(context.Background(), RefreshToken{UserID: userID, TokenHash: "hash-first", ExpiresAt: time.Now().Add(time.Hour)})
+	require.NoError(t, err)
+	second, err := repo.Create(context.Background(), RefreshToken{UserID: userID, TokenHash: "hash-second", ExpiresAt: time.Now().Add(time.Hour)})
+	require.NoError(t, err)
+
+	require.NoError(t, repo.Replace(context.Background(), old.ID, first.ID))
+	require.NoError(t, repo.Replace(context.Background(), old.ID, second.ID))
+
+	result, err := repo.FindByID(context.Background(), old.ID)
+	require.NoError(t, err)
+	require.NotNil(t, result.ReplacedBy)
+	assert.Equal(t, first.ID, *result.ReplacedBy)
+}
+
 func TestPostgresRepository_RevokeAllForUser_RevokesOnlyThatUsersActiveTokens(t *testing.T) {
 	db := getTestDB(t)
 	userA := seedUser(t, db)

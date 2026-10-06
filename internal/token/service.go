@@ -6,7 +6,13 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"time"
+)
+
+const (
+	reuseGrace       = 10 * time.Second
+	maxSuccessorHops = 5
 )
 
 type Service struct {
@@ -19,55 +25,87 @@ func NewService(repo Repository, ttl time.Duration) *Service {
 }
 
 func (s *Service) IssueRefreshToken(ctx context.Context, userID string) (string, error) {
-	plaintext, err := generatePlaintext()
+	plaintext, _, err := s.issue(ctx, userID)
+	return plaintext, err
+}
+
+func (s *Service) issue(ctx context.Context, userID string) (plaintext string, id string, err error) {
+	plaintext, err = generatePlaintext()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	if _, err := s.repo.Create(ctx, RefreshToken{
+	created, err := s.repo.Create(ctx, RefreshToken{
 		UserID:    userID,
 		TokenHash: hash(plaintext),
 		ExpiresAt: time.Now().Add(s.ttl),
-	}); err != nil {
-		return "", err
+	})
+	if err != nil {
+		return "", "", err
 	}
 
-	return plaintext, nil
+	return plaintext, created.ID, nil
 }
 
-// Rotate exchanges a valid, unused refresh token for a new one, revoking
-// the old one in the same operation. If the submitted token has already
-// been rotated out (reused — a sign it may have been stolen), every
-// refresh token for that user is revoked, forcing a fresh login
-// everywhere, and ErrInvalid is returned.
 func (s *Service) Rotate(ctx context.Context, plaintext string) (userID string, newPlaintext string, err error) {
 	rt, err := s.repo.FindByHash(ctx, hash(plaintext))
 	if err != nil {
-		if err == ErrNotFound {
+		if errors.Is(err, ErrNotFound) {
 			return "", "", ErrInvalid
 		}
 		return "", "", err
 	}
 
 	if rt.RevokedAt != nil {
-		_ = s.repo.RevokeAllForUser(ctx, rt.UserID)
-		return "", "", ErrInvalid
+		successor, err := s.activeSuccessor(ctx, rt)
+		if err != nil {
+			return "", "", err
+		}
+		if successor == nil {
+			_ = s.repo.RevokeAllForUser(ctx, rt.UserID)
+			return "", "", ErrInvalid
+		}
+		rt = *successor
 	}
 
 	if time.Now().After(rt.ExpiresAt) {
 		return "", "", ErrInvalid
 	}
 
-	if err := s.repo.Revoke(ctx, rt.ID); err != nil {
-		return "", "", err
-	}
-
-	newPlaintext, err = s.IssueRefreshToken(ctx, rt.UserID)
+	newPlaintext, successorID, err := s.issue(ctx, rt.UserID)
 	if err != nil {
 		return "", "", err
 	}
 
+	if err := s.repo.Replace(ctx, rt.ID, successorID); err != nil {
+		return "", "", err
+	}
+
 	return rt.UserID, newPlaintext, nil
+}
+
+func (s *Service) activeSuccessor(ctx context.Context, rt RefreshToken) (*RefreshToken, error) {
+	current := rt
+	for range maxSuccessorHops {
+		if current.ReplacedBy == nil || current.RevokedAt == nil || time.Since(*current.RevokedAt) > reuseGrace {
+			return nil, nil
+		}
+
+		next, err := s.repo.FindByID(ctx, *current.ReplacedBy)
+		if errors.Is(err, ErrNotFound) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		if next.RevokedAt == nil {
+			return &next, nil
+		}
+		current = next
+	}
+
+	return nil, nil
 }
 
 func (s *Service) Revoke(ctx context.Context, plaintext string) error {

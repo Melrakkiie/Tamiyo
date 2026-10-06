@@ -147,7 +147,9 @@ paths:
         revokes it and returns a new one. Reusing an already-rotated
         refresh token is treated as a possible theft and revokes every
         refresh token for that user, so all of that user's other sessions
-        are also logged out. The token is read from the JSON body, or,
+        are also logged out. Exception: a token rotated out less than 10
+        seconds ago, whose replacement is still valid, is accepted once
+        more (the client most likely never received the response). The token is read from the JSON body, or,
         when the body has none, from the tamiyo_refresh_token cookie
         (browser clients send an empty body).
       security: []
