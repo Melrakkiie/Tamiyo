@@ -15,10 +15,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"Melrakkiie/Tamiyo/internal/auth"
+	"Melrakkiie/Tamiyo/internal/authcookie"
 )
 
 const testJWTSecret = "test-secret"
 const testAccessTokenTTL = time.Hour
+
+var testCookie = authcookie.New("", true, 24*time.Hour)
 
 type fakeService struct {
 	registerUser User
@@ -83,7 +86,7 @@ func (f *fakeTokenService) RevokeAllForUser(ctx context.Context, userID string) 
 func setupRouter(service userService, tokens refreshTokenService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	NewHandler(service, testJWTSecret, testAccessTokenTTL, tokens).RegisterRoutes(router)
+	NewHandler(service, testJWTSecret, testAccessTokenTTL, tokens, testCookie).RegisterRoutes(router)
 	return router
 }
 
@@ -92,7 +95,7 @@ func setupProtectedRouter(service userService, tokens refreshTokenService) *gin.
 	router := gin.New()
 	protected := router.Group("/")
 	protected.Use(auth.RequireAuth(testJWTSecret))
-	NewHandler(service, testJWTSecret, testAccessTokenTTL, tokens).RegisterProtectedRoutes(protected)
+	NewHandler(service, testJWTSecret, testAccessTokenTTL, tokens, testCookie).RegisterProtectedRoutes(protected)
 	return router
 }
 
@@ -123,6 +126,24 @@ func TestHandler_Register_ReturnsTokenPairOnSuccess(t *testing.T) {
 	assert.NotEmpty(t, response["token"])
 	assert.Equal(t, "a-refresh-token", response["refresh_token"])
 	assert.Equal(t, "11111111-1111-1111-1111-111111111111", tokens.issueCalledWithUserID)
+}
+
+func TestHandler_Register_SetsRefreshCookie(t *testing.T) {
+	service := &fakeService{registerUser: User{ID: "11111111-1111-1111-1111-111111111111", Email: "alice@example.com"}}
+	tokens := &fakeTokenService{issuedRefreshToken: "a-refresh-token"}
+	router := setupRouter(service, tokens)
+
+	body := `{"email": "alice@example.com", "password": "supersecret"}`
+	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	cookie := findCookie(w, authcookie.DefaultName)
+	require.NotNil(t, cookie)
+	assert.Equal(t, "a-refresh-token", cookie.Value)
+	assert.True(t, cookie.HttpOnly)
 }
 
 func TestHandler_Register_ReturnsBadRequestOnInvalidEmail(t *testing.T) {
@@ -198,6 +219,37 @@ func TestHandler_Login_ReturnsTokenPairOnSuccess(t *testing.T) {
 	assert.Equal(t, "a-refresh-token", response["refresh_token"])
 }
 
+func TestHandler_Login_SetsRefreshCookie(t *testing.T) {
+	service := &fakeService{authUser: User{ID: "11111111-1111-1111-1111-111111111111", Email: "alice@example.com"}}
+	tokens := &fakeTokenService{issuedRefreshToken: "a-refresh-token"}
+	router := setupRouter(service, tokens)
+
+	body := `{"email": "alice@example.com", "password": "supersecret"}`
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	cookie := findCookie(w, authcookie.DefaultName)
+	require.NotNil(t, cookie)
+	assert.Equal(t, "a-refresh-token", cookie.Value)
+}
+
+func TestHandler_Login_DoesNotSetRefreshCookieOnInvalidCredentials(t *testing.T) {
+	service := &fakeService{authErr: ErrInvalidCredentials}
+	router := setupRouter(service, &fakeTokenService{})
+
+	body := `{"email": "alice@example.com", "password": "wrong-password"}`
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Nil(t, findCookie(w, authcookie.DefaultName))
+}
+
 func TestHandler_Login_ReturnsUnauthorizedOnInvalidCredentials(t *testing.T) {
 	service := &fakeService{authErr: ErrInvalidCredentials}
 	router := setupRouter(service, &fakeTokenService{})
@@ -257,7 +309,7 @@ func TestHandler_RegisterRoutes_AppliesGivenMiddlewareToBothAuthRoutes(t *testin
 		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests, please try again later"})
 	}
 
-	NewHandler(&fakeService{}, testJWTSecret, testAccessTokenTTL, &fakeTokenService{}).RegisterRoutes(router, blockAll)
+	NewHandler(&fakeService{}, testJWTSecret, testAccessTokenTTL, &fakeTokenService{}, testCookie).RegisterRoutes(router, blockAll)
 
 	for _, path := range []string{"/auth/register", "/auth/login"} {
 		body := `{"email": "alice@example.com", "password": "supersecret"}`
@@ -378,3 +430,12 @@ var assertAnError = errAnError{}
 type errAnError struct{}
 
 func (errAnError) Error() string { return "boom" }
+
+func findCookie(w *httptest.ResponseRecorder, name string) *http.Cookie {
+	for _, c := range w.Result().Cookies() {
+		if c.Name == name {
+			return c
+		}
+	}
+	return nil
+}

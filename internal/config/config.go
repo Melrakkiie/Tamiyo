@@ -20,6 +20,8 @@ type Config struct {
 
 	APIBasePath string
 
+	RefreshCookieSecure bool
+
 	AuthRateLimitMax    int
 	AuthRateLimitWindow time.Duration
 
@@ -60,6 +62,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("DB_MAX_IDLE_CONNS", 5)
 	viper.SetDefault("DB_CONN_MAX_LIFETIME_MINUTES", 5)
 	viper.SetDefault("SHUTDOWN_TIMEOUT_SECONDS", 10)
+	viper.SetDefault("REFRESH_COOKIE_SECURE", true)
 
 	cfg := &Config{
 		PGHost:              firstNonEmpty(viper.GetString("PGHOST"), viper.GetString("POSTGRESQL_ADDON_HOST")),
@@ -71,6 +74,7 @@ func Load() (*Config, error) {
 		AppPort:             viper.GetString("APP_PORT"),
 		JWTSecret:           viper.GetString("JWT_SECRET"),
 		APIBasePath:         normalizeBasePath(viper.GetString("API_BASE_PATH")),
+		RefreshCookieSecure: viper.GetBool("REFRESH_COOKIE_SECURE"),
 		AuthRateLimitMax:    viper.GetInt("AUTH_RATE_LIMIT_MAX"),
 		AuthRateLimitWindow: time.Duration(viper.GetInt("AUTH_RATE_LIMIT_WINDOW_SECONDS")) * time.Second,
 		JWTAccessTokenTTL:   time.Duration(viper.GetInt("JWT_ACCESS_TOKEN_TTL_MINUTES")) * time.Minute,

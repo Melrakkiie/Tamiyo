@@ -97,6 +97,16 @@ Authorization: Bearer <token>
 ```
 Access tokens are short-lived — 15 minutes by default (`JWT_ACCESS_TOKEN_TTL_MINUTES`). Use the `refresh_token` returned alongside it to get a new pair without logging in again (see below), instead of waiting for it to expire.
 
+### Browser clients: the refresh cookie
+
+`/auth/register`, `/auth/login` and `/auth/refresh` also set the refresh token in a cookie named `tamiyo_refresh_token`: `HttpOnly`, `SameSite=Strict`, `Secure` (unless `REFRESH_COOKIE_SECURE=false`), scoped to `<API_BASE_PATH>/auth` so it is only ever sent to the auth routes. A browser frontend served from the same origin as the API should:
+
+- keep the access token in memory only (never `localStorage`),
+- call `/auth/refresh` and `/auth/logout` with no body: the browser sends the cookie on its own, and the token is read from it,
+- ignore `refresh_token` in the JSON responses.
+
+JavaScript can't read an `HttpOnly` cookie, so an XSS bug can't steal the long-lived refresh token. API clients (curl, scripts) are unaffected: they keep sending `refresh_token` in the body, which takes precedence over the cookie.
+
 ### `POST /auth/refresh`
 
 Exchange a refresh token for a brand-new token pair.
@@ -105,7 +115,9 @@ Exchange a refresh token for a brand-new token pair.
 
 | Field | Type | Required |
 |---|---|---|
-| `refresh_token` | string | Yes |
+| `refresh_token` | string | No — falls back to the `tamiyo_refresh_token` cookie |
+
+The new refresh token is also set in the cookie (see [the refresh cookie](#browser-clients-the-refresh-cookie)).
 
 **Response `200 OK`**
 ```json
@@ -115,7 +127,7 @@ Exchange a refresh token for a brand-new token pair.
 }
 ```
 
-**Errors:** `400` missing `refresh_token` · `401` invalid, expired, or already-used refresh token
+**Errors:** `400` refresh token in neither the body nor the cookie, or malformed body · `401` invalid, expired, or already-used refresh token (the cookie is cleared)
 
 > Refresh tokens are **single-use**: a successful call revokes the one you sent and returns a new one (token rotation). Submitting an already-used refresh token is treated as a possible theft — it revokes *every* refresh token belonging to that account, logging out all of its sessions.
 
@@ -125,17 +137,17 @@ Refresh tokens are valid for 30 days by default (`JWT_REFRESH_TOKEN_TTL_DAYS`) u
 
 ### `POST /auth/logout`
 
-Revoke a refresh token, ending that session.
+Revoke a refresh token, ending that session. The refresh cookie is always cleared.
 
 **Body**
 
 | Field | Type | Required |
 |---|---|---|
-| `refresh_token` | string | Yes |
+| `refresh_token` | string | No — falls back to the `tamiyo_refresh_token` cookie |
 
 **Response `204 No Content`**
 
-**Errors:** `400` missing `refresh_token`
+**Errors:** `400` refresh token in neither the body nor the cookie, or malformed body
 
 > Idempotent — logging out with an unknown or already-revoked refresh token still returns `204`. This only revokes the refresh token: an access token already issued remains valid until it naturally expires (JWTs are stateless), which is exactly why the access token's lifetime is kept short.
 

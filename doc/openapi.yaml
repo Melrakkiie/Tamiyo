@@ -12,7 +12,9 @@ info:
 
 servers:
   - url: http://localhost:8080
-    description: Local development
+    description: Local development (API_BASE_PATH empty)
+  - url: https://tamiyo.alangelier.com/api
+    description: Production (API_BASE_PATH=/api)
 
 security:
   - bearerAuth: []
@@ -77,6 +79,9 @@ paths:
       responses:
         "201":
           description: Created
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/RefreshCookie"
           content:
             application/json:
               schema:
@@ -113,6 +118,9 @@ paths:
       responses:
         "200":
           description: OK
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/RefreshCookie"
           content:
             application/json:
               schema:
@@ -135,10 +143,14 @@ paths:
         revokes it and returns a new one. Reusing an already-rotated
         refresh token is treated as a possible theft and revokes every
         refresh token for that user, so all of that user's other sessions
-        are also logged out.
+        are also logged out. The token is read from the JSON body, or,
+        when the body has none, from the tamiyo_refresh_token cookie
+        (browser clients send an empty body).
       security: []
+      parameters:
+        - $ref: "#/components/parameters/RefreshCookie"
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
@@ -146,18 +158,21 @@ paths:
       responses:
         "200":
           description: OK
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/RefreshCookie"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/TokenPair"
         "400":
-          description: Missing refresh_token
+          description: Refresh token in neither the body nor the cookie, or malformed body
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "401":
-          description: Invalid, expired, or already-used refresh token
+          description: Invalid, expired, or already-used refresh token (the refresh cookie is cleared)
           content:
             application/json:
               schema:
@@ -173,10 +188,14 @@ paths:
         unknown or already-revoked refresh token still returns 204.
         Note this does not invalidate an access token already issued —
         it simply expires on its own shortly after (see
-        JWT_ACCESS_TOKEN_TTL_MINUTES).
+        JWT_ACCESS_TOKEN_TTL_MINUTES). The token is read from the JSON
+        body, or from the tamiyo_refresh_token cookie when the body has
+        none. The refresh cookie is always cleared.
       security: []
+      parameters:
+        - $ref: "#/components/parameters/RefreshCookie"
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
@@ -185,7 +204,7 @@ paths:
         "204":
           description: No Content
         "400":
-          description: Missing refresh_token
+          description: Refresh token in neither the body nor the cookie, or malformed body
           content:
             application/json:
               schema:
@@ -1215,7 +1234,26 @@ components:
         15 minutes by default) — use /auth/refresh to obtain a new one
         without logging in again.
 
+  headers:
+    RefreshCookie:
+      description: >
+        tamiyo_refresh_token=<refresh token>; HttpOnly; SameSite=Strict;
+        Secure (unless REFRESH_COOKIE_SECURE=false); Path=<API_BASE_PATH>/auth;
+        Max-Age = JWT_REFRESH_TOKEN_TTL_DAYS. Lets a browser client keep the
+        refresh token out of reach of JavaScript.
+      schema:
+        type: string
+
   parameters:
+    RefreshCookie:
+      name: tamiyo_refresh_token
+      in: cookie
+      required: false
+      schema:
+        type: string
+      description: >
+        Refresh token set by /auth/register, /auth/login and /auth/refresh.
+        Used when the request body carries no refresh_token.
     CardID:
       name: id
       in: path
@@ -1394,14 +1432,14 @@ components:
       properties:
         refresh_token:
           type: string
-      required: [refresh_token]
+          description: Optional when the tamiyo_refresh_token cookie is sent.
 
     LogoutRequest:
       type: object
       properties:
         refresh_token:
           type: string
-      required: [refresh_token]
+          description: Optional when the tamiyo_refresh_token cookie is sent.
 
     ChangePasswordRequest:
       type: object

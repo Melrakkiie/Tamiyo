@@ -9,6 +9,7 @@ import (
 
 	"Melrakkiie/Tamiyo/internal/apierr"
 	"Melrakkiie/Tamiyo/internal/auth"
+	"Melrakkiie/Tamiyo/internal/authcookie"
 )
 
 type registerRequest struct {
@@ -47,14 +48,16 @@ type Handler struct {
 	jwtSecret      string
 	accessTokenTTL time.Duration
 	tokens         refreshTokenService
+	cookie         authcookie.RefreshCookie
 }
 
-func NewHandler(service userService, jwtSecret string, accessTokenTTL time.Duration, tokens refreshTokenService) *Handler {
+func NewHandler(service userService, jwtSecret string, accessTokenTTL time.Duration, tokens refreshTokenService, cookie authcookie.RefreshCookie) *Handler {
 	return &Handler{
 		service:        service,
 		jwtSecret:      jwtSecret,
 		accessTokenTTL: accessTokenTTL,
 		tokens:         tokens,
+		cookie:         cookie,
 	}
 }
 
@@ -115,6 +118,7 @@ func (h *Handler) respondWithTokenPair(ctx *gin.Context, userID string, status i
 		return
 	}
 
+	h.cookie.Set(ctx.Writer, refreshToken)
 	ctx.JSON(status, authResponse{Token: accessToken, RefreshToken: refreshToken})
 }
 

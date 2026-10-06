@@ -130,6 +130,26 @@ func TestLoad_NormalizesAPIBasePath(t *testing.T) {
 	}
 }
 
+func TestLoad_DefaultsRefreshCookieSecureToTrue(t *testing.T) {
+	setRequiredEnv(t)
+	// REFRESH_COOKIE_SECURE is missing
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.True(t, cfg.RefreshCookieSecure)
+}
+
+func TestLoad_ReadsRefreshCookieSecureFromEnvironment(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("REFRESH_COOKIE_SECURE", "false")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.False(t, cfg.RefreshCookieSecure)
+}
+
 func TestLoad_DefaultsPGSSLModeToDisable(t *testing.T) {
 	setRequiredEnv(t)
 	// PGSSLMODE is missing

@@ -17,6 +17,7 @@ import (
 
 	"Melrakkiie/Tamiyo/_devops/database/migrations"
 	"Melrakkiie/Tamiyo/internal/auth"
+	"Melrakkiie/Tamiyo/internal/authcookie"
 	"Melrakkiie/Tamiyo/internal/bulk"
 	"Melrakkiie/Tamiyo/internal/card"
 	"Melrakkiie/Tamiyo/internal/config"
@@ -79,11 +80,13 @@ func main() {
 
 	tokenRepo := token.NewPostgresRepository(db)
 	tokenService := token.NewService(tokenRepo, cfg.JWTRefreshTokenTTL)
-	tokenHandler := token.NewHandler(tokenService, cfg.JWTSecret, cfg.JWTAccessTokenTTL)
+	refreshCookie := authcookie.New(cfg.APIBasePath, cfg.RefreshCookieSecure, cfg.JWTRefreshTokenTTL)
+
+	tokenHandler := token.NewHandler(tokenService, cfg.JWTSecret, cfg.JWTAccessTokenTTL, refreshCookie)
 
 	userRepo := user.NewPostgresRepository(db)
 	userService := user.NewService(userRepo)
-	userHandler := user.NewHandler(userService, cfg.JWTSecret, cfg.JWTAccessTokenTTL, tokenService)
+	userHandler := user.NewHandler(userService, cfg.JWTSecret, cfg.JWTAccessTokenTTL, tokenService, refreshCookie)
 
 	var mailer mail.Mailer
 	if cfg.SMTPHost != "" {
