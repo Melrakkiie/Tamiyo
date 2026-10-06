@@ -54,6 +54,8 @@ type cardRow struct {
 	Foil            bool      `db:"foil"`
 	StorageID       *int      `db:"storage_id"`
 	ManaValue       float64   `db:"mana_value"`
+	Colors          *string   `db:"colors"`
+	CardType        *string   `db:"card_type"`
 	Added           time.Time `db:"added"`
 	Updated         time.Time `db:"updated"`
 }
@@ -267,7 +269,7 @@ func (r *PostgresRepository) Delete(ctx context.Context, userID string, id int) 
 
 func (r *PostgresRepository) FindCardsByDeckID(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]DeckCard, error) {
 	query := `
-		SELECT c.id, c.name, c.scryfall_id, c.set_code, c.collector_number, c.foil, c.storage_id, c.mana_value, c.added, c.updated
+		SELECT c.id, c.name, c.scryfall_id, c.set_code, c.collector_number, c.foil, c.storage_id, c.mana_value, c.colors, c.card_type, c.added, c.updated
 		FROM tamiyo.cards c
 		JOIN tamiyo.card_deck cd ON c.id = cd.card_id
 		WHERE cd.deck_id = $1 AND c.user_id = $2

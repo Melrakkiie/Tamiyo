@@ -94,6 +94,8 @@ type deckCardResponse struct {
 	Foil            bool    `json:"foil"`
 	StorageID       *int    `json:"storage_id"`
 	ManaValue       float64 `json:"mana_value"`
+	Colors          *string `json:"colors"`
+	CardType        *string `json:"card_type"`
 	Added           string  `json:"added"`
 	Updated         string  `json:"updated"`
 }
@@ -108,6 +110,8 @@ func toDeckCardResponse(dc DeckCard) deckCardResponse {
 		Foil:            dc.Foil,
 		StorageID:       dc.StorageID,
 		ManaValue:       dc.ManaValue,
+		Colors:          dc.Colors,
+		CardType:        dc.CardType,
 		Added:           dc.Added.Format("2006-01-02 15:04:05"),
 		Updated:         dc.Updated.Format("2006-01-02 15:04:05"),
 	}

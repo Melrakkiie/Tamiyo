@@ -543,6 +543,31 @@ func TestHandler_GetDeckCards_ReturnsCardsAsJSON(t *testing.T) {
 	assert.Equal(t, "Black Lotus", response[0].Name)
 }
 
+func TestHandler_GetDeckCards_IncludesColorsAndType(t *testing.T) {
+	colors, cardType := "R", "Instant"
+	service := &fakeService{
+		getDeckCards: []DeckCard{
+			{ID: 1, Name: "Lightning Bolt", Colors: &colors, CardType: &cardType},
+			{ID: 2, Name: "Unknown Card"},
+		},
+	}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck/1/cards", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var response []map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.Len(t, response, 2)
+	assert.Equal(t, "R", response[0]["colors"])
+	assert.Equal(t, "Instant", response[0]["card_type"])
+	assert.Contains(t, response[1], "colors")
+	assert.Nil(t, response[1]["colors"])
+	assert.Nil(t, response[1]["card_type"])
+}
+
 func TestHandler_GetDeckCards_PassesManaValueSortToService(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)

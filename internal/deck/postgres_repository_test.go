@@ -523,6 +523,31 @@ func TestPostgresRepository_FindCardsByDeckID_ReturnsCardsInDeck(t *testing.T) {
 	assert.Contains(t, names, "Lightning Bolt")
 }
 
+func TestPostgresRepository_FindCardsByDeckID_ReturnsColorsAndType(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userID)
+	seedCardsWithoutStorage(t, db, userID)
+	_, err := db.Exec(`UPDATE tamiyo.cards SET colors = 'R', card_type = 'Instant' WHERE id = 2`)
+	require.NoError(t, err)
+
+	linkCardToDeck(t, db, 1, 1)
+	linkCardToDeck(t, db, 2, 1)
+
+	result, err := repo.FindCardsByDeckID(context.Background(), userID, 1, "name", false)
+
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	assert.Equal(t, "Black Lotus", result[0].Name)
+	assert.Nil(t, result[0].Colors)
+	assert.Nil(t, result[0].CardType)
+	require.NotNil(t, result[1].Colors)
+	assert.Equal(t, "R", *result[1].Colors)
+	require.NotNil(t, result[1].CardType)
+	assert.Equal(t, "Instant", *result[1].CardType)
+}
+
 func TestPostgresRepository_FindCardsByDeckID_ReturnsEmptySliceWhenDeckHasNoCards(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db, "alice@example.com")

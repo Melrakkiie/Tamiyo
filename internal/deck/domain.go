@@ -29,6 +29,8 @@ type DeckCard struct {
 	Foil            bool
 	StorageID       *int
 	ManaValue       float64
+	Colors          *string
+	CardType        *string
 	Added           time.Time
 	Updated         time.Time
 }
