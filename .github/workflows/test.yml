@@ -133,9 +133,14 @@ jobs:
           fetch-depth: 0
 
       - name: Deploy
-        uses: 47ng/actions-clever-cloud@v2
+        # Pinned to a commit (v2.2.0): this action receives the Clever Cloud
+        # credentials, so a moved tag must not be able to swap its code.
+        uses: 47ng/actions-clever-cloud@6029f491cd1ae7942b1053c467fddf993a6a9aa4 # v2.2.0
         with:
           appID: ${{ vars.CLEVER_APP_ID }}
+          # Don't fail when this commit is already deployed (e.g. after a
+          # manual `git push clever main:master`).
+          sameCommitPolicy: ignore
         env:
           CLEVER_TOKEN: ${{ secrets.CLEVER_TOKEN }}
           CLEVER_SECRET: ${{ secrets.CLEVER_SECRET }}
