@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# A newer push on the same branch (or PR) cancels the run still in progress
+# for the previous one: no point testing or deploying an outdated commit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build
@@ -106,3 +112,30 @@ jobs:
           files: ./coverage-integration.out
           flags: integration
           fail_ci_if_error: false
+
+  deploy:
+    name: Deploy to Clever Cloud
+    runs-on: ubuntu-latest
+    # Only a push to main deploys (never a pull request), and only once the
+    # build, lint and both test suites have passed.
+    needs: [unit-tests, integration-tests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # A newer push to main cancels a deployment still in progress, so only
+    # the latest commit ends up being deployed.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Clever Cloud deploys through a git push, which needs full history.
+          fetch-depth: 0
+
+      - name: Deploy
+        uses: 47ng/actions-clever-cloud@v2
+        with:
+          appID: ${{ vars.CLEVER_APP_ID }}
+        env:
+          CLEVER_TOKEN: ${{ secrets.CLEVER_TOKEN }}
+          CLEVER_SECRET: ${{ secrets.CLEVER_SECRET }}
