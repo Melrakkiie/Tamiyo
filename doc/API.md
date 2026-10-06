@@ -224,7 +224,7 @@ with a `Retry-After` header giving the number of seconds until the window resets
 ## Conventions
 
 ### Timestamps
-Every resource carries `added` and `updated` timestamps, generated and maintained by the database — they can never be set or modified through the API.
+Every resource carries `added` and `updated` timestamps, generated and maintained by the database — they can never be set or modified through the API. A storage's `updated` also moves when a card is put in it, moved out of it or deleted, and a deck's when a card is added to it or removed from it, so `sort=-updated` lists the most recently active ones first.
 
 ### Optional relations
 Fields like `storage_id` or `commander_id` are nullable. A card doesn't have to belong to a storage, and a deck doesn't have to have a commander.

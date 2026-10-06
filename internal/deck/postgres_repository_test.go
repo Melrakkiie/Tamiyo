@@ -694,3 +694,33 @@ func TestPostgresRepository_UnlinkCardFromDeck_DoesNotRemoveLinkWhenDeckBelongsT
 	require.NoError(t, err)
 	require.Len(t, cards, 1)
 }
+
+func TestPostgresRepository_CardLinks_RefreshUpdatedTimestamp(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userID)
+	seedCardsWithoutStorage(t, db, userID)
+
+	before, err := repo.FindByID(context.Background(), userID, 1)
+	require.NoError(t, err)
+	other, err := repo.FindByID(context.Background(), userID, 2)
+	require.NoError(t, err)
+
+	time.Sleep(10 * time.Millisecond)
+	require.NoError(t, repo.LinkCardToDeck(context.Background(), userID, 1, 1))
+
+	afterLink, err := repo.FindByID(context.Background(), userID, 1)
+	require.NoError(t, err)
+	assert.True(t, afterLink.Updated.After(before.Updated))
+	untouched, err := repo.FindByID(context.Background(), userID, 2)
+	require.NoError(t, err)
+	assert.Equal(t, other.Updated, untouched.Updated)
+
+	time.Sleep(10 * time.Millisecond)
+	require.NoError(t, repo.UnlinkCardFromDeck(context.Background(), userID, 1, 1))
+
+	afterUnlink, err := repo.FindByID(context.Background(), userID, 1)
+	require.NoError(t, err)
+	assert.True(t, afterUnlink.Updated.After(afterLink.Updated))
+}

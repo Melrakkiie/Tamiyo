@@ -478,3 +478,54 @@ func TestPostgresRepository_Delete_DoesNotAffectAnotherUsersStorage(t *testing.T
 	require.NoError(t, err)
 	assert.Equal(t, "Vintage Collection", result.Name)
 }
+
+func TestPostgresRepository_CardActivity_RefreshesUpdatedTimestamp(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userID)
+
+	before, err := repo.FindByID(context.Background(), userID, 1)
+	require.NoError(t, err)
+	other, err := repo.FindByID(context.Background(), userID, 2)
+	require.NoError(t, err)
+
+	time.Sleep(10 * time.Millisecond)
+	var cardID int
+	require.NoError(t, db.Get(&cardID, `
+		INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value)
+		VALUES ($1, 'Sol Ring', 'bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd', 'c21', '263', false, 1, 1)
+		RETURNING id
+	`, userID))
+
+	afterInsert, err := repo.FindByID(context.Background(), userID, 1)
+	require.NoError(t, err)
+	assert.True(t, afterInsert.Updated.After(before.Updated))
+	untouched, err := repo.FindByID(context.Background(), userID, 2)
+	require.NoError(t, err)
+	assert.Equal(t, other.Updated, untouched.Updated)
+
+	time.Sleep(10 * time.Millisecond)
+	_, err = db.Exec(`UPDATE tamiyo.cards SET foil = true WHERE id = $1`, cardID)
+	require.NoError(t, err)
+	afterFoil, err := repo.FindByID(context.Background(), userID, 1)
+	require.NoError(t, err)
+	assert.Equal(t, afterInsert.Updated, afterFoil.Updated)
+
+	time.Sleep(10 * time.Millisecond)
+	_, err = db.Exec(`UPDATE tamiyo.cards SET storage_id = 2 WHERE id = $1`, cardID)
+	require.NoError(t, err)
+	afterMoveFrom, err := repo.FindByID(context.Background(), userID, 1)
+	require.NoError(t, err)
+	afterMoveTo, err := repo.FindByID(context.Background(), userID, 2)
+	require.NoError(t, err)
+	assert.True(t, afterMoveFrom.Updated.After(afterFoil.Updated))
+	assert.True(t, afterMoveTo.Updated.After(other.Updated))
+
+	time.Sleep(10 * time.Millisecond)
+	_, err = db.Exec(`DELETE FROM tamiyo.cards WHERE id = $1`, cardID)
+	require.NoError(t, err)
+	afterDelete, err := repo.FindByID(context.Background(), userID, 2)
+	require.NoError(t, err)
+	assert.True(t, afterDelete.Updated.After(afterMoveTo.Updated))
+}
