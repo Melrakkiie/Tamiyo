@@ -387,6 +387,17 @@ Delete a card. If the card is linked to any decks (including as a commander), th
 
 **Errors:** `400` invalid id · `404` card not found
 
+### `DELETE /cards?confirm=true`
+
+Delete **every** card of the account at once, with the same clean-up as above (removed from every deck, commanders cleared). Storages and decks themselves are kept, now empty. `confirm=true` is required so the collection can't be wiped by accident.
+
+**Response `200 OK`**
+```json
+{ "deleted": 128 }
+```
+
+**Errors:** `400` `confirm=true` is missing
+
 ---
 
 ## Storage

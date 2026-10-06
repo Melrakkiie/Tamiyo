@@ -29,6 +29,9 @@ type fakeRepository struct {
 	updateErr   error
 
 	deleteErr error
+
+	deleteAllCount int
+	deleteAllErr   error
 }
 
 func (f *fakeRepository) FindAll(ctx context.Context, userID string, filter CardFilter) ([]Card, int, error) {
@@ -67,6 +70,11 @@ func (f *fakeRepository) Update(ctx context.Context, userID string, c Card) (Car
 func (f *fakeRepository) Delete(ctx context.Context, userID string, id int) error {
 	f.lastUserID = userID
 	return f.deleteErr
+}
+
+func (f *fakeRepository) DeleteAll(ctx context.Context, userID string) (int, error) {
+	f.lastUserID = userID
+	return f.deleteAllCount, f.deleteAllErr
 }
 
 func TestService_GetAllCards_PassesUserIDAndFilterToRepository(t *testing.T) {
@@ -301,4 +309,15 @@ func TestService_DeleteCard_PropagatesRepositoryError(t *testing.T) {
 	err := service.DeleteCard(context.Background(), testUserID, 1)
 
 	assert.Error(t, err)
+}
+
+func TestService_DeleteAllCards_ReturnsDeletedCountForTheUser(t *testing.T) {
+	repo := &fakeRepository{deleteAllCount: 3}
+	service := NewService(repo)
+
+	deleted, err := service.DeleteAllCards(context.Background(), testUserID)
+
+	require.NoError(t, err)
+	assert.Equal(t, 3, deleted)
+	assert.Equal(t, testUserID, repo.lastUserID)
 }

@@ -227,3 +227,17 @@ func (r *PostgresRepository) Delete(ctx context.Context, userID string, id int) 
 
 	return nil
 }
+
+func (r *PostgresRepository) DeleteAll(ctx context.Context, userID string) (int, error) {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM tamiyo.cards WHERE user_id = $1`, userID)
+	if err != nil {
+		return 0, err
+	}
+
+	deleted, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+
+	return int(deleted), nil
+}

@@ -406,6 +406,40 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+    delete:
+      tags: [cards]
+      summary: Delete every card of the account
+      description: >
+        Deletes all of the authenticated user's cards at once: they are
+        removed from every deck, and any deck whose commander was one of them
+        has its commander_id cleared. Storages and decks themselves are kept.
+        Requires confirm=true, so the collection can't be wiped by accident.
+      parameters:
+        - name: confirm
+          in: query
+          required: true
+          schema:
+            type: boolean
+            enum: [true]
+          description: Must be true.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteAllCardsResponse"
+        "400":
+          description: confirm=true is missing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /cards/{id}:
     parameters:
       - $ref: "#/components/parameters/CardID"
@@ -1525,6 +1559,14 @@ components:
         - mana_value
         - added
         - updated
+
+    DeleteAllCardsResponse:
+      type: object
+      properties:
+        deleted:
+          type: integer
+          description: Number of cards deleted.
+      required: [deleted]
 
     PaginatedCards:
       type: object

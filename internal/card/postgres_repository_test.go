@@ -551,6 +551,34 @@ func TestPostgresRepository_Delete_ReturnsErrNotFoundWhenCardDoesNotExist(t *tes
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
+func TestPostgresRepository_DeleteAll_RemovesOnlyThatUsersCards(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+
+	seedCards(t, db, userA, []Card{
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false},
+		{Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: "129", Foil: true},
+	})
+	seedCards(t, db, userB, []Card{
+		{Name: "Sol Ring", ScryfallID: "6ad8011d-3471-4369-9d68-b264cc027487", SetCode: "c21", CollectorNumber: "263", Foil: false},
+	})
+
+	deleted, err := repo.DeleteAll(context.Background(), userA)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, deleted)
+
+	_, totalA, err := repo.FindAll(context.Background(), userA, CardFilter{Page: 1, Limit: 25})
+	require.NoError(t, err)
+	assert.Equal(t, 0, totalA)
+
+	_, totalB, err := repo.FindAll(context.Background(), userB, CardFilter{Page: 1, Limit: 25})
+	require.NoError(t, err)
+	assert.Equal(t, 1, totalB)
+}
+
 func TestPostgresRepository_Delete_DoesNotAffectAnotherUsersCard(t *testing.T) {
 	db := getTestDB(t)
 	userA := seedUser(t, db, "alice@example.com")

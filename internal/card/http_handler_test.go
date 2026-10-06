@@ -31,6 +31,10 @@ type fakeService struct {
 	updateErr         error
 
 	deleteErr error
+
+	deleteAllCount  int
+	deleteAllErr    error
+	deleteAllCalled bool
 }
 
 func (f *fakeService) GetAllCards(ctx context.Context, userID string, filter CardFilter) ([]Card, int, error) {
@@ -63,6 +67,12 @@ func (f *fakeService) UpdateCard(ctx context.Context, userID string, id int, req
 		return Card{}, f.updateErr
 	}
 	return f.updateCard, nil
+}
+
+func (f *fakeService) DeleteAllCards(ctx context.Context, userID string) (int, error) {
+	f.lastUserID = userID
+	f.deleteAllCalled = true
+	return f.deleteAllCount, f.deleteAllErr
 }
 
 func (f *fakeService) DeleteCard(ctx context.Context, userID string, id int) error {
@@ -601,6 +611,44 @@ func TestHandler_DeleteCard_ReturnsErrorOnServiceFailure(t *testing.T) {
 	router := setupRouter(service)
 
 	req := httptest.NewRequest(http.MethodDelete, "/cards/1", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestHandler_DeleteAllCards_ReturnsDeletedCount(t *testing.T) {
+	service := &fakeService{deleteAllCount: 42}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/cards?confirm=true", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var response deleteAllCardsResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	assert.Equal(t, 42, response.Deleted)
+	assert.Equal(t, testUserID, service.lastUserID)
+}
+
+func TestHandler_DeleteAllCards_RequiresConfirmation(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/cards", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.False(t, service.deleteAllCalled)
+}
+
+func TestHandler_DeleteAllCards_ReturnsErrorOnServiceFailure(t *testing.T) {
+	service := &fakeService{deleteAllErr: errors.New("delete failed")}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/cards?confirm=true", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 

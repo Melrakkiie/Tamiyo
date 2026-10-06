@@ -39,4 +39,5 @@ type Repository interface {
 	Create(ctx context.Context, userID string, c Card) (Card, error)
 	Update(ctx context.Context, userID string, c Card) (Card, error)
 	Delete(ctx context.Context, userID string, id int) error
+	DeleteAll(ctx context.Context, userID string) (int, error)
 }

@@ -149,6 +149,11 @@ type cardService interface {
 	CreateCard(ctx context.Context, userID string, c Card) (Card, error)
 	UpdateCard(ctx context.Context, userID string, id int, req updateCardRequest) (Card, error)
 	DeleteCard(ctx context.Context, userID string, id int) error
+	DeleteAllCards(ctx context.Context, userID string) (int, error)
+}
+
+type deleteAllCardsResponse struct {
+	Deleted int `json:"deleted"`
 }
 
 type Handler struct {
@@ -165,6 +170,7 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.POST("/cards", h.createCard)
 	router.PATCH("/cards/:id", h.updateCard)
 	router.DELETE("/cards/:id", h.deleteCard)
+	router.DELETE("/cards", h.deleteAllCards)
 }
 
 func (h *Handler) getCards(ctx *gin.Context) {
@@ -355,4 +361,25 @@ func (h *Handler) deleteCard(ctx *gin.Context) {
 	}
 
 	ctx.Status(http.StatusNoContent)
+}
+
+func (h *Handler) deleteAllCards(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
+	if ctx.Query("confirm") != "true" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "confirm=true is required to delete every card"})
+		return
+	}
+
+	deleted, err := h.service.DeleteAllCards(ctx.Request.Context(), userID)
+	if err != nil {
+		apierr.Respond(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, deleteAllCardsResponse{Deleted: deleted})
 }
