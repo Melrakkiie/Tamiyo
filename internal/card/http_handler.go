@@ -2,6 +2,8 @@ package card
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -78,13 +80,42 @@ func (r createCardRequest) toDomain() Card {
 }
 
 type updateCardRequest struct {
-	Name            *string  `json:"name" binding:"omitempty"`
-	ScryfallID      *string  `json:"scryfall_id" binding:"omitempty,uuid"`
-	SetCode         *string  `json:"set_code" binding:"omitempty"`
-	CollectorNumber *string  `json:"collector_number" binding:"omitempty"`
-	Foil            *bool    `json:"foil" binding:"omitempty"`
-	StorageID       *int     `json:"storage_id" binding:"omitempty,gt=0"`
-	ManaValue       *float64 `json:"mana_value" binding:"omitempty,gte=0"`
+	Name            *string           `json:"name" binding:"omitempty"`
+	ScryfallID      *string           `json:"scryfall_id" binding:"omitempty,uuid"`
+	SetCode         *string           `json:"set_code" binding:"omitempty"`
+	CollectorNumber *string           `json:"collector_number" binding:"omitempty"`
+	Foil            *bool             `json:"foil" binding:"omitempty"`
+	StorageID       optionalStorageID `json:"storage_id"`
+	ManaValue       *float64          `json:"mana_value" binding:"omitempty,gte=0"`
+}
+
+type optionalStorageID struct {
+	Set   bool
+	Value *int
+}
+
+func (o *optionalStorageID) UnmarshalJSON(data []byte) error {
+	o.Set = true
+	if string(data) == "null" {
+		o.Value = nil
+		return nil
+	}
+
+	var id int
+	if err := json.Unmarshal(data, &id); err != nil {
+		return err
+	}
+	o.Value = &id
+	return nil
+}
+
+var errInvalidStorageID = errors.New("storage_id must be a positive integer, or null to remove the card from its storage")
+
+func (r updateCardRequest) validate() error {
+	if r.StorageID.Value != nil && *r.StorageID.Value <= 0 {
+		return errInvalidStorageID
+	}
+	return nil
 }
 
 func (r updateCardRequest) applyTo(c Card) Card {
@@ -106,8 +137,8 @@ func (r updateCardRequest) applyTo(c Card) Card {
 	if r.ManaValue != nil {
 		c.ManaValue = *r.ManaValue
 	}
-	if r.StorageID != nil {
-		c.StorageID = r.StorageID
+	if r.StorageID.Set {
+		c.StorageID = r.StorageID.Value
 	}
 	return c
 }
@@ -285,6 +316,10 @@ func (h *Handler) updateCard(ctx *gin.Context) {
 
 	var req updateCardRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := req.validate(); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

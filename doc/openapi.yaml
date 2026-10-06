@@ -1593,6 +1593,10 @@ components:
         storage_id:
           type: integer
           minimum: 1
+          nullable: true
+          description: >
+            Moves the card to this storage. null removes the card from its
+            storage; leaving the field out keeps the current one.
         mana_value:
           type: number
           minimum: 0

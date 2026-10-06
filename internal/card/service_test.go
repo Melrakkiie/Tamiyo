@@ -200,7 +200,7 @@ func TestService_UpdateCard_AppliesAllFieldsWhenProvided(t *testing.T) {
 		SetCode:         &newSetCode,
 		CollectorNumber: &newCollectorNumber,
 		Foil:            &newFoil,
-		StorageID:       &newStorageID,
+		StorageID:       optionalStorageID{Set: true, Value: &newStorageID},
 	}
 
 	result, err := service.UpdateCard(context.Background(), testUserID, 1, req)
@@ -213,6 +213,30 @@ func TestService_UpdateCard_AppliesAllFieldsWhenProvided(t *testing.T) {
 	assert.True(t, result.Foil)
 	require.NotNil(t, result.StorageID)
 	assert.Equal(t, 7, *result.StorageID)
+}
+
+func TestService_UpdateCard_RemovesCardFromStorageWhenStorageIDIsNull(t *testing.T) {
+	storageID := 5
+	repo := &fakeRepository{findByIDCard: Card{ID: 1, Name: "Black Lotus", StorageID: &storageID}}
+	service := NewService(repo)
+
+	result, err := service.UpdateCard(context.Background(), testUserID, 1, updateCardRequest{StorageID: optionalStorageID{Set: true}})
+
+	require.NoError(t, err)
+	assert.Nil(t, result.StorageID)
+}
+
+func TestService_UpdateCard_KeepsStorageWhenStorageIDIsAbsent(t *testing.T) {
+	storageID := 5
+	repo := &fakeRepository{findByIDCard: Card{ID: 1, Name: "Black Lotus", StorageID: &storageID}}
+	service := NewService(repo)
+	newName := "Renamed"
+
+	result, err := service.UpdateCard(context.Background(), testUserID, 1, updateCardRequest{Name: &newName})
+
+	require.NoError(t, err)
+	require.NotNil(t, result.StorageID)
+	assert.Equal(t, 5, *result.StorageID)
 }
 
 func TestService_UpdateCard_PassesUserIDToFindAndUpdate(t *testing.T) {

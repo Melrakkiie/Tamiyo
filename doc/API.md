@@ -361,7 +361,7 @@ Partially update a card. Any subset of the fields below can be sent.
 | `set_code` | string | |
 | `collector_number` | int | Must be > 0 if provided. |
 | `foil` | bool | |
-| `storage_id` | int | Must reference an existing storage if provided. |
+| `storage_id` | int or `null` | Must reference an existing storage if provided. `null` removes the card from its storage; leaving the field out keeps the current one. |
 | `mana_value` | number | Must be >= 0 if provided. |
 
 > `scryfall_id`, `added`, and `updated` can never be modified after creation.

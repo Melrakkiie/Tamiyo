@@ -26,8 +26,9 @@ type fakeService struct {
 
 	createErr error
 
-	updateCard Card
-	updateErr  error
+	updateCard        Card
+	lastUpdateRequest updateCardRequest
+	updateErr         error
 
 	deleteErr error
 }
@@ -57,6 +58,7 @@ func (f *fakeService) CreateCard(ctx context.Context, userID string, c Card) (Ca
 
 func (f *fakeService) UpdateCard(ctx context.Context, userID string, id int, req updateCardRequest) (Card, error) {
 	f.lastUserID = userID
+	f.lastUpdateRequest = req
 	if f.updateErr != nil {
 		return Card{}, f.updateErr
 	}
@@ -430,6 +432,64 @@ func TestHandler_UpdateCard_ReturnsUpdatedCard(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 	assert.Equal(t, "Renamed", response.Name)
+}
+
+func patchCard(router *gin.Engine, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPatch, "/cards/1", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	return w
+}
+
+func TestHandler_UpdateCard_NullStorageIDRemovesCardFromStorage(t *testing.T) {
+	service := &fakeService{updateCard: Card{ID: 1, Name: "Black Lotus"}}
+	router := setupRouter(service)
+
+	w := patchCard(router, `{"storage_id": null}`)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, service.lastUpdateRequest.StorageID.Set)
+	assert.Nil(t, service.lastUpdateRequest.StorageID.Value)
+}
+
+func TestHandler_UpdateCard_AbsentStorageIDLeavesStorageUnchanged(t *testing.T) {
+	service := &fakeService{updateCard: Card{ID: 1, Name: "Renamed"}}
+	router := setupRouter(service)
+
+	w := patchCard(router, `{"name": "Renamed"}`)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.False(t, service.lastUpdateRequest.StorageID.Set)
+}
+
+func TestHandler_UpdateCard_SetsStorageID(t *testing.T) {
+	service := &fakeService{updateCard: Card{ID: 1, Name: "Black Lotus"}}
+	router := setupRouter(service)
+
+	w := patchCard(router, `{"storage_id": 7}`)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, service.lastUpdateRequest.StorageID.Value)
+	assert.Equal(t, 7, *service.lastUpdateRequest.StorageID.Value)
+}
+
+func TestHandler_UpdateCard_ReturnsBadRequestOnNonPositiveStorageID(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	w := patchCard(router, `{"storage_id": 0}`)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_UpdateCard_ReturnsBadRequestOnNonIntegerStorageID(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	w := patchCard(router, `{"storage_id": "seven"}`)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 func TestHandler_UpdateCard_ReturnsBadRequestOnInvalidID(t *testing.T) {
