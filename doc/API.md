@@ -802,7 +802,7 @@ A bulk import never fails outright just because some rows couldn't be resolved: 
 
 ### `POST /import/manabox`
 
-Import a [ManaBox](https://manabox.app/) collection export (`ManaBox_Collection.csv`). For each row: gets or creates the storage matching `Binder Name` (type = `Binder Type`); if `Binder Type` is `deck`, also gets or creates a deck with the same name (format defaults to `commander` — the export has no format column, so correct it afterwards with `PATCH /deck/:id` if needed); creates one card per physical copy (`Quantity`); links each card to the deck if applicable. ManaBox's export already carries the Scryfall ID directly, so no external lookups are needed — this route never returns `502`.
+Import a [ManaBox](https://manabox.app/) collection export (`ManaBox_Collection.csv`). For each row: gets or creates the storage matching `Binder Name` (type = `Binder Type`); if `Binder Type` is `deck`, also gets or creates a deck with the same name (format defaults to `commander` — the export has no format column, so correct it afterwards with `PATCH /deck/:id` if needed); creates one card per physical copy (`Quantity`); links each card to the deck if applicable. ManaBox's export already carries the Scryfall ID directly, so cards are created even when Scryfall is unreachable: the route only looks them up to store their colors and primary type, and leaves those unknown (to fill in later with `POST /cards/refresh-details`) rather than failing — it never returns `502`. Scryfall allows one lookup of 75 cards every 500 ms, so a collection of several thousand cards takes about a minute.
 
 **Form fields**
 
