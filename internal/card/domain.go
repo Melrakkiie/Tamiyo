@@ -20,13 +20,15 @@ type Card struct {
 	ManaValue       float64
 	Colors          *string
 	CardType        *string
+	ColorIdentity   *string
 	Added           time.Time
 	Updated         time.Time
 }
 
 type CardFilter struct {
-	StorageID *int
-	Name      string
+	StorageID     *int
+	Name          string
+	ColorIdentity *string
 
 	SortField string
 	SortDesc  bool
@@ -48,7 +50,8 @@ type Repository interface {
 }
 
 type Details struct {
-	Colors    string
-	CardType  string
-	ManaValue float64
+	Colors        string
+	CardType      string
+	ColorIdentity string
+	ManaValue     float64
 }

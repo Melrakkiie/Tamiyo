@@ -36,10 +36,11 @@ func (c *ScryfallClient) Resolve(ctx context.Context, identifiers []CardIdentifi
 	resolved := make(map[string]ResolvedCard, len(cards)*2)
 	for _, card := range cards {
 		rc := ResolvedCard{
-			ScryfallID: card.ID,
-			ManaValue:  card.CMC,
-			Colors:     scryfall.ColorCode(card.Colors),
-			CardType:   scryfall.PrimaryType(card.TypeLine),
+			ScryfallID:    card.ID,
+			ManaValue:     card.CMC,
+			Colors:        scryfall.ColorCode(card.Colors),
+			CardType:      scryfall.PrimaryType(card.TypeLine),
+			ColorIdentity: scryfall.ColorCode(card.ColorIdentity),
 		}
 		resolved[resolveKey(card.Set, card.CollectorNumber)] = rc
 		resolved[resolveKeyByID(card.ID)] = rc

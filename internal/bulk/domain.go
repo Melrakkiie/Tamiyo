@@ -29,15 +29,16 @@ type CardIdentifier struct {
 }
 
 type ResolvedCard struct {
-	ScryfallID string
-	ManaValue  float64
-	Colors     string
-	CardType   string
+	ScryfallID    string
+	ManaValue     float64
+	Colors        string
+	CardType      string
+	ColorIdentity string
 }
 
-func (rc ResolvedCard) colorsAndType() (*string, *string) {
-	colors, cardType := rc.Colors, rc.CardType
-	return &colors, &cardType
+func (rc ResolvedCard) details() (*string, *string, *string) {
+	colors, cardType, identity := rc.Colors, rc.CardType, rc.ColorIdentity
+	return &colors, &cardType, &identity
 }
 
 type DetailsRefreshSummary struct {

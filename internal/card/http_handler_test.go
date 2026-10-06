@@ -214,6 +214,54 @@ func TestHandler_GetCards_PassesStorageIDQueryParamToService(t *testing.T) {
 	assert.Equal(t, 1, *service.lastFilter.StorageID)
 }
 
+func TestHandler_GetCards_PassesColorIdentityFilter(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/cards?color_identity=gw", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, service.lastFilter.ColorIdentity)
+	assert.Equal(t, "WG", *service.lastFilter.ColorIdentity)
+}
+
+func TestHandler_GetCards_AcceptsEmptyColorIdentityForColorlessCommanders(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/cards?color_identity=", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, service.lastFilter.ColorIdentity)
+	assert.Equal(t, "", *service.lastFilter.ColorIdentity)
+}
+
+func TestHandler_GetCards_DoesNotFilterOnColorIdentityByDefault(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/cards", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Nil(t, service.lastFilter.ColorIdentity)
+}
+
+func TestHandler_GetCards_RejectsInvalidColorIdentity(t *testing.T) {
+	router := setupRouter(&fakeService{})
+
+	req := httptest.NewRequest(http.MethodGet, "/cards?color_identity=WX", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
 func TestHandler_GetCards_ReturnsErrorInvalidStorageID(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)
@@ -694,6 +742,27 @@ func TestHandler_CreateCard_NormalizesColorsAndKeepsType(t *testing.T) {
 	assert.Equal(t, "WR", *response.Colors)
 	require.NotNil(t, response.CardType)
 	assert.Equal(t, "Instant", *response.CardType)
+}
+
+func TestHandler_CreateCard_NormalizesColorIdentity(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	w := postCard(router, `{`+cardBodyPrefix+`, "color_identity": "gub"}`)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	var response cardResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.NotNil(t, response.ColorIdentity)
+	assert.Equal(t, "UBG", *response.ColorIdentity)
+}
+
+func TestHandler_CreateCard_RejectsInvalidColorIdentity(t *testing.T) {
+	router := setupRouter(&fakeService{})
+
+	w := postCard(router, `{`+cardBodyPrefix+`, "color_identity": "C"}`)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 func TestHandler_CreateCard_AcceptsEmptyColorsForColorlessCards(t *testing.T) {

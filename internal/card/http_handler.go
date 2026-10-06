@@ -33,6 +33,7 @@ type cardResponse struct {
 	ManaValue       float64 `json:"mana_value"`
 	Colors          *string `json:"colors"`
 	CardType        *string `json:"card_type"`
+	ColorIdentity   *string `json:"color_identity"`
 	Added           string  `json:"added"`
 	Updated         string  `json:"updated"`
 }
@@ -49,6 +50,7 @@ func toResponse(c Card) cardResponse {
 		ManaValue:       c.ManaValue,
 		Colors:          c.Colors,
 		CardType:        c.CardType,
+		ColorIdentity:   c.ColorIdentity,
 		Added:           c.Added.Format("2006-01-02 15:04:05"),
 		Updated:         c.Updated.Format("2006-01-02 15:04:05"),
 	}
@@ -72,10 +74,14 @@ type createCardRequest struct {
 	ManaValue       float64 `json:"mana_value" binding:"omitempty,gte=0"`
 	Colors          *string `json:"colors"`
 	CardType        *string `json:"card_type"`
+	ColorIdentity   *string `json:"color_identity"`
 }
 
 func (r createCardRequest) validate() error {
-	return validateDetails(r.Colors, r.CardType)
+	if err := validateDetails(r.Colors, r.CardType); err != nil {
+		return err
+	}
+	return validateColorIdentity(r.ColorIdentity)
 }
 
 func (r createCardRequest) toDomain() Card {
@@ -89,7 +95,17 @@ func (r createCardRequest) toDomain() Card {
 		ManaValue:       r.ManaValue,
 		Colors:          normalizeColors(r.Colors),
 		CardType:        r.CardType,
+		ColorIdentity:   normalizeColors(r.ColorIdentity),
 	}
+}
+
+var errInvalidColorIdentity = errors.New("color_identity must only contain the letters W, U, B, R and G")
+
+func validateColorIdentity(identity *string) error {
+	if identity != nil && strings.Trim(strings.ToUpper(*identity), "WUBRG") != "" {
+		return errInvalidColorIdentity
+	}
+	return nil
 }
 
 var errInvalidColors = errors.New("colors must only contain the letters W, U, B, R and G")
@@ -123,6 +139,7 @@ type updateCardRequest struct {
 	ManaValue       *float64          `json:"mana_value" binding:"omitempty,gte=0"`
 	Colors          *string           `json:"colors"`
 	CardType        *string           `json:"card_type"`
+	ColorIdentity   *string           `json:"color_identity"`
 }
 
 type optionalStorageID struct {
@@ -151,7 +168,10 @@ func (r updateCardRequest) validate() error {
 	if r.StorageID.Value != nil && *r.StorageID.Value <= 0 {
 		return errInvalidStorageID
 	}
-	return validateDetails(r.Colors, r.CardType)
+	if err := validateDetails(r.Colors, r.CardType); err != nil {
+		return err
+	}
+	return validateColorIdentity(r.ColorIdentity)
 }
 
 func (r updateCardRequest) applyTo(c Card) Card {
@@ -181,6 +201,9 @@ func (r updateCardRequest) applyTo(c Card) Card {
 	}
 	if r.CardType != nil {
 		c.CardType = r.CardType
+	}
+	if r.ColorIdentity != nil {
+		c.ColorIdentity = normalizeColors(r.ColorIdentity)
 	}
 	return c
 }
@@ -271,13 +294,23 @@ func (h *Handler) getCards(ctx *gin.Context) {
 		}
 	}
 
+	var colorIdentity *string
+	if raw, present := ctx.GetQuery("color_identity"); present {
+		if err := validateColorIdentity(&raw); err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		colorIdentity = normalizeColors(&raw)
+	}
+
 	filter := CardFilter{
-		StorageID: storageID,
-		Name:      ctx.Query("name"),
-		SortField: sortField,
-		SortDesc:  sortDesc,
-		Page:      page,
-		Limit:     limit,
+		StorageID:     storageID,
+		ColorIdentity: colorIdentity,
+		Name:          ctx.Query("name"),
+		SortField:     sortField,
+		SortDesc:      sortDesc,
+		Page:          page,
+		Limit:         limit,
 	}
 
 	cards, total, err := h.service.GetAllCards(ctx.Request.Context(), userID, filter)

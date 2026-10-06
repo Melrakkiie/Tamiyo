@@ -609,6 +609,7 @@ func createCardWithDetails(t *testing.T, repo *PostgresRepository, userID, name 
 		CollectorNumber: "1",
 		Colors:          colors,
 		CardType:        cardType,
+		ColorIdentity:   colors,
 	})
 	require.NoError(t, err)
 	return created
@@ -691,7 +692,7 @@ func TestPostgresRepository_FindMissingDetails_AndSetDetails(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
 
-	require.NoError(t, repo.SetDetails(context.Background(), userA, missing.ID, Details{Colors: "", CardType: "Artifact", ManaValue: 1}))
+	require.NoError(t, repo.SetDetails(context.Background(), userA, missing.ID, Details{Colors: "", CardType: "Artifact", ColorIdentity: "", ManaValue: 1}))
 
 	updated, err := repo.FindByID(context.Background(), userA, missing.ID)
 	require.NoError(t, err)
@@ -729,4 +730,34 @@ func TestPostgresRepository_FindMissingDetails_PagesByID(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, page, 1)
 	assert.Equal(t, third.ID, page[0].ID)
+}
+
+func TestPostgresRepository_FindAll_FiltersByColorIdentity(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+
+	createCardWithDetails(t, repo, userID, "Lightning Helix", strPtr("WR"), strPtr("Instant"))
+	createCardWithDetails(t, repo, userID, "Swords to Plowshares", strPtr("W"), strPtr("Instant"))
+	createCardWithDetails(t, repo, userID, "Sol Ring", strPtr(""), strPtr("Artifact"))
+	createCardWithDetails(t, repo, userID, "Counterspell", strPtr("U"), strPtr("Instant"))
+	createCardWithDetails(t, repo, userID, "Unknown Card", nil, nil)
+
+	names := func(identity string) []string {
+		cards, total, err := repo.FindAll(context.Background(), userID, CardFilter{
+			ColorIdentity: &identity, SortField: "name", Page: 1, Limit: 25,
+		})
+		require.NoError(t, err)
+		result := make([]string, len(cards))
+		for i, c := range cards {
+			result[i] = c.Name
+		}
+		assert.Len(t, result, total)
+		return result
+	}
+
+	assert.Equal(t, []string{"Lightning Helix", "Sol Ring", "Swords to Plowshares"}, names("WR"))
+	assert.Equal(t, []string{"Sol Ring", "Swords to Plowshares"}, names("W"))
+	assert.Equal(t, []string{"Sol Ring"}, names(""))
+	assert.Equal(t, []string{"Counterspell", "Lightning Helix", "Sol Ring", "Swords to Plowshares"}, names("WUBRG"))
 }

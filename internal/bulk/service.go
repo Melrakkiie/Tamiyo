@@ -112,9 +112,9 @@ func (s *Service) ImportManaBox(ctx context.Context, userID string, r io.Reader)
 		}
 
 		rc, resolvedOK := resolvedByScryfallID[row.ScryfallID]
-		var colors, cardType *string
+		var colors, cardType, identity *string
 		if resolvedOK {
-			colors, cardType = rc.colorsAndType()
+			colors, cardType, identity = rc.details()
 		}
 
 		for i := 0; i < row.Quantity; i++ {
@@ -128,6 +128,7 @@ func (s *Service) ImportManaBox(ctx context.Context, userID string, r io.Reader)
 				ManaValue:       rc.ManaValue,
 				Colors:          colors,
 				CardType:        cardType,
+				ColorIdentity:   identity,
 			})
 			if err != nil {
 				summary.CardsSkipped++
@@ -180,7 +181,7 @@ func (s *Service) ImportMoxfieldCollection(ctx context.Context, userID string, s
 			continue
 		}
 
-		colors, cardType := resolvedCard.colorsAndType()
+		colors, cardType, identity := resolvedCard.details()
 		for i := 0; i < row.Quantity; i++ {
 			if _, err := s.cards.CreateCard(ctx, userID, card.Card{
 				Name:            row.CardName,
@@ -192,6 +193,7 @@ func (s *Service) ImportMoxfieldCollection(ctx context.Context, userID string, s
 				ManaValue:       resolvedCard.ManaValue,
 				Colors:          colors,
 				CardType:        cardType,
+				ColorIdentity:   identity,
 			}); err != nil {
 				summary.CardsSkipped++
 				summary.Warnings = append(summary.Warnings, fmt.Sprintf("line %d: could not create %q: %v", row.LineNo, row.CardName, err))
@@ -233,7 +235,7 @@ func (s *Service) ImportMoxfieldDeck(ctx context.Context, userID string, req Mox
 
 	createLineCopies := func(line moxfieldDeckLine, resolvedCard ResolvedCard) []int {
 		ids := make([]int, 0, line.Quantity)
-		colors, cardType := resolvedCard.colorsAndType()
+		colors, cardType, identity := resolvedCard.details()
 		for i := 0; i < line.Quantity; i++ {
 			created, err := s.cards.CreateCard(ctx, userID, card.Card{
 				Name:            line.CardName,
@@ -245,6 +247,7 @@ func (s *Service) ImportMoxfieldDeck(ctx context.Context, userID string, req Mox
 				ManaValue:       resolvedCard.ManaValue,
 				Colors:          colors,
 				CardType:        cardType,
+				ColorIdentity:   identity,
 			})
 			if err != nil {
 				summary.CardsSkipped++
@@ -445,7 +448,7 @@ func (s *Service) RefreshCardDetails(ctx context.Context, userID string, afterID
 			summary.NotFound++
 			continue
 		}
-		details := card.Details{Colors: rc.Colors, CardType: rc.CardType, ManaValue: rc.ManaValue}
+		details := card.Details{Colors: rc.Colors, CardType: rc.CardType, ColorIdentity: rc.ColorIdentity, ManaValue: rc.ManaValue}
 		if err := s.cards.SetCardDetails(ctx, userID, c.ID, details); err != nil {
 			return summary, err
 		}

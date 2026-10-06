@@ -334,6 +334,17 @@ paths:
           schema:
             type: string
           description: Case-insensitive partial match on the card name.
+        - name: color_identity
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: "^[WUBRGwubrg]*$"
+          description: >
+            Only return cards whose color identity fits inside these colors
+            (e.g. a commander's identity), in any order. An empty value keeps
+            colorless cards only. Cards whose color identity isn't known yet
+            are left out.
         - name: page
           in: query
           required: false
@@ -450,10 +461,10 @@ paths:
       tags: [cards]
       summary: Fill in missing colors and types from Scryfall
       description: >
-        Looks up on Scryfall the cards of the account whose colors or
-        card_type aren't known yet (cards created before they were stored,
+        Looks up on Scryfall the cards of the account whose colors,
+        card_type or color_identity aren't known yet (cards created before they were stored,
         or imported while Scryfall was unreachable), and stores their colors,
-        primary type and mana value. Works through at most 750 cards per
+        primary type, color identity and mana value. Works through at most 750 cards per
         call, in id order, so a call stays short: while next_after_id is
         not null, call again with after_id set to it.
       parameters:
@@ -1605,6 +1616,14 @@ components:
           description: >
             Primary type, from the type line (lands first, then creatures,
             planeswalkers...). null when not known yet.
+        color_identity:
+          type: string
+          nullable: true
+          pattern: "^W?U?B?R?G?$"
+          description: >
+            Color identity as WUBRG letters in that order, empty for a
+            colorless card, null when not known yet (see
+            POST /cards/refresh-details).
         added:
           type: string
         updated:
@@ -1701,6 +1720,13 @@ components:
           nullable: true
           enum: [Creature, Planeswalker, Battle, Instant, Sorcery, Artifact, Enchantment, Land, Other]
           description: Primary type. Optional, left unknown when omitted.
+        color_identity:
+          type: string
+          nullable: true
+          pattern: "^[WUBRGwubrg]*$"
+          description: >
+            WUBRG letters (any case and order, normalized to WUBRG order),
+            empty for colorless. Optional: left unknown when omitted.
       required:
         - name
         - scryfall_id
@@ -1738,6 +1764,9 @@ components:
         card_type:
           type: string
           enum: [Creature, Planeswalker, Battle, Instant, Sorcery, Artifact, Enchantment, Land, Other]
+        color_identity:
+          type: string
+          pattern: "^[WUBRGwubrg]*$"
 
     Storage:
       type: object

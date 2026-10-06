@@ -587,7 +587,7 @@ Main Binder,binder,Lightning Helix,RAV,aaaaaaaa-0000-0000-0000-000000000000,213,
 	cards := &fakeCardService{}
 	resolver := &fakeResolver{resolved: map[string]ResolvedCard{
 		resolveKeyByID("aaaaaaaa-0000-0000-0000-000000000000"): {
-			ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000", ManaValue: 2, Colors: "WR", CardType: "Instant",
+			ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000", ManaValue: 2, Colors: "WR", CardType: "Instant", ColorIdentity: "WR",
 		},
 	}}
 	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, resolver)
@@ -600,6 +600,8 @@ Main Binder,binder,Lightning Helix,RAV,aaaaaaaa-0000-0000-0000-000000000000,213,
 	assert.Equal(t, "WR", *cards.created[0].Colors)
 	require.NotNil(t, cards.created[0].CardType)
 	assert.Equal(t, "Instant", *cards.created[0].CardType)
+	require.NotNil(t, cards.created[0].ColorIdentity)
+	assert.Equal(t, "WR", *cards.created[0].ColorIdentity)
 }
 
 func TestImportManaBox_LeavesColorsAndTypeUnknownWhenScryfallMissesTheCard(t *testing.T) {
@@ -624,7 +626,7 @@ func TestRefreshCardDetails_FillsMissingDetailsFromScryfall(t *testing.T) {
 	}}
 	resolver := &fakeResolver{resolved: map[string]ResolvedCard{
 		resolveKeyByID("aaaaaaaa-0000-0000-0000-000000000000"): {
-			ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000", ManaValue: 1, Colors: "", CardType: "Artifact",
+			ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000", ManaValue: 1, Colors: "", CardType: "Artifact", ColorIdentity: "",
 		},
 	}}
 	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, resolver)

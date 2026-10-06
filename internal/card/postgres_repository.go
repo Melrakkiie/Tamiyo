@@ -24,6 +24,7 @@ type cardRow struct {
 	ManaValue       float64   `db:"mana_value"`
 	Colors          *string   `db:"colors"`
 	CardType        *string   `db:"card_type"`
+	ColorIdentity   *string   `db:"color_identity"`
 	Added           time.Time `db:"added"`
 	Updated         time.Time `db:"updated"`
 }
@@ -40,6 +41,7 @@ func (r cardRow) toDomain() Card {
 		ManaValue:       r.ManaValue,
 		Colors:          r.Colors,
 		CardType:        r.CardType,
+		ColorIdentity:   r.ColorIdentity,
 		Added:           r.Added,
 		Updated:         r.Updated,
 	}
@@ -58,6 +60,7 @@ func toCardRow(userID string, c Card) cardRow {
 		ManaValue:       c.ManaValue,
 		Colors:          c.Colors,
 		CardType:        c.CardType,
+		ColorIdentity:   c.ColorIdentity,
 	}
 }
 
@@ -86,6 +89,12 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		argPos++
 	}
 
+	if filter.ColorIdentity != nil {
+		conditions = append(conditions, fmt.Sprintf("color_identity IS NOT NULL AND translate(color_identity, $%d, '') = ''", argPos))
+		args = append(args, *filter.ColorIdentity)
+		argPos++
+	}
+
 	whereClause := " WHERE " + strings.Join(conditions, " AND ")
 
 	countQuery := `SELECT COUNT(*) FROM tamiyo.cards` + whereClause
@@ -97,7 +106,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 	offset := (filter.Page - 1) * filter.Limit
 
 	query := `
-	    SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, added, updated
+	    SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, color_identity, added, updated
 	    FROM tamiyo.cards
 	` + whereClause + orderByClause(filter) + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 
@@ -168,7 +177,7 @@ func orderByClause(filter CardFilter) string {
 
 func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int) (Card, error) {
 	query := `
-		SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, added, updated
+		SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, color_identity, added, updated
 	    FROM tamiyo.cards
 		WHERE id = $1 AND user_id = $2
 	`
@@ -187,9 +196,9 @@ func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int
 func (r *PostgresRepository) Create(ctx context.Context, userID string, c Card) (Card, error) {
 	row := toCardRow(userID, c)
 	query := `
-    	INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type)
-     	VALUES (:user_id, :name, :scryfall_id, :set_code, :collector_number, :foil, :storage_id, :mana_value, :colors, :card_type)
-      	RETURNING id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, added, updated
+    	INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, color_identity)
+     	VALUES (:user_id, :name, :scryfall_id, :set_code, :collector_number, :foil, :storage_id, :mana_value, :colors, :card_type, :color_identity)
+      	RETURNING id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, color_identity, added, updated
 	`
 
 	stmt, err := r.db.PrepareNamedContext(ctx, query)
@@ -216,9 +225,9 @@ func (r *PostgresRepository) Update(ctx context.Context, userID string, c Card) 
 	row := toCardRow(userID, c)
 	query := `
 		UPDATE tamiyo.cards
-		SET name = :name, scryfall_id = :scryfall_id, set_code = :set_code, collector_number = :collector_number, foil = :foil, storage_id = :storage_id, mana_value = :mana_value, colors = :colors, card_type = :card_type
+		SET name = :name, scryfall_id = :scryfall_id, set_code = :set_code, collector_number = :collector_number, foil = :foil, storage_id = :storage_id, mana_value = :mana_value, colors = :colors, card_type = :card_type, color_identity = :color_identity
 		WHERE id = :id AND user_id = :user_id
-		RETURNING id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, added, updated
+		RETURNING id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, color_identity, added, updated
 	`
 
 	stmt, err := r.db.PrepareNamedContext(ctx, query)
@@ -280,9 +289,9 @@ func (r *PostgresRepository) DeleteAll(ctx context.Context, userID string) (int,
 
 func (r *PostgresRepository) FindMissingDetails(ctx context.Context, userID string, afterID int, limit int) ([]Card, error) {
 	query := `
-		SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, added, updated
+		SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, color_identity, added, updated
 		FROM tamiyo.cards
-		WHERE user_id = $1 AND id > $2 AND (colors IS NULL OR card_type IS NULL)
+		WHERE user_id = $1 AND id > $2 AND (colors IS NULL OR card_type IS NULL OR color_identity IS NULL)
 		ORDER BY id
 		LIMIT $3
 	`
@@ -303,7 +312,7 @@ func (r *PostgresRepository) CountMissingDetails(ctx context.Context, userID str
 	var count int
 	err := r.db.GetContext(ctx, &count, `
 		SELECT COUNT(*) FROM tamiyo.cards
-		WHERE user_id = $1 AND id > $2 AND (colors IS NULL OR card_type IS NULL)
+		WHERE user_id = $1 AND id > $2 AND (colors IS NULL OR card_type IS NULL OR color_identity IS NULL)
 	`, userID, afterID)
 	return count, err
 }
@@ -311,8 +320,8 @@ func (r *PostgresRepository) CountMissingDetails(ctx context.Context, userID str
 func (r *PostgresRepository) SetDetails(ctx context.Context, userID string, id int, details Details) error {
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE tamiyo.cards
-		SET colors = $1, card_type = $2, mana_value = $3
-		WHERE id = $4 AND user_id = $5
-	`, details.Colors, details.CardType, details.ManaValue, id, userID)
+		SET colors = $1, card_type = $2, mana_value = $3, color_identity = $4
+		WHERE id = $5 AND user_id = $6
+	`, details.Colors, details.CardType, details.ManaValue, details.ColorIdentity, id, userID)
 	return err
 }
