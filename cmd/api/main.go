@@ -24,6 +24,7 @@ import (
 	"Melrakkiie/Tamiyo/internal/cors"
 	"Melrakkiie/Tamiyo/internal/deck"
 	"Melrakkiie/Tamiyo/internal/deckinsights"
+	"Melrakkiie/Tamiyo/internal/emailchange"
 	"Melrakkiie/Tamiyo/internal/health"
 	"Melrakkiie/Tamiyo/internal/httplog"
 	"Melrakkiie/Tamiyo/internal/mail"
@@ -90,7 +91,7 @@ func main() {
 
 	var mailer mail.Mailer
 	if cfg.SMTPHost != "" {
-		mailer = mail.NewSMTPMailer(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom, cfg.PasswordResetURLTemplate)
+		mailer = mail.NewSMTPMailer(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom, cfg.PasswordResetURLTemplate, cfg.EmailChangeURLTemplate)
 	} else {
 		mailer = mail.NewLoggingMailer(logger)
 	}
@@ -98,6 +99,10 @@ func main() {
 	passwordResetRepo := passwordreset.NewPostgresRepository(db)
 	passwordResetService := passwordreset.NewService(passwordResetRepo, cfg.PasswordResetTokenTTL)
 	passwordResetHandler := passwordreset.NewHandler(passwordResetService, userService, tokenService, mailer)
+
+	emailChangeRepo := emailchange.NewPostgresRepository(db)
+	emailChangeService := emailchange.NewService(emailChangeRepo, cfg.EmailChangeTokenTTL)
+	emailChangeHandler := emailchange.NewHandler(emailChangeService, userService, mailer)
 
 	cardRepo := card.NewPostgresRepository(db)
 	cardService := card.NewService(cardRepo)
@@ -137,6 +142,7 @@ func main() {
 	userHandler.RegisterRoutes(api, ratelimit.Middleware(authLimiter))
 	tokenHandler.RegisterRoutes(api)
 	passwordResetHandler.RegisterRoutes(api, ratelimit.Middleware(authLimiter))
+	emailChangeHandler.RegisterRoutes(api, ratelimit.Middleware(authLimiter))
 
 	protected := api.Group("")
 	protected.Use(auth.RequireAuth(cfg.JWTSecret))
@@ -146,6 +152,7 @@ func main() {
 	importHandler.RegisterRoutes(protected)
 	insightsHandler.RegisterRoutes(protected)
 	userHandler.RegisterProtectedRoutes(protected)
+	emailChangeHandler.RegisterProtectedRoutes(protected)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.AppPort,

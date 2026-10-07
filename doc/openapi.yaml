@@ -316,6 +316,113 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /auth/me:
+    get:
+      tags: [auth]
+      summary: The authenticated account
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: User no longer exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/email:
+    post:
+      tags: [auth]
+      summary: Ask to change the authenticated user's email
+      description: >
+        Requires the current password. The email doesn't change yet: a
+        single-use confirmation token is emailed to the current address (as
+        a link when EMAIL_CHANGE_URL_TEMPLATE is set), valid for
+        EMAIL_CHANGE_TOKEN_TTL_MINUTES (a day by default). The account keeps
+        its current email until the token is sent to /auth/confirm-email.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangeEmailRequest"
+      responses:
+        "202":
+          description: Accepted, the confirmation email was sent
+        "400":
+          description: Missing field, invalid email, or new_email is the current email.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing/invalid access token, or current_password is incorrect.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: User no longer exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: new_email already belongs to an account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /auth/confirm-email:
+    post:
+      tags: [auth]
+      summary: Confirm an email change
+      description: >
+        Consumes the single-use token emailed to the current address by
+        /auth/email and switches the account to the new email. A notice is
+        then sent to the new address. Sessions stay open.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmEmailRequest"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Missing token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Invalid, expired, or already-used token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The new email was registered by another account in the meantime
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /cards:
     get:
       tags: [cards]
@@ -1709,6 +1816,31 @@ components:
           type: string
           minLength: 8
       required: [current_password, new_password]
+
+    Me:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+      required: [email]
+
+    ChangeEmailRequest:
+      type: object
+      properties:
+        current_password:
+          type: string
+        new_email:
+          type: string
+          format: email
+      required: [current_password, new_email]
+
+    ConfirmEmailRequest:
+      type: object
+      properties:
+        token:
+          type: string
+      required: [token]
 
     ForgotPasswordRequest:
       type: object

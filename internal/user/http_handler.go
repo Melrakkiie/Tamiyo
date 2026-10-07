@@ -27,6 +27,10 @@ type changePasswordRequest struct {
 	NewPassword     string `json:"new_password" binding:"required,min=8"`
 }
 
+type meResponse struct {
+	Email string `json:"email"`
+}
+
 type authResponse struct {
 	Token        string `json:"token"`
 	RefreshToken string `json:"refresh_token,omitempty"`
@@ -36,6 +40,7 @@ type userService interface {
 	Register(ctx context.Context, email, password string) (User, error)
 	Authenticate(ctx context.Context, email, password string) (User, error)
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
+	GetUser(ctx context.Context, userID string) (User, error)
 }
 
 type refreshTokenService interface {
@@ -71,6 +76,23 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes, authMiddleware ...gin.Handl
 
 func (h *Handler) RegisterProtectedRoutes(router gin.IRoutes) {
 	router.POST("/auth/password", h.changePassword)
+	router.GET("/auth/me", h.me)
+}
+
+func (h *Handler) me(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "missing or malformed Authorization header"})
+		return
+	}
+
+	u, err := h.service.GetUser(ctx.Request.Context(), userID)
+	if err != nil {
+		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "user not found"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, meResponse{Email: u.Email})
 }
 
 func (h *Handler) register(ctx *gin.Context) {

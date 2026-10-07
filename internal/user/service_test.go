@@ -23,6 +23,19 @@ type fakeRepository struct {
 	updatePasswordID   string
 	updatePasswordHash string
 	updatePasswordErr  error
+
+	updateEmailID    string
+	updateEmailValue string
+	updateEmailErr   error
+}
+
+func (f *fakeRepository) UpdateEmail(ctx context.Context, id string, email string) error {
+	if f.updateEmailErr != nil {
+		return f.updateEmailErr
+	}
+	f.updateEmailID = id
+	f.updateEmailValue = email
+	return nil
 }
 
 func (f *fakeRepository) Create(ctx context.Context, u User) (User, error) {
@@ -211,4 +224,77 @@ func TestService_SetPassword_PropagatesUpdatePasswordError(t *testing.T) {
 	err := service.SetPassword(context.Background(), "unknown-id", "brandnewpassword")
 
 	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func hashedUser(t *testing.T, email, password string) User {
+	t.Helper()
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
+	require.NoError(t, err)
+	return User{ID: "user-1", Email: email, PasswordHash: string(hash)}
+}
+
+func TestService_CheckPassword_ReturnsCurrentEmailWhenPasswordIsCorrect(t *testing.T) {
+	repo := &fakeRepository{findByIDUser: hashedUser(t, "alice@example.com", "supersecret")}
+	service := NewService(repo)
+
+	email, err := service.CheckPassword(context.Background(), "user-1", "supersecret")
+
+	require.NoError(t, err)
+	assert.Equal(t, "alice@example.com", email)
+}
+
+func TestService_CheckPassword_FailsWithIncorrectPassword(t *testing.T) {
+	repo := &fakeRepository{findByIDUser: hashedUser(t, "alice@example.com", "supersecret")}
+	service := NewService(repo)
+
+	_, err := service.CheckPassword(context.Background(), "user-1", "wrong")
+
+	assert.ErrorIs(t, err, ErrIncorrectPassword)
+}
+
+func TestService_EmailTaken_IsFalseWhenNoUserHasIt(t *testing.T) {
+	service := NewService(&fakeRepository{findByEmailErr: ErrNotFound})
+
+	taken, err := service.EmailTaken(context.Background(), "new@example.com")
+
+	require.NoError(t, err)
+	assert.False(t, taken)
+}
+
+func TestService_EmailTaken_IsTrueWhenAUserHasIt(t *testing.T) {
+	service := NewService(&fakeRepository{findByEmailUser: User{ID: "user-2", Email: "new@example.com"}})
+
+	taken, err := service.EmailTaken(context.Background(), "new@example.com")
+
+	require.NoError(t, err)
+	assert.True(t, taken)
+}
+
+func TestService_EmailTaken_PropagatesOtherErrors(t *testing.T) {
+	service := NewService(&fakeRepository{findByEmailErr: assert.AnError})
+
+	_, err := service.EmailTaken(context.Background(), "new@example.com")
+
+	assert.ErrorIs(t, err, assert.AnError)
+}
+
+func TestService_ChangeEmail_UpdatesEmailAndReturnsTheOldOne(t *testing.T) {
+	repo := &fakeRepository{findByIDUser: User{ID: "user-1", Email: "alice@example.com"}}
+	service := NewService(repo)
+
+	old, err := service.ChangeEmail(context.Background(), "user-1", "new@example.com")
+
+	require.NoError(t, err)
+	assert.Equal(t, "alice@example.com", old)
+	assert.Equal(t, "user-1", repo.updateEmailID)
+	assert.Equal(t, "new@example.com", repo.updateEmailValue)
+}
+
+func TestService_ChangeEmail_PropagatesEmailAlreadyTaken(t *testing.T) {
+	repo := &fakeRepository{findByIDUser: User{ID: "user-1", Email: "alice@example.com"}, updateEmailErr: ErrEmailAlreadyTaken}
+	service := NewService(repo)
+
+	_, err := service.ChangeEmail(context.Background(), "user-1", "new@example.com")
+
+	assert.ErrorIs(t, err, ErrEmailAlreadyTaken)
 }

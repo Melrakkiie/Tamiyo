@@ -29,6 +29,7 @@ type Config struct {
 	JWTRefreshTokenTTL time.Duration
 
 	PasswordResetTokenTTL time.Duration
+	EmailChangeTokenTTL   time.Duration
 
 	SMTPHost     string `mapstructure:"SMTP_HOST"`
 	SMTPPort     string `mapstructure:"SMTP_PORT"`
@@ -37,6 +38,7 @@ type Config struct {
 	SMTPFrom     string `mapstructure:"SMTP_FROM"`
 
 	PasswordResetURLTemplate string `mapstructure:"PASSWORD_RESET_URL_TEMPLATE"`
+	EmailChangeURLTemplate   string `mapstructure:"EMAIL_CHANGE_URL_TEMPLATE"`
 
 	CORSAllowedOrigins []string
 
@@ -56,6 +58,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("JWT_ACCESS_TOKEN_TTL_MINUTES", 15)
 	viper.SetDefault("JWT_REFRESH_TOKEN_TTL_DAYS", 30)
 	viper.SetDefault("PASSWORD_RESET_TOKEN_TTL_MINUTES", 30)
+	viper.SetDefault("EMAIL_CHANGE_TOKEN_TTL_MINUTES", 1440)
 	viper.SetDefault("SMTP_PORT", "587")
 	viper.SetDefault("CORS_ALLOWED_ORIGINS", "")
 	viper.SetDefault("DB_MAX_OPEN_CONNS", 10)
@@ -81,6 +84,7 @@ func Load() (*Config, error) {
 		JWTRefreshTokenTTL:  time.Duration(viper.GetInt("JWT_REFRESH_TOKEN_TTL_DAYS")) * 24 * time.Hour,
 
 		PasswordResetTokenTTL: time.Duration(viper.GetInt("PASSWORD_RESET_TOKEN_TTL_MINUTES")) * time.Minute,
+		EmailChangeTokenTTL:   time.Duration(viper.GetInt("EMAIL_CHANGE_TOKEN_TTL_MINUTES")) * time.Minute,
 
 		SMTPHost:     viper.GetString("SMTP_HOST"),
 		SMTPPort:     viper.GetString("SMTP_PORT"),
@@ -89,6 +93,7 @@ func Load() (*Config, error) {
 		SMTPFrom:     viper.GetString("SMTP_FROM"),
 
 		PasswordResetURLTemplate: viper.GetString("PASSWORD_RESET_URL_TEMPLATE"),
+		EmailChangeURLTemplate:   viper.GetString("EMAIL_CHANGE_URL_TEMPLATE"),
 
 		CORSAllowedOrigins: parseOrigins(viper.GetString("CORS_ALLOWED_ORIGINS")),
 

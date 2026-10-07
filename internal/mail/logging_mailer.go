@@ -25,3 +25,19 @@ func (m *LoggingMailer) SendPasswordResetEmail(_ context.Context, toEmail, reset
 	)
 	return nil
 }
+
+func (m *LoggingMailer) SendEmailChangeConfirmation(_ context.Context, toEmail, newEmail, token string) error {
+	m.logger.Warn("SMTP_HOST not configured — logging email change confirmation instead of sending it",
+		zap.String("to", toEmail),
+		zap.String("new_email", newEmail),
+		zap.String("email_change_token", token),
+	)
+	return nil
+}
+
+func (m *LoggingMailer) SendEmailChangedNotice(_ context.Context, toEmail string) error {
+	m.logger.Warn("SMTP_HOST not configured — logging email changed notice instead of sending it",
+		zap.String("to", toEmail),
+	)
+	return nil
+}

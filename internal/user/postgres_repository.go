@@ -121,3 +121,25 @@ func (r *PostgresRepository) UpdatePassword(ctx context.Context, id string, pass
 
 	return nil
 }
+
+func (r *PostgresRepository) UpdateEmail(ctx context.Context, id string, email string) error {
+	result, err := r.db.ExecContext(ctx, `UPDATE tamiyo.users SET email = $1 WHERE id = $2`, email, id)
+	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+			return ErrEmailAlreadyTaken
+		}
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}

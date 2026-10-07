@@ -120,7 +120,7 @@ func TestSMTPMailer_SendPasswordResetEmail_UsesResetURLTemplateWhenSet(t *testin
 	_ = srv
 	host, port := splitHostPort(t, addr)
 
-	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "https://app.example.com/reset?token=%s")
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "https://app.example.com/reset?token=%s", "")
 
 	err := mailer.SendPasswordResetEmail(context.Background(), "alice@example.com", "reset-token-123")
 	require.NoError(t, err)
@@ -136,7 +136,7 @@ func TestSMTPMailer_SendPasswordResetEmail_UsesRawTokenWhenNoTemplate(t *testing
 	srv, addr := startFakeSMTPServer(t, false)
 	host, port := splitHostPort(t, addr)
 
-	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "")
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "")
 
 	err := mailer.SendPasswordResetEmail(context.Background(), "alice@example.com", "reset-token-123")
 	require.NoError(t, err)
@@ -150,7 +150,7 @@ func TestSMTPMailer_SendPasswordResetEmail_AuthenticatesWhenUsernameSet(t *testi
 	srv, addr := startFakeSMTPServer(t, true)
 	host, port := splitHostPort(t, addr)
 
-	mailer := NewSMTPMailer(host, port, "smtp-user", "smtp-pass", "tamiyo@example.com", "")
+	mailer := NewSMTPMailer(host, port, "smtp-user", "smtp-pass", "tamiyo@example.com", "", "")
 
 	err := mailer.SendPasswordResetEmail(context.Background(), "alice@example.com", "reset-token-123")
 	require.NoError(t, err)
@@ -167,10 +167,54 @@ func TestSMTPMailer_SendPasswordResetEmail_ConnectionFailureReturnsError(t *test
 	require.NoError(t, ln.Close()) // nothing is listening here anymore
 
 	host, port := splitHostPort(t, addr)
-	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "")
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "")
 
 	err = mailer.SendPasswordResetEmail(context.Background(), "alice@example.com", "reset-token-123")
 	require.Error(t, err)
+}
+
+func TestSMTPMailer_SendEmailChangeConfirmation_UsesEmailChangeURLTemplateWhenSet(t *testing.T) {
+	srv, addr := startFakeSMTPServer(t, false)
+	host, port := splitHostPort(t, addr)
+
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "https://app.example.com/reset?token=%s", "https://app.example.com/confirm-email?token=%s")
+
+	err := mailer.SendEmailChangeConfirmation(context.Background(), "alice@example.com", "new@example.com", "change-token-123")
+	require.NoError(t, err)
+
+	msg := <-srv.received
+	assert.Contains(t, msg, "To: alice@example.com")
+	assert.Contains(t, msg, "Subject: Confirm your Tamiyo email change")
+	assert.Contains(t, msg, "new@example.com")
+	assert.Contains(t, msg, "https://app.example.com/confirm-email?token=change-token-123")
+}
+
+func TestSMTPMailer_SendEmailChangeConfirmation_UsesRawTokenWhenNoTemplate(t *testing.T) {
+	srv, addr := startFakeSMTPServer(t, false)
+	host, port := splitHostPort(t, addr)
+
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "")
+
+	err := mailer.SendEmailChangeConfirmation(context.Background(), "alice@example.com", "new@example.com", "change-token-123")
+	require.NoError(t, err)
+
+	msg := <-srv.received
+	assert.Contains(t, msg, "change-token-123")
+	assert.Contains(t, msg, "POST /auth/confirm-email")
+}
+
+func TestSMTPMailer_SendEmailChangedNotice_IsSentToTheNewAddress(t *testing.T) {
+	srv, addr := startFakeSMTPServer(t, false)
+	host, port := splitHostPort(t, addr)
+
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "")
+
+	err := mailer.SendEmailChangedNotice(context.Background(), "new@example.com")
+	require.NoError(t, err)
+
+	msg := <-srv.received
+	assert.Contains(t, msg, "To: new@example.com")
+	assert.Contains(t, msg, "Subject: Your Tamiyo email was changed")
 }
 
 func TestNewSMTPMailer_ImplementsMailer(t *testing.T) {

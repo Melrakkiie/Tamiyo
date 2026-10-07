@@ -14,17 +14,19 @@ type SMTPMailer struct {
 	password string
 	from     string
 
-	resetURLTemplate string
+	resetURLTemplate       string
+	emailChangeURLTemplate string
 }
 
-func NewSMTPMailer(host, port, username, password, from, resetURLTemplate string) *SMTPMailer {
+func NewSMTPMailer(host, port, username, password, from, resetURLTemplate, emailChangeURLTemplate string) *SMTPMailer {
 	return &SMTPMailer{
-		host:             host,
-		port:             port,
-		username:         username,
-		password:         password,
-		from:             from,
-		resetURLTemplate: resetURLTemplate,
+		host:                   host,
+		port:                   port,
+		username:               username,
+		password:               password,
+		from:                   from,
+		resetURLTemplate:       resetURLTemplate,
+		emailChangeURLTemplate: emailChangeURLTemplate,
 	}
 }
 
@@ -43,10 +45,38 @@ func (m *SMTPMailer) SendPasswordResetEmail(_ context.Context, toEmail, resetTok
 		)
 	}
 
+	return m.send(toEmail, "Reset your Tamiyo password", body)
+}
+
+func (m *SMTPMailer) SendEmailChangeConfirmation(_ context.Context, toEmail, newEmail, token string) error {
+	var body string
+	if m.emailChangeURLTemplate != "" {
+		link := fmt.Sprintf(m.emailChangeURLTemplate, token)
+		body = fmt.Sprintf(
+			"We received a request to change the email of your Tamiyo account to %s.\r\n\r\nConfirm the change here: %s\r\n\r\nIf you didn't request this, ignore this email and change your password: nothing changes until the link is opened.",
+			newEmail, link,
+		)
+	} else {
+		body = fmt.Sprintf(
+			"We received a request to change the email of your Tamiyo account to %s.\r\n\r\nYour confirmation token:\r\n%s\r\n\r\nSubmit it to POST /auth/confirm-email. If you didn't request this, ignore this email and change your password: nothing changes until the token is used.",
+			newEmail, token,
+		)
+	}
+
+	return m.send(toEmail, "Confirm your Tamiyo email change", body)
+}
+
+func (m *SMTPMailer) SendEmailChangedNotice(_ context.Context, toEmail string) error {
+	body := "This address is now the email of your Tamiyo account: sign in with it from now on."
+
+	return m.send(toEmail, "Your Tamiyo email was changed", body)
+}
+
+func (m *SMTPMailer) send(toEmail, subject, body string) error {
 	msg := strings.Join([]string{
 		"From: " + m.from,
 		"To: " + toEmail,
-		"Subject: Reset your Tamiyo password",
+		"Subject: " + subject,
 		"",
 		body,
 	}, "\r\n")

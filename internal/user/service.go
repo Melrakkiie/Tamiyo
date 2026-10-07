@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"errors"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -74,4 +75,45 @@ func (s *Service) SetPassword(ctx context.Context, userID, newPassword string) e
 		return err
 	}
 	return s.repo.UpdatePassword(ctx, userID, string(hash))
+}
+
+func (s *Service) GetUser(ctx context.Context, userID string) (User, error) {
+	return s.repo.FindByID(ctx, userID)
+}
+
+func (s *Service) CheckPassword(ctx context.Context, userID, password string) (string, error) {
+	u, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
+		return "", ErrIncorrectPassword
+	}
+
+	return u.Email, nil
+}
+
+func (s *Service) EmailTaken(ctx context.Context, email string) (bool, error) {
+	_, err := s.repo.FindByEmail(ctx, email)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (s *Service) ChangeEmail(ctx context.Context, userID, newEmail string) (string, error) {
+	u, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+
+	if err := s.repo.UpdateEmail(ctx, userID, newEmail); err != nil {
+		return "", err
+	}
+
+	return u.Email, nil
 }

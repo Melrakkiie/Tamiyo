@@ -50,7 +50,7 @@ Tamiyo is multi-tenant. `/health`, `/auth/register`, `/auth/login`, `/auth/refre
      -d '{"refresh_token": "<refresh_token>"}'
 ```
 
-`/health`, `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/forgot-password`, and `/auth/reset-password` are the only public routes — everything else (`/cards`, `/storage`, `/deck`, `/auth/password`) requires a valid Bearer token and only ever returns or modifies that account's own data.
+`/health`, `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/forgot-password`, `/auth/reset-password`, and `/auth/confirm-email` are the only public routes — everything else (`/cards`, `/storage`, `/deck`, `/auth/password`, `/auth/email`, `/auth/me`) requires a valid Bearer token and only ever returns or modifies that account's own data.
 
 `/auth/register` and `/auth/login` are rate-limited per client IP (5 requests/minute by default) to blunt brute-force attempts.
 
@@ -62,7 +62,7 @@ curl -X POST localhost:8080/auth/forgot-password \
   -d '{"email": "you@example.com"}'
 ```
 
-Without an `SMTP_HOST` configured, the reset email is logged to stdout instead of sent — the token is right there in the container logs, no real mail server needed for local development. See [`openapi.yaml`](./doc/openapi.yaml) for every auth-related environment variable (`JWT_*`, `AUTH_RATE_LIMIT_*`, `PASSWORD_RESET_*`, `SMTP_*`).
+Without an `SMTP_HOST` configured, the reset email is logged to stdout instead of sent — the token is right there in the container logs, no real mail server needed for local development. See [`openapi.yaml`](./doc/openapi.yaml) for every auth-related environment variable (`JWT_*`, `AUTH_RATE_LIMIT_*`, `PASSWORD_RESET_*`, `EMAIL_CHANGE_*`, `SMTP_*`).
 
 ---
 
@@ -170,6 +170,56 @@ Change the authenticated account's password. **Requires `Authorization: Bearer <
 
 > On success, **every** refresh token belonging to the account is revoked — all other sessions (and this one, once its current access token expires) must log in again.
 
+### `GET /auth/me`
+
+The authenticated account. **Requires `Authorization: Bearer <token>`.**
+
+**Response `200 OK`**
+```json
+{ "email": "you@example.com" }
+```
+
+**Errors:** `401` missing/invalid token · `404` account no longer exists
+
+---
+
+### `POST /auth/email`
+
+Ask to change the authenticated account's email. **Requires `Authorization: Bearer <token>`.** The email doesn't change yet: a single-use confirmation token is emailed to the **current** address, so that only the account's owner can approve the change even with a stolen session or password, valid for a day by default (`EMAIL_CHANGE_TOKEN_TTL_MINUTES`), as a link when `EMAIL_CHANGE_URL_TEMPLATE` is set. The account keeps signing in with its current email until the token is sent to `POST /auth/confirm-email`.
+
+**Body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `current_password` | string | Yes | Must match the account's current password. |
+| `new_email` | string | Yes | A valid email, different from the current one. |
+
+**Response `202 Accepted`**
+
+**Errors:** `400` missing field, invalid email, or `new_email` is the current email · `401` missing/invalid token, or `current_password` is incorrect · `404` account no longer exists · `409` `new_email` already belongs to an account · `500` the confirmation email could not be sent
+
+> Asking again sends a new token; earlier ones stay valid until they expire or one of them is used.
+
+---
+
+### `POST /auth/confirm-email`
+
+Confirm an email change with the token emailed to the current address. Public, so the link works from any device; rate-limited like the other public auth routes.
+
+**Body**
+
+| Field | Type | Required |
+|---|---|---|
+| `token` | string | Yes |
+
+**Response `204 No Content`**
+
+**Errors:** `400` missing token · `401` invalid, expired, or already-used token · `409` the new email was registered by another account in the meantime · `429` too many requests
+
+> On success the account signs in with the new email, and a notice is sent to the new address. Sessions stay open.
+
+---
+
 ### `POST /auth/forgot-password`
 
 Request a password reset email.
@@ -209,7 +259,7 @@ Set a new password using the token from the forgot-password email.
 
 ### Rate limiting
 
-`POST /auth/register`, `POST /auth/login`, and `POST /auth/forgot-password` share a per-client-IP limit: 5 requests per 60-second window by default (`AUTH_RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns:
+`POST /auth/register`, `POST /auth/login`, `POST /auth/forgot-password`, `POST /auth/reset-password`, and `POST /auth/confirm-email` share a per-client-IP limit: 5 requests per 60-second window by default (`AUTH_RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns:
 
 **Response `429 Too Many Requests`**
 ```json

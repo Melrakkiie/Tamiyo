@@ -35,6 +35,16 @@ type fakeService struct {
 	changePasswordCalledWithUserID string
 	changePasswordCalledWithOld    string
 	changePasswordCalledWithNew    string
+
+	getUser    User
+	getUserErr error
+}
+
+func (f *fakeService) GetUser(ctx context.Context, userID string) (User, error) {
+	if f.getUserErr != nil {
+		return User{}, f.getUserErr
+	}
+	return f.getUser, nil
 }
 
 func (f *fakeService) Register(ctx context.Context, email, password string) (User, error) {
@@ -463,4 +473,37 @@ func findCookie(w *httptest.ResponseRecorder, name string) *http.Cookie {
 		}
 	}
 	return nil
+}
+
+func TestHandler_Me_ReturnsTheAccountEmail(t *testing.T) {
+	service := &fakeService{getUser: User{ID: "11111111-1111-1111-1111-111111111111", Email: "alice@example.com"}}
+	router := setupProtectedRouter(service, &fakeTokenService{})
+
+	req := authenticatedRequest(http.MethodGet, "/auth/me", "", "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.JSONEq(t, `{"email": "alice@example.com"}`, w.Body.String())
+}
+
+func TestHandler_Me_ReturnsNotFoundWhenTheUserIsGone(t *testing.T) {
+	service := &fakeService{getUserErr: ErrNotFound}
+	router := setupProtectedRouter(service, &fakeTokenService{})
+
+	req := authenticatedRequest(http.MethodGet, "/auth/me", "", "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestHandler_Me_RequiresAuthentication(t *testing.T) {
+	router := setupProtectedRouter(&fakeService{}, &fakeTokenService{})
+
+	req := httptest.NewRequest(http.MethodGet, "/auth/me", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
