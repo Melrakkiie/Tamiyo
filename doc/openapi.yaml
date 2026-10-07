@@ -89,7 +89,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/TokenPair"
         "400":
-          description: Missing/invalid email, or password shorter than 8 characters.
+          description: Missing/invalid email, password shorter than 8 characters, or display_name longer than 32 characters.
           content:
             application/json:
               schema:
@@ -327,6 +327,39 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Me"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: User no longer exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      tags: [auth]
+      summary: Set or clear the account's display name
+      description: >
+        A purely cosmetic name shown instead of the email. Not unique.
+        Trimmed; null or a blank string clears it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMeRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "400":
+          description: display_name missing, not a string, or longer than 32 characters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -1766,6 +1799,11 @@ components:
         password:
           type: string
           minLength: 8
+        display_name:
+          type: string
+          nullable: true
+          maxLength: 32
+          description: Optional cosmetic name, trimmed; blank means none.
       required: [email, password]
 
     LoginRequest:
@@ -1823,7 +1861,22 @@ components:
         email:
           type: string
           format: email
-      required: [email]
+        display_name:
+          type: string
+          nullable: true
+          maxLength: 32
+          description: Cosmetic name shown instead of the email, null until set.
+      required: [email, display_name]
+
+    UpdateMeRequest:
+      type: object
+      properties:
+        display_name:
+          type: string
+          nullable: true
+          maxLength: 32
+          description: Trimmed; null or a blank string clears it.
+      required: [display_name]
 
     ChangeEmailRequest:
       type: object

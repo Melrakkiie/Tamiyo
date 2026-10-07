@@ -30,8 +30,9 @@ Tamiyo is multi-tenant. `/health`, `/auth/register`, `/auth/login`, `/auth/refre
 ```bash
    curl -X POST localhost:8080/auth/register \
      -H "Content-Type: application/json" \
-     -d '{"email": "you@example.com", "password": "at-least-8-chars"}'
+     -d '{"email": "you@example.com", "password": "at-least-8-chars", "display_name": "Tamiyo"}'
 ```
+   `display_name` is optional (trimmed, at most 32 characters, see [`PATCH /auth/me`](#patch-authme)); a longer one is rejected with `400`.
 2. **Log in** (or reuse the pair from registration):
 ```bash
    curl -X POST localhost:8080/auth/login \
@@ -176,10 +177,27 @@ The authenticated account. **Requires `Authorization: Bearer <token>`.**
 
 **Response `200 OK`**
 ```json
-{ "email": "you@example.com" }
+{ "email": "you@example.com", "display_name": "Tamiyo" }
 ```
+`display_name` is `null` until the user picks one.
 
 **Errors:** `401` missing/invalid token · `404` account no longer exists
+
+---
+
+### `PATCH /auth/me`
+
+Set or clear the account's display name, a purely cosmetic name the app shows instead of the email. **Requires `Authorization: Bearer <token>`.** Display names aren't unique and never identify an account.
+
+**Body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `display_name` | string \| null | Yes | Trimmed; at most 32 characters. `null` or a blank string clears it. |
+
+**Response `200 OK`** — same body as `GET /auth/me`.
+
+**Errors:** `400` `display_name` missing, not a string, or longer than 32 characters · `401` missing/invalid token · `404` account no longer exists
 
 ---
 

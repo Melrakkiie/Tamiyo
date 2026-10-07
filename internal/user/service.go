@@ -3,6 +3,8 @@ package user
 import (
 	"context"
 	"errors"
+	"strings"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -15,7 +17,12 @@ func NewService(repo Repository) *Service {
 	return &Service{repo: repo}
 }
 
-func (s *Service) Register(ctx context.Context, email, password string) (User, error) {
+func (s *Service) Register(ctx context.Context, email, password string, displayName *string) (User, error) {
+	normalizedName, err := normalizeDisplayName(displayName)
+	if err != nil {
+		return User{}, err
+	}
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return User{}, err
@@ -24,6 +31,7 @@ func (s *Service) Register(ctx context.Context, email, password string) (User, e
 	return s.repo.Create(ctx, User{
 		Email:        email,
 		PasswordHash: string(hash),
+		DisplayName:  normalizedName,
 	})
 }
 
@@ -116,4 +124,27 @@ func (s *Service) ChangeEmail(ctx context.Context, userID, newEmail string) (str
 	}
 
 	return u.Email, nil
+}
+
+func (s *Service) SetDisplayName(ctx context.Context, userID string, displayName *string) (User, error) {
+	normalized, err := normalizeDisplayName(displayName)
+	if err != nil {
+		return User{}, err
+	}
+
+	return s.repo.UpdateDisplayName(ctx, userID, normalized)
+}
+
+func normalizeDisplayName(displayName *string) (*string, error) {
+	if displayName == nil {
+		return nil, nil
+	}
+	trimmed := strings.TrimSpace(*displayName)
+	if utf8.RuneCountInString(trimmed) > MaxDisplayNameLength {
+		return nil, ErrInvalidDisplayName
+	}
+	if trimmed == "" {
+		return nil, nil
+	}
+	return &trimmed, nil
 }

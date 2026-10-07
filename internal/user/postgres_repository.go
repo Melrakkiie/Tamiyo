@@ -16,6 +16,7 @@ type userRow struct {
 	PasswordHash string    `db:"password_hash"`
 	Added        time.Time `db:"added"`
 	Updated      time.Time `db:"updated"`
+	DisplayName  *string   `db:"display_name"`
 }
 
 func (r userRow) toDomain() User {
@@ -27,6 +28,7 @@ func toUserRow(u User) userRow {
 		ID:           u.ID,
 		Email:        u.Email,
 		PasswordHash: u.PasswordHash,
+		DisplayName:  u.DisplayName,
 	}
 }
 
@@ -41,9 +43,9 @@ func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
 func (r *PostgresRepository) Create(ctx context.Context, u User) (User, error) {
 	row := toUserRow(u)
 	query := `
-		INSERT INTO tamiyo.users (email, password_hash)
-		VALUES (:email, :password_hash)
-		RETURNING id, email, password_hash, added, updated
+		INSERT INTO tamiyo.users (email, password_hash, display_name)
+		VALUES (:email, :password_hash, :display_name)
+		RETURNING id, email, password_hash, added, updated, display_name
 	`
 
 	stmt, err := r.db.PrepareNamedContext(ctx, query)
@@ -68,7 +70,7 @@ func (r *PostgresRepository) Create(ctx context.Context, u User) (User, error) {
 
 func (r *PostgresRepository) FindByEmail(ctx context.Context, email string) (User, error) {
 	query := `
-		SELECT id, email, password_hash, added, updated
+		SELECT id, email, password_hash, added, updated, display_name
 		FROM tamiyo.users
 		WHERE email = $1
 	`
@@ -86,7 +88,7 @@ func (r *PostgresRepository) FindByEmail(ctx context.Context, email string) (Use
 
 func (r *PostgresRepository) FindByID(ctx context.Context, id string) (User, error) {
 	query := `
-		SELECT id, email, password_hash, added, updated
+		SELECT id, email, password_hash, added, updated, display_name
 		FROM tamiyo.users
 		WHERE id = $1
 	`
@@ -142,4 +144,21 @@ func (r *PostgresRepository) UpdateEmail(ctx context.Context, id string, email s
 	}
 
 	return nil
+}
+
+func (r *PostgresRepository) UpdateDisplayName(ctx context.Context, id string, displayName *string) (User, error) {
+	query := `
+		UPDATE tamiyo.users SET display_name = $1 WHERE id = $2
+		RETURNING id, email, password_hash, added, updated, display_name
+	`
+
+	var row userRow
+	if err := r.db.GetContext(ctx, &row, query, displayName, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return User{}, ErrNotFound
+		}
+		return User{}, err
+	}
+
+	return row.toDomain(), nil
 }

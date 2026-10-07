@@ -24,8 +24,9 @@ const testAccessTokenTTL = time.Hour
 var testCookie = authcookie.New("", true, 24*time.Hour)
 
 type fakeService struct {
-	registerUser User
-	registerErr  error
+	registerUser        User
+	registerErr         error
+	registerDisplayName *string
 
 	authUser User
 	authErr  error
@@ -38,6 +39,19 @@ type fakeService struct {
 
 	getUser    User
 	getUserErr error
+
+	setDisplayNameErr    error
+	setDisplayNameCalled bool
+	setDisplayNameValue  *string
+}
+
+func (f *fakeService) SetDisplayName(ctx context.Context, userID string, displayName *string) (User, error) {
+	f.setDisplayNameCalled = true
+	f.setDisplayNameValue = displayName
+	if f.setDisplayNameErr != nil {
+		return User{}, f.setDisplayNameErr
+	}
+	return User{ID: userID, Email: "alice@example.com", DisplayName: displayName}, nil
 }
 
 func (f *fakeService) GetUser(ctx context.Context, userID string) (User, error) {
@@ -47,7 +61,8 @@ func (f *fakeService) GetUser(ctx context.Context, userID string) (User, error) 
 	return f.getUser, nil
 }
 
-func (f *fakeService) Register(ctx context.Context, email, password string) (User, error) {
+func (f *fakeService) Register(ctx context.Context, email, password string, displayName *string) (User, error) {
+	f.registerDisplayName = displayName
 	if f.registerErr != nil {
 		return User{}, f.registerErr
 	}
@@ -484,7 +499,7 @@ func TestHandler_Me_ReturnsTheAccountEmail(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.JSONEq(t, `{"email": "alice@example.com"}`, w.Body.String())
+	assert.JSONEq(t, `{"email": "alice@example.com", "display_name": null}`, w.Body.String())
 }
 
 func TestHandler_Me_ReturnsNotFoundWhenTheUserIsGone(t *testing.T) {
@@ -506,4 +521,122 @@ func TestHandler_Me_RequiresAuthentication(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestHandler_Me_ReturnsTheDisplayName(t *testing.T) {
+	name := "Tamiyo"
+	service := &fakeService{getUser: User{Email: "alice@example.com", DisplayName: &name}}
+	router := setupProtectedRouter(service, &fakeTokenService{})
+
+	req := authenticatedRequest(http.MethodGet, "/auth/me", "", "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.JSONEq(t, `{"email": "alice@example.com", "display_name": "Tamiyo"}`, w.Body.String())
+}
+
+func TestHandler_UpdateMe_SetsTheDisplayName(t *testing.T) {
+	service := &fakeService{}
+	router := setupProtectedRouter(service, &fakeTokenService{})
+
+	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"display_name": "Tamiyo"}`, "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, service.setDisplayNameValue)
+	assert.Equal(t, "Tamiyo", *service.setDisplayNameValue)
+	assert.JSONEq(t, `{"email": "alice@example.com", "display_name": "Tamiyo"}`, w.Body.String())
+}
+
+func TestHandler_UpdateMe_ClearsTheDisplayNameWithNull(t *testing.T) {
+	service := &fakeService{}
+	router := setupProtectedRouter(service, &fakeTokenService{})
+
+	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"display_name": null}`, "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, service.setDisplayNameCalled)
+	assert.Nil(t, service.setDisplayNameValue)
+}
+
+func TestHandler_UpdateMe_RequiresTheDisplayNameField(t *testing.T) {
+	service := &fakeService{}
+	router := setupProtectedRouter(service, &fakeTokenService{})
+
+	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{}`, "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.False(t, service.setDisplayNameCalled)
+}
+
+func TestHandler_UpdateMe_RejectsATooLongDisplayName(t *testing.T) {
+	service := &fakeService{setDisplayNameErr: ErrInvalidDisplayName}
+	router := setupProtectedRouter(service, &fakeTokenService{})
+
+	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"display_name": "x"}`, "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "32")
+}
+
+func TestHandler_UpdateMe_RejectsANonStringDisplayName(t *testing.T) {
+	service := &fakeService{}
+	router := setupProtectedRouter(service, &fakeTokenService{})
+
+	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"display_name": 42}`, "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.False(t, service.setDisplayNameCalled)
+}
+
+func TestHandler_Register_PassesTheDisplayName(t *testing.T) {
+	service := &fakeService{registerUser: User{ID: "11111111-1111-1111-1111-111111111111", Email: "alice@example.com"}}
+	router := setupRouter(service, &fakeTokenService{})
+
+	body := `{"email": "alice@example.com", "password": "supersecret", "display_name": "Tamiyo"}`
+	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	require.NotNil(t, service.registerDisplayName)
+	assert.Equal(t, "Tamiyo", *service.registerDisplayName)
+}
+
+func TestHandler_Register_AcceptsNoDisplayName(t *testing.T) {
+	service := &fakeService{registerUser: User{ID: "11111111-1111-1111-1111-111111111111", Email: "alice@example.com"}}
+	router := setupRouter(service, &fakeTokenService{})
+
+	body := `{"email": "alice@example.com", "password": "supersecret"}`
+	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	assert.Nil(t, service.registerDisplayName)
+}
+
+func TestHandler_Register_RejectsATooLongDisplayName(t *testing.T) {
+	service := &fakeService{registerErr: ErrInvalidDisplayName}
+	router := setupRouter(service, &fakeTokenService{})
+
+	body := `{"email": "alice@example.com", "password": "supersecret", "display_name": "x"}`
+	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }

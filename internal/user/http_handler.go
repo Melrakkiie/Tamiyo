@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -13,8 +14,9 @@ import (
 )
 
 type registerRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=8"`
+	Email       string  `json:"email" binding:"required,email"`
+	Password    string  `json:"password" binding:"required,min=8"`
+	DisplayName *string `json:"display_name"`
 }
 
 type loginRequest struct {
@@ -28,7 +30,31 @@ type changePasswordRequest struct {
 }
 
 type meResponse struct {
-	Email string `json:"email"`
+	Email       string  `json:"email"`
+	DisplayName *string `json:"display_name"`
+}
+
+type updateMeRequest struct {
+	DisplayName optionalString `json:"display_name"`
+}
+
+type optionalString struct {
+	Set   bool
+	Value *string
+}
+
+func (o *optionalString) UnmarshalJSON(data []byte) error {
+	o.Set = true
+	if string(data) == "null" {
+		o.Value = nil
+		return nil
+	}
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	o.Value = &value
+	return nil
 }
 
 type authResponse struct {
@@ -37,10 +63,11 @@ type authResponse struct {
 }
 
 type userService interface {
-	Register(ctx context.Context, email, password string) (User, error)
+	Register(ctx context.Context, email, password string, displayName *string) (User, error)
 	Authenticate(ctx context.Context, email, password string) (User, error)
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
 	GetUser(ctx context.Context, userID string) (User, error)
+	SetDisplayName(ctx context.Context, userID string, displayName *string) (User, error)
 }
 
 type refreshTokenService interface {
@@ -77,6 +104,7 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes, authMiddleware ...gin.Handl
 func (h *Handler) RegisterProtectedRoutes(router gin.IRoutes) {
 	router.POST("/auth/password", h.changePassword)
 	router.GET("/auth/me", h.me)
+	router.PATCH("/auth/me", h.updateMe)
 }
 
 func (h *Handler) me(ctx *gin.Context) {
@@ -92,7 +120,37 @@ func (h *Handler) me(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, meResponse{Email: u.Email})
+	ctx.JSON(http.StatusOK, meResponse{Email: u.Email, DisplayName: u.DisplayName})
+}
+
+func (h *Handler) updateMe(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "missing or malformed Authorization header"})
+		return
+	}
+
+	var req updateMeRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if !req.DisplayName.Set {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "display_name is required (null clears it)"})
+		return
+	}
+
+	u, err := h.service.SetDisplayName(ctx.Request.Context(), userID, req.DisplayName.Value)
+	if err != nil {
+		apierr.Respond(ctx, err,
+			apierr.Mapping{Err: ErrInvalidDisplayName, Status: http.StatusBadRequest},
+			apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "user not found"},
+		)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, meResponse{Email: u.Email, DisplayName: u.DisplayName})
 }
 
 func (h *Handler) register(ctx *gin.Context) {
@@ -102,9 +160,12 @@ func (h *Handler) register(ctx *gin.Context) {
 		return
 	}
 
-	created, err := h.service.Register(ctx.Request.Context(), req.Email, req.Password)
+	created, err := h.service.Register(ctx.Request.Context(), req.Email, req.Password, req.DisplayName)
 	if err != nil {
-		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrEmailAlreadyTaken, Status: http.StatusConflict, Message: "email already registered"})
+		apierr.Respond(ctx, err,
+			apierr.Mapping{Err: ErrEmailAlreadyTaken, Status: http.StatusConflict, Message: "email already registered"},
+			apierr.Mapping{Err: ErrInvalidDisplayName, Status: http.StatusBadRequest},
+		)
 		return
 	}
 

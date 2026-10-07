@@ -295,3 +295,48 @@ func TestPostgresRepository_UpdateEmail_ReturnsErrNotFoundWhenMissing(t *testing
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
+
+func TestPostgresRepository_UpdateDisplayName_SetsAndClearsTheName(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	created, err := repo.Create(context.Background(), User{Email: "alice@example.com", PasswordHash: "hash"})
+	require.NoError(t, err)
+	assert.Nil(t, created.DisplayName)
+
+	name := "Tamiyo"
+	updated, err := repo.UpdateDisplayName(context.Background(), created.ID, &name)
+	require.NoError(t, err)
+	require.NotNil(t, updated.DisplayName)
+	assert.Equal(t, "Tamiyo", *updated.DisplayName)
+
+	found, err := repo.FindByID(context.Background(), created.ID)
+	require.NoError(t, err)
+	require.NotNil(t, found.DisplayName)
+	assert.Equal(t, "Tamiyo", *found.DisplayName)
+
+	cleared, err := repo.UpdateDisplayName(context.Background(), created.ID, nil)
+	require.NoError(t, err)
+	assert.Nil(t, cleared.DisplayName)
+}
+
+func TestPostgresRepository_UpdateDisplayName_ReturnsErrNotFoundWhenMissing(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	name := "Tamiyo"
+	_, err := repo.UpdateDisplayName(context.Background(), "00000000-0000-0000-0000-000000000000", &name)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestPostgresRepository_Create_StoresTheDisplayName(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	name := "Tamiyo"
+	created, err := repo.Create(context.Background(), User{Email: "alice@example.com", PasswordHash: "hash", DisplayName: &name})
+	require.NoError(t, err)
+	require.NotNil(t, created.DisplayName)
+	assert.Equal(t, "Tamiyo", *created.DisplayName)
+}

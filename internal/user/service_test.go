@@ -27,6 +27,19 @@ type fakeRepository struct {
 	updateEmailID    string
 	updateEmailValue string
 	updateEmailErr   error
+
+	updateDisplayNameID    string
+	updateDisplayNameValue *string
+	updateDisplayNameErr   error
+}
+
+func (f *fakeRepository) UpdateDisplayName(ctx context.Context, id string, displayName *string) (User, error) {
+	if f.updateDisplayNameErr != nil {
+		return User{}, f.updateDisplayNameErr
+	}
+	f.updateDisplayNameID = id
+	f.updateDisplayNameValue = displayName
+	return User{ID: id, Email: "alice@example.com", DisplayName: displayName}, nil
 }
 
 func (f *fakeRepository) UpdateEmail(ctx context.Context, id string, email string) error {
@@ -74,7 +87,7 @@ func TestService_Register_HashesPasswordBeforeStoring(t *testing.T) {
 	repo := &fakeRepository{}
 	service := NewService(repo)
 
-	_, err := service.Register(context.Background(), "alice@example.com", "supersecret")
+	_, err := service.Register(context.Background(), "alice@example.com", "supersecret", nil)
 
 	require.NoError(t, err)
 	assert.NotEqual(t, "supersecret", repo.createdUser.PasswordHash)
@@ -85,7 +98,7 @@ func TestService_Register_PropagatesEmailAlreadyTakenError(t *testing.T) {
 	repo := &fakeRepository{createErr: ErrEmailAlreadyTaken}
 	service := NewService(repo)
 
-	_, err := service.Register(context.Background(), "alice@example.com", "supersecret")
+	_, err := service.Register(context.Background(), "alice@example.com", "supersecret", nil)
 
 	assert.ErrorIs(t, err, ErrEmailAlreadyTaken)
 }
@@ -96,7 +109,7 @@ func TestService_Register_ReturnsErrorWhenPasswordTooLongToHash(t *testing.T) {
 
 	tooLong := strings.Repeat("a", 73) // bcrypt rejects passwords over 72 bytes
 
-	_, err := service.Register(context.Background(), "alice@example.com", tooLong)
+	_, err := service.Register(context.Background(), "alice@example.com", tooLong, nil)
 
 	require.Error(t, err)
 }
@@ -297,4 +310,84 @@ func TestService_ChangeEmail_PropagatesEmailAlreadyTaken(t *testing.T) {
 	_, err := service.ChangeEmail(context.Background(), "user-1", "new@example.com")
 
 	assert.ErrorIs(t, err, ErrEmailAlreadyTaken)
+}
+
+func strPtr(s string) *string {
+	return &s
+}
+
+func TestService_SetDisplayName_StoresTheTrimmedName(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	u, err := service.SetDisplayName(context.Background(), "user-1", strPtr("  Tamiyo  "))
+
+	require.NoError(t, err)
+	assert.Equal(t, "user-1", repo.updateDisplayNameID)
+	require.NotNil(t, repo.updateDisplayNameValue)
+	assert.Equal(t, "Tamiyo", *repo.updateDisplayNameValue)
+	assert.Equal(t, "Tamiyo", *u.DisplayName)
+}
+
+func TestService_SetDisplayName_ClearsTheNameWhenNilOrBlank(t *testing.T) {
+	for _, name := range []*string{nil, strPtr(""), strPtr("   ")} {
+		repo := &fakeRepository{}
+		service := NewService(repo)
+
+		_, err := service.SetDisplayName(context.Background(), "user-1", name)
+
+		require.NoError(t, err)
+		assert.Equal(t, "user-1", repo.updateDisplayNameID)
+		assert.Nil(t, repo.updateDisplayNameValue)
+	}
+}
+
+func TestService_SetDisplayName_AcceptsThirtyTwoCharactersCountedAsLetters(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	_, err := service.SetDisplayName(context.Background(), "user-1", strPtr(strings.Repeat("é", 32)))
+
+	require.NoError(t, err)
+}
+
+func TestService_SetDisplayName_RejectsALongerName(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	_, err := service.SetDisplayName(context.Background(), "user-1", strPtr(strings.Repeat("a", 33)))
+
+	assert.ErrorIs(t, err, ErrInvalidDisplayName)
+	assert.Empty(t, repo.updateDisplayNameID)
+}
+
+func TestService_Register_StoresTheTrimmedDisplayName(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	_, err := service.Register(context.Background(), "alice@example.com", "supersecret", strPtr("  Tamiyo "))
+
+	require.NoError(t, err)
+	require.NotNil(t, repo.createdUser.DisplayName)
+	assert.Equal(t, "Tamiyo", *repo.createdUser.DisplayName)
+}
+
+func TestService_Register_LeavesABlankDisplayNameUnset(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	_, err := service.Register(context.Background(), "alice@example.com", "supersecret", strPtr("   "))
+
+	require.NoError(t, err)
+	assert.Nil(t, repo.createdUser.DisplayName)
+}
+
+func TestService_Register_RejectsATooLongDisplayNameBeforeCreatingTheAccount(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	_, err := service.Register(context.Background(), "alice@example.com", "supersecret", strPtr(strings.Repeat("a", 33)))
+
+	assert.ErrorIs(t, err, ErrInvalidDisplayName)
+	assert.Empty(t, repo.createdUser.Email)
 }
