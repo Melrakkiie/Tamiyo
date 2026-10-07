@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -147,4 +148,29 @@ func normalizeDisplayName(displayName *string) (*string, error) {
 		return nil, nil
 	}
 	return &trimmed, nil
+}
+
+func (s *Service) SetAvatar(ctx context.Context, userID string, avatarScryfallID *string) (User, error) {
+	normalized, err := normalizeAvatarID(avatarScryfallID)
+	if err != nil {
+		return User{}, err
+	}
+
+	return s.repo.UpdateAvatar(ctx, userID, normalized)
+}
+
+var scryfallIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+func normalizeAvatarID(avatarScryfallID *string) (*string, error) {
+	if avatarScryfallID == nil {
+		return nil, nil
+	}
+	normalized := strings.ToLower(strings.TrimSpace(*avatarScryfallID))
+	if normalized == "" {
+		return nil, nil
+	}
+	if !scryfallIDPattern.MatchString(normalized) {
+		return nil, ErrInvalidAvatar
+	}
+	return &normalized, nil
 }

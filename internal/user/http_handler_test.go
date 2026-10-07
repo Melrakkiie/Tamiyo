@@ -43,6 +43,19 @@ type fakeService struct {
 	setDisplayNameErr    error
 	setDisplayNameCalled bool
 	setDisplayNameValue  *string
+
+	setAvatarErr    error
+	setAvatarCalled bool
+	setAvatarValue  *string
+}
+
+func (f *fakeService) SetAvatar(ctx context.Context, userID string, avatarScryfallID *string) (User, error) {
+	f.setAvatarCalled = true
+	f.setAvatarValue = avatarScryfallID
+	if f.setAvatarErr != nil {
+		return User{}, f.setAvatarErr
+	}
+	return User{ID: userID, Email: "alice@example.com", AvatarScryfallID: avatarScryfallID}, nil
 }
 
 func (f *fakeService) SetDisplayName(ctx context.Context, userID string, displayName *string) (User, error) {
@@ -499,7 +512,7 @@ func TestHandler_Me_ReturnsTheAccountEmail(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.JSONEq(t, `{"email": "alice@example.com", "display_name": null}`, w.Body.String())
+	assert.JSONEq(t, `{"email": "alice@example.com", "display_name": null, "avatar_scryfall_id": null}`, w.Body.String())
 }
 
 func TestHandler_Me_ReturnsNotFoundWhenTheUserIsGone(t *testing.T) {
@@ -533,7 +546,7 @@ func TestHandler_Me_ReturnsTheDisplayName(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.JSONEq(t, `{"email": "alice@example.com", "display_name": "Tamiyo"}`, w.Body.String())
+	assert.JSONEq(t, `{"email": "alice@example.com", "display_name": "Tamiyo", "avatar_scryfall_id": null}`, w.Body.String())
 }
 
 func TestHandler_UpdateMe_SetsTheDisplayName(t *testing.T) {
@@ -547,7 +560,7 @@ func TestHandler_UpdateMe_SetsTheDisplayName(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	require.NotNil(t, service.setDisplayNameValue)
 	assert.Equal(t, "Tamiyo", *service.setDisplayNameValue)
-	assert.JSONEq(t, `{"email": "alice@example.com", "display_name": "Tamiyo"}`, w.Body.String())
+	assert.JSONEq(t, `{"email": "alice@example.com", "display_name": "Tamiyo", "avatar_scryfall_id": null}`, w.Body.String())
 }
 
 func TestHandler_UpdateMe_ClearsTheDisplayNameWithNull(t *testing.T) {
@@ -563,7 +576,7 @@ func TestHandler_UpdateMe_ClearsTheDisplayNameWithNull(t *testing.T) {
 	assert.Nil(t, service.setDisplayNameValue)
 }
 
-func TestHandler_UpdateMe_RequiresTheDisplayNameField(t *testing.T) {
+func TestHandler_UpdateMe_RequiresAField(t *testing.T) {
 	service := &fakeService{}
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
@@ -573,6 +586,7 @@ func TestHandler_UpdateMe_RequiresTheDisplayNameField(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.False(t, service.setDisplayNameCalled)
+	assert.False(t, service.setAvatarCalled)
 }
 
 func TestHandler_UpdateMe_RejectsATooLongDisplayName(t *testing.T) {
@@ -639,4 +653,60 @@ func TestHandler_Register_RejectsATooLongDisplayName(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+const avatarID = "0000579f-7b35-4ed3-b44c-db2a538066fe"
+
+func TestHandler_UpdateMe_SetsTheAvatarAlone(t *testing.T) {
+	service := &fakeService{}
+	router := setupProtectedRouter(service, &fakeTokenService{})
+
+	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"avatar_scryfall_id": "`+avatarID+`"}`, "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.False(t, service.setDisplayNameCalled)
+	require.NotNil(t, service.setAvatarValue)
+	assert.Equal(t, avatarID, *service.setAvatarValue)
+	assert.JSONEq(t, `{"email": "alice@example.com", "display_name": null, "avatar_scryfall_id": "`+avatarID+`"}`, w.Body.String())
+}
+
+func TestHandler_UpdateMe_ClearsTheAvatarWithNull(t *testing.T) {
+	service := &fakeService{}
+	router := setupProtectedRouter(service, &fakeTokenService{})
+
+	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"avatar_scryfall_id": null}`, "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, service.setAvatarCalled)
+	assert.Nil(t, service.setAvatarValue)
+}
+
+func TestHandler_UpdateMe_RejectsAnInvalidAvatarBeforeChangingAnything(t *testing.T) {
+	service := &fakeService{}
+	router := setupProtectedRouter(service, &fakeTokenService{})
+
+	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"display_name": "Tamiyo", "avatar_scryfall_id": "not-a-uuid"}`, "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.False(t, service.setDisplayNameCalled)
+	assert.False(t, service.setAvatarCalled)
+}
+
+func TestHandler_UpdateMe_SetsBothFields(t *testing.T) {
+	service := &fakeService{}
+	router := setupProtectedRouter(service, &fakeTokenService{})
+
+	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"display_name": "Tamiyo", "avatar_scryfall_id": "`+avatarID+`"}`, "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, service.setDisplayNameCalled)
+	assert.True(t, service.setAvatarCalled)
 }

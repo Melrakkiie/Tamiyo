@@ -11,12 +11,13 @@ import (
 )
 
 type userRow struct {
-	ID           string    `db:"id"`
-	Email        string    `db:"email"`
-	PasswordHash string    `db:"password_hash"`
-	Added        time.Time `db:"added"`
-	Updated      time.Time `db:"updated"`
-	DisplayName  *string   `db:"display_name"`
+	ID               string    `db:"id"`
+	Email            string    `db:"email"`
+	PasswordHash     string    `db:"password_hash"`
+	Added            time.Time `db:"added"`
+	Updated          time.Time `db:"updated"`
+	DisplayName      *string   `db:"display_name"`
+	AvatarScryfallID *string   `db:"avatar_scryfall_id"`
 }
 
 func (r userRow) toDomain() User {
@@ -45,7 +46,7 @@ func (r *PostgresRepository) Create(ctx context.Context, u User) (User, error) {
 	query := `
 		INSERT INTO tamiyo.users (email, password_hash, display_name)
 		VALUES (:email, :password_hash, :display_name)
-		RETURNING id, email, password_hash, added, updated, display_name
+		RETURNING id, email, password_hash, added, updated, display_name, avatar_scryfall_id
 	`
 
 	stmt, err := r.db.PrepareNamedContext(ctx, query)
@@ -70,7 +71,7 @@ func (r *PostgresRepository) Create(ctx context.Context, u User) (User, error) {
 
 func (r *PostgresRepository) FindByEmail(ctx context.Context, email string) (User, error) {
 	query := `
-		SELECT id, email, password_hash, added, updated, display_name
+		SELECT id, email, password_hash, added, updated, display_name, avatar_scryfall_id
 		FROM tamiyo.users
 		WHERE email = $1
 	`
@@ -88,7 +89,7 @@ func (r *PostgresRepository) FindByEmail(ctx context.Context, email string) (Use
 
 func (r *PostgresRepository) FindByID(ctx context.Context, id string) (User, error) {
 	query := `
-		SELECT id, email, password_hash, added, updated, display_name
+		SELECT id, email, password_hash, added, updated, display_name, avatar_scryfall_id
 		FROM tamiyo.users
 		WHERE id = $1
 	`
@@ -149,11 +150,28 @@ func (r *PostgresRepository) UpdateEmail(ctx context.Context, id string, email s
 func (r *PostgresRepository) UpdateDisplayName(ctx context.Context, id string, displayName *string) (User, error) {
 	query := `
 		UPDATE tamiyo.users SET display_name = $1 WHERE id = $2
-		RETURNING id, email, password_hash, added, updated, display_name
+		RETURNING id, email, password_hash, added, updated, display_name, avatar_scryfall_id
 	`
 
 	var row userRow
 	if err := r.db.GetContext(ctx, &row, query, displayName, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return User{}, ErrNotFound
+		}
+		return User{}, err
+	}
+
+	return row.toDomain(), nil
+}
+
+func (r *PostgresRepository) UpdateAvatar(ctx context.Context, id string, avatarScryfallID *string) (User, error) {
+	query := `
+		UPDATE tamiyo.users SET avatar_scryfall_id = $1 WHERE id = $2
+		RETURNING id, email, password_hash, added, updated, display_name, avatar_scryfall_id
+	`
+
+	var row userRow
+	if err := r.db.GetContext(ctx, &row, query, avatarScryfallID, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return User{}, ErrNotFound
 		}

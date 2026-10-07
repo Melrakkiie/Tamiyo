@@ -31,6 +31,15 @@ type fakeRepository struct {
 	updateDisplayNameID    string
 	updateDisplayNameValue *string
 	updateDisplayNameErr   error
+
+	updateAvatarID    string
+	updateAvatarValue *string
+}
+
+func (f *fakeRepository) UpdateAvatar(ctx context.Context, id string, avatarScryfallID *string) (User, error) {
+	f.updateAvatarID = id
+	f.updateAvatarValue = avatarScryfallID
+	return User{ID: id, Email: "alice@example.com", AvatarScryfallID: avatarScryfallID}, nil
 }
 
 func (f *fakeRepository) UpdateDisplayName(ctx context.Context, id string, displayName *string) (User, error) {
@@ -390,4 +399,39 @@ func TestService_Register_RejectsATooLongDisplayNameBeforeCreatingTheAccount(t *
 
 	assert.ErrorIs(t, err, ErrInvalidDisplayName)
 	assert.Empty(t, repo.createdUser.Email)
+}
+
+func TestService_SetAvatar_StoresTheLowercasedScryfallID(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	_, err := service.SetAvatar(context.Background(), "user-1", strPtr(" 0000579F-7B35-4ED3-B44C-DB2A538066FE "))
+
+	require.NoError(t, err)
+	assert.Equal(t, "user-1", repo.updateAvatarID)
+	require.NotNil(t, repo.updateAvatarValue)
+	assert.Equal(t, "0000579f-7b35-4ed3-b44c-db2a538066fe", *repo.updateAvatarValue)
+}
+
+func TestService_SetAvatar_ClearsTheAvatarWhenNilOrBlank(t *testing.T) {
+	for _, id := range []*string{nil, strPtr(""), strPtr("  ")} {
+		repo := &fakeRepository{}
+		service := NewService(repo)
+
+		_, err := service.SetAvatar(context.Background(), "user-1", id)
+
+		require.NoError(t, err)
+		assert.Equal(t, "user-1", repo.updateAvatarID)
+		assert.Nil(t, repo.updateAvatarValue)
+	}
+}
+
+func TestService_SetAvatar_RejectsSomethingThatIsNotAScryfallID(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	_, err := service.SetAvatar(context.Background(), "user-1", strPtr("https://cards.scryfall.io/art_crop/front/0/0/0000579f.jpg"))
+
+	assert.ErrorIs(t, err, ErrInvalidAvatar)
+	assert.Empty(t, repo.updateAvatarID)
 }

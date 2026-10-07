@@ -30,12 +30,18 @@ type changePasswordRequest struct {
 }
 
 type meResponse struct {
-	Email       string  `json:"email"`
-	DisplayName *string `json:"display_name"`
+	Email            string  `json:"email"`
+	DisplayName      *string `json:"display_name"`
+	AvatarScryfallID *string `json:"avatar_scryfall_id"`
+}
+
+func toMeResponse(u User) meResponse {
+	return meResponse{Email: u.Email, DisplayName: u.DisplayName, AvatarScryfallID: u.AvatarScryfallID}
 }
 
 type updateMeRequest struct {
-	DisplayName optionalString `json:"display_name"`
+	DisplayName      optionalString `json:"display_name"`
+	AvatarScryfallID optionalString `json:"avatar_scryfall_id"`
 }
 
 type optionalString struct {
@@ -68,6 +74,7 @@ type userService interface {
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
 	GetUser(ctx context.Context, userID string) (User, error)
 	SetDisplayName(ctx context.Context, userID string, displayName *string) (User, error)
+	SetAvatar(ctx context.Context, userID string, avatarScryfallID *string) (User, error)
 }
 
 type refreshTokenService interface {
@@ -120,7 +127,7 @@ func (h *Handler) me(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, meResponse{Email: u.Email, DisplayName: u.DisplayName})
+	ctx.JSON(http.StatusOK, toMeResponse(u))
 }
 
 func (h *Handler) updateMe(ctx *gin.Context) {
@@ -136,21 +143,38 @@ func (h *Handler) updateMe(ctx *gin.Context) {
 		return
 	}
 
-	if !req.DisplayName.Set {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "display_name is required (null clears it)"})
+	if !req.DisplayName.Set && !req.AvatarScryfallID.Set {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "display_name or avatar_scryfall_id is required (null clears it)"})
 		return
 	}
 
-	u, err := h.service.SetDisplayName(ctx.Request.Context(), userID, req.DisplayName.Value)
+	if _, err := normalizeDisplayName(req.DisplayName.Value); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if _, err := normalizeAvatarID(req.AvatarScryfallID.Value); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var u User
+	var err error
+	if req.DisplayName.Set {
+		u, err = h.service.SetDisplayName(ctx.Request.Context(), userID, req.DisplayName.Value)
+	}
+	if err == nil && req.AvatarScryfallID.Set {
+		u, err = h.service.SetAvatar(ctx.Request.Context(), userID, req.AvatarScryfallID.Value)
+	}
 	if err != nil {
 		apierr.Respond(ctx, err,
 			apierr.Mapping{Err: ErrInvalidDisplayName, Status: http.StatusBadRequest},
+			apierr.Mapping{Err: ErrInvalidAvatar, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "user not found"},
 		)
 		return
 	}
 
-	ctx.JSON(http.StatusOK, meResponse{Email: u.Email, DisplayName: u.DisplayName})
+	ctx.JSON(http.StatusOK, toMeResponse(u))
 }
 
 func (h *Handler) register(ctx *gin.Context) {

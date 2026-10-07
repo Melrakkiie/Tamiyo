@@ -337,10 +337,12 @@ paths:
                 $ref: "#/components/schemas/Error"
     patch:
       tags: [auth]
-      summary: Set or clear the account's display name
+      summary: Set or clear the account's display name and avatar
       description: >
-        A purely cosmetic name shown instead of the email. Not unique.
-        Trimmed; null or a blank string clears it.
+        Only the fields present change; at least one is required. The
+        display name is a purely cosmetic name shown instead of the email,
+        not unique. The avatar is a Scryfall card id whose art crop is shown
+        (only the id is stored). null or a blank string clears a field.
       requestBody:
         required: true
         content:
@@ -355,7 +357,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Me"
         "400":
-          description: display_name missing, not a string, or longer than 32 characters.
+          description: No field given, a field that isn't a string, display_name longer than 32 characters, or avatar_scryfall_id not a UUID. Nothing is changed.
           content:
             application/json:
               schema:
@@ -1866,7 +1868,12 @@ components:
           nullable: true
           maxLength: 32
           description: Cosmetic name shown instead of the email, null until set.
-      required: [email, display_name]
+        avatar_scryfall_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Scryfall card whose art crop is the avatar, null until set.
+      required: [email, display_name, avatar_scryfall_id]
 
     UpdateMeRequest:
       type: object
@@ -1876,7 +1883,11 @@ components:
           nullable: true
           maxLength: 32
           description: Trimmed; null or a blank string clears it.
-      required: [display_name]
+        avatar_scryfall_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Scryfall card id whose art crop becomes the avatar; null or a blank string clears it.
 
     ChangeEmailRequest:
       type: object

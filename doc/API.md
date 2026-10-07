@@ -177,9 +177,9 @@ The authenticated account. **Requires `Authorization: Bearer <token>`.**
 
 **Response `200 OK`**
 ```json
-{ "email": "you@example.com", "display_name": "Tamiyo" }
+{ "email": "you@example.com", "display_name": "Tamiyo", "avatar_scryfall_id": "0000579f-7b35-4ed3-b44c-db2a538066fe" }
 ```
-`display_name` is `null` until the user picks one.
+`display_name` and `avatar_scryfall_id` are `null` until the user picks them. The avatar is the art crop of that Scryfall card: clients fetch the image from Scryfall and credit its artist, Tamiyo only stores the id.
 
 **Errors:** `401` missing/invalid token · `404` account no longer exists
 
@@ -187,17 +187,18 @@ The authenticated account. **Requires `Authorization: Bearer <token>`.**
 
 ### `PATCH /auth/me`
 
-Set or clear the account's display name, a purely cosmetic name the app shows instead of the email. **Requires `Authorization: Bearer <token>`.** Display names aren't unique and never identify an account.
+Set or clear the account's profile: its display name, a purely cosmetic name the app shows instead of the email, and its avatar. **Requires `Authorization: Bearer <token>`.** Display names aren't unique and never identify an account. Only the fields present in the body change; at least one is required.
 
 **Body**
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `display_name` | string \| null | Yes | Trimmed; at most 32 characters. `null` or a blank string clears it. |
+| `display_name` | string \| null | No | Trimmed; at most 32 characters. `null` or a blank string clears it. |
+| `avatar_scryfall_id` | string \| null | No | A Scryfall card id (UUID); its art crop becomes the avatar. Not checked against Scryfall. `null` or a blank string clears it. |
 
 **Response `200 OK`** — same body as `GET /auth/me`.
 
-**Errors:** `400` `display_name` missing, not a string, or longer than 32 characters · `401` missing/invalid token · `404` account no longer exists
+**Errors:** `400` no field given, a field that isn't a string, `display_name` longer than 32 characters, or `avatar_scryfall_id` not a UUID (nothing is changed then) · `401` missing/invalid token · `404` account no longer exists
 
 ---
 

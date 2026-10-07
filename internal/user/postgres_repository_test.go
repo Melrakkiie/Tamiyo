@@ -340,3 +340,37 @@ func TestPostgresRepository_Create_StoresTheDisplayName(t *testing.T) {
 	require.NotNil(t, created.DisplayName)
 	assert.Equal(t, "Tamiyo", *created.DisplayName)
 }
+
+func TestPostgresRepository_UpdateAvatar_SetsAndClearsTheAvatar(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	created, err := repo.Create(context.Background(), User{Email: "alice@example.com", PasswordHash: "hash"})
+	require.NoError(t, err)
+	assert.Nil(t, created.AvatarScryfallID)
+
+	id := "0000579f-7b35-4ed3-b44c-db2a538066fe"
+	updated, err := repo.UpdateAvatar(context.Background(), created.ID, &id)
+	require.NoError(t, err)
+	require.NotNil(t, updated.AvatarScryfallID)
+	assert.Equal(t, id, *updated.AvatarScryfallID)
+
+	found, err := repo.FindByID(context.Background(), created.ID)
+	require.NoError(t, err)
+	require.NotNil(t, found.AvatarScryfallID)
+	assert.Equal(t, id, *found.AvatarScryfallID)
+
+	cleared, err := repo.UpdateAvatar(context.Background(), created.ID, nil)
+	require.NoError(t, err)
+	assert.Nil(t, cleared.AvatarScryfallID)
+}
+
+func TestPostgresRepository_UpdateAvatar_ReturnsErrNotFoundWhenMissing(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	id := "0000579f-7b35-4ed3-b44c-db2a538066fe"
+	_, err := repo.UpdateAvatar(context.Background(), "00000000-0000-0000-0000-000000000000", &id)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}

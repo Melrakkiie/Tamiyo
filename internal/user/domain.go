@@ -11,16 +11,18 @@ var ErrNotFound = errors.New("user not found")
 var ErrInvalidCredentials = errors.New("invalid email or password")
 var ErrIncorrectPassword = errors.New("incorrect current password")
 var ErrInvalidDisplayName = errors.New("display_name must be at most 32 characters")
+var ErrInvalidAvatar = errors.New("avatar_scryfall_id must be a Scryfall card id (a UUID)")
 
 const MaxDisplayNameLength = 32
 
 type User struct {
-	ID           string
-	Email        string
-	PasswordHash string
-	Added        time.Time
-	Updated      time.Time
-	DisplayName  *string
+	ID               string
+	Email            string
+	PasswordHash     string
+	Added            time.Time
+	Updated          time.Time
+	DisplayName      *string
+	AvatarScryfallID *string
 }
 
 type Repository interface {
@@ -30,4 +32,5 @@ type Repository interface {
 	UpdatePassword(ctx context.Context, id string, passwordHash string) error
 	UpdateEmail(ctx context.Context, id string, email string) error
 	UpdateDisplayName(ctx context.Context, id string, displayName *string) (User, error)
+	UpdateAvatar(ctx context.Context, id string, avatarScryfallID *string) (User, error)
 }
