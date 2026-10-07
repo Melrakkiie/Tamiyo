@@ -426,9 +426,9 @@ paths:
       tags: [cards]
       summary: Delete every card of the account
       description: >
-        Deletes all of the authenticated user's cards at once: they are
-        removed from every deck, and any deck whose commander was one of them
-        has its commander_id cleared. Storages and decks themselves are kept.
+        Deletes all of the authenticated user's cards at once: every deck
+        keeps its cards in its pending list, and any deck whose commander was
+        one of them has its commander_id cleared. Storages and decks themselves are kept.
         Requires confirm=true, so the collection can't be wiped by accident.
       parameters:
         - name: confirm
@@ -559,8 +559,9 @@ paths:
       tags: [cards]
       summary: Delete a card
       description: >
-        Removes the card from any deck it belongs to, and clears
-        commander_id on any deck where it was the commander.
+        Removes the card from the collection. Each deck it was in gets it back
+        in its pending list (to add to the collection again later), and
+        commander_id is cleared on any deck where it was the commander.
       responses:
         "204":
           description: No Content

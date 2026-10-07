@@ -383,9 +383,9 @@ Partially update a card. Any subset of the fields below can be sent.
 
 ### `DELETE /cards/:id`
 
-Delete a card. If the card is linked to any decks (including as a commander), those links are cleaned up automatically:
-- Removed from `card_deck` (deck contents) via cascade.
-- Any deck's `commander_id` pointing to this card is set to `null`.
+Delete a card from the collection. The decks it was in keep it as a card to get back:
+- Each of those decks gets it in its [pending list](#pending-cards-deckidpending) (one copy, merged with an existing pending entry for the same printing and foil), so it still shows in the deck until it's added to the collection again.
+- Its `card_deck` links are removed, and any deck's `commander_id` pointing to it is set to `null` (a pending card can't be a commander).
 
 **Response `204 No Content`**
 
@@ -410,7 +410,7 @@ Scryfall allows one `/cards/collection` call every 500 ms, so a large backlog ta
 
 ### `DELETE /cards?confirm=true`
 
-Delete **every** card of the account at once, with the same clean-up as above (removed from every deck, commanders cleared). Storages and decks themselves are kept, now empty. `confirm=true` is required so the collection can't be wiped by accident.
+Delete **every** card of the account at once, with the same clean-up as above (each deck keeps its cards in its pending list, commanders cleared). Storages and decks themselves are kept, now empty. `confirm=true` is required so the collection can't be wiped by accident.
 
 **Response `200 OK`**
 ```json

@@ -761,3 +761,36 @@ func TestPostgresRepository_FindAll_FiltersByColorIdentity(t *testing.T) {
 	assert.Equal(t, []string{"Sol Ring"}, names(""))
 	assert.Equal(t, []string{"Counterspell", "Lightning Helix", "Sol Ring", "Swords to Plowshares"}, names("WUBRG"))
 }
+
+func TestPostgresRepository_Delete_KeepsDeckCardsAsPending(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+
+	first := createCardWithDetails(t, repo, userID, "Sol Ring", strPtr(""), strPtr("Artifact"))
+	second := createCardWithDetails(t, repo, userID, "Sol Ring", strPtr(""), strPtr("Artifact"))
+	var deckID int
+	require.NoError(t, db.Get(&deckID, `INSERT INTO tamiyo.deck (user_id, name, format) VALUES ($1, 'Deck', 'commander') RETURNING id`, userID))
+	_, err := db.Exec(`INSERT INTO tamiyo.card_deck (card_id, deck_id) VALUES ($1, $3), ($2, $3)`, first.ID, second.ID, deckID)
+	require.NoError(t, err)
+
+	require.NoError(t, repo.Delete(context.Background(), userID, first.ID))
+
+	type pendingRow struct {
+		Name     string `db:"name"`
+		Quantity int    `db:"quantity"`
+	}
+	var pending []pendingRow
+	require.NoError(t, db.Select(&pending, `SELECT name, quantity FROM tamiyo.deck_pending_cards WHERE deck_id = $1`, deckID))
+	require.Len(t, pending, 1)
+	assert.Equal(t, pendingRow{Name: "Sol Ring", Quantity: 1}, pending[0])
+
+	deleted, err := repo.DeleteAll(context.Background(), userID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, deleted)
+
+	pending = nil
+	require.NoError(t, db.Select(&pending, `SELECT name, quantity FROM tamiyo.deck_pending_cards WHERE deck_id = $1`, deckID))
+	require.Len(t, pending, 1)
+	assert.Equal(t, 2, pending[0].Quantity)
+}
