@@ -29,6 +29,8 @@ tags:
     description: Public profiles and their public decks
   - name: deck-cards
     description: Deck ↔ card relationship
+  - name: shared-decks
+    description: Read-only access to public and unlisted decks through their share link, without signing in
 
 paths:
   /health:
@@ -1414,6 +1416,108 @@ paths:
         "502":
           $ref: "#/components/responses/BadGateway"
 
+  /shared/decks/{share_id}:
+    parameters:
+      - $ref: "#/components/parameters/ShareID"
+    get:
+      tags: [shared-decks]
+      summary: A shared deck, its owner and its cards
+      description: >
+        Works without authentication. Resolves only public and unlisted
+        decks. Owned copies and pending cards are merged into one list,
+        with no storage, proxy or ownership details.
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SharedDeck"
+        "404":
+          description: >
+            No deck has this share_id, or the deck is private.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/SharedTooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /shared/decks/{share_id}/legality:
+    parameters:
+      - $ref: "#/components/parameters/ShareID"
+    get:
+      tags: [shared-decks]
+      summary: Legality of a shared deck
+      description: >
+        Same report as GET /deck/{id}/legality, without card ids. Works
+        without authentication.
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LegalityReport"
+        "400":
+          description: The deck's format isn't one Scryfall recognizes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: >
+            No deck has this share_id, or the deck is private.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/SharedTooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
+  /shared/decks/{share_id}/stats:
+    parameters:
+      - $ref: "#/components/parameters/ShareID"
+    get:
+      tags: [shared-decks]
+      summary: Statistics of a shared deck
+      description: Same statistics as GET /deck/{id}/stats. Works without authentication.
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeckStats"
+        "400":
+          description: The deck's format isn't one Scryfall recognizes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: >
+            No deck has this share_id, or the deck is private.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/SharedTooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
   /import/manabox:
     post:
       tags: [bulk-import]
@@ -1751,6 +1855,14 @@ components:
       schema:
         type: integer
       description: Storage ID
+    ShareID:
+      name: share_id
+      in: path
+      required: true
+      description: A deck's share_id. Anything that isn't a UUID is answered with 404.
+      schema:
+        type: string
+        format: uuid
     DeckID:
       name: id
       in: path
@@ -1792,6 +1904,21 @@ components:
         (AUTH_RATE_LIMIT_MAX per AUTH_RATE_LIMIT_WINDOW_SECONDS, 5 per 60s
         by default). A Retry-After header (seconds) indicates when to
         retry.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds until the rate limit window resets.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    SharedTooManyRequests:
+      description: >
+        Too many requests from this client IP on the /shared/decks routes
+        combined (SHARE_RATE_LIMIT_MAX per SHARE_RATE_LIMIT_WINDOW_SECONDS,
+        60 per 60s by default). A Retry-After header (seconds) indicates
+        when to retry.
       headers:
         Retry-After:
           schema:
@@ -2400,6 +2527,14 @@ components:
           description: Scryfall id of the commander card, null without a commander.
         visibility:
           $ref: "#/components/schemas/DeckVisibility"
+        share_id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: >
+            Random identifier of the deck's share link (GET
+            /shared/decks/{share_id}). Only resolves while the deck is
+            public or unlisted.
         card_count:
           type: integer
         pending_count:
@@ -2409,7 +2544,84 @@ components:
           type: string
         updated:
           type: string
-      required: [id, name, format, visibility, card_count, added, updated]
+      required: [id, name, format, visibility, share_id, card_count, added, updated]
+
+    SharedDeckInfo:
+      type: object
+      properties:
+        share_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        format:
+          type: string
+        visibility:
+          type: string
+          enum: [public, unlisted]
+        background_scryfall_id:
+          type: string
+          format: uuid
+          nullable: true
+        commander_scryfall_id:
+          type: string
+          format: uuid
+          nullable: true
+        card_count:
+          type: integer
+          description: Every card of the deck, owned or pending.
+        added:
+          type: string
+        updated:
+          type: string
+      required: [share_id, name, format, visibility, background_scryfall_id, commander_scryfall_id, card_count, added, updated]
+
+    SharedDeckCard:
+      type: object
+      description: One printing of a card in a shared deck, with how many copies the deck holds.
+      properties:
+        name:
+          type: string
+        scryfall_id:
+          type: string
+          format: uuid
+        set_code:
+          type: string
+        collector_number:
+          type: string
+        foil:
+          type: boolean
+        quantity:
+          type: integer
+          minimum: 1
+        mana_value:
+          type: number
+        colors:
+          type: string
+          nullable: true
+        card_type:
+          type: string
+          nullable: true
+        color_identity:
+          type: string
+          nullable: true
+        commander:
+          type: boolean
+          description: True for the deck's commander, which is always listed on its own.
+      required: [name, scryfall_id, set_code, collector_number, foil, quantity, mana_value, colors, card_type, color_identity, commander]
+
+    SharedDeck:
+      type: object
+      properties:
+        deck:
+          $ref: "#/components/schemas/SharedDeckInfo"
+        owner:
+          $ref: "#/components/schemas/Profile"
+        cards:
+          type: array
+          items:
+            $ref: "#/components/schemas/SharedDeckCard"
+      required: [deck, owner, cards]
 
     PaginatedDecks:
       type: object

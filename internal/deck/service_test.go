@@ -30,6 +30,11 @@ type fakeRepository struct {
 
 	deleteErr error
 
+	sharedOwnerID string
+	sharedDeck    Deck
+	sharedErr     error
+	lastShareID   string
+
 	getDeckCards    []DeckCard
 	getDeckCardsErr error
 
@@ -96,6 +101,14 @@ func (f *fakeRepository) Update(ctx context.Context, userID string, d Deck) (Dec
 func (f *fakeRepository) Delete(ctx context.Context, userID string, id int) error {
 	f.lastUserID = userID
 	return f.deleteErr
+}
+
+func (f *fakeRepository) FindShared(ctx context.Context, shareID string) (string, Deck, error) {
+	f.lastShareID = shareID
+	if f.sharedErr != nil {
+		return "", Deck{}, f.sharedErr
+	}
+	return f.sharedOwnerID, f.sharedDeck, nil
 }
 
 func (f *fakeRepository) FindCardsByDeckID(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]DeckCard, error) {
@@ -572,4 +585,25 @@ func TestService_PromotePendingCommander_IgnoresOtherPendingCards(t *testing.T) 
 	require.NoError(t, service.PromotePendingCommander(context.Background(), testUserID, 1, 8, 42))
 
 	assert.Zero(t, repo.updatedDeck.ID)
+}
+
+func TestService_GetSharedDeck_ReturnsOwnerAndDeck(t *testing.T) {
+	repo := &fakeRepository{sharedOwnerID: otherUserID, sharedDeck: Deck{ID: 4, Name: "Shared", ShareID: "abc"}}
+	service := NewService(repo)
+
+	ownerID, d, err := service.GetSharedDeck(context.Background(), "abc")
+
+	require.NoError(t, err)
+	assert.Equal(t, "abc", repo.lastShareID)
+	assert.Equal(t, otherUserID, ownerID)
+	assert.Equal(t, 4, d.ID)
+}
+
+func TestService_GetSharedDeck_PropagatesNotFound(t *testing.T) {
+	repo := &fakeRepository{sharedErr: ErrNotFound}
+	service := NewService(repo)
+
+	_, _, err := service.GetSharedDeck(context.Background(), "abc")
+
+	assert.ErrorIs(t, err, ErrNotFound)
 }

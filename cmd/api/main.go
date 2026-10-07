@@ -24,6 +24,7 @@ import (
 	"Melrakkiie/Tamiyo/internal/cors"
 	"Melrakkiie/Tamiyo/internal/deck"
 	"Melrakkiie/Tamiyo/internal/deckinsights"
+	"Melrakkiie/Tamiyo/internal/deckshare"
 	"Melrakkiie/Tamiyo/internal/emailchange"
 	"Melrakkiie/Tamiyo/internal/health"
 	"Melrakkiie/Tamiyo/internal/httplog"
@@ -122,9 +123,13 @@ func main() {
 	insightsService := deckinsights.NewService(deckService, scryfall.NewClient())
 	insightsHandler := deckinsights.NewHandler(insightsService)
 
+	shareService := deckshare.NewService(deckService, userService, insightsService)
+	shareHandler := deckshare.NewHandler(shareService)
+
 	healthHandler := health.NewHandler(db)
 
 	authLimiter := ratelimit.NewLimiter(cfg.AuthRateLimitMax, cfg.AuthRateLimitWindow)
+	shareLimiter := ratelimit.NewLimiter(cfg.ShareRateLimitMax, cfg.ShareRateLimitWindow)
 
 	router := gin.New()
 	router.Use(httplog.Recovery(logger))
@@ -143,6 +148,7 @@ func main() {
 	tokenHandler.RegisterRoutes(api)
 	passwordResetHandler.RegisterRoutes(api, ratelimit.Middleware(authLimiter))
 	emailChangeHandler.RegisterRoutes(api, ratelimit.Middleware(authLimiter))
+	shareHandler.RegisterRoutes(api.Group("", ratelimit.Middleware(shareLimiter)))
 
 	protected := api.Group("")
 	protected.Use(auth.RequireAuth(cfg.JWTSecret))

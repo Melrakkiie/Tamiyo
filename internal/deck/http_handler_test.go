@@ -1039,3 +1039,17 @@ func TestHandler_GetDecks_DoesNotFilterOnVisibility(t *testing.T) {
 	assert.Empty(t, service.lastFilter.Visibility)
 	assert.Equal(t, testUserID, service.lastUserID)
 }
+
+func TestHandler_GetDeck_ExposesTheShareID(t *testing.T) {
+	service := &fakeService{getDeck: Deck{ID: 1, Name: "Deck", Format: "commander", ShareID: "6f0d3c5e-8a51-4c0b-9b1e-2d7c4a3f9e10"}}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck/1", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var response deckResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	assert.Equal(t, "6f0d3c5e-8a51-4c0b-9b1e-2d7c4a3f9e10", response.ShareID)
+}

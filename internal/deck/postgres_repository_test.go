@@ -978,3 +978,58 @@ func TestPostgresRepository_FindAll_FiltersByVisibility(t *testing.T) {
 	require.Len(t, decks, 1)
 	assert.Equal(t, "Shown", decks[0].Name)
 }
+
+func TestPostgresRepository_ShareID_IsGeneratedAndStable(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+
+	first, err := repo.Create(context.Background(), userID, Deck{Name: "Otters", Format: "commander"})
+	require.NoError(t, err)
+	second, err := repo.Create(context.Background(), userID, Deck{Name: "Birds", Format: "commander"})
+	require.NoError(t, err)
+	assert.Len(t, first.ShareID, 36)
+	assert.NotEqual(t, first.ShareID, second.ShareID)
+
+	first.Name = "Sea otters"
+	updated, err := repo.Update(context.Background(), userID, first)
+	require.NoError(t, err)
+	assert.Equal(t, first.ShareID, updated.ShareID)
+
+	found, err := repo.FindByID(context.Background(), userID, first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, first.ShareID, found.ShareID)
+}
+
+func TestPostgresRepository_FindShared_ReturnsPublicAndUnlistedDecksWithTheirOwner(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+
+	for _, visibility := range []string{VisibilityPublic, VisibilityUnlisted} {
+		created, err := repo.Create(context.Background(), userID, Deck{Name: "Otters", Format: "commander", Visibility: visibility})
+		require.NoError(t, err)
+
+		ownerID, found, err := repo.FindShared(context.Background(), created.ShareID)
+
+		require.NoError(t, err)
+		assert.Equal(t, userID, ownerID)
+		assert.Equal(t, created.ID, found.ID)
+		assert.Equal(t, visibility, found.Visibility)
+	}
+}
+
+func TestPostgresRepository_FindShared_HidesPrivateAndUnknownDecks(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+
+	created, err := repo.Create(context.Background(), userID, Deck{Name: "Secret", Format: "commander", Visibility: VisibilityPrivate})
+	require.NoError(t, err)
+
+	_, _, err = repo.FindShared(context.Background(), created.ShareID)
+	assert.ErrorIs(t, err, ErrNotFound)
+
+	_, _, err = repo.FindShared(context.Background(), "00000000-0000-0000-0000-000000000000")
+	assert.ErrorIs(t, err, ErrNotFound)
+}

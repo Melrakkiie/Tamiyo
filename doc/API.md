@@ -17,6 +17,7 @@ Tamiyo is a REST API for managing a Magic: The Gathering card collection — car
 - [Profiles](#profiles)
 - [Deck ↔ Card relationship](#deck--card-relationship)
 - [Deck Insights](#deck-insights)
+- [Shared decks](#shared-decks)
 - [Bulk Import](#bulk-import)
 - [Bulk Export](#bulk-export)
 - [Error reference](#error-reference)
@@ -25,7 +26,7 @@ Tamiyo is a REST API for managing a Magic: The Gathering card collection — car
 
 ## Authentication
 
-Tamiyo is multi-tenant. `/health`, `/auth/register`, `/auth/login`, `/auth/refresh`, and `/auth/logout` are public; every other endpoint — including `/auth/password` — requires a Bearer token and is scoped to the authenticated account. You only ever see or modify your own cards, storages, and decks.
+Tamiyo is multi-tenant. `/health`, `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` and the [shared deck](#shared-decks) routes are public; every other endpoint — including `/auth/password` — requires a Bearer token and is scoped to the authenticated account. You only ever see or modify your own cards, storages, and decks.
 
 1. **Register** an account:
 ```bash
@@ -286,6 +287,8 @@ Set a new password using the token from the forgot-password email.
 { "error": "too many requests" }
 ```
 with a `Retry-After` header giving the number of seconds until the window resets.
+
+The public [shared deck](#shared-decks) routes have their own limit, counted separately: 60 requests per 60-second window by default (`SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`).
 
 > The limiter is in-memory and per-instance. Running several replicas behind a load balancer means each instance tracks its own counter — there's no shared global limit without an external store (e.g. Redis).
 
@@ -636,6 +639,7 @@ GET /deck?format=commander&sort=-added&page=1&limit=25
       "background_scryfall_id": "436d6a84-4cea-4ca7-94aa-9d08280652af",
       "commander_scryfall_id": "a0b4c5ad-14f7-4bcb-9a59-6c0ac4f1a5e0",
       "visibility": "unlisted",
+      "share_id": "6f0d3c5e-8a51-4c0b-9b1e-2d7c4a3f9e10",
       "card_count": 4,
       "pending_count": 2,
       "added": "2026-01-15 10:30:00",
@@ -649,7 +653,7 @@ GET /deck?format=commander&sort=-added&page=1&limit=25
 }
 ```
 
-`pending_count` is the number of copies in the deck's pending list (see [Pending cards](#pending-cards-deckidpending)), not counted in `card_count`. `commander_scryfall_id` is read-only: the Scryfall id of the commander card, so a client can show its art without another call. `background_scryfall_id` is the art the user picked for the deck (`null` when none was chosen). `visibility` says who may see the deck once decks can be shared: `private` (only its owner), `unlisted` (anyone with its link, the default) or `public` (anyone, and listed when browsing decks). It has no effect yet: every deck route still only serves the owner's own decks.
+`pending_count` is the number of copies in the deck's pending list (see [Pending cards](#pending-cards-deckidpending)), not counted in `card_count`. `commander_scryfall_id` is read-only: the Scryfall id of the commander card, so a client can show its art without another call. `background_scryfall_id` is the art the user picked for the deck (`null` when none was chosen). `visibility` says who may see the deck: `private` (only its owner), `unlisted` (anyone with its link, the default) or `public` (anyone, and listed on its owner's profile). `share_id` is the random identifier of the deck's share link, read-only and generated when the deck is created: see [Shared decks](#shared-decks). The routes in this section still only serve the owner's own decks.
 
 **Errors:** `400` if `page` or `limit` is not a valid integer, `limit` is outside `1..100`, or `sort` is not one of the allowed values.
 
@@ -890,6 +894,65 @@ Summarizes the deck's composition: mana curve, color breakdown, and primary card
 ```
 
 A multicolor card counts once per color it has in `color_breakdown`; a dual-typed permanent (e.g. "Artifact Creature") counts once under a single primary type in `type_breakdown` — Creature takes precedence over Artifact/Enchantment, matching how most deckbuilding sites categorize it. A double-faced or split card counts under the type of its front face (a creature with a land on its back is a creature).
+
+---
+
+## Shared decks
+
+Read-only access to a deck through its share link. **No authentication required.** A deck is reached by its `share_id` (from `GET /deck`), never by its numeric id, so an unlisted deck can only be found by someone who was given the link. Only `public` and `unlisted` decks resolve: a private deck, an unknown `share_id` or anything that isn't a UUID all answer `404`, so the response never tells whether a private deck exists.
+
+The three routes share a per-client-IP limit, separate from the auth one: 60 requests per 60-second window by default (`SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns `429` with a `Retry-After` header, as described in [Rate limiting](#rate-limiting).
+
+### `GET /shared/decks/:share_id`
+
+**Response `200 OK`**
+```json
+{
+  "deck": {
+    "share_id": "6f0d3c5e-8a51-4c0b-9b1e-2d7c4a3f9e10",
+    "name": "Kess Commander",
+    "format": "commander",
+    "visibility": "unlisted",
+    "background_scryfall_id": null,
+    "commander_scryfall_id": "a0b4c5ad-14f7-4bcb-9a59-6c0ac4f1a5e0",
+    "card_count": 100,
+    "added": "2026-01-15 10:30:00",
+    "updated": "2026-01-15 10:30:00"
+  },
+  "owner": { "id": "4b8a0a9e-2f1c-4c8e-9d3a-1e2f3a4b5c6d", "display_name": "Tamiyo", "avatar_scryfall_id": null },
+  "cards": [
+    {
+      "name": "Island",
+      "scryfall_id": "fc3f6a8f-0b5e-4b5f-9a1a-1d4b0e3c4c2f",
+      "set_code": "neo",
+      "collector_number": "294",
+      "foil": false,
+      "quantity": 12,
+      "mana_value": 0,
+      "colors": null,
+      "card_type": "Land",
+      "color_identity": "U",
+      "commander": false
+    }
+  ]
+}
+```
+
+The owner's copies and the deck's pending cards are merged into one list, one entry per printing and finish with its `quantity`, sorted by name. Nothing tells them apart, and storages, proxies and card ids are left out. The commander is always its own entry with `commander: true`. `card_count` counts every card, pending ones included. `owner` has the shape of [`GET /users/:id`](#get-usersid).
+
+**Errors:** `404` unknown, private or malformed `share_id` · `429` rate limit exceeded
+
+### `GET /shared/decks/:share_id/legality`
+
+Same report as [`GET /deck/:id/legality`](#get-deckidlegality), without `card_id` on the issues.
+
+**Errors:** `400` the deck's format isn't one Scryfall recognizes · `404` as above · `429` rate limit exceeded · `502` Scryfall unreachable
+
+### `GET /shared/decks/:share_id/stats`
+
+Same statistics as [`GET /deck/:id/stats`](#get-deckidstats).
+
+**Errors:** `400` the deck's format isn't one Scryfall recognizes · `404` as above · `429` rate limit exceeded · `502` Scryfall unreachable
 
 ---
 

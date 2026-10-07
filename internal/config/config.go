@@ -25,6 +25,9 @@ type Config struct {
 	AuthRateLimitMax    int
 	AuthRateLimitWindow time.Duration
 
+	ShareRateLimitMax    int
+	ShareRateLimitWindow time.Duration
+
 	JWTAccessTokenTTL  time.Duration
 	JWTRefreshTokenTTL time.Duration
 
@@ -55,6 +58,8 @@ func Load() (*Config, error) {
 	viper.SetDefault("PGSSLMODE", "disable")
 	viper.SetDefault("AUTH_RATE_LIMIT_MAX", 5)
 	viper.SetDefault("AUTH_RATE_LIMIT_WINDOW_SECONDS", 60)
+	viper.SetDefault("SHARE_RATE_LIMIT_MAX", 60)
+	viper.SetDefault("SHARE_RATE_LIMIT_WINDOW_SECONDS", 60)
 	viper.SetDefault("JWT_ACCESS_TOKEN_TTL_MINUTES", 15)
 	viper.SetDefault("JWT_REFRESH_TOKEN_TTL_DAYS", 30)
 	viper.SetDefault("PASSWORD_RESET_TOKEN_TTL_MINUTES", 30)
@@ -82,6 +87,9 @@ func Load() (*Config, error) {
 		AuthRateLimitWindow: time.Duration(viper.GetInt("AUTH_RATE_LIMIT_WINDOW_SECONDS")) * time.Second,
 		JWTAccessTokenTTL:   time.Duration(viper.GetInt("JWT_ACCESS_TOKEN_TTL_MINUTES")) * time.Minute,
 		JWTRefreshTokenTTL:  time.Duration(viper.GetInt("JWT_REFRESH_TOKEN_TTL_DAYS")) * 24 * time.Hour,
+
+		ShareRateLimitMax:    viper.GetInt("SHARE_RATE_LIMIT_MAX"),
+		ShareRateLimitWindow: time.Duration(viper.GetInt("SHARE_RATE_LIMIT_WINDOW_SECONDS")) * time.Second,
 
 		PasswordResetTokenTTL: time.Duration(viper.GetInt("PASSWORD_RESET_TOKEN_TTL_MINUTES")) * time.Minute,
 		EmailChangeTokenTTL:   time.Duration(viper.GetInt("EMAIL_CHANGE_TOKEN_TTL_MINUTES")) * time.Minute,

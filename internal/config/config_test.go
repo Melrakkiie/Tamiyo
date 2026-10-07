@@ -296,3 +296,25 @@ func TestLoad_DefaultsPGPortWhenNeitherPGPortNorAddonPortIsSet(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "5432", cfg.PGPort)
 }
+
+func TestLoad_DefaultsShareRateLimit(t *testing.T) {
+	setRequiredEnv(t)
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, 60, cfg.ShareRateLimitMax)
+	assert.Equal(t, 60*time.Second, cfg.ShareRateLimitWindow)
+}
+
+func TestLoad_ReadsShareRateLimitFromEnvironment(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("SHARE_RATE_LIMIT_MAX", "20")
+	t.Setenv("SHARE_RATE_LIMIT_WINDOW_SECONDS", "120")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, 20, cfg.ShareRateLimitMax)
+	assert.Equal(t, 120*time.Second, cfg.ShareRateLimitWindow)
+}

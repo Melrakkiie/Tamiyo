@@ -22,6 +22,7 @@ tamiyo/
 │   ├── deck/             # deck domain, including deck ↔ card relationship
 │   ├── bulk/             # bulk import/export routes (ManaBox, Moxfield)
 │   ├── deckinsights/     # deck legality + stats routes
+│   ├── deckshare/        # public, read-only shared deck routes
 │   ├── scryfall/         # shared Scryfall API client (used by bulk and deckinsights)
 │   └── config/           # environment configuration
 ├── _devops/database/     # goose SQL migrations (embedded, applied on API boot)
@@ -190,6 +191,10 @@ See [`doc/API.md`](./doc/API.md#deck-insights) for the exact response shapes and
 curl localhost:8080/deck/1/legality -H "Authorization: Bearer <token>"
 curl localhost:8080/deck/1/stats -H "Authorization: Bearer <token>"
 ```
+
+### Shared decks
+
+Every deck has a random `share_id`. `GET /shared/decks/:share_id` (plus `/legality` and `/stats`) serves a public or unlisted deck read-only, without authentication: its name, format, owner profile and card list, with no storage, proxy or ownership details. A private deck answers `404`, like an unknown link. These routes are rate-limited per client IP (60 requests per minute by default, `SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`). See [`doc/API.md`](./doc/API.md#shared-decks).
 
 ### Importing a ManaBox Collection via script (alternative)
 
