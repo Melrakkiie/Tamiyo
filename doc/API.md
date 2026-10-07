@@ -819,6 +819,8 @@ For the `commander` format specifically, two deck-construction rules Scryfall's 
 - **Singleton** — at most one copy of each card by name, except basic lands.
 - **Color identity** — every card's color identity must be contained in the commander's (the deck's `commander_id`, or its `commander_pending_id` when the commander isn't in the collection yet).
 
+The deck size is checked too, counting every copy (the commander and pending cards included): exactly 100 cards for `commander`, `brawl`, `duel`, `paupercommander`, `predh` and `gladiator`, exactly 60 for `oathbreaker` and `standardbrawl`, at least 60 for the other constructed formats (`standard`, `pioneer`, `modern`, `legacy`, `vintage`, `pauper`, `premodern`, `explorer`, `historic`, `timeless`, `alchemy`, `oldschool`, `penny`, `future`). Other formats get no size check. A wrong size is reported first, as an issue with an empty `card_name` and a reason like `deck size: 87 cards, commander requires exactly 100`.
+
 Pending cards (see `GET /deck/:id/pending-cards`) are checked like the deck's own cards, one entry per copy, so a pending copy counts toward the singleton rule too. An issue about a pending card has no `card_id`.
 
 **Known limitations:** only `commander` itself gets these extra checks (not singleton siblings like `oathbreaker` or `brawl`); named singleton exceptions (e.g. Shadowborn Apostle, Relentless Rats) aren't recognized, only the basic-land exemption; partner/background commanders aren't handled.
@@ -830,6 +832,7 @@ Pending cards (see `GET /deck/:id/pending-cards`) are checked like the deck's ow
   "legal": false,
   "issues": [
     { "card_id": 42, "card_name": "Channel", "reason": "banned in commander" },
+    { "card_name": "", "reason": "deck size: 99 cards, commander requires exactly 100" },
     { "card_name": "Mountain", "reason": "singleton violation: 2 copies in deck (commander allows only 1, except basic lands)" }
   ]
 }

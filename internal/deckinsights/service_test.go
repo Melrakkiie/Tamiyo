@@ -3,6 +3,8 @@ package deckinsights
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -92,6 +94,7 @@ func TestGetDeckLegality_AllLegalCardsReportsLegalTrue(t *testing.T) {
 	svc := NewService(decks, fetcher)
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
 	assert.True(t, report.Legal)
@@ -112,6 +115,7 @@ func TestGetDeckLegality_BannedCardIsReportedAndMarksDeckIllegal(t *testing.T) {
 	svc := NewService(decks, fetcher)
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
 	assert.False(t, report.Legal)
@@ -147,6 +151,7 @@ func TestGetDeckLegality_CardNotFoundOnScryfallIsReportedAndMarksDeckIllegal(t *
 	svc := NewService(decks, &fakeScryfallFetcher{})
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
 	assert.False(t, report.Legal)
@@ -170,6 +175,7 @@ func TestGetDeckLegality_CommanderSingletonViolationIsReported(t *testing.T) {
 	svc := NewService(decks, fetcher)
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
 	assert.False(t, report.Legal)
@@ -193,6 +199,7 @@ func TestGetDeckLegality_DuplicateBasicLandsAreExemptFromSingleton(t *testing.T)
 	svc := NewService(decks, fetcher)
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
 	assert.True(t, report.Legal)
@@ -216,6 +223,7 @@ func TestGetDeckLegality_CardOutsideCommanderColorIdentityIsReported(t *testing.
 	svc := NewService(decks, fetcher)
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
 	assert.False(t, report.Legal)
@@ -240,6 +248,7 @@ func TestGetDeckLegality_CardWithinCommanderColorIdentityIsFine(t *testing.T) {
 	svc := NewService(decks, fetcher)
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
 	assert.True(t, report.Legal)
@@ -261,6 +270,7 @@ func TestGetDeckLegality_NonCommanderFormatSkipsConstructionRules(t *testing.T) 
 	svc := NewService(decks, fetcher)
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
 	assert.True(t, report.Legal) // duplicate Mountains are fine outside commander
@@ -463,6 +473,7 @@ func TestGetDeckLegality_UsesAPendingCommanderAndPendingCards(t *testing.T) {
 	svc := NewService(decks, fetcher)
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
 	assert.False(t, report.Legal)
@@ -488,6 +499,7 @@ func TestGetDeckLegality_PendingCopiesCountForSingleton(t *testing.T) {
 	svc := NewService(decks, fetcher)
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
 	assert.False(t, report.Legal)
@@ -514,4 +526,101 @@ func TestGetDeckStats_CountsPendingCopies(t *testing.T) {
 	assert.Equal(t, 4, stats.CardCount)
 	assert.Equal(t, 4, stats.LandCount)
 	assert.Len(t, fetcher.lastRequest, 1)
+}
+
+func ignoringDeckSize(report LegalityReport) LegalityReport {
+	var issues []LegalityIssue
+	for _, issue := range report.Issues {
+		if !strings.HasPrefix(issue.Reason, deckSizeReasonPrefix) {
+			issues = append(issues, issue)
+		}
+	}
+	report.Issues = issues
+	report.Legal = len(issues) == 0
+	return report
+}
+
+func deckOf(format string, count int) (*fakeDeckService, *fakeScryfallFetcher) {
+	cards := make([]deck.DeckCard, 0, count)
+	for i := 0; i < count; i++ {
+		cards = append(cards, deck.DeckCard{ID: i + 1, Name: "Forest", ScryfallID: "forest"})
+	}
+	decks := &fakeDeckService{
+		decks:       map[int]deck.Deck{1: {ID: 1, Name: "Pile", Format: format}},
+		cardsByDeck: map[int][]deck.DeckCard{1: cards},
+	}
+	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
+		"forest": {ID: "forest", Name: "Forest", TypeLine: "Basic Land — Forest", Legalities: map[string]string{format: "legal"}},
+	}}
+	return decks, fetcher
+}
+
+func TestGetDeckLegality_CommanderDeckOfExactlyAHundredCardsIsLegal(t *testing.T) {
+	decks, fetcher := deckOf("commander", 100)
+
+	report, err := NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, 1)
+
+	require.NoError(t, err)
+	assert.True(t, report.Legal)
+	assert.Empty(t, report.Issues)
+}
+
+func TestGetDeckLegality_CommanderDeckWithTheWrongCardCountIsNotLegal(t *testing.T) {
+	for _, count := range []int{99, 101} {
+		decks, fetcher := deckOf("commander", count)
+
+		report, err := NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, 1)
+
+		require.NoError(t, err)
+		assert.False(t, report.Legal)
+		require.Len(t, report.Issues, 1)
+		assert.Empty(t, report.Issues[0].CardName)
+		assert.Equal(t, fmt.Sprintf("deck size: %d cards, commander requires exactly 100", count), report.Issues[0].Reason)
+	}
+}
+
+func TestGetDeckLegality_ConstructedDeckNeedsAtLeastSixtyCards(t *testing.T) {
+	decks, fetcher := deckOf("modern", 59)
+	report, err := NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, 1)
+	require.NoError(t, err)
+	assert.False(t, report.Legal)
+	require.Len(t, report.Issues, 1)
+	assert.Equal(t, "deck size: 59 cards, modern requires at least 60", report.Issues[0].Reason)
+
+	decks, fetcher = deckOf("modern", 75)
+	report, err = NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, 1)
+	require.NoError(t, err)
+	assert.True(t, report.Legal)
+}
+
+func TestGetDeckLegality_CountsPendingCopiesInTheDeckSize(t *testing.T) {
+	decks, fetcher := deckOf("commander", 97)
+	decks.pendingByDeck = map[int][]deck.PendingCard{1: {{ID: 1, Name: "Forest", ScryfallID: "forest", Quantity: 3}}}
+
+	report, err := NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, 1)
+
+	require.NoError(t, err)
+	assert.True(t, report.Legal)
+}
+
+func TestGetDeckLegality_PutsTheDeckSizeIssueFirst(t *testing.T) {
+	decks, fetcher := deckOf("commander", 2)
+	decks.cardsByDeck[1] = append(decks.cardsByDeck[1], deck.DeckCard{ID: 50, Name: "Channel", ScryfallID: "channel"})
+	fetcher.cards["channel"] = scryfall.Card{ID: "channel", Name: "Channel", TypeLine: "Sorcery", Legalities: map[string]string{"commander": "banned"}}
+
+	report, err := NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, 1)
+
+	require.NoError(t, err)
+	require.Len(t, report.Issues, 2)
+	assert.Equal(t, "deck size: 3 cards, commander requires exactly 100", report.Issues[0].Reason)
+	assert.Equal(t, "Channel", report.Issues[1].CardName)
+}
+
+func TestGetDeckLegality_FormatsWithoutASizeRuleAreNotChecked(t *testing.T) {
+	decks, fetcher := deckOf("someformat", 3)
+
+	report, err := NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, 1)
+
+	require.NoError(t, err)
+	assert.True(t, report.Legal)
 }

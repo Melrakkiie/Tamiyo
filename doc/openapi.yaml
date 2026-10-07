@@ -1734,6 +1734,7 @@ components:
           type: integer
         card_name:
           type: string
+          description: Empty for an issue about the whole deck, such as its size.
         reason:
           type: string
       required: [card_name, reason]

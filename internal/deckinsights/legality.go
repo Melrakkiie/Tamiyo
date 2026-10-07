@@ -10,6 +10,56 @@ import (
 
 const commanderFormat = "commander"
 
+const deckSizeReasonPrefix = "deck size:"
+
+type deckSizeRule struct {
+	min   int
+	exact bool
+}
+
+var deckSizeRules = map[string]deckSizeRule{
+	"commander":       {min: 100, exact: true},
+	"brawl":           {min: 100, exact: true},
+	"duel":            {min: 100, exact: true},
+	"paupercommander": {min: 100, exact: true},
+	"predh":           {min: 100, exact: true},
+	"gladiator":       {min: 100, exact: true},
+	"oathbreaker":     {min: 60, exact: true},
+	"standardbrawl":   {min: 60, exact: true},
+	"standard":        {min: 60},
+	"pioneer":         {min: 60},
+	"modern":          {min: 60},
+	"legacy":          {min: 60},
+	"vintage":         {min: 60},
+	"pauper":          {min: 60},
+	"premodern":       {min: 60},
+	"explorer":        {min: 60},
+	"historic":        {min: 60},
+	"timeless":        {min: 60},
+	"alchemy":         {min: 60},
+	"oldschool":       {min: 60},
+	"penny":           {min: 60},
+	"future":          {min: 60},
+}
+
+func checkDeckSize(report *LegalityReport, format string, cardCount int) {
+	rule, ok := deckSizeRules[format]
+	if !ok {
+		return
+	}
+	var reason string
+	switch {
+	case rule.exact && cardCount != rule.min:
+		reason = fmt.Sprintf("%s %d cards, %s requires exactly %d", deckSizeReasonPrefix, cardCount, format, rule.min)
+	case !rule.exact && cardCount < rule.min:
+		reason = fmt.Sprintf("%s %d cards, %s requires at least %d", deckSizeReasonPrefix, cardCount, format, rule.min)
+	default:
+		return
+	}
+	report.Issues = append([]LegalityIssue{{Reason: reason}}, report.Issues...)
+	report.Legal = false
+}
+
 func checkLegality(d deck.Deck, cards []deck.DeckCard, scryfallByID map[string]scryfall.Card) (LegalityReport, error) {
 	format := strings.ToLower(strings.TrimSpace(d.Format))
 	report := LegalityReport{Format: d.Format, Legal: true}
@@ -57,6 +107,8 @@ func checkLegality(d deck.Deck, cards []deck.DeckCard, scryfallByID map[string]s
 		checkSingleton(&report, cards, scryfallByID)
 		checkColorIdentity(&report, d, cards, scryfallByID)
 	}
+
+	checkDeckSize(&report, format, len(cards))
 
 	return report, nil
 }
