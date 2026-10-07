@@ -527,7 +527,7 @@ paths:
             default: false
           description: >
             Return one entry per stack of identical copies (same printing,
-            foil and storage) instead of one per card. Each entry is the
+            foil, proxy and storage) instead of one per card. Each entry is the
             stack's lowest-id copy with quantity and copy_ids set; total,
             page and limit then count stacks. added is the oldest copy's,
             updated the most recent one's.
@@ -1941,6 +1941,9 @@ components:
           type: string
         foil:
           type: boolean
+        proxy:
+          type: boolean
+          description: A printed stand-in rather than a real copy.
         storage_id:
           type: integer
           nullable: true
@@ -2130,6 +2133,10 @@ components:
         foil:
           type: boolean
           default: false
+        proxy:
+          type: boolean
+          default: false
+          description: A printed stand-in rather than a real copy.
         storage_id:
           type: integer
           nullable: true
@@ -2181,6 +2188,9 @@ components:
           type: string
         foil:
           type: boolean
+        proxy:
+          type: boolean
+          description: A printed stand-in rather than a real copy.
         storage_id:
           type: integer
           minimum: 1

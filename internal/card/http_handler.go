@@ -29,6 +29,7 @@ type cardResponse struct {
 	SetCode         string  `json:"set_code"`
 	CollectorNumber string  `json:"collector_number"`
 	Foil            bool    `json:"foil"`
+	Proxy           bool    `json:"proxy"`
 	StorageID       *int    `json:"storage_id"`
 	ManaValue       float64 `json:"mana_value"`
 	Colors          *string `json:"colors"`
@@ -52,6 +53,7 @@ func toResponse(c Card) cardResponse {
 		SetCode:         c.SetCode,
 		CollectorNumber: c.CollectorNumber,
 		Foil:            c.Foil,
+		Proxy:           c.Proxy,
 		StorageID:       c.StorageID,
 		ManaValue:       c.ManaValue,
 		Colors:          c.Colors,
@@ -78,6 +80,7 @@ type createCardRequest struct {
 	SetCode         string  `json:"set_code" binding:"required"`
 	CollectorNumber string  `json:"collector_number" binding:"required"`
 	Foil            bool    `json:"foil"`
+	Proxy           bool    `json:"proxy"`
 	StorageID       *int    `json:"storage_id" binding:"omitempty,gt=0"`
 	ManaValue       float64 `json:"mana_value" binding:"omitempty,gte=0"`
 	Colors          *string `json:"colors"`
@@ -99,6 +102,7 @@ func (r createCardRequest) toDomain() Card {
 		SetCode:         r.SetCode,
 		CollectorNumber: r.CollectorNumber,
 		Foil:            r.Foil,
+		Proxy:           r.Proxy,
 		StorageID:       r.StorageID,
 		ManaValue:       r.ManaValue,
 		Colors:          normalizeColors(r.Colors),
@@ -143,6 +147,7 @@ type updateCardRequest struct {
 	SetCode         *string           `json:"set_code" binding:"omitempty"`
 	CollectorNumber *string           `json:"collector_number" binding:"omitempty"`
 	Foil            *bool             `json:"foil" binding:"omitempty"`
+	Proxy           *bool             `json:"proxy" binding:"omitempty"`
 	StorageID       optionalStorageID `json:"storage_id"`
 	ManaValue       *float64          `json:"mana_value" binding:"omitempty,gte=0"`
 	Colors          *string           `json:"colors"`
@@ -197,6 +202,9 @@ func (r updateCardRequest) applyTo(c Card) Card {
 	}
 	if r.Foil != nil {
 		c.Foil = *r.Foil
+	}
+	if r.Proxy != nil {
+		c.Proxy = *r.Proxy
 	}
 	if r.ManaValue != nil {
 		c.ManaValue = *r.ManaValue

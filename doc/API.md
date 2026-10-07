@@ -323,7 +323,7 @@ List cards, with optional filtering, sorting, and pagination.
 | `color_identity` | string | No | Only cards whose color identity fits inside these WUBRG letters (any order), e.g. a commander's identity. Empty (`color_identity=`) keeps colorless cards only. Cards whose identity isn't known yet are left out. |
 | `page` | int | No | 1-based page number. Defaults to `1`. |
 | `limit` | int | No | Cards per page, max `100`. Defaults to `25`. |
-| `stack` | bool | No | `true` returns one entry per stack of identical copies (same printing, foil and storage) instead of one per card: the stack's lowest-id copy, plus `quantity` and `copy_ids` (lowest first). `total`, `page` and `limit` then count stacks; `added` is the oldest copy's and `updated` the most recent one's. Defaults to `false`. |
+| `stack` | bool | No | `true` returns one entry per stack of identical copies (same printing, foil, proxy and storage) instead of one per card: the stack's lowest-id copy, plus `quantity` and `copy_ids` (lowest first). `total`, `page` and `limit` then count stacks; `added` is the oldest copy's and `updated` the most recent one's. Defaults to `false`. |
 | `sort` | string | No | One of `name`, `-name`, `added`, `-added`, `updated`, `-updated`, `mana_value`, `-mana_value`, `color`, `-color`, `type`, `-type`. Defaults to `-updated`. A `-` prefix means descending. `color` groups white, blue, black, red, green, multicolor, colorless, lands, then unknown; `type` groups by primary type (creature, planeswalker, battle, instant, sorcery, artifact, enchantment, land, other, unknown); both sort by name within a group. `id` is always used as a stable secondary tie-breaker. |
 
 **Example**
@@ -342,6 +342,7 @@ GET /cards?storage_id=1&sort=-added&page=1&limit=25
       "set_code": "lea",
       "collector_number": 232,
       "foil": false,
+      "proxy": false,
       "storage_id": 1,
       "mana_value": 0,
       "added": "2026-01-15 10:30:00",
@@ -396,6 +397,7 @@ Create a new card.
 | `set_code` | string | Yes | |
 | `collector_number` | int | Yes | Must be > 0. |
 | `foil` | bool | No | Defaults to `false`. |
+| `proxy` | bool | No | `true` for a proxy (a printed stand-in rather than a real copy). Defaults to `false`. |
 | `storage_id` | int | No | Must reference an existing storage if provided. |
 | `mana_value` | number | No | Converted mana cost (CMC). Must be >= 0 if provided. Defaults to `0`. Not fetched automatically from Scryfall — the client supplies it, same as `name` or `set_code`. |
 | `colors` | string | No | The card's colors as WUBRG letters (any case or order, stored in WUBRG order, e.g. `WR`), empty string for colorless. Left unknown (`null`) when omitted. |
@@ -435,6 +437,7 @@ Partially update a card. Any subset of the fields below can be sent.
 | `set_code` | string | |
 | `collector_number` | int | Must be > 0 if provided. |
 | `foil` | bool | |
+| `proxy` | bool | |
 | `storage_id` | int or `null` | Must reference an existing storage if provided. `null` removes the card from its storage; leaving the field out keeps the current one. |
 | `mana_value` | number | Must be >= 0 if provided. |
 

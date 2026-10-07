@@ -863,3 +863,33 @@ func TestHandler_UpdateCard_RejectsInvalidColors(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
+
+func TestHandler_CreateCard_StoresAndReturnsProxy(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	body := `{"name": "Mana Crypt", "scryfall_id": "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f", "set_code": "2xm", "collector_number": "270", "proxy": true}`
+	req := httptest.NewRequest(http.MethodPost, "/cards", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	var response cardResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	assert.True(t, response.Proxy)
+}
+
+func TestHandler_UpdateCard_SetsProxy(t *testing.T) {
+	service := &fakeService{updateCard: Card{ID: 1, Name: "Mana Crypt", Proxy: true}}
+	router := setupRouter(service)
+
+	w := patchCard(router, `{"proxy": true}`)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, service.lastUpdateRequest.Proxy)
+	assert.True(t, *service.lastUpdateRequest.Proxy)
+	var response cardResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	assert.True(t, response.Proxy)
+}

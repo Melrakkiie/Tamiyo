@@ -31,6 +31,7 @@ type DeckCard struct {
 	SetCode         string
 	CollectorNumber string
 	Foil            bool
+	Proxy           bool
 	StorageID       *int
 	ManaValue       float64
 	Colors          *string

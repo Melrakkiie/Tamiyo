@@ -399,3 +399,18 @@ func TestService_SetCardDetails_DelegatesToRepository(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, Details{Colors: "", CardType: "Artifact", ManaValue: 1}, repo.setDetails[4])
 }
+
+func TestService_UpdateCard_TogglesProxyOnlyWhenGiven(t *testing.T) {
+	repo := &fakeRepository{findByIDCard: Card{ID: 1, Name: "Mana Crypt", Proxy: true}}
+	service := NewService(repo)
+
+	newName := "Mana Crypt"
+	kept, err := service.UpdateCard(context.Background(), testUserID, 1, updateCardRequest{Name: &newName})
+	require.NoError(t, err)
+	assert.True(t, kept.Proxy)
+
+	notProxy := false
+	changed, err := service.UpdateCard(context.Background(), testUserID, 1, updateCardRequest{Proxy: &notProxy})
+	require.NoError(t, err)
+	assert.False(t, changed.Proxy)
+}

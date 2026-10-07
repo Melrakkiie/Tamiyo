@@ -115,6 +115,7 @@ type deckCardResponse struct {
 	SetCode         string  `json:"set_code"`
 	CollectorNumber string  `json:"collector_number"`
 	Foil            bool    `json:"foil"`
+	Proxy           bool    `json:"proxy"`
 	StorageID       *int    `json:"storage_id"`
 	ManaValue       float64 `json:"mana_value"`
 	Colors          *string `json:"colors"`
@@ -132,6 +133,7 @@ func toDeckCardResponse(dc DeckCard) deckCardResponse {
 		SetCode:         dc.SetCode,
 		CollectorNumber: dc.CollectorNumber,
 		Foil:            dc.Foil,
+		Proxy:           dc.Proxy,
 		StorageID:       dc.StorageID,
 		ManaValue:       dc.ManaValue,
 		Colors:          dc.Colors,

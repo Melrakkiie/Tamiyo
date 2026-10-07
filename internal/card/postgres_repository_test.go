@@ -841,3 +841,46 @@ func TestPostgresRepository_Delete_KeepsDeckCardsAsPending(t *testing.T) {
 	require.Len(t, pending, 1)
 	assert.Equal(t, 2, pending[0].Quantity)
 }
+
+func TestPostgresRepository_CreateAndUpdate_PersistProxy(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+
+	created, err := repo.Create(context.Background(), userID, Card{Name: "Mana Crypt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: "270", Proxy: true})
+	require.NoError(t, err)
+	assert.True(t, created.Proxy)
+
+	created.Proxy = false
+	updated, err := repo.Update(context.Background(), userID, created)
+	require.NoError(t, err)
+	assert.False(t, updated.Proxy)
+
+	found, err := repo.FindByID(context.Background(), userID, created.ID)
+	require.NoError(t, err)
+	assert.False(t, found.Proxy)
+}
+
+func TestPostgresRepository_FindAll_DoesNotStackProxiesWithRealCopies(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+
+	crypt := Card{Name: "Mana Crypt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: "270"}
+	proxy := crypt
+	proxy.Proxy = true
+	for _, c := range []Card{crypt, proxy, proxy} {
+		_, err := repo.Create(context.Background(), userID, c)
+		require.NoError(t, err)
+	}
+
+	result, total, err := repo.FindAll(context.Background(), userID, CardFilter{Stack: true, SortField: "name", Page: 1, Limit: 25})
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, total)
+	quantities := map[bool]int{}
+	for _, c := range result {
+		quantities[c.Proxy] = len(c.CopyIDs)
+	}
+	assert.Equal(t, map[bool]int{false: 1, true: 2}, quantities)
+}

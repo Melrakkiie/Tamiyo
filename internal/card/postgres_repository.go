@@ -20,6 +20,7 @@ type cardRow struct {
 	SetCode         string    `db:"set_code"`
 	CollectorNumber string    `db:"collector_number"`
 	Foil            bool      `db:"foil"`
+	Proxy           bool      `db:"proxy"`
 	StorageID       *int      `db:"storage_id"`
 	ManaValue       float64   `db:"mana_value"`
 	Colors          *string   `db:"colors"`
@@ -37,6 +38,7 @@ func (r cardRow) toDomain() Card {
 		SetCode:         r.SetCode,
 		CollectorNumber: r.CollectorNumber,
 		Foil:            r.Foil,
+		Proxy:           r.Proxy,
 		StorageID:       r.StorageID,
 		ManaValue:       r.ManaValue,
 		Colors:          r.Colors,
@@ -56,6 +58,7 @@ func toCardRow(userID string, c Card) cardRow {
 		SetCode:         c.SetCode,
 		CollectorNumber: c.CollectorNumber,
 		Foil:            c.Foil,
+		Proxy:           c.Proxy,
 		StorageID:       c.StorageID,
 		ManaValue:       c.ManaValue,
 		Colors:          c.Colors,
@@ -110,7 +113,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 	offset := (filter.Page - 1) * filter.Limit
 
 	query := `
-	    SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, color_identity, added, updated
+	    SELECT id, name, scryfall_id, set_code, collector_number, foil, proxy, storage_id, mana_value, colors, card_type, color_identity, added, updated
 	    FROM tamiyo.cards
 	` + whereClause + orderByClause(filter) + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 
@@ -136,11 +139,11 @@ type stackRow struct {
 
 func (r *PostgresRepository) findStacks(ctx context.Context, whereClause string, args []interface{}, argPos int, filter CardFilter) ([]Card, int, error) {
 	stacks := `
-	    SELECT MIN(id) AS id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, color_identity,
+	    SELECT MIN(id) AS id, name, scryfall_id, set_code, collector_number, foil, proxy, storage_id, mana_value, colors, card_type, color_identity,
 	        MIN(added) AS added, MAX(updated) AS updated, array_agg(id ORDER BY id) AS copy_ids
 	    FROM tamiyo.cards
 	` + whereClause + `
-	    GROUP BY name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, color_identity`
+	    GROUP BY name, scryfall_id, set_code, collector_number, foil, proxy, storage_id, mana_value, colors, card_type, color_identity`
 
 	var total int
 	if err := r.db.GetContext(ctx, &total, `SELECT COUNT(*) FROM (`+stacks+`) AS stacks`, args...); err != nil {
@@ -220,7 +223,7 @@ func orderByClause(filter CardFilter) string {
 
 func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int) (Card, error) {
 	query := `
-		SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, color_identity, added, updated
+		SELECT id, name, scryfall_id, set_code, collector_number, foil, proxy, storage_id, mana_value, colors, card_type, color_identity, added, updated
 	    FROM tamiyo.cards
 		WHERE id = $1 AND user_id = $2
 	`
@@ -239,9 +242,9 @@ func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int
 func (r *PostgresRepository) Create(ctx context.Context, userID string, c Card) (Card, error) {
 	row := toCardRow(userID, c)
 	query := `
-    	INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, color_identity)
-     	VALUES (:user_id, :name, :scryfall_id, :set_code, :collector_number, :foil, :storage_id, :mana_value, :colors, :card_type, :color_identity)
-      	RETURNING id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, color_identity, added, updated
+    	INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, proxy, storage_id, mana_value, colors, card_type, color_identity)
+     	VALUES (:user_id, :name, :scryfall_id, :set_code, :collector_number, :foil, :proxy, :storage_id, :mana_value, :colors, :card_type, :color_identity)
+      	RETURNING id, name, scryfall_id, set_code, collector_number, foil, proxy, storage_id, mana_value, colors, card_type, color_identity, added, updated
 	`
 
 	stmt, err := r.db.PrepareNamedContext(ctx, query)
@@ -268,9 +271,9 @@ func (r *PostgresRepository) Update(ctx context.Context, userID string, c Card) 
 	row := toCardRow(userID, c)
 	query := `
 		UPDATE tamiyo.cards
-		SET name = :name, scryfall_id = :scryfall_id, set_code = :set_code, collector_number = :collector_number, foil = :foil, storage_id = :storage_id, mana_value = :mana_value, colors = :colors, card_type = :card_type, color_identity = :color_identity
+		SET name = :name, scryfall_id = :scryfall_id, set_code = :set_code, collector_number = :collector_number, foil = :foil, proxy = :proxy, storage_id = :storage_id, mana_value = :mana_value, colors = :colors, card_type = :card_type, color_identity = :color_identity
 		WHERE id = :id AND user_id = :user_id
-		RETURNING id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, color_identity, added, updated
+		RETURNING id, name, scryfall_id, set_code, collector_number, foil, proxy, storage_id, mana_value, colors, card_type, color_identity, added, updated
 	`
 
 	stmt, err := r.db.PrepareNamedContext(ctx, query)
@@ -332,7 +335,7 @@ func (r *PostgresRepository) DeleteAll(ctx context.Context, userID string) (int,
 
 func (r *PostgresRepository) FindMissingDetails(ctx context.Context, userID string, afterID int, limit int) ([]Card, error) {
 	query := `
-		SELECT id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, color_identity, added, updated
+		SELECT id, name, scryfall_id, set_code, collector_number, foil, proxy, storage_id, mana_value, colors, card_type, color_identity, added, updated
 		FROM tamiyo.cards
 		WHERE user_id = $1 AND id > $2 AND (colors IS NULL OR card_type IS NULL OR color_identity IS NULL)
 		ORDER BY id
