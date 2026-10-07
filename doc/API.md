@@ -254,6 +254,7 @@ List cards, with optional filtering, sorting, and pagination.
 | `color_identity` | string | No | Only cards whose color identity fits inside these WUBRG letters (any order), e.g. a commander's identity. Empty (`color_identity=`) keeps colorless cards only. Cards whose identity isn't known yet are left out. |
 | `page` | int | No | 1-based page number. Defaults to `1`. |
 | `limit` | int | No | Cards per page, max `100`. Defaults to `25`. |
+| `stack` | bool | No | `true` returns one entry per stack of identical copies (same printing, foil and storage) instead of one per card: the stack's lowest-id copy, plus `quantity` and `copy_ids` (lowest first). `total`, `page` and `limit` then count stacks; `added` is the oldest copy's and `updated` the most recent one's. Defaults to `false`. |
 | `sort` | string | No | One of `name`, `-name`, `added`, `-added`, `updated`, `-updated`, `mana_value`, `-mana_value`, `color`, `-color`, `type`, `-type`. Defaults to `-updated`. A `-` prefix means descending. `color` groups white, blue, black, red, green, multicolor, colorless, lands, then unknown; `type` groups by primary type (creature, planeswalker, battle, instant, sorcery, artifact, enchantment, land, other, unknown); both sort by name within a group. `id` is always used as a stable secondary tie-breaker. |
 
 **Example**
@@ -285,7 +286,7 @@ GET /cards?storage_id=1&sort=-added&page=1&limit=25
 }
 ```
 
-**Errors:** `400` if `storage_id`, `page`, or `limit` is not a valid integer, or `sort` is not one of the allowed values.
+**Errors:** `400` if `storage_id`, `page`, or `limit` is not a valid integer, `stack` is not a boolean, or `sort` is not one of the allowed values.
 
 ---
 

@@ -4,6 +4,7 @@ package card
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -173,6 +174,52 @@ func TestPostgresRepository_FindAll_FiltersByStorageID(t *testing.T) {
 	require.Len(t, result, 1)
 	assert.Equal(t, "Black Lotus", result[0].Name)
 	assert.Equal(t, 1, total)
+}
+
+func TestPostgresRepository_FindAll_StacksCopiesOfTheSamePrintingInTheSameStorage(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userID)
+
+	box := 1
+	bolt := Card{Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: "129", StorageID: &box}
+	foilBolt := bolt
+	foilBolt.Foil = true
+	looseBolt := bolt
+	looseBolt.StorageID = nil
+	seedCards(t, db, userID, []Card{bolt, bolt, foilBolt, looseBolt, bolt})
+
+	result, total, err := repo.FindAll(context.Background(), userID, CardFilter{Stack: true, SortField: "name", Page: 1, Limit: 25})
+
+	require.NoError(t, err)
+	assert.Equal(t, 3, total)
+	require.Len(t, result, 3)
+	quantities := map[string]int{}
+	for _, c := range result {
+		key := fmt.Sprintf("foil=%t storage=%v", c.Foil, c.StorageID != nil)
+		quantities[key] = len(c.CopyIDs)
+		assert.Equal(t, c.CopyIDs[0], c.ID)
+	}
+	assert.Equal(t, map[string]int{"foil=false storage=true": 3, "foil=true storage=true": 1, "foil=false storage=false": 1}, quantities)
+}
+
+func TestPostgresRepository_FindAll_PaginatesStacks(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+
+	bolt := Card{Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: "129"}
+	counterspell := Card{Name: "Counterspell", ScryfallID: "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f", SetCode: "mh2", CollectorNumber: "267"}
+	seedCards(t, db, userID, []Card{bolt, bolt, counterspell, bolt})
+
+	result, total, err := repo.FindAll(context.Background(), userID, CardFilter{Stack: true, SortField: "name", Page: 2, Limit: 1})
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, total)
+	require.Len(t, result, 1)
+	assert.Equal(t, "Lightning Bolt", result[0].Name)
+	assert.Len(t, result[0].CopyIDs, 3)
 }
 
 func TestPostgresRepository_FindAll_FiltersByNameCaseInsensitive(t *testing.T) {

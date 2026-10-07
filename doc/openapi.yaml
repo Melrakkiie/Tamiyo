@@ -377,6 +377,18 @@ paths:
             by primary type (creature, planeswalker, battle, instant, sorcery,
             artifact, enchantment, land, other, unknown). Both sort by name
             within a group.
+        - name: stack
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: >
+            Return one entry per stack of identical copies (same printing,
+            foil and storage) instead of one per card. Each entry is the
+            stack's lowest-id copy with quantity and copy_ids set; total,
+            page and limit then count stacks. added is the oldest copy's,
+            updated the most recent one's.
       responses:
         "200":
           description: OK
@@ -1765,6 +1777,14 @@ components:
           type: string
         updated:
           type: string
+        quantity:
+          type: integer
+          description: Only with GET /cards?stack=true, the number of copies in the stack.
+        copy_ids:
+          type: array
+          items:
+            type: integer
+          description: Only with GET /cards?stack=true, the ids of the stack's copies, lowest first.
       required:
         - id
         - name

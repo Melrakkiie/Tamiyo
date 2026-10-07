@@ -168,6 +168,52 @@ func TestHandler_GetCards_PassesManaValueSortToService(t *testing.T) {
 	assert.True(t, service.lastFilter.SortDesc)
 }
 
+func TestHandler_GetCards_ReturnsStacksWithQuantityAndCopyIDs(t *testing.T) {
+	service := &fakeService{
+		cards: []Card{{ID: 4, Name: "Lightning Bolt", SetCode: "2xm", CopyIDs: []int{4, 7, 9}}},
+		total: 1,
+	}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/cards?stack=true", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, service.lastFilter.Stack)
+
+	var response paginatedCardsResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.Len(t, response.Data, 1)
+	assert.Equal(t, 3, response.Data[0].Quantity)
+	assert.Equal(t, []int{4, 7, 9}, response.Data[0].CopyIDs)
+}
+
+func TestHandler_GetCards_OmitsQuantityWhenNotStacked(t *testing.T) {
+	service := &fakeService{cards: []Card{{ID: 1, Name: "Black Lotus"}}, total: 1}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/cards", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.False(t, service.lastFilter.Stack)
+	assert.NotContains(t, w.Body.String(), "quantity")
+	assert.NotContains(t, w.Body.String(), "copy_ids")
+}
+
+func TestHandler_GetCards_ReturnsBadRequestOnInvalidStack(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/cards?stack=maybe", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
 func TestHandler_GetCards_ReturnsBadRequestOnInvalidSort(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)

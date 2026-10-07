@@ -23,12 +23,14 @@ type Card struct {
 	ColorIdentity   *string
 	Added           time.Time
 	Updated         time.Time
+	CopyIDs         []int
 }
 
 type CardFilter struct {
 	StorageID     *int
 	Name          string
 	ColorIdentity *string
+	Stack         bool
 
 	SortField string
 	SortDesc  bool

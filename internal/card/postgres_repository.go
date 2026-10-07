@@ -97,6 +97,10 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 
 	whereClause := " WHERE " + strings.Join(conditions, " AND ")
 
+	if filter.Stack {
+		return r.findStacks(ctx, whereClause, args, argPos, filter)
+	}
+
 	countQuery := `SELECT COUNT(*) FROM tamiyo.cards` + whereClause
 	var total int
 	if err := r.db.GetContext(ctx, &total, countQuery, args...); err != nil {
@@ -120,6 +124,45 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 	cards := make([]Card, 0, len(rows))
 	for _, row := range rows {
 		cards = append(cards, row.toDomain())
+	}
+
+	return cards, total, nil
+}
+
+type stackRow struct {
+	cardRow
+	CopyIDs pq.Int64Array `db:"copy_ids"`
+}
+
+func (r *PostgresRepository) findStacks(ctx context.Context, whereClause string, args []interface{}, argPos int, filter CardFilter) ([]Card, int, error) {
+	stacks := `
+	    SELECT MIN(id) AS id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, color_identity,
+	        MIN(added) AS added, MAX(updated) AS updated, array_agg(id ORDER BY id) AS copy_ids
+	    FROM tamiyo.cards
+	` + whereClause + `
+	    GROUP BY name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value, colors, card_type, color_identity`
+
+	var total int
+	if err := r.db.GetContext(ctx, &total, `SELECT COUNT(*) FROM (`+stacks+`) AS stacks`, args...); err != nil {
+		return nil, 0, err
+	}
+
+	offset := (filter.Page - 1) * filter.Limit
+	query := `SELECT * FROM (` + stacks + `) AS stacks` + orderByClause(filter) + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
+
+	var rows []stackRow
+	if err := r.db.SelectContext(ctx, &rows, query, append(args, filter.Limit, offset)...); err != nil {
+		return nil, 0, err
+	}
+
+	cards := make([]Card, 0, len(rows))
+	for _, row := range rows {
+		c := row.toDomain()
+		c.CopyIDs = make([]int, 0, len(row.CopyIDs))
+		for _, id := range row.CopyIDs {
+			c.CopyIDs = append(c.CopyIDs, int(id))
+		}
+		cards = append(cards, c)
 	}
 
 	return cards, total, nil

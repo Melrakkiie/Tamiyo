@@ -36,9 +36,15 @@ type cardResponse struct {
 	ColorIdentity   *string `json:"color_identity"`
 	Added           string  `json:"added"`
 	Updated         string  `json:"updated"`
+	Quantity        int     `json:"quantity,omitempty"`
+	CopyIDs         []int   `json:"copy_ids,omitempty"`
 }
 
 func toResponse(c Card) cardResponse {
+	quantity := 0
+	if c.CopyIDs != nil {
+		quantity = len(c.CopyIDs)
+	}
 	return cardResponse{
 		ID:              c.ID,
 		Name:            c.Name,
@@ -53,6 +59,8 @@ func toResponse(c Card) cardResponse {
 		ColorIdentity:   c.ColorIdentity,
 		Added:           c.Added.Format("2006-01-02 15:04:05"),
 		Updated:         c.Updated.Format("2006-01-02 15:04:05"),
+		Quantity:        quantity,
+		CopyIDs:         c.CopyIDs,
 	}
 }
 
@@ -303,9 +311,20 @@ func (h *Handler) getCards(ctx *gin.Context) {
 		colorIdentity = normalizeColors(&raw)
 	}
 
+	stack := false
+	if raw := ctx.Query("stack"); raw != "" {
+		parsed, err := strconv.ParseBool(raw)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "stack must be true or false"})
+			return
+		}
+		stack = parsed
+	}
+
 	filter := CardFilter{
 		StorageID:     storageID,
 		ColorIdentity: colorIdentity,
+		Stack:         stack,
 		Name:          ctx.Query("name"),
 		SortField:     sortField,
 		SortDesc:      sortDesc,
