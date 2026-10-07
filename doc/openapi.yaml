@@ -1960,7 +1960,7 @@ components:
           nullable: true
           enum: [Creature, Planeswalker, Battle, Instant, Sorcery, Artifact, Enchantment, Land, Other]
           description: >
-            Primary type, from the type line (lands first, then creatures,
+            Primary type, from the type line of the front face (lands first, then creatures,
             planeswalkers...). null when not known yet.
         color_identity:
           type: string

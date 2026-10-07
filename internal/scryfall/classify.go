@@ -21,6 +21,9 @@ var typesByPrecedence = []string{
 var colorOrder = "WUBRG"
 
 func PrimaryType(typeLine string) string {
+	if idx := strings.Index(typeLine, "//"); idx >= 0 {
+		typeLine = typeLine[:idx]
+	}
 	types := typeLine
 	if idx := strings.Index(typeLine, "—"); idx >= 0 {
 		types = typeLine[:idx]

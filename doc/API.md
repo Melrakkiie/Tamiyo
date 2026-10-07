@@ -860,7 +860,7 @@ Summarizes the deck's composition: mana curve, color breakdown, and primary card
 }
 ```
 
-A multicolor card counts once per color it has in `color_breakdown`; a dual-typed permanent (e.g. "Artifact Creature") counts once under a single primary type in `type_breakdown` — Creature takes precedence over Artifact/Enchantment, matching how most deckbuilding sites categorize it.
+A multicolor card counts once per color it has in `color_breakdown`; a dual-typed permanent (e.g. "Artifact Creature") counts once under a single primary type in `type_breakdown` — Creature takes precedence over Artifact/Enchantment, matching how most deckbuilding sites categorize it. A double-faced or split card counts under the type of its front face (a creature with a land on its back is a creature).
 
 ---
 

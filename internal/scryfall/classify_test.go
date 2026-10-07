@@ -20,7 +20,11 @@ func TestPrimaryType(t *testing.T) {
 		"Battle — Siege":                         TypeBattle,
 		"Kindred Instant — Elf":                  TypeInstant,
 		"Creature — Human Wizard // Land — Town": TypeCreature,
-		"Scheme": TypeOther,
+		"Instant // Land":                        TypeInstant,
+		"Sorcery // Land":                        TypeSorcery,
+		"Legendary Enchantment — Saga // Legendary Creature — Goblin": TypeEnchantment,
+		"Land // Creature — Elemental":                                TypeLand,
+		"Scheme":                                                      TypeOther,
 	}
 	for typeLine, want := range cases {
 		assert.Equal(t, want, PrimaryType(typeLine), typeLine)
