@@ -18,6 +18,7 @@ type Deck struct {
 	BackgroundScryfallID *string
 	CommanderScryfallID  *string
 	CardCount            int
+	PendingCount         int
 	Added                time.Time
 	Updated              time.Time
 }

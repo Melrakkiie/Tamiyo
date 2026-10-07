@@ -2062,6 +2062,9 @@ components:
           description: Scryfall id of the commander card, null without a commander.
         card_count:
           type: integer
+        pending_count:
+          type: integer
+          description: Copies waiting in the deck's pending list (not in the collection yet), not counted in card_count.
         added:
           type: string
         updated:

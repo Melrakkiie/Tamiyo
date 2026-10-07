@@ -27,6 +27,7 @@ type deckResponse struct {
 	BackgroundScryfallID *string `json:"background_scryfall_id"`
 	CommanderScryfallID  *string `json:"commander_scryfall_id"`
 	CardCount            int     `json:"card_count"`
+	PendingCount         int     `json:"pending_count"`
 	Added                string  `json:"added"`
 	Updated              string  `json:"updated"`
 }
@@ -40,6 +41,7 @@ func toResponse(d Deck) deckResponse {
 		BackgroundScryfallID: d.BackgroundScryfallID,
 		CommanderScryfallID:  d.CommanderScryfallID,
 		CardCount:            d.CardCount,
+		PendingCount:         d.PendingCount,
 		Added:                d.Added.Format("2006-01-02 15:04:05"),
 		Updated:              d.Updated.Format("2006-01-02 15:04:05"),
 	}

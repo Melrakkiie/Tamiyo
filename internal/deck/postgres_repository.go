@@ -21,6 +21,7 @@ type deckRow struct {
 	BackgroundScryfallID *string   `db:"background_scryfall_id"`
 	CommanderScryfallID  *string   `db:"commander_scryfall_id"`
 	CardCount            int       `db:"card_count"`
+	PendingCount         int       `db:"pending_count"`
 	Added                time.Time `db:"added"`
 	Updated              time.Time `db:"updated"`
 }
@@ -34,6 +35,7 @@ func (r deckRow) toDomain() Deck {
 		BackgroundScryfallID: r.BackgroundScryfallID,
 		CommanderScryfallID:  r.CommanderScryfallID,
 		CardCount:            r.CardCount,
+		PendingCount:         r.PendingCount,
 		Added:                r.Added,
 		Updated:              r.Updated,
 	}
@@ -106,6 +108,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		    d.format AS format,
 			d.commander_id as commander_id,
 			d.background_scryfall_id AS background_scryfall_id,
+			(SELECT COALESCE(SUM(p.quantity), 0) FROM tamiyo.deck_pending_cards p WHERE p.deck_id = d.id) AS pending_count,
 			(SELECT c.scryfall_id FROM tamiyo.cards c WHERE c.id = d.commander_id) AS commander_scryfall_id,
 		    d.added AS added,
 			d.updated as updated,
@@ -177,6 +180,7 @@ func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int
 		    d.format AS format,
 			d.commander_id as commander_id,
 			d.background_scryfall_id AS background_scryfall_id,
+			(SELECT COALESCE(SUM(p.quantity), 0) FROM tamiyo.deck_pending_cards p WHERE p.deck_id = d.id) AS pending_count,
 			(SELECT c.scryfall_id FROM tamiyo.cards c WHERE c.id = d.commander_id) AS commander_scryfall_id,
 		    d.added AS added,
 			d.updated as updated,

@@ -886,3 +886,17 @@ func TestHandler_RemovePendingCard(t *testing.T) {
 		assert.Equal(t, expected, w.Code)
 	}
 }
+
+func TestHandler_GetDeck_ReturnsPendingCount(t *testing.T) {
+	router := setupRouter(&fakeService{getDeck: Deck{ID: 1, Name: "Deck", Format: "commander", CardCount: 98, PendingCount: 2}})
+
+	req := httptest.NewRequest(http.MethodGet, "/deck/1", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var response deckResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	assert.Equal(t, 98, response.CardCount)
+	assert.Equal(t, 2, response.PendingCount)
+}

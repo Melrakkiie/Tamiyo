@@ -849,3 +849,29 @@ func TestPostgresRepository_PendingCards(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, found)
 }
+
+func TestPostgresRepository_CountsPendingCopies(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userID)
+
+	for _, quantity := range []int{2, 1} {
+		_, err := repo.CreatePendingCard(context.Background(), userID, PendingCard{
+			DeckID: 1, Name: "Sol Ring", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "c21", CollectorNumber: "263", Quantity: quantity,
+		})
+		require.NoError(t, err)
+	}
+
+	found, err := repo.FindByID(context.Background(), userID, 1)
+	require.NoError(t, err)
+	assert.Equal(t, 3, found.PendingCount)
+
+	all, _, err := repo.FindAll(context.Background(), userID, Filter{Page: 1, Limit: 25, SortField: "name"})
+	require.NoError(t, err)
+	counts := map[int]int{}
+	for _, d := range all {
+		counts[d.ID] = d.PendingCount
+	}
+	assert.Equal(t, map[int]int{1: 3, 2: 0}, counts)
+}

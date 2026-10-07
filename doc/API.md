@@ -562,6 +562,7 @@ GET /deck?format=commander&sort=-added&page=1&limit=25
       "background_scryfall_id": "436d6a84-4cea-4ca7-94aa-9d08280652af",
       "commander_scryfall_id": "a0b4c5ad-14f7-4bcb-9a59-6c0ac4f1a5e0",
       "card_count": 4,
+      "pending_count": 2,
       "added": "2026-01-15 10:30:00",
       "updated": "2026-01-15 10:30:00"
     }
@@ -573,7 +574,7 @@ GET /deck?format=commander&sort=-added&page=1&limit=25
 }
 ```
 
-`commander_scryfall_id` is read-only: the Scryfall id of the commander card, so a client can show its art without another call. `background_scryfall_id` is the art the user picked for the deck (`null` when none was chosen).
+`pending_count` is the number of copies in the deck's pending list (see [Pending cards](#pending-cards-deckidpending)), not counted in `card_count`. `commander_scryfall_id` is read-only: the Scryfall id of the commander card, so a client can show its art without another call. `background_scryfall_id` is the art the user picked for the deck (`null` when none was chosen).
 
 **Errors:** `400` if `page` or `limit` is not a valid integer, `limit` is outside `1..100`, or `sort` is not one of the allowed values.
 
