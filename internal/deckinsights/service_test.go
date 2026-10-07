@@ -21,8 +21,13 @@ func ptr(i int) *int { return &i }
 type fakeDeckService struct {
 	decks           map[int]deck.Deck
 	cardsByDeck     map[int][]deck.DeckCard
+	pendingByDeck   map[int][]deck.PendingCard
 	getDeckErr      error
 	getDeckCardsErr error
+}
+
+func (f *fakeDeckService) GetPendingCards(ctx context.Context, userID string, deckID int) ([]deck.PendingCard, error) {
+	return f.pendingByDeck[deckID], nil
 }
 
 func (f *fakeDeckService) GetDeck(ctx context.Context, userID string, id int) (deck.Deck, error) {
@@ -434,5 +439,79 @@ func TestGetDeckStats_DistinctScryfallIDsAreOnlyFetchedOnce(t *testing.T) {
 	_, err := svc.GetDeckStats(context.Background(), testUserID, 1)
 
 	require.NoError(t, err)
+	assert.Len(t, fetcher.lastRequest, 1)
+}
+
+func TestGetDeckLegality_UsesAPendingCommanderAndPendingCards(t *testing.T) {
+	decks := &fakeDeckService{
+		decks: map[int]deck.Deck{1: {ID: 1, Name: "Pile", Format: "commander", CommanderPendingID: ptr(5)}},
+		cardsByDeck: map[int][]deck.DeckCard{
+			1: {{ID: 11, Name: "Lightning Bolt", ScryfallID: "bolt"}},
+		},
+		pendingByDeck: map[int][]deck.PendingCard{
+			1: {
+				{ID: 5, Name: "Golos, Tireless Pilgrim", ScryfallID: "golos", Quantity: 1},
+				{ID: 6, Name: "Counterspell", ScryfallID: "counter", Quantity: 1},
+			},
+		},
+	}
+	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
+		"golos":   {ID: "golos", Name: "Golos, Tireless Pilgrim", TypeLine: "Legendary Creature — Dog", ColorIdentity: []string{}, Legalities: map[string]string{"commander": "legal"}},
+		"bolt":    {ID: "bolt", Name: "Lightning Bolt", TypeLine: "Instant", ColorIdentity: []string{"R"}, Legalities: map[string]string{"commander": "legal"}},
+		"counter": {ID: "counter", Name: "Counterspell", TypeLine: "Instant", ColorIdentity: []string{"U"}, Legalities: map[string]string{"commander": "legal"}},
+	}}
+	svc := NewService(decks, fetcher)
+
+	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+
+	require.NoError(t, err)
+	assert.False(t, report.Legal)
+	require.Len(t, report.Issues, 2)
+	names := []string{report.Issues[0].CardName, report.Issues[1].CardName}
+	assert.ElementsMatch(t, []string{"Lightning Bolt", "Counterspell"}, names)
+	for _, issue := range report.Issues {
+		assert.GreaterOrEqual(t, issue.CardID, 0)
+	}
+}
+
+func TestGetDeckLegality_PendingCopiesCountForSingleton(t *testing.T) {
+	decks := &fakeDeckService{
+		decks:       map[int]deck.Deck{1: {ID: 1, Name: "Pile", Format: "commander"}},
+		cardsByDeck: map[int][]deck.DeckCard{1: {{ID: 11, Name: "Sol Ring", ScryfallID: "ring"}}},
+		pendingByDeck: map[int][]deck.PendingCard{
+			1: {{ID: 5, Name: "Sol Ring", ScryfallID: "ring", Quantity: 1}},
+		},
+	}
+	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
+		"ring": {ID: "ring", Name: "Sol Ring", TypeLine: "Artifact", Legalities: map[string]string{"commander": "legal"}},
+	}}
+	svc := NewService(decks, fetcher)
+
+	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+
+	require.NoError(t, err)
+	assert.False(t, report.Legal)
+	require.Len(t, report.Issues, 1)
+	assert.Contains(t, report.Issues[0].Reason, "singleton")
+}
+
+func TestGetDeckStats_CountsPendingCopies(t *testing.T) {
+	decks := &fakeDeckService{
+		decks:       map[int]deck.Deck{1: {ID: 1, Name: "Pile", Format: "commander"}},
+		cardsByDeck: map[int][]deck.DeckCard{1: {{ID: 10, Name: "Mountain", ScryfallID: "mtn"}}},
+		pendingByDeck: map[int][]deck.PendingCard{
+			1: {{ID: 5, Name: "Mountain", ScryfallID: "mtn", Quantity: 3}},
+		},
+	}
+	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
+		"mtn": {ID: "mtn", TypeLine: "Basic Land — Mountain", CMC: 0},
+	}}
+	svc := NewService(decks, fetcher)
+
+	stats, err := svc.GetDeckStats(context.Background(), testUserID, 1)
+
+	require.NoError(t, err)
+	assert.Equal(t, 4, stats.CardCount)
+	assert.Equal(t, 4, stats.LandCount)
 	assert.Len(t, fetcher.lastRequest, 1)
 }

@@ -69,6 +69,11 @@ func (s *Service) CommitPendingCards(ctx context.Context, userID string, deckID 
 			if err := s.decks.PutCardInDeck(ctx, userID, deckID, created.ID); err != nil {
 				return summary, fmt.Errorf("adding %q to the deck: %w", p.Name, err)
 			}
+			if i == 0 {
+				if err := s.decks.PromotePendingCommander(ctx, userID, deckID, p.ID, created.ID); err != nil {
+					return summary, fmt.Errorf("making %q the commander: %w", p.Name, err)
+				}
+			}
 		}
 		if err := s.decks.RemovePendingCard(ctx, userID, deckID, p.ID); err != nil {
 			return summary, fmt.Errorf("clearing %q from the pending list: %w", p.Name, err)

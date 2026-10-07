@@ -24,6 +24,7 @@ type deckResponse struct {
 	Name                 string  `json:"name"`
 	Format               string  `json:"format"`
 	CommanderID          *int    `json:"commander_id"`
+	CommanderPendingID   *int    `json:"commander_pending_id"`
 	BackgroundScryfallID *string `json:"background_scryfall_id"`
 	CommanderScryfallID  *string `json:"commander_scryfall_id"`
 	CardCount            int     `json:"card_count"`
@@ -38,6 +39,7 @@ func toResponse(d Deck) deckResponse {
 		Name:                 d.Name,
 		Format:               d.Format,
 		CommanderID:          d.CommanderID,
+		CommanderPendingID:   d.CommanderPendingID,
 		BackgroundScryfallID: d.BackgroundScryfallID,
 		CommanderScryfallID:  d.CommanderScryfallID,
 		CardCount:            d.CardCount,
@@ -75,6 +77,7 @@ type updateDeckRequest struct {
 	Name                 *string `json:"name" binding:"omitempty"`
 	Format               *string `json:"format" binding:"omitempty"`
 	CommanderID          *int    `json:"commander_id" binding:"omitempty,gt=0"`
+	CommanderPendingID   *int    `json:"commander_pending_id" binding:"omitempty,gt=0"`
 	ClearCommanderID     bool    `json:"clear_commander_id"`
 	BackgroundScryfallID *string `json:"background_scryfall_id" binding:"omitempty,uuid"`
 	ClearBackground      bool    `json:"clear_background_scryfall_id"`
@@ -89,8 +92,13 @@ func (r updateDeckRequest) applyTo(d Deck) Deck {
 	}
 	if r.ClearCommanderID {
 		d.CommanderID = nil
+		d.CommanderPendingID = nil
 	} else if r.CommanderID != nil {
 		d.CommanderID = r.CommanderID
+		d.CommanderPendingID = nil
+	} else if r.CommanderPendingID != nil {
+		d.CommanderPendingID = r.CommanderPendingID
+		d.CommanderID = nil
 	}
 	if r.ClearBackground {
 		d.BackgroundScryfallID = nil

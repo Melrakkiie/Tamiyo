@@ -385,7 +385,7 @@ Partially update a card. Any subset of the fields below can be sent.
 
 Delete a card from the collection. The decks it was in keep it as a card to get back:
 - Each of those decks gets it in its [pending list](#pending-cards-deckidpending) (one copy, merged with an existing pending entry for the same printing and foil), so it still shows in the deck until it's added to the collection again.
-- Its `card_deck` links are removed, and any deck's `commander_id` pointing to it is set to `null` (a pending card can't be a commander).
+- Its `card_deck` links are removed. A deck whose commander it was keeps it as its pending commander (`commander_pending_id`).
 
 **Response `204 No Content`**
 
@@ -410,7 +410,7 @@ Scryfall allows one `/cards/collection` call every 500 ms, so a large backlog ta
 
 ### `DELETE /cards?confirm=true`
 
-Delete **every** card of the account at once, with the same clean-up as above (each deck keeps its cards in its pending list, commanders cleared). Storages and decks themselves are kept, now empty. `confirm=true` is required so the collection can't be wiped by accident.
+Delete **every** card of the account at once, with the same clean-up as above (each deck keeps its cards, commander included, in its pending list). Storages and decks themselves are kept, now empty. `confirm=true` is required so the collection can't be wiped by accident.
 
 **Response `200 OK`**
 ```json
@@ -623,7 +623,8 @@ Partially update a deck.
 | `name` | string | |
 | `format` | string | |
 | `commander_id` | int | Must reference an existing card if provided. |
-| `clear_commander_id` | bool | Set to `true` to explicitly remove the current commander (set `commander_id` to `null`). |
+| `commander_pending_id` | int | Make one of the deck's [pending cards](#pending-cards-deckidpending) the commander, for a commander not in the collection yet. Clears `commander_id`; setting `commander_id` clears it in turn. When that pending card is added to the collection (`POST /deck/:id/pending/commit`), its first new copy becomes `commander_id`. |
+| `clear_commander_id` | bool | Set to `true` to explicitly remove the current commander (sets both `commander_id` and `commander_pending_id` to `null`). |
 | `background_scryfall_id` | uuid | Scryfall id of the printing whose art is shown behind the deck. |
 | `clear_background_scryfall_id` | bool | Set to `true` to remove the chosen art (set `background_scryfall_id` to `null`). |
 
@@ -746,7 +747,9 @@ Checks every card in the deck against the deck's own `format` (lowercased, match
 
 For the `commander` format specifically, two deck-construction rules Scryfall's per-card legality can't express are checked as well:
 - **Singleton** — at most one copy of each card by name, except basic lands.
-- **Color identity** — every card's color identity must be contained in the commander's (the deck's `commander_id`, if set).
+- **Color identity** — every card's color identity must be contained in the commander's (the deck's `commander_id`, or its `commander_pending_id` when the commander isn't in the collection yet).
+
+Pending cards (see `GET /deck/:id/pending-cards`) are checked like the deck's own cards, one entry per copy, so a pending copy counts toward the singleton rule too. An issue about a pending card has no `card_id`.
 
 **Known limitations:** only `commander` itself gets these extra checks (not singleton siblings like `oathbreaker` or `brawl`); named singleton exceptions (e.g. Shadowborn Apostle, Relentless Rats) aren't recognized, only the basic-land exemption; partner/background commanders aren't handled.
 
@@ -765,7 +768,7 @@ For the `commander` format specifically, two deck-construction rules Scryfall's 
 
 ### `GET /deck/:id/stats`
 
-Summarizes the deck's composition: mana curve, color breakdown, and primary card types — all computed from Scryfall data, nothing stored by Tamiyo itself. Lands are excluded from the mana curve, color breakdown, and average mana value (a land's mana value is always 0 and it has no casting colors, so including it would just dilute what the deck actually casts) but are still counted in `card_count`, `land_count`, and `type_breakdown`.
+Summarizes the deck's composition: mana curve, color breakdown, and primary card types — all computed from Scryfall data, nothing stored by Tamiyo itself. Lands are excluded from the mana curve, color breakdown, and average mana value (a land's mana value is always 0 and it has no casting colors, so including it would just dilute what the deck actually casts) but are still counted in `card_count`, `land_count`, and `type_breakdown`. Pending cards are included, once per copy, as if they were already in the deck.
 
 **Response `200 OK`**
 ```json

@@ -875,3 +875,60 @@ func TestPostgresRepository_CountsPendingCopies(t *testing.T) {
 	}
 	assert.Equal(t, map[int]int{1: 3, 2: 0}, counts)
 }
+
+func TestPostgresRepository_PendingCommander(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userID)
+
+	pending, err := repo.CreatePendingCard(context.Background(), userID, PendingCard{
+		DeckID: 1, Name: "Atraxa", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: "190", Quantity: 1,
+	})
+	require.NoError(t, err)
+
+	deck, err := repo.FindByID(context.Background(), userID, 1)
+	require.NoError(t, err)
+	deck.CommanderPendingID = &pending.ID
+	updated, err := repo.Update(context.Background(), userID, deck)
+	require.NoError(t, err)
+	require.NotNil(t, updated.CommanderPendingID)
+	assert.Equal(t, pending.ID, *updated.CommanderPendingID)
+	require.NotNil(t, updated.CommanderScryfallID)
+	assert.Equal(t, "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", *updated.CommanderScryfallID)
+
+	require.NoError(t, repo.DeletePendingCard(context.Background(), userID, 1, pending.ID))
+	found, err := repo.FindByID(context.Background(), userID, 1)
+	require.NoError(t, err)
+	assert.Nil(t, found.CommanderPendingID)
+	assert.Nil(t, found.CommanderScryfallID)
+}
+
+func TestPostgresRepository_DeletingTheCommanderCardKeepsItAsPendingCommander(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userID)
+	seedCardsWithoutStorage(t, db, userID)
+	linkCardToDeck(t, db, 1, 1)
+
+	deck, err := repo.FindByID(context.Background(), userID, 1)
+	require.NoError(t, err)
+	commanderID := 1
+	deck.CommanderID = &commanderID
+	_, err = repo.Update(context.Background(), userID, deck)
+	require.NoError(t, err)
+
+	_, err = db.Exec(`DELETE FROM tamiyo.cards WHERE id = 1`)
+	require.NoError(t, err)
+
+	found, err := repo.FindByID(context.Background(), userID, 1)
+	require.NoError(t, err)
+	assert.Nil(t, found.CommanderID)
+	require.NotNil(t, found.CommanderPendingID)
+	pending, err := repo.FindPendingCards(context.Background(), userID, 1)
+	require.NoError(t, err)
+	require.Len(t, pending, 1)
+	assert.Equal(t, pending[0].ID, *found.CommanderPendingID)
+	assert.Equal(t, "Black Lotus", pending[0].Name)
+}

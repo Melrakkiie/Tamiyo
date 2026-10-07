@@ -15,6 +15,7 @@ type Deck struct {
 	Name                 string
 	Format               string
 	CommanderID          *int
+	CommanderPendingID   *int
 	BackgroundScryfallID *string
 	CommanderScryfallID  *string
 	CardCount            int

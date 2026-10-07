@@ -900,3 +900,20 @@ func TestHandler_GetDeck_ReturnsPendingCount(t *testing.T) {
 	assert.Equal(t, 98, response.CardCount)
 	assert.Equal(t, 2, response.PendingCount)
 }
+
+func TestHandler_UpdateDeck_AcceptsAPendingCommander(t *testing.T) {
+	pendingID := 7
+	service := &fakeService{updateDeck: Deck{ID: 1, Name: "Deck", Format: "commander", CommanderPendingID: &pendingID}}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPatch, "/deck/1", bytes.NewBufferString(`{"commander_pending_id": 7}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var response deckResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.NotNil(t, response.CommanderPendingID)
+	assert.Equal(t, 7, *response.CommanderPendingID)
+}

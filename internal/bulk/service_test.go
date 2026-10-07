@@ -130,6 +130,15 @@ type fakeDeckService struct {
 
 	pending        []deck.PendingCard
 	removedPending []int
+	promoted       map[int]int
+}
+
+func (f *fakeDeckService) PromotePendingCommander(ctx context.Context, userID string, deckID, pendingID, cardID int) error {
+	if f.promoted == nil {
+		f.promoted = map[int]int{}
+	}
+	f.promoted[pendingID] = cardID
+	return nil
 }
 
 func (f *fakeDeckService) GetPendingCards(ctx context.Context, userID string, deckID int) ([]deck.PendingCard, error) {
@@ -787,4 +796,16 @@ func TestCommitPendingCards_ReturnsNotFoundForAnUnknownPendingCard(t *testing.T)
 
 	assert.ErrorIs(t, err, deck.ErrPendingCardNotFound)
 	assert.Empty(t, cards.created)
+}
+
+func TestCommitPendingCards_OffersEachItemAsCommanderOnce(t *testing.T) {
+	cards := &fakeCardService{}
+	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 3, Name: "Atraxa", Quantity: 2}}}
+	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+
+	_, err := svc.CommitPendingCards(context.Background(), testUserID, 9, nil, nil)
+
+	require.NoError(t, err)
+	require.Len(t, cards.created, 2)
+	assert.Equal(t, map[int]int{3: cards.created[0].ID}, decks.promoted)
 }

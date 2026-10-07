@@ -427,8 +427,8 @@ paths:
       summary: Delete every card of the account
       description: >
         Deletes all of the authenticated user's cards at once: every deck
-        keeps its cards in its pending list, and any deck whose commander was
-        one of them has its commander_id cleared. Storages and decks themselves are kept.
+        keeps its cards in its pending list, its commander included (as
+        commander_pending_id). Storages and decks themselves are kept.
         Requires confirm=true, so the collection can't be wiped by accident.
       parameters:
         - name: confirm
@@ -560,8 +560,8 @@ paths:
       summary: Delete a card
       description: >
         Removes the card from the collection. Each deck it was in gets it back
-        in its pending list (to add to the collection again later), and
-        commander_id is cleared on any deck where it was the commander.
+        in its pending list (to add to the collection again later); a deck
+        whose commander it was keeps it as commander_pending_id.
       responses:
         "204":
           description: No Content
@@ -2048,6 +2048,13 @@ components:
         commander_id:
           type: integer
           nullable: true
+        commander_pending_id:
+          type: integer
+          nullable: true
+          description: >
+            The commander when it's one of the deck's pending cards (not in
+            the collection yet). At most one of commander_id and
+            commander_pending_id is set.
         background_scryfall_id:
           type: string
           format: uuid
@@ -2115,6 +2122,12 @@ components:
         commander_id:
           type: integer
           minimum: 1
+        commander_pending_id:
+          type: integer
+          minimum: 1
+          description: >
+            Make one of the deck's pending cards the commander (clears
+            commander_id). Setting commander_id clears it in turn.
         clear_commander_id:
           type: boolean
           description: Set to true to explicitly clear commander_id (set it to null).

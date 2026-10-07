@@ -498,3 +498,78 @@ func TestService_RemovePendingCard_PropagatesNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, ErrPendingCardNotFound)
 	assert.Equal(t, 9, repo.lastPendingID)
 }
+
+func TestService_UpdateDeck_SetsAPendingCommander(t *testing.T) {
+	commanderID := 4
+	repo := &fakeRepository{
+		findByIDDeck: Deck{ID: 1, Name: "Deck", Format: "commander", CommanderID: &commanderID},
+		pending:      []PendingCard{{ID: 7, DeckID: 1, Name: "Atraxa"}},
+	}
+	service := NewService(repo)
+
+	pendingID := 7
+	result, err := service.UpdateDeck(context.Background(), testUserID, 1, updateDeckRequest{CommanderPendingID: &pendingID})
+
+	require.NoError(t, err)
+	require.NotNil(t, result.CommanderPendingID)
+	assert.Equal(t, 7, *result.CommanderPendingID)
+	assert.Nil(t, result.CommanderID)
+}
+
+func TestService_UpdateDeck_RejectsAPendingCommanderFromAnotherDeck(t *testing.T) {
+	repo := &fakeRepository{findByIDDeck: Deck{ID: 1}, pending: []PendingCard{{ID: 7, DeckID: 1}}}
+	service := NewService(repo)
+
+	pendingID := 8
+	_, err := service.UpdateDeck(context.Background(), testUserID, 1, updateDeckRequest{CommanderPendingID: &pendingID})
+
+	assert.ErrorIs(t, err, ErrCommanderNotFound)
+}
+
+func TestService_UpdateDeck_RealCommanderReplacesThePendingOne(t *testing.T) {
+	pendingID := 7
+	repo := &fakeRepository{findByIDDeck: Deck{ID: 1, CommanderPendingID: &pendingID}}
+	service := NewService(repo)
+
+	commanderID := 4
+	result, err := service.UpdateDeck(context.Background(), testUserID, 1, updateDeckRequest{CommanderID: &commanderID})
+
+	require.NoError(t, err)
+	assert.Nil(t, result.CommanderPendingID)
+	require.NotNil(t, result.CommanderID)
+	assert.Equal(t, 4, *result.CommanderID)
+}
+
+func TestService_UpdateDeck_ClearCommanderClearsBoth(t *testing.T) {
+	pendingID := 7
+	repo := &fakeRepository{findByIDDeck: Deck{ID: 1, CommanderPendingID: &pendingID}}
+	service := NewService(repo)
+
+	result, err := service.UpdateDeck(context.Background(), testUserID, 1, updateDeckRequest{ClearCommanderID: true})
+
+	require.NoError(t, err)
+	assert.Nil(t, result.CommanderPendingID)
+	assert.Nil(t, result.CommanderID)
+}
+
+func TestService_PromotePendingCommander(t *testing.T) {
+	pendingID := 7
+	repo := &fakeRepository{findByIDDeck: Deck{ID: 1, CommanderPendingID: &pendingID}}
+	service := NewService(repo)
+
+	require.NoError(t, service.PromotePendingCommander(context.Background(), testUserID, 1, 7, 42))
+
+	require.NotNil(t, repo.updatedDeck.CommanderID)
+	assert.Equal(t, 42, *repo.updatedDeck.CommanderID)
+	assert.Nil(t, repo.updatedDeck.CommanderPendingID)
+}
+
+func TestService_PromotePendingCommander_IgnoresOtherPendingCards(t *testing.T) {
+	pendingID := 7
+	repo := &fakeRepository{findByIDDeck: Deck{ID: 1, CommanderPendingID: &pendingID}}
+	service := NewService(repo)
+
+	require.NoError(t, service.PromotePendingCommander(context.Background(), testUserID, 1, 8, 42))
+
+	assert.Zero(t, repo.updatedDeck.ID)
+}
