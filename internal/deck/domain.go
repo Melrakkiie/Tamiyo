@@ -18,11 +18,18 @@ type Deck struct {
 	CommanderPendingID   *int
 	BackgroundScryfallID *string
 	CommanderScryfallID  *string
+	Visibility           string
 	CardCount            int
 	PendingCount         int
 	Added                time.Time
 	Updated              time.Time
 }
+
+const (
+	VisibilityPublic   = "public"
+	VisibilityUnlisted = "unlisted"
+	VisibilityPrivate  = "private"
+)
 
 type DeckCard struct {
 	ID              int

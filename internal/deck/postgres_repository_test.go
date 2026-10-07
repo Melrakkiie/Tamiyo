@@ -932,3 +932,27 @@ func TestPostgresRepository_DeletingTheCommanderCardKeepsItAsPendingCommander(t 
 	assert.Equal(t, pending[0].ID, *found.CommanderPendingID)
 	assert.Equal(t, "Black Lotus", pending[0].Name)
 }
+
+func TestPostgresRepository_Visibility_DefaultsToUnlistedAndCanBeChanged(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+
+	created, err := repo.Create(context.Background(), userID, Deck{Name: "Otters", Format: "commander"})
+	require.NoError(t, err)
+	assert.Equal(t, VisibilityUnlisted, created.Visibility)
+
+	created.Visibility = VisibilityPublic
+	updated, err := repo.Update(context.Background(), userID, created)
+	require.NoError(t, err)
+	assert.Equal(t, VisibilityPublic, updated.Visibility)
+
+	found, err := repo.FindByID(context.Background(), userID, created.ID)
+	require.NoError(t, err)
+	assert.Equal(t, VisibilityPublic, found.Visibility)
+
+	decks, _, err := repo.FindAll(context.Background(), userID, Filter{Page: 1, Limit: 25})
+	require.NoError(t, err)
+	require.Len(t, decks, 1)
+	assert.Equal(t, VisibilityPublic, decks[0].Visibility)
+}

@@ -2295,6 +2295,8 @@ components:
           nullable: true
           readOnly: true
           description: Scryfall id of the commander card, null without a commander.
+        visibility:
+          $ref: "#/components/schemas/DeckVisibility"
         card_count:
           type: integer
         pending_count:
@@ -2304,7 +2306,7 @@ components:
           type: string
         updated:
           type: string
-      required: [id, name, format, card_count, added, updated]
+      required: [id, name, format, visibility, card_count, added, updated]
 
     PaginatedDecks:
       type: object
@@ -2336,6 +2338,8 @@ components:
         background_scryfall_id:
           type: string
           format: uuid
+        visibility:
+          $ref: "#/components/schemas/DeckVisibility"
       required: [name, format]
 
     UpdateDeckRequest:
@@ -2364,6 +2368,18 @@ components:
         clear_background_scryfall_id:
           type: boolean
           description: Set to true to remove the chosen art (set background_scryfall_id to null).
+        visibility:
+          $ref: "#/components/schemas/DeckVisibility"
+
+    DeckVisibility:
+      type: string
+      enum: [private, unlisted, public]
+      default: unlisted
+      description: >
+        Who may see the deck once decks can be shared: only its owner
+        (private), anyone with its link (unlisted), or anyone, listed when
+        browsing decks (public). No effect yet: deck routes only serve the
+        owner's decks.
 
     ImportSummary:
       type: object

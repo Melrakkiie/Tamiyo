@@ -27,6 +27,7 @@ type deckResponse struct {
 	CommanderPendingID   *int    `json:"commander_pending_id"`
 	BackgroundScryfallID *string `json:"background_scryfall_id"`
 	CommanderScryfallID  *string `json:"commander_scryfall_id"`
+	Visibility           string  `json:"visibility"`
 	CardCount            int     `json:"card_count"`
 	PendingCount         int     `json:"pending_count"`
 	Added                string  `json:"added"`
@@ -42,6 +43,7 @@ func toResponse(d Deck) deckResponse {
 		CommanderPendingID:   d.CommanderPendingID,
 		BackgroundScryfallID: d.BackgroundScryfallID,
 		CommanderScryfallID:  d.CommanderScryfallID,
+		Visibility:           d.Visibility,
 		CardCount:            d.CardCount,
 		PendingCount:         d.PendingCount,
 		Added:                d.Added.Format("2006-01-02 15:04:05"),
@@ -62,14 +64,20 @@ type createDeckRequest struct {
 	Format               string  `json:"format" binding:"required"`
 	CommanderID          *int    `json:"commander_id" binding:"omitempty,gt=0"`
 	BackgroundScryfallID *string `json:"background_scryfall_id" binding:"omitempty,uuid"`
+	Visibility           string  `json:"visibility" binding:"omitempty,oneof=public unlisted private"`
 }
 
 func (r createDeckRequest) toDomain() Deck {
+	visibility := r.Visibility
+	if visibility == "" {
+		visibility = VisibilityUnlisted
+	}
 	return Deck{
 		Name:                 r.Name,
 		Format:               r.Format,
 		CommanderID:          r.CommanderID,
 		BackgroundScryfallID: r.BackgroundScryfallID,
+		Visibility:           visibility,
 	}
 }
 
@@ -81,6 +89,7 @@ type updateDeckRequest struct {
 	ClearCommanderID     bool    `json:"clear_commander_id"`
 	BackgroundScryfallID *string `json:"background_scryfall_id" binding:"omitempty,uuid"`
 	ClearBackground      bool    `json:"clear_background_scryfall_id"`
+	Visibility           *string `json:"visibility" binding:"omitempty,oneof=public unlisted private"`
 }
 
 func (r updateDeckRequest) applyTo(d Deck) Deck {
@@ -104,6 +113,9 @@ func (r updateDeckRequest) applyTo(d Deck) Deck {
 		d.BackgroundScryfallID = nil
 	} else if r.BackgroundScryfallID != nil {
 		d.BackgroundScryfallID = r.BackgroundScryfallID
+	}
+	if r.Visibility != nil {
+		d.Visibility = *r.Visibility
 	}
 	return d
 }

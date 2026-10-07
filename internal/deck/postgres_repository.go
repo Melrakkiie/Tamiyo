@@ -21,6 +21,7 @@ type deckRow struct {
 	CommanderPendingID   *int      `db:"commander_pending_id"`
 	BackgroundScryfallID *string   `db:"background_scryfall_id"`
 	CommanderScryfallID  *string   `db:"commander_scryfall_id"`
+	Visibility           string    `db:"visibility"`
 	CardCount            int       `db:"card_count"`
 	PendingCount         int       `db:"pending_count"`
 	Added                time.Time `db:"added"`
@@ -36,6 +37,7 @@ func (r deckRow) toDomain() Deck {
 		CommanderPendingID:   r.CommanderPendingID,
 		BackgroundScryfallID: r.BackgroundScryfallID,
 		CommanderScryfallID:  r.CommanderScryfallID,
+		Visibility:           r.Visibility,
 		CardCount:            r.CardCount,
 		PendingCount:         r.PendingCount,
 		Added:                r.Added,
@@ -52,7 +54,15 @@ func toDeckRow(userID string, d Deck) deckRow {
 		CommanderID:          d.CommanderID,
 		CommanderPendingID:   d.CommanderPendingID,
 		BackgroundScryfallID: d.BackgroundScryfallID,
+		Visibility:           visibilityOrDefault(d.Visibility),
 	}
+}
+
+func visibilityOrDefault(visibility string) string {
+	if visibility == "" {
+		return VisibilityUnlisted
+	}
+	return visibility
 }
 
 type cardRow struct {
@@ -113,6 +123,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 			d.commander_id as commander_id,
 			d.commander_pending_id AS commander_pending_id,
 			d.background_scryfall_id AS background_scryfall_id,
+			d.visibility AS visibility,
 			(SELECT COALESCE(SUM(p.quantity), 0) FROM tamiyo.deck_pending_cards p WHERE p.deck_id = d.id) AS pending_count,
 			COALESCE(
 				(SELECT c.scryfall_id FROM tamiyo.cards c WHERE c.id = d.commander_id),
@@ -124,7 +135,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		FROM tamiyo.deck d
 		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id
 	` + whereClause + `
-		GROUP BY d.id, d.name, d.format, d.commander_id, d.commander_pending_id, d.background_scryfall_id, d.added, d.updated
+		GROUP BY d.id, d.name, d.format, d.commander_id, d.commander_pending_id, d.background_scryfall_id, d.visibility, d.added, d.updated
 	` + orderByClause(filter) + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 
 	pagedArgs := append(args, filter.Limit, offset)
@@ -189,6 +200,7 @@ func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int
 			d.commander_id as commander_id,
 			d.commander_pending_id AS commander_pending_id,
 			d.background_scryfall_id AS background_scryfall_id,
+			d.visibility AS visibility,
 			(SELECT COALESCE(SUM(p.quantity), 0) FROM tamiyo.deck_pending_cards p WHERE p.deck_id = d.id) AS pending_count,
 			COALESCE(
 				(SELECT c.scryfall_id FROM tamiyo.cards c WHERE c.id = d.commander_id),
@@ -200,7 +212,7 @@ func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int
 		FROM tamiyo.deck d
 		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id
 		WHERE d.id = $1 AND d.user_id = $2
-		GROUP BY d.id, d.name, d.format, d.commander_id, d.commander_pending_id, d.background_scryfall_id, d.added, d.updated
+		GROUP BY d.id, d.name, d.format, d.commander_id, d.commander_pending_id, d.background_scryfall_id, d.visibility, d.added, d.updated
 	`
 
 	var row deckRow
@@ -217,9 +229,9 @@ func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int
 func (r *PostgresRepository) Create(ctx context.Context, userID string, d Deck) (Deck, error) {
 	row := toDeckRow(userID, d)
 	query := `
-    	INSERT INTO tamiyo.deck (user_id, name, format, commander_id, background_scryfall_id)
-     	VALUES (:user_id, :name, :format, :commander_id, :background_scryfall_id)
-      	RETURNING id, name, format, commander_id, commander_pending_id, background_scryfall_id, added, updated,
+    	INSERT INTO tamiyo.deck (user_id, name, format, commander_id, background_scryfall_id, visibility)
+     	VALUES (:user_id, :name, :format, :commander_id, :background_scryfall_id, :visibility)
+      	RETURNING id, name, format, commander_id, commander_pending_id, background_scryfall_id, visibility, added, updated,
       	    (SELECT c.scryfall_id FROM tamiyo.cards c WHERE c.id = commander_id) AS commander_scryfall_id
 	`
 	stmt, err := r.db.PrepareNamedContext(ctx, query)
@@ -246,9 +258,9 @@ func (r *PostgresRepository) Update(ctx context.Context, userID string, d Deck) 
 	row := toDeckRow(userID, d)
 	query := `
 		UPDATE tamiyo.deck
-		SET name = :name, format = :format, commander_id = :commander_id, commander_pending_id = :commander_pending_id, background_scryfall_id = :background_scryfall_id
+		SET name = :name, format = :format, commander_id = :commander_id, commander_pending_id = :commander_pending_id, background_scryfall_id = :background_scryfall_id, visibility = :visibility
 		WHERE id = :id AND user_id = :user_id
-		RETURNING id, name, format, commander_id, commander_pending_id, background_scryfall_id, added, updated,
+		RETURNING id, name, format, commander_id, commander_pending_id, background_scryfall_id, visibility, added, updated,
 		    COALESCE(
 		        (SELECT c.scryfall_id FROM tamiyo.cards c WHERE c.id = commander_id),
 		        (SELECT p.scryfall_id FROM tamiyo.deck_pending_cards p WHERE p.id = commander_pending_id)

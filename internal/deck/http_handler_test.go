@@ -26,8 +26,10 @@ type fakeService struct {
 
 	createErr error
 
-	updateDeck Deck
-	updateErr  error
+	updateDeck        Deck
+	updateErr         error
+	lastUpdateRequest updateDeckRequest
+	lastCreatedDeck   Deck
 
 	deleteErr error
 
@@ -82,6 +84,7 @@ func (f *fakeService) GetDeck(ctx context.Context, userID string, id int) (Deck,
 
 func (f *fakeService) CreateDeck(ctx context.Context, userID string, d Deck) (Deck, error) {
 	f.lastUserID = userID
+	f.lastCreatedDeck = d
 	if f.createErr != nil {
 		return Deck{}, f.createErr
 	}
@@ -91,6 +94,7 @@ func (f *fakeService) CreateDeck(ctx context.Context, userID string, d Deck) (De
 
 func (f *fakeService) UpdateDeck(ctx context.Context, userID string, id int, req updateDeckRequest) (Deck, error) {
 	f.lastUserID = userID
+	f.lastUpdateRequest = req
 	if f.updateErr != nil {
 		return Deck{}, f.updateErr
 	}
@@ -916,4 +920,81 @@ func TestHandler_UpdateDeck_AcceptsAPendingCommander(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
 	require.NotNil(t, response.CommanderPendingID)
 	assert.Equal(t, 7, *response.CommanderPendingID)
+}
+
+func postDeck(router *gin.Engine, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, "/deck", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	return w
+}
+
+func TestHandler_CreateDeck_IsUnlistedByDefault(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	w := postDeck(router, `{"name": "Otterly Playful", "format": "commander"}`)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	assert.Equal(t, VisibilityUnlisted, service.lastCreatedDeck.Visibility)
+	var response deckResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	assert.Equal(t, "unlisted", response.Visibility)
+}
+
+func TestHandler_CreateDeck_AcceptsAVisibility(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	w := postDeck(router, `{"name": "Otterly Playful", "format": "commander", "visibility": "private"}`)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	assert.Equal(t, VisibilityPrivate, service.lastCreatedDeck.Visibility)
+}
+
+func TestHandler_CreateDeck_RejectsAnUnknownVisibility(t *testing.T) {
+	router := setupRouter(&fakeService{})
+
+	w := postDeck(router, `{"name": "Otterly Playful", "format": "commander", "visibility": "friends"}`)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_UpdateDeck_PassesTheVisibility(t *testing.T) {
+	service := &fakeService{updateDeck: Deck{ID: 1, Name: "Deck", Format: "commander", Visibility: VisibilityPublic}}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPatch, "/deck/1", bytes.NewBufferString(`{"visibility": "public"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, service.lastUpdateRequest.Visibility)
+	assert.Equal(t, "public", *service.lastUpdateRequest.Visibility)
+	var response deckResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	assert.Equal(t, "public", response.Visibility)
+}
+
+func TestHandler_UpdateDeck_RejectsAnUnknownVisibility(t *testing.T) {
+	router := setupRouter(&fakeService{})
+
+	req := httptest.NewRequest(http.MethodPatch, "/deck/1", bytes.NewBufferString(`{"visibility": "everyone"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestUpdateDeckRequest_ChangesTheVisibilityOnlyWhenGiven(t *testing.T) {
+	d := Deck{Name: "Deck", Visibility: VisibilityUnlisted}
+
+	name := "Renamed"
+	assert.Equal(t, VisibilityUnlisted, updateDeckRequest{Name: &name}.applyTo(d).Visibility)
+
+	public := VisibilityPublic
+	assert.Equal(t, VisibilityPublic, updateDeckRequest{Visibility: &public}.applyTo(d).Visibility)
 }

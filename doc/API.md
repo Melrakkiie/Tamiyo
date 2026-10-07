@@ -634,6 +634,7 @@ GET /deck?format=commander&sort=-added&page=1&limit=25
       "commander_id": 12,
       "background_scryfall_id": "436d6a84-4cea-4ca7-94aa-9d08280652af",
       "commander_scryfall_id": "a0b4c5ad-14f7-4bcb-9a59-6c0ac4f1a5e0",
+      "visibility": "unlisted",
       "card_count": 4,
       "pending_count": 2,
       "added": "2026-01-15 10:30:00",
@@ -647,7 +648,7 @@ GET /deck?format=commander&sort=-added&page=1&limit=25
 }
 ```
 
-`pending_count` is the number of copies in the deck's pending list (see [Pending cards](#pending-cards-deckidpending)), not counted in `card_count`. `commander_scryfall_id` is read-only: the Scryfall id of the commander card, so a client can show its art without another call. `background_scryfall_id` is the art the user picked for the deck (`null` when none was chosen).
+`pending_count` is the number of copies in the deck's pending list (see [Pending cards](#pending-cards-deckidpending)), not counted in `card_count`. `commander_scryfall_id` is read-only: the Scryfall id of the commander card, so a client can show its art without another call. `background_scryfall_id` is the art the user picked for the deck (`null` when none was chosen). `visibility` says who may see the deck once decks can be shared: `private` (only its owner), `unlisted` (anyone with its link, the default) or `public` (anyone, and listed when browsing decks). It has no effect yet: every deck route still only serves the owner's own decks.
 
 **Errors:** `400` if `page` or `limit` is not a valid integer, `limit` is outside `1..100`, or `sort` is not one of the allowed values.
 
@@ -673,6 +674,7 @@ Create a new deck.
 | `format` | string | Yes | e.g. `commander`, `modern`, `standard`. |
 | `commander_id` | int | No | Must reference an existing card if provided. |
 | `background_scryfall_id` | uuid | No | Scryfall id of the printing whose art (`art_crop`) is shown behind the deck. Any printing works, it doesn't have to be in the deck. |
+| `visibility` | string | No | `private`, `unlisted` (default) or `public`. |
 
 **Example**
 ```json
@@ -681,7 +683,7 @@ Create a new deck.
 
 **Response `201 Created`**
 
-**Errors:** `400` missing required field, or `commander_id` doesn't reference an existing card (`"commander_id does not reference an existing card"`)
+**Errors:** `400` missing required field, `visibility` not one of `private`, `unlisted`, `public`, or `commander_id` doesn't reference an existing card (`"commander_id does not reference an existing card"`)
 
 ---
 
@@ -700,6 +702,7 @@ Partially update a deck.
 | `clear_commander_id` | bool | Set to `true` to explicitly remove the current commander (sets both `commander_id` and `commander_pending_id` to `null`). |
 | `background_scryfall_id` | uuid | Scryfall id of the printing whose art is shown behind the deck. |
 | `clear_background_scryfall_id` | bool | Set to `true` to remove the chosen art (set `background_scryfall_id` to `null`). |
+| `visibility` | string | `private`, `unlisted` or `public`. |
 
 **Example — clear the commander**
 ```json
@@ -708,7 +711,7 @@ Partially update a deck.
 
 **Response `200 OK`** — the full, updated deck.
 
-**Errors:** `400` invalid id / invalid body / invalid `commander_id` / `background_scryfall_id` not a UUID · `404` deck not found
+**Errors:** `400` invalid id / invalid body / invalid `commander_id` / `background_scryfall_id` not a UUID / unknown `visibility` · `404` deck not found
 
 ---
 
