@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -30,14 +32,23 @@ type changePasswordRequest struct {
 }
 
 type meResponse struct {
+	ID               string  `json:"id"`
 	Email            string  `json:"email"`
 	DisplayName      *string `json:"display_name"`
 	AvatarScryfallID *string `json:"avatar_scryfall_id"`
 }
 
 func toMeResponse(u User) meResponse {
-	return meResponse{Email: u.Email, DisplayName: u.DisplayName, AvatarScryfallID: u.AvatarScryfallID}
+	return meResponse{ID: u.ID, Email: u.Email, DisplayName: u.DisplayName, AvatarScryfallID: u.AvatarScryfallID}
 }
+
+type profileResponse struct {
+	ID               string  `json:"id"`
+	DisplayName      *string `json:"display_name"`
+	AvatarScryfallID *string `json:"avatar_scryfall_id"`
+}
+
+var userIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 type updateMeRequest struct {
 	DisplayName      optionalString `json:"display_name"`
@@ -112,6 +123,23 @@ func (h *Handler) RegisterProtectedRoutes(router gin.IRoutes) {
 	router.POST("/auth/password", h.changePassword)
 	router.GET("/auth/me", h.me)
 	router.PATCH("/auth/me", h.updateMe)
+	router.GET("/users/:id", h.profile)
+}
+
+func (h *Handler) profile(ctx *gin.Context) {
+	id := strings.ToLower(ctx.Param("id"))
+	if !userIDPattern.MatchString(id) {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	u, err := h.service.GetUser(ctx.Request.Context(), id)
+	if err != nil {
+		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "user not found"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, profileResponse{ID: u.ID, DisplayName: u.DisplayName, AvatarScryfallID: u.AvatarScryfallID})
 }
 
 func (h *Handler) me(ctx *gin.Context) {

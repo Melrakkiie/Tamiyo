@@ -14,6 +14,7 @@ Tamiyo is a REST API for managing a Magic: The Gathering card collection — car
 - [Cards](#cards)
 - [Storage](#storage)
 - [Decks](#decks)
+- [Profiles](#profiles)
 - [Deck ↔ Card relationship](#deck--card-relationship)
 - [Deck Insights](#deck-insights)
 - [Bulk Import](#bulk-import)
@@ -177,7 +178,7 @@ The authenticated account. **Requires `Authorization: Bearer <token>`.**
 
 **Response `200 OK`**
 ```json
-{ "email": "you@example.com", "display_name": "Tamiyo", "avatar_scryfall_id": "0000579f-7b35-4ed3-b44c-db2a538066fe" }
+{ "id": "4b8a0a9e-2f1c-4c8e-9d3a-1e2f3a4b5c6d", "email": "you@example.com", "display_name": "Tamiyo", "avatar_scryfall_id": "0000579f-7b35-4ed3-b44c-db2a538066fe" }
 ```
 `display_name` and `avatar_scryfall_id` are `null` until the user picks them. The avatar is the art crop of that Scryfall card: clients fetch the image from Scryfall and credit its artist, Tamiyo only stores the id.
 
@@ -722,6 +723,28 @@ Delete a deck and all of its card associations (`card_deck` rows are removed via
 **Response `204 No Content`**
 
 **Errors:** `400` invalid id · `404` deck not found
+
+---
+
+## Profiles
+
+What any signed-in user can see of another user. **Requires `Authorization: Bearer <token>`.** A user's email is never exposed here; `id` is the one from `GET /auth/me`.
+
+### `GET /users/:id`
+
+**Response `200 OK`**
+```json
+{ "id": "4b8a0a9e-2f1c-4c8e-9d3a-1e2f3a4b5c6d", "display_name": "Tamiyo", "avatar_scryfall_id": "0000579f-7b35-4ed3-b44c-db2a538066fe" }
+```
+`display_name` and `avatar_scryfall_id` are `null` when the user hasn't picked them.
+
+**Errors:** `400` `:id` is not a UUID · `401` missing/invalid token · `404` no such user
+
+### `GET /users/:id/decks`
+
+That user's **public** decks (`visibility` = `public`), with the same pagination, `sort` and response shape as `GET /deck`. Unlisted and private decks are never listed. An unknown user simply has no decks.
+
+**Errors:** `400` `:id` is not a UUID, or invalid `page` / `limit` / `sort` · `401` missing/invalid token
 
 ---
 

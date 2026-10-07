@@ -49,7 +49,8 @@ type DeckCard struct {
 }
 
 type Filter struct {
-	Format string
+	Format     string
+	Visibility string
 
 	SortField string
 	SortDesc  bool

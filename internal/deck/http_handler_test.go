@@ -998,3 +998,44 @@ func TestUpdateDeckRequest_ChangesTheVisibilityOnlyWhenGiven(t *testing.T) {
 	public := VisibilityPublic
 	assert.Equal(t, VisibilityPublic, updateDeckRequest{Visibility: &public}.applyTo(d).Visibility)
 }
+
+func TestHandler_GetUserPublicDecks_ListsOnlyThatUsersPublicDecks(t *testing.T) {
+	service := &fakeService{decks: []Deck{{ID: 3, Name: "Otters", Format: "commander", Visibility: VisibilityPublic}}, getAllTotal: 1}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/users/22222222-2222-2222-2222-222222222222/decks?sort=name", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "22222222-2222-2222-2222-222222222222", service.lastUserID)
+	assert.Equal(t, VisibilityPublic, service.lastFilter.Visibility)
+	assert.Equal(t, "name", service.lastFilter.SortField)
+	var response paginatedDecksResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.Len(t, response.Data, 1)
+	assert.Equal(t, "Otters", response.Data[0].Name)
+}
+
+func TestHandler_GetUserPublicDecks_RejectsAnInvalidUserID(t *testing.T) {
+	router := setupRouter(&fakeService{})
+
+	req := httptest.NewRequest(http.MethodGet, "/users/not-a-uuid/decks", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_GetDecks_DoesNotFilterOnVisibility(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Empty(t, service.lastFilter.Visibility)
+	assert.Equal(t, testUserID, service.lastUserID)
+}

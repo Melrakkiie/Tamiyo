@@ -956,3 +956,25 @@ func TestPostgresRepository_Visibility_DefaultsToUnlistedAndCanBeChanged(t *test
 	require.Len(t, decks, 1)
 	assert.Equal(t, VisibilityPublic, decks[0].Visibility)
 }
+
+func TestPostgresRepository_FindAll_FiltersByVisibility(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+
+	for _, d := range []Deck{
+		{Name: "Shown", Format: "commander", Visibility: VisibilityPublic},
+		{Name: "Link only", Format: "commander", Visibility: VisibilityUnlisted},
+		{Name: "Secret", Format: "commander", Visibility: VisibilityPrivate},
+	} {
+		_, err := repo.Create(context.Background(), userID, d)
+		require.NoError(t, err)
+	}
+
+	decks, total, err := repo.FindAll(context.Background(), userID, Filter{Visibility: VisibilityPublic, Page: 1, Limit: 25})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, total)
+	require.Len(t, decks, 1)
+	assert.Equal(t, "Shown", decks[0].Name)
+}

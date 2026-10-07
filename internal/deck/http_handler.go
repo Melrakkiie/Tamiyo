@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -182,6 +183,7 @@ func NewHandler(service deckService) *Handler {
 
 func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.GET("/deck", h.getDecks)
+	router.GET("/users/:id/decks", h.getUserPublicDecks)
 	router.GET("/deck/:id", h.getDeck)
 	router.POST("/deck", h.createDeck)
 	router.PATCH("/deck/:id", h.updateDeck)
@@ -203,12 +205,40 @@ func (h *Handler) getDecks(ctx *gin.Context) {
 		return
 	}
 
+	filter, ok := parseDeckListQuery(ctx)
+	if !ok {
+		return
+	}
+	filter.Format = ctx.Query("format")
+
+	h.respondWithDecks(ctx, userID, filter)
+}
+
+func (h *Handler) getUserPublicDecks(ctx *gin.Context) {
+	ownerID := strings.ToLower(ctx.Param("id"))
+	if !userIDPattern.MatchString(ownerID) {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	filter, ok := parseDeckListQuery(ctx)
+	if !ok {
+		return
+	}
+	filter.Visibility = VisibilityPublic
+
+	h.respondWithDecks(ctx, ownerID, filter)
+}
+
+var userIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+func parseDeckListQuery(ctx *gin.Context) (Filter, bool) {
 	page := defaultPage
 	if raw := ctx.Query("page"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
 		if err != nil || parsed < 1 {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "page must be a positive integer"})
-			return
+			return Filter{}, false
 		}
 		page = parsed
 	}
@@ -218,7 +248,7 @@ func (h *Handler) getDecks(ctx *gin.Context) {
 		parsed, err := strconv.Atoi(raw)
 		if err != nil || parsed < 1 || parsed > maxLimit {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("limit must be an integer between 1 and %d", maxLimit)})
-			return
+			return Filter{}, false
 		}
 		limit = parsed
 	}
@@ -238,18 +268,14 @@ func (h *Handler) getDecks(ctx *gin.Context) {
 			sortDesc = desc
 		default:
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "sort must be one of: name, -name, added, -added, updated, -updated"})
-			return
+			return Filter{}, false
 		}
 	}
 
-	filter := Filter{
-		Format:    ctx.Query("format"),
-		SortField: sortField,
-		SortDesc:  sortDesc,
-		Page:      page,
-		Limit:     limit,
-	}
+	return Filter{SortField: sortField, SortDesc: sortDesc, Page: page, Limit: limit}, true
+}
 
+func (h *Handler) respondWithDecks(ctx *gin.Context, userID string, filter Filter) {
 	decks, total, err := h.service.GetAllDecks(ctx.Request.Context(), userID, filter)
 	if err != nil {
 		apierr.Respond(ctx, err)
@@ -263,13 +289,13 @@ func (h *Handler) getDecks(ctx *gin.Context) {
 
 	totalPages := 0
 	if total > 0 {
-		totalPages = (total + limit - 1) / limit
+		totalPages = (total + filter.Limit - 1) / filter.Limit
 	}
 
 	ctx.IndentedJSON(http.StatusOK, paginatedDecksResponse{
 		Data:       response,
-		Page:       page,
-		Limit:      limit,
+		Page:       filter.Page,
+		Limit:      filter.Limit,
 		Total:      total,
 		TotalPages: totalPages,
 	})

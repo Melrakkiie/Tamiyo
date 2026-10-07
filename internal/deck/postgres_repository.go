@@ -105,6 +105,12 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		argPos++
 	}
 
+	if filter.Visibility != "" {
+		conditions = append(conditions, fmt.Sprintf("d.visibility = $%d", argPos))
+		args = append(args, filter.Visibility)
+		argPos++
+	}
+
 	whereClause := " WHERE " + strings.Join(conditions, " AND ")
 
 	countQuery := `SELECT COUNT(*) FROM tamiyo.deck d` + whereClause

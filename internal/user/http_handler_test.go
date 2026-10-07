@@ -150,7 +150,7 @@ func TestHandler_Register_ReturnsTokenPairOnSuccess(t *testing.T) {
 	tokens := &fakeTokenService{issuedRefreshToken: "a-refresh-token"}
 	router := setupRouter(service, tokens)
 
-	body := `{"email": "alice@example.com", "password": "supersecret"}`
+	body := `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "password": "supersecret"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -171,7 +171,7 @@ func TestHandler_Register_SetsRefreshCookie(t *testing.T) {
 	tokens := &fakeTokenService{issuedRefreshToken: "a-refresh-token"}
 	router := setupRouter(service, tokens)
 
-	body := `{"email": "alice@example.com", "password": "supersecret"}`
+	body := `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "password": "supersecret"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -201,7 +201,7 @@ func TestHandler_Register_ReturnsBadRequestOnShortPassword(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service, &fakeTokenService{})
 
-	body := `{"email": "alice@example.com", "password": "short"}`
+	body := `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "password": "short"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -214,7 +214,7 @@ func TestHandler_Register_ReturnsConflictWhenEmailAlreadyTaken(t *testing.T) {
 	service := &fakeService{registerErr: ErrEmailAlreadyTaken}
 	router := setupRouter(service, &fakeTokenService{})
 
-	body := `{"email": "alice@example.com", "password": "supersecret"}`
+	body := `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "password": "supersecret"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -228,7 +228,7 @@ func TestHandler_Register_ReturnsInternalServerErrorWhenIssuingRefreshTokenFails
 	tokens := &fakeTokenService{issueErr: assertAnError}
 	router := setupRouter(service, tokens)
 
-	body := `{"email": "alice@example.com", "password": "supersecret"}`
+	body := `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "password": "supersecret"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -242,7 +242,7 @@ func TestHandler_Login_ReturnsTokenPairOnSuccess(t *testing.T) {
 	tokens := &fakeTokenService{issuedRefreshToken: "a-refresh-token"}
 	router := setupRouter(service, tokens)
 
-	body := `{"email": "alice@example.com", "password": "supersecret"}`
+	body := `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "password": "supersecret"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -262,7 +262,7 @@ func TestHandler_Login_SetsRefreshCookie(t *testing.T) {
 	tokens := &fakeTokenService{issuedRefreshToken: "a-refresh-token"}
 	router := setupRouter(service, tokens)
 
-	body := `{"email": "alice@example.com", "password": "supersecret"}`
+	body := `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "password": "supersecret"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -279,7 +279,7 @@ func TestHandler_Login_OmitsRefreshTokenFromBodyForCookieOnlyClients(t *testing.
 	tokens := &fakeTokenService{issuedRefreshToken: "a-refresh-token"}
 	router := setupRouter(service, tokens)
 
-	body := `{"email": "alice@example.com", "password": "supersecret"}`
+	body := `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "password": "supersecret"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(authcookie.TransportHeader, "cookie")
@@ -303,7 +303,7 @@ func TestHandler_Login_DoesNotSetRefreshCookieOnInvalidCredentials(t *testing.T)
 	service := &fakeService{authErr: ErrInvalidCredentials}
 	router := setupRouter(service, &fakeTokenService{})
 
-	body := `{"email": "alice@example.com", "password": "wrong-password"}`
+	body := `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "password": "wrong-password"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -317,7 +317,7 @@ func TestHandler_Login_ReturnsUnauthorizedOnInvalidCredentials(t *testing.T) {
 	service := &fakeService{authErr: ErrInvalidCredentials}
 	router := setupRouter(service, &fakeTokenService{})
 
-	body := `{"email": "alice@example.com", "password": "wrongpassword"}`
+	body := `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "password": "wrongpassword"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -341,7 +341,7 @@ func TestHandler_Login_ReturnsInternalServerErrorOnUnknownAuthError(t *testing.T
 	service := &fakeService{authErr: errors.New("boom")}
 	router := setupRouter(service, &fakeTokenService{})
 
-	body := `{"email": "alice@example.com", "password": "supersecret"}`
+	body := `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "password": "supersecret"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -355,7 +355,7 @@ func TestHandler_Login_ReturnsInternalServerErrorWhenRefreshTokenIssueFails(t *t
 	tokens := &fakeTokenService{issueErr: errors.New("boom")}
 	router := setupRouter(service, tokens)
 
-	body := `{"email": "alice@example.com", "password": "supersecret"}`
+	body := `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "password": "supersecret"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -375,7 +375,7 @@ func TestHandler_RegisterRoutes_AppliesGivenMiddlewareToBothAuthRoutes(t *testin
 	NewHandler(&fakeService{}, testJWTSecret, testAccessTokenTTL, &fakeTokenService{}, testCookie).RegisterRoutes(router, blockAll)
 
 	for _, path := range []string{"/auth/register", "/auth/login"} {
-		body := `{"email": "alice@example.com", "password": "supersecret"}`
+		body := `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "password": "supersecret"}`
 		req := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
@@ -512,7 +512,7 @@ func TestHandler_Me_ReturnsTheAccountEmail(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.JSONEq(t, `{"email": "alice@example.com", "display_name": null, "avatar_scryfall_id": null}`, w.Body.String())
+	assert.JSONEq(t, `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "display_name": null, "avatar_scryfall_id": null}`, w.Body.String())
 }
 
 func TestHandler_Me_ReturnsNotFoundWhenTheUserIsGone(t *testing.T) {
@@ -538,7 +538,7 @@ func TestHandler_Me_RequiresAuthentication(t *testing.T) {
 
 func TestHandler_Me_ReturnsTheDisplayName(t *testing.T) {
 	name := "Tamiyo"
-	service := &fakeService{getUser: User{Email: "alice@example.com", DisplayName: &name}}
+	service := &fakeService{getUser: User{ID: "11111111-1111-1111-1111-111111111111", Email: "alice@example.com", DisplayName: &name}}
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
 	req := authenticatedRequest(http.MethodGet, "/auth/me", "", "11111111-1111-1111-1111-111111111111")
@@ -546,7 +546,7 @@ func TestHandler_Me_ReturnsTheDisplayName(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.JSONEq(t, `{"email": "alice@example.com", "display_name": "Tamiyo", "avatar_scryfall_id": null}`, w.Body.String())
+	assert.JSONEq(t, `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "display_name": "Tamiyo", "avatar_scryfall_id": null}`, w.Body.String())
 }
 
 func TestHandler_UpdateMe_SetsTheDisplayName(t *testing.T) {
@@ -560,7 +560,7 @@ func TestHandler_UpdateMe_SetsTheDisplayName(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	require.NotNil(t, service.setDisplayNameValue)
 	assert.Equal(t, "Tamiyo", *service.setDisplayNameValue)
-	assert.JSONEq(t, `{"email": "alice@example.com", "display_name": "Tamiyo", "avatar_scryfall_id": null}`, w.Body.String())
+	assert.JSONEq(t, `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "display_name": "Tamiyo", "avatar_scryfall_id": null}`, w.Body.String())
 }
 
 func TestHandler_UpdateMe_ClearsTheDisplayNameWithNull(t *testing.T) {
@@ -617,7 +617,7 @@ func TestHandler_Register_PassesTheDisplayName(t *testing.T) {
 	service := &fakeService{registerUser: User{ID: "11111111-1111-1111-1111-111111111111", Email: "alice@example.com"}}
 	router := setupRouter(service, &fakeTokenService{})
 
-	body := `{"email": "alice@example.com", "password": "supersecret", "display_name": "Tamiyo"}`
+	body := `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "password": "supersecret", "display_name": "Tamiyo"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -632,7 +632,7 @@ func TestHandler_Register_AcceptsNoDisplayName(t *testing.T) {
 	service := &fakeService{registerUser: User{ID: "11111111-1111-1111-1111-111111111111", Email: "alice@example.com"}}
 	router := setupRouter(service, &fakeTokenService{})
 
-	body := `{"email": "alice@example.com", "password": "supersecret"}`
+	body := `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "password": "supersecret"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -646,7 +646,7 @@ func TestHandler_Register_RejectsATooLongDisplayName(t *testing.T) {
 	service := &fakeService{registerErr: ErrInvalidDisplayName}
 	router := setupRouter(service, &fakeTokenService{})
 
-	body := `{"email": "alice@example.com", "password": "supersecret", "display_name": "x"}`
+	body := `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "password": "supersecret", "display_name": "x"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -669,7 +669,7 @@ func TestHandler_UpdateMe_SetsTheAvatarAlone(t *testing.T) {
 	assert.False(t, service.setDisplayNameCalled)
 	require.NotNil(t, service.setAvatarValue)
 	assert.Equal(t, avatarID, *service.setAvatarValue)
-	assert.JSONEq(t, `{"email": "alice@example.com", "display_name": null, "avatar_scryfall_id": "`+avatarID+`"}`, w.Body.String())
+	assert.JSONEq(t, `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "display_name": null, "avatar_scryfall_id": "`+avatarID+`"}`, w.Body.String())
 }
 
 func TestHandler_UpdateMe_ClearsTheAvatarWithNull(t *testing.T) {
@@ -709,4 +709,60 @@ func TestHandler_UpdateMe_SetsBothFields(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.True(t, service.setDisplayNameCalled)
 	assert.True(t, service.setAvatarCalled)
+}
+
+func TestHandler_Me_ReturnsTheAccountID(t *testing.T) {
+	service := &fakeService{getUser: User{ID: "11111111-1111-1111-1111-111111111111", Email: "alice@example.com"}}
+	router := setupProtectedRouter(service, &fakeTokenService{})
+
+	req := authenticatedRequest(http.MethodGet, "/auth/me", "", "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), `"id":"11111111-1111-1111-1111-111111111111"`)
+}
+
+func TestHandler_Profile_ReturnsThePublicFieldsOnly(t *testing.T) {
+	name := "Tamiyo"
+	service := &fakeService{getUser: User{ID: "22222222-2222-2222-2222-222222222222", Email: "bob@example.com", PasswordHash: "hash", DisplayName: &name}}
+	router := setupProtectedRouter(service, &fakeTokenService{})
+
+	req := authenticatedRequest(http.MethodGet, "/users/22222222-2222-2222-2222-222222222222", "", "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.JSONEq(t, `{"id": "22222222-2222-2222-2222-222222222222", "display_name": "Tamiyo", "avatar_scryfall_id": null}`, w.Body.String())
+	assert.NotContains(t, w.Body.String(), "bob@example.com")
+}
+
+func TestHandler_Profile_ReturnsNotFoundForAnUnknownUser(t *testing.T) {
+	router := setupProtectedRouter(&fakeService{getUserErr: ErrNotFound}, &fakeTokenService{})
+
+	req := authenticatedRequest(http.MethodGet, "/users/22222222-2222-2222-2222-222222222222", "", "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestHandler_Profile_RejectsAnInvalidID(t *testing.T) {
+	router := setupProtectedRouter(&fakeService{}, &fakeTokenService{})
+
+	req := authenticatedRequest(http.MethodGet, "/users/42", "", "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_Profile_RequiresAuthentication(t *testing.T) {
+	router := setupProtectedRouter(&fakeService{}, &fakeTokenService{})
+
+	req := httptest.NewRequest(http.MethodGet, "/users/22222222-2222-2222-2222-222222222222", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
