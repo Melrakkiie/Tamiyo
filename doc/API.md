@@ -632,14 +632,13 @@ GET /deck?format=commander&sort=-added&page=1&limit=25
 {
   "data": [
     {
-      "id": 1,
+      "id": "6f0d3c5e-8a51-4c0b-9b1e-2d7c4a3f9e10",
       "name": "Kess Commander",
       "format": "commander",
       "commander_id": 12,
       "background_scryfall_id": "436d6a84-4cea-4ca7-94aa-9d08280652af",
       "commander_scryfall_id": "a0b4c5ad-14f7-4bcb-9a59-6c0ac4f1a5e0",
       "visibility": "unlisted",
-      "share_id": "6f0d3c5e-8a51-4c0b-9b1e-2d7c4a3f9e10",
       "card_count": 4,
       "pending_count": 2,
       "added": "2026-01-15 10:30:00",
@@ -653,7 +652,7 @@ GET /deck?format=commander&sort=-added&page=1&limit=25
 }
 ```
 
-`pending_count` is the number of copies in the deck's pending list (see [Pending cards](#pending-cards-deckidpending)), not counted in `card_count`. `commander_scryfall_id` is read-only: the Scryfall id of the commander card, so a client can show its art without another call. `background_scryfall_id` is the art the user picked for the deck (`null` when none was chosen). `visibility` says who may see the deck: `private` (only its owner), `unlisted` (anyone with its link, the default) or `public` (anyone, and listed on its owner's profile). `share_id` is the random identifier of the deck's share link, read-only and generated when the deck is created: see [Shared decks](#shared-decks). The routes in this section still only serve the owner's own decks.
+`pending_count` is the number of copies in the deck's pending list (see [Pending cards](#pending-cards-deckidpending)), not counted in `card_count`. `commander_scryfall_id` is read-only: the Scryfall id of the commander card, so a client can show its art without another call. `background_scryfall_id` is the art the user picked for the deck (`null` when none was chosen). `visibility` says who may see the deck: `private` (only its owner), `unlisted` (anyone with its link, the default) or `public` (anyone, and listed on its owner's profile). `id` is a random UUID generated when the deck is created, so deck ids can't be guessed from one another. It is also how anyone reaches the deck's read-only page: see [Shared decks](#shared-decks). The routes in this section still only serve the owner's own decks.
 
 **Errors:** `400` if `page` or `limit` is not a valid integer, `limit` is outside `1..100`, or `sort` is not one of the allowed values.
 
@@ -766,7 +765,7 @@ List every card currently in a deck.
 
 **Example**
 ```
-GET /deck/1/cards?sort=mana_value
+GET /deck/6f0d3c5e-8a51-4c0b-9b1e-2d7c4a3f9e10/cards?sort=mana_value
 ```
 
 **Response `200 OK`**
@@ -836,7 +835,7 @@ Cards wanted in a deck but not in the collection yet (typically picked on Scryfa
 Two read-only routes analyze a deck's cards — nothing here persists anything, every call is computed fresh from Scryfall data at request time. Both are purely about playing the game: there's no notion of card price or collection value anywhere in Tamiyo.
 
 **Errors common to both**
-- `400` — `:id` is not a valid integer, or the deck's own `format` field isn't a format Scryfall recognizes (so legality/stats can't be computed against it)
+- `400` — `:id` is not a UUID, or the deck's own `format` field isn't a format Scryfall recognizes (so legality/stats can't be computed against it)
 - `401` — unauthenticated
 - `404` — no deck with that id exists for this account
 - `502` — Scryfall couldn't be reached
@@ -899,17 +898,17 @@ A multicolor card counts once per color it has in `color_breakdown`; a dual-type
 
 ## Shared decks
 
-Read-only access to a deck through its share link. **No authentication required.** A deck is reached by its `share_id` (from `GET /deck`), never by its numeric id, so an unlisted deck can only be found by someone who was given the link. Only `public` and `unlisted` decks resolve: a private deck, an unknown `share_id` or anything that isn't a UUID all answer `404`, so the response never tells whether a private deck exists.
+Read-only access to a deck by its id. **No authentication required.** Deck ids are random UUIDs, so an unlisted deck can only be found by someone who was given its id or link. Only `public` and `unlisted` decks resolve: a private deck, an unknown id or anything that isn't a UUID all answer `404`, so the response never tells whether a private deck exists.
 
 The three routes share a per-client-IP limit, separate from the auth one: 60 requests per 60-second window by default (`SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns `429` with a `Retry-After` header, as described in [Rate limiting](#rate-limiting).
 
-### `GET /shared/decks/:share_id`
+### `GET /shared/decks/:id`
 
 **Response `200 OK`**
 ```json
 {
   "deck": {
-    "share_id": "6f0d3c5e-8a51-4c0b-9b1e-2d7c4a3f9e10",
+    "id": "6f0d3c5e-8a51-4c0b-9b1e-2d7c4a3f9e10",
     "name": "Kess Commander",
     "format": "commander",
     "visibility": "unlisted",
@@ -940,15 +939,15 @@ The three routes share a per-client-IP limit, separate from the auth one: 60 req
 
 The owner's copies and the deck's pending cards are merged into one list, one entry per printing and finish with its `quantity`, sorted by name. Nothing tells them apart, and storages, proxies and card ids are left out. The commander is always its own entry with `commander: true`. `card_count` counts every card, pending ones included. `owner` has the shape of [`GET /users/:id`](#get-usersid).
 
-**Errors:** `404` unknown, private or malformed `share_id` · `429` rate limit exceeded
+**Errors:** `404` unknown, private or malformed id · `429` rate limit exceeded
 
-### `GET /shared/decks/:share_id/legality`
+### `GET /shared/decks/:id/legality`
 
 Same report as [`GET /deck/:id/legality`](#get-deckidlegality), without `card_id` on the issues.
 
 **Errors:** `400` the deck's format isn't one Scryfall recognizes · `404` as above · `429` rate limit exceeded · `502` Scryfall unreachable
 
-### `GET /shared/decks/:share_id/stats`
+### `GET /shared/decks/:id/stats`
 
 Same statistics as [`GET /deck/:id/stats`](#get-deckidstats).
 
@@ -1062,7 +1061,7 @@ Exports **one deck** — not the whole collection — as a Moxfield deck plain-t
 If the deck has a commander (`commander_id` on the deck), that printing's line is written **first** — with its full quantity in the deck, not just the one physical card that happens to be marked as commander — so re-importing the file via `POST /import/moxfield/deck` (which defaults to treating the first line as the commander) reconstructs the same commander. A deck with no commander has no special first line at all; every line is sorted alphabetically.
 
 **Errors**
-- `400` — `:id` is not a valid integer
+- `400` — `:id` is not a UUID
 - `401` — unauthenticated
 - `404` — no deck with that id exists for this account
 - `500` — unexpected failure reading the deck

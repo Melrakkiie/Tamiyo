@@ -18,16 +18,16 @@ type fakeInsightsService struct {
 	err      error
 
 	lastUserID string
-	lastDeckID int
+	lastDeckID string
 }
 
-func (f *fakeInsightsService) GetDeckLegality(ctx context.Context, userID string, deckID int) (LegalityReport, error) {
+func (f *fakeInsightsService) GetDeckLegality(ctx context.Context, userID string, deckID string) (LegalityReport, error) {
 	f.lastUserID = userID
 	f.lastDeckID = deckID
 	return f.legality, f.err
 }
 
-func (f *fakeInsightsService) GetDeckStats(ctx context.Context, userID string, deckID int) (DeckStats, error) {
+func (f *fakeInsightsService) GetDeckStats(ctx context.Context, userID string, deckID string) (DeckStats, error) {
 	f.lastUserID = userID
 	f.lastDeckID = deckID
 	return f.stats, f.err
@@ -48,7 +48,7 @@ func TestGetDeckLegality_ReturnsReportOnSuccess(t *testing.T) {
 	service := &fakeInsightsService{legality: LegalityReport{Format: "commander", Legal: true}}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/7/legality", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000007/legality", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -57,7 +57,7 @@ func TestGetDeckLegality_ReturnsReportOnSuccess(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
 	assert.True(t, got.Legal)
 	assert.Equal(t, testUserID, service.lastUserID)
-	assert.Equal(t, 7, service.lastDeckID)
+	assert.Equal(t, "00000000-0000-0000-0000-000000000007", service.lastDeckID)
 }
 
 func TestGetDeckLegality_InvalidIDReturnsBadRequest(t *testing.T) {
@@ -73,7 +73,7 @@ func TestGetDeckLegality_InvalidIDReturnsBadRequest(t *testing.T) {
 func TestGetDeckLegality_UnknownDeckReturnsNotFound(t *testing.T) {
 	router := setupRouter(&fakeInsightsService{err: ErrDeckNotFound})
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/999/legality", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000999/legality", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -83,7 +83,7 @@ func TestGetDeckLegality_UnknownDeckReturnsNotFound(t *testing.T) {
 func TestGetDeckLegality_UnknownFormatReturnsBadRequest(t *testing.T) {
 	router := setupRouter(&fakeInsightsService{err: ErrUnknownFormat})
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/1/legality", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/legality", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -93,7 +93,7 @@ func TestGetDeckLegality_UnknownFormatReturnsBadRequest(t *testing.T) {
 func TestGetDeckLegality_ScryfallFailureReturnsBadGateway(t *testing.T) {
 	router := setupRouter(&fakeInsightsService{err: ErrScryfallUnavailable})
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/1/legality", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/legality", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -103,7 +103,7 @@ func TestGetDeckLegality_ScryfallFailureReturnsBadGateway(t *testing.T) {
 func TestGetDeckLegality_UnknownErrorReturnsInternalServerError(t *testing.T) {
 	router := setupRouter(&fakeInsightsService{err: assertAnError{}})
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/1/legality", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/legality", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -114,7 +114,7 @@ func TestGetDeckStats_ReturnsStatsOnSuccess(t *testing.T) {
 	service := &fakeInsightsService{stats: DeckStats{CardCount: 42}}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/7/stats", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000007/stats", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -127,7 +127,7 @@ func TestGetDeckStats_ReturnsStatsOnSuccess(t *testing.T) {
 func TestGetDeckStats_UnknownDeckReturnsNotFound(t *testing.T) {
 	router := setupRouter(&fakeInsightsService{err: ErrDeckNotFound})
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/999/stats", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000999/stats", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -139,7 +139,7 @@ func TestGetDeckLegality_ReturnsUnauthorizedWhenNotAuthenticated(t *testing.T) {
 	router := gin.New()
 	NewHandler(&fakeInsightsService{}).RegisterRoutes(router)
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/1/legality", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/legality", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 

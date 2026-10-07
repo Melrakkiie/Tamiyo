@@ -8,7 +8,7 @@ import (
 type pendingRow struct {
 	ID              int       `db:"id"`
 	UserID          string    `db:"user_id"`
-	DeckID          int       `db:"deck_id"`
+	DeckID          string    `db:"deck_id"`
 	Name            string    `db:"name"`
 	ScryfallID      string    `db:"scryfall_id"`
 	SetCode         string    `db:"set_code"`
@@ -42,7 +42,7 @@ func (r pendingRow) toDomain() PendingCard {
 
 const pendingColumns = `id, deck_id, name, scryfall_id, set_code, collector_number, foil, quantity, mana_value, colors, card_type, color_identity, added`
 
-func (r *PostgresRepository) FindPendingCards(ctx context.Context, userID string, deckID int) ([]PendingCard, error) {
+func (r *PostgresRepository) FindPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error) {
 	var rows []pendingRow
 	query := `SELECT ` + pendingColumns + ` FROM tamiyo.deck_pending_cards WHERE user_id = $1 AND deck_id = $2 ORDER BY name, id`
 	if err := r.db.SelectContext(ctx, &rows, query, userID, deckID); err != nil {
@@ -90,7 +90,7 @@ func (r *PostgresRepository) CreatePendingCard(ctx context.Context, userID strin
 	return created.toDomain(), nil
 }
 
-func (r *PostgresRepository) DeletePendingCard(ctx context.Context, userID string, deckID, id int) error {
+func (r *PostgresRepository) DeletePendingCard(ctx context.Context, userID string, deckID string, id int) error {
 	result, err := r.db.ExecContext(ctx, `DELETE FROM tamiyo.deck_pending_cards WHERE id = $1 AND deck_id = $2 AND user_id = $3`, id, deckID, userID)
 	if err != nil {
 		return err

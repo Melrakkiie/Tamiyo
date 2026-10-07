@@ -64,29 +64,29 @@ INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number
 --------------------------
 ---- DECKS (3)         ----
 --------------------------
-INSERT INTO tamiyo.deck (user_id, name, format, commander_id) VALUES
-    ('11111111-1111-1111-1111-111111111111', 'Burn Aggro', 'modern', NULL),
-    ('11111111-1111-1111-1111-111111111111', 'Izzet Control', 'legacy', NULL),
-    ('11111111-1111-1111-1111-111111111111', 'Kess Commander', 'commander', 12); -- commander_id = Counterspell (arbitraire, pour la démo)
+INSERT INTO tamiyo.deck (id, user_id, name, format, commander_id) VALUES
+    ('d0000000-0000-4000-8000-000000000001', '11111111-1111-1111-1111-111111111111', 'Burn Aggro', 'modern', NULL),
+    ('d0000000-0000-4000-8000-000000000002', '11111111-1111-1111-1111-111111111111', 'Izzet Control', 'legacy', NULL),
+    ('d0000000-0000-4000-8000-000000000003', '11111111-1111-1111-1111-111111111111', 'Kess Commander', 'commander', 12); -- commander_id = Counterspell (arbitraire, pour la démo)
 
 -----------------------------
 ---- CARD_DECK (compo)   ----
 -----------------------------
 -- Deck 1: Burn Aggro -> Lightning Bolt, Goblin Guide, Monastery Swiftspear
 INSERT INTO tamiyo.card_deck (card_id, deck_id) VALUES
-    (4, 1),
-    (5, 1),
-    (6, 1);
+    (4, 'd0000000-0000-4000-8000-000000000001'),
+    (5, 'd0000000-0000-4000-8000-000000000001'),
+    (6, 'd0000000-0000-4000-8000-000000000001');
 
 -- Deck 2: Izzet Control -> Counterspell, Brainstorm, Lightning Bolt
 INSERT INTO tamiyo.card_deck (card_id, deck_id) VALUES
-    (12, 2),
-    (13, 2),
-    (4, 2);
+    (12, 'd0000000-0000-4000-8000-000000000002'),
+    (13, 'd0000000-0000-4000-8000-000000000002'),
+    (4, 'd0000000-0000-4000-8000-000000000002');
 
 -- Deck 3: Kess Commander -> Sol Ring, Command Tower, Arcane Signet, Counterspell (commander)
 INSERT INTO tamiyo.card_deck (card_id, deck_id) VALUES
-    (7, 3),
-    (8, 3),
-    (9, 3),
-    (12, 3);
+    (7, 'd0000000-0000-4000-8000-000000000003'),
+    (8, 'd0000000-0000-4000-8000-000000000003'),
+    (9, 'd0000000-0000-4000-8000-000000000003'),
+    (12, 'd0000000-0000-4000-8000-000000000003');

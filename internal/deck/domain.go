@@ -3,6 +3,8 @@ package deck
 import (
 	"context"
 	"errors"
+	"regexp"
+	"strings"
 	"time"
 )
 
@@ -11,7 +13,7 @@ var ErrCardNotFound = errors.New("referenced card does not exist")
 var ErrNotFound = errors.New("deck not found")
 
 type Deck struct {
-	ID                   int
+	ID                   string
 	Name                 string
 	Format               string
 	CommanderID          *int
@@ -19,7 +21,6 @@ type Deck struct {
 	BackgroundScryfallID *string
 	CommanderScryfallID  *string
 	Visibility           string
-	ShareID              string
 	CardCount            int
 	PendingCount         int
 	Added                time.Time
@@ -60,17 +61,24 @@ type Filter struct {
 	Limit int
 }
 
+var idPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+func ParseID(raw string) (string, bool) {
+	id := strings.ToLower(raw)
+	return id, idPattern.MatchString(id)
+}
+
 type Repository interface {
 	FindAll(ctx context.Context, userID string, filter Filter) ([]Deck, int, error)
-	FindByID(ctx context.Context, userID string, id int) (Deck, error)
+	FindByID(ctx context.Context, userID string, id string) (Deck, error)
 	Create(ctx context.Context, userID string, d Deck) (Deck, error)
 	Update(ctx context.Context, userID string, d Deck) (Deck, error)
-	Delete(ctx context.Context, userID string, id int) error
-	FindShared(ctx context.Context, shareID string) (string, Deck, error)
+	Delete(ctx context.Context, userID string, id string) error
+	FindShared(ctx context.Context, id string) (string, Deck, error)
 
-	FindCardsByDeckID(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]DeckCard, error)
-	LinkCardToDeck(ctx context.Context, userID string, deckID int, cardID int) error
-	UnlinkCardFromDeck(ctx context.Context, userID string, deckID int, cardID int) error
+	FindCardsByDeckID(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]DeckCard, error)
+	LinkCardToDeck(ctx context.Context, userID string, deckID string, cardID int) error
+	UnlinkCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error
 
 	PendingRepository
 }

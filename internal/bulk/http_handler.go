@@ -12,6 +12,7 @@ import (
 
 	"Melrakkiie/Tamiyo/internal/apierr"
 	"Melrakkiie/Tamiyo/internal/auth"
+	"Melrakkiie/Tamiyo/internal/deck"
 )
 
 type importService interface {
@@ -21,10 +22,10 @@ type importService interface {
 
 	ExportManaBox(ctx context.Context, userID string, w io.Writer) error
 	ExportMoxfieldCollection(ctx context.Context, userID string, w io.Writer) error
-	ExportMoxfieldDeck(ctx context.Context, userID string, deckID int, w io.Writer) error
+	ExportMoxfieldDeck(ctx context.Context, userID string, deckID string, w io.Writer) error
 
 	RefreshCardDetails(ctx context.Context, userID string, afterID int) (DetailsRefreshSummary, error)
-	CommitPendingCards(ctx context.Context, userID string, deckID int, storageID, pendingID *int) (PendingCommitSummary, error)
+	CommitPendingCards(ctx context.Context, userID string, deckID string, storageID, pendingID *int) (PendingCommitSummary, error)
 }
 
 type Handler struct {
@@ -217,8 +218,8 @@ func (h *Handler) exportMoxfieldDeck(ctx *gin.Context) {
 		return
 	}
 
-	deckID, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
+	deckID, valid := deck.ParseID(ctx.Param("id"))
+	if !valid {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}

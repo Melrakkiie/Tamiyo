@@ -47,7 +47,7 @@ type fakeRepository struct {
 	lastPendingID    int
 }
 
-func (f *fakeRepository) FindPendingCards(ctx context.Context, userID string, deckID int) ([]PendingCard, error) {
+func (f *fakeRepository) FindPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error) {
 	f.lastUserID = userID
 	return f.pending, nil
 }
@@ -59,7 +59,7 @@ func (f *fakeRepository) CreatePendingCard(ctx context.Context, userID string, p
 	return p, nil
 }
 
-func (f *fakeRepository) DeletePendingCard(ctx context.Context, userID string, deckID, id int) error {
+func (f *fakeRepository) DeletePendingCard(ctx context.Context, userID string, deckID string, id int) error {
 	f.lastUserID = userID
 	f.lastPendingID = id
 	return f.deletePendingErr
@@ -71,7 +71,7 @@ func (f *fakeRepository) FindAll(ctx context.Context, userID string, filter Filt
 	return f.decks, f.findAllTotal, f.findAllErr
 }
 
-func (f *fakeRepository) FindByID(ctx context.Context, userID string, id int) (Deck, error) {
+func (f *fakeRepository) FindByID(ctx context.Context, userID string, id string) (Deck, error) {
 	f.lastUserID = userID
 	if f.findByIDErr != nil {
 		return Deck{}, f.findByIDErr
@@ -85,7 +85,7 @@ func (f *fakeRepository) Create(ctx context.Context, userID string, d Deck) (Dec
 		return Deck{}, f.createErr
 	}
 	f.createdDeck = d
-	d.ID = 1
+	d.ID = "00000000-0000-0000-0000-000000000001"
 	return d, nil
 }
 
@@ -98,7 +98,7 @@ func (f *fakeRepository) Update(ctx context.Context, userID string, d Deck) (Dec
 	return d, nil
 }
 
-func (f *fakeRepository) Delete(ctx context.Context, userID string, id int) error {
+func (f *fakeRepository) Delete(ctx context.Context, userID string, id string) error {
 	f.lastUserID = userID
 	return f.deleteErr
 }
@@ -111,7 +111,7 @@ func (f *fakeRepository) FindShared(ctx context.Context, shareID string) (string
 	return f.sharedOwnerID, f.sharedDeck, nil
 }
 
-func (f *fakeRepository) FindCardsByDeckID(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]DeckCard, error) {
+func (f *fakeRepository) FindCardsByDeckID(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]DeckCard, error) {
 	f.lastUserID = userID
 	if f.getDeckCardsErr != nil {
 		return nil, f.getDeckCardsErr
@@ -119,12 +119,12 @@ func (f *fakeRepository) FindCardsByDeckID(ctx context.Context, userID string, i
 	return f.getDeckCards, nil
 }
 
-func (f *fakeRepository) LinkCardToDeck(ctx context.Context, userID string, deckID, cardID int) error {
+func (f *fakeRepository) LinkCardToDeck(ctx context.Context, userID string, deckID string, cardID int) error {
 	f.lastUserID = userID
 	return f.linkErr
 }
 
-func (f *fakeRepository) UnlinkCardFromDeck(ctx context.Context, userID string, deckID, cardID int) error {
+func (f *fakeRepository) UnlinkCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error {
 	f.lastUserID = userID
 	return f.unlinkErr
 }
@@ -151,8 +151,8 @@ func TestService_GetAllDecks_PassesFilterToRepository(t *testing.T) {
 
 func TestService_GetAllDecks_ReturnsDecksAndTotalFromRepository(t *testing.T) {
 	expected := []Deck{
-		{ID: 1, Name: "Otterly Playful", Format: "commander"},
-		{ID: 2, Name: "Cutelings Everywhere", Format: "commander"},
+		{ID: "00000000-0000-0000-0000-000000000001", Name: "Otterly Playful", Format: "commander"},
+		{ID: "00000000-0000-0000-0000-000000000002", Name: "Cutelings Everywhere", Format: "commander"},
 	}
 	repo := &fakeRepository{decks: expected, findAllTotal: 2}
 	service := NewService(repo)
@@ -179,7 +179,7 @@ func TestService_GetDeck_PassesUserIDToRepository(t *testing.T) {
 	repo := &fakeRepository{}
 	service := NewService(repo)
 
-	_, err := service.GetDeck(context.Background(), testUserID, 1)
+	_, err := service.GetDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 
 	require.NoError(t, err)
 	assert.Equal(t, testUserID, repo.lastUserID)
@@ -189,7 +189,7 @@ func TestService_GetDeck_ReturnsNotFoundWhenDeckBelongsToAnotherUser(t *testing.
 	repo := &fakeRepository{findByIDErr: ErrNotFound}
 	service := NewService(repo)
 
-	_, err := service.GetDeck(context.Background(), otherUserID, 1)
+	_, err := service.GetDeck(context.Background(), otherUserID, "00000000-0000-0000-0000-000000000001")
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
@@ -214,7 +214,7 @@ func TestService_CreateDeck_ReturnsDeckFromRepository(t *testing.T) {
 	result, err := service.CreateDeck(context.Background(), testUserID, Deck{Name: "Otterly Playful", Format: "commander"})
 
 	require.NoError(t, err)
-	assert.Equal(t, 1, result.ID)
+	assert.Equal(t, "00000000-0000-0000-0000-000000000001", result.ID)
 	assert.Equal(t, "Otterly Playful", result.Name)
 }
 
@@ -229,14 +229,14 @@ func TestService_CreateDeck_PropagatesRepositoryError(t *testing.T) {
 }
 
 func TestService_UpdateDeck_AppliesPartialChangesOnExistingDeck(t *testing.T) {
-	existing := Deck{ID: 1, Name: "Red Deck", Format: "modern"}
+	existing := Deck{ID: "00000000-0000-0000-0000-000000000001", Name: "Red Deck", Format: "modern"}
 	repo := &fakeRepository{findByIDDeck: existing}
 	service := NewService(repo)
 
 	newName := "Renamed"
 	req := updateDeckRequest{Name: &newName}
 
-	result, err := service.UpdateDeck(context.Background(), testUserID, 1, req)
+	result, err := service.UpdateDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", req)
 
 	require.NoError(t, err)
 	assert.Equal(t, "Renamed", result.Name)
@@ -244,7 +244,7 @@ func TestService_UpdateDeck_AppliesPartialChangesOnExistingDeck(t *testing.T) {
 }
 
 func TestService_UpdateDeck_AppliesFormatAndCommanderIDWhenProvided(t *testing.T) {
-	existing := Deck{ID: 1, Name: "Red Deck", Format: "modern"}
+	existing := Deck{ID: "00000000-0000-0000-0000-000000000001", Name: "Red Deck", Format: "modern"}
 	repo := &fakeRepository{findByIDDeck: existing}
 	service := NewService(repo)
 
@@ -252,7 +252,7 @@ func TestService_UpdateDeck_AppliesFormatAndCommanderIDWhenProvided(t *testing.T
 	newCommanderID := 42
 	req := updateDeckRequest{Format: &newFormat, CommanderID: &newCommanderID}
 
-	result, err := service.UpdateDeck(context.Background(), testUserID, 1, req)
+	result, err := service.UpdateDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", req)
 
 	require.NoError(t, err)
 	assert.Equal(t, "commander", result.Format)
@@ -262,27 +262,27 @@ func TestService_UpdateDeck_AppliesFormatAndCommanderIDWhenProvided(t *testing.T
 
 func TestService_UpdateDeck_ClearsCommanderIDWhenRequested(t *testing.T) {
 	existingCommanderID := 42
-	existing := Deck{ID: 1, Name: "Red Deck", Format: "commander", CommanderID: &existingCommanderID}
+	existing := Deck{ID: "00000000-0000-0000-0000-000000000001", Name: "Red Deck", Format: "commander", CommanderID: &existingCommanderID}
 	repo := &fakeRepository{findByIDDeck: existing}
 	service := NewService(repo)
 
 	req := updateDeckRequest{ClearCommanderID: true}
 
-	result, err := service.UpdateDeck(context.Background(), testUserID, 1, req)
+	result, err := service.UpdateDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", req)
 
 	require.NoError(t, err)
 	assert.Nil(t, result.CommanderID)
 }
 
 func TestService_UpdateDeck_SetsBackgroundScryfallID(t *testing.T) {
-	existing := Deck{ID: 1, Name: "Red Deck", Format: "commander"}
+	existing := Deck{ID: "00000000-0000-0000-0000-000000000001", Name: "Red Deck", Format: "commander"}
 	repo := &fakeRepository{findByIDDeck: existing}
 	service := NewService(repo)
 
 	background := "436d6a84-4cea-4ca7-94aa-9d08280652af"
 	req := updateDeckRequest{BackgroundScryfallID: &background}
 
-	result, err := service.UpdateDeck(context.Background(), testUserID, 1, req)
+	result, err := service.UpdateDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", req)
 
 	require.NoError(t, err)
 	require.NotNil(t, result.BackgroundScryfallID)
@@ -292,11 +292,11 @@ func TestService_UpdateDeck_SetsBackgroundScryfallID(t *testing.T) {
 
 func TestService_UpdateDeck_ClearsBackgroundWhenRequested(t *testing.T) {
 	background := "436d6a84-4cea-4ca7-94aa-9d08280652af"
-	existing := Deck{ID: 1, Name: "Red Deck", Format: "commander", BackgroundScryfallID: &background}
+	existing := Deck{ID: "00000000-0000-0000-0000-000000000001", Name: "Red Deck", Format: "commander", BackgroundScryfallID: &background}
 	repo := &fakeRepository{findByIDDeck: existing}
 	service := NewService(repo)
 
-	result, err := service.UpdateDeck(context.Background(), testUserID, 1, updateDeckRequest{ClearBackground: true})
+	result, err := service.UpdateDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", updateDeckRequest{ClearBackground: true})
 
 	require.NoError(t, err)
 	assert.Nil(t, result.BackgroundScryfallID)
@@ -304,12 +304,12 @@ func TestService_UpdateDeck_ClearsBackgroundWhenRequested(t *testing.T) {
 
 func TestService_UpdateDeck_KeepsBackgroundWhenNotMentioned(t *testing.T) {
 	background := "436d6a84-4cea-4ca7-94aa-9d08280652af"
-	existing := Deck{ID: 1, Name: "Red Deck", Format: "commander", BackgroundScryfallID: &background}
+	existing := Deck{ID: "00000000-0000-0000-0000-000000000001", Name: "Red Deck", Format: "commander", BackgroundScryfallID: &background}
 	repo := &fakeRepository{findByIDDeck: existing}
 	service := NewService(repo)
 
 	newName := "Renamed"
-	result, err := service.UpdateDeck(context.Background(), testUserID, 1, updateDeckRequest{Name: &newName})
+	result, err := service.UpdateDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", updateDeckRequest{Name: &newName})
 
 	require.NoError(t, err)
 	require.NotNil(t, result.BackgroundScryfallID)
@@ -323,20 +323,20 @@ func TestService_UpdateDeck_ReturnsNotFoundWhenDeckDoesNotBelongToUser(t *testin
 	newName := "Doesn't matter"
 	req := updateDeckRequest{Name: &newName}
 
-	_, err := service.UpdateDeck(context.Background(), otherUserID, 999, req)
+	_, err := service.UpdateDeck(context.Background(), otherUserID, "00000000-0000-0000-0000-000000000999", req)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
 func TestService_UpdateDeck_PropagatesRepositoryUpdateError(t *testing.T) {
-	existing := Deck{ID: 1, Name: "Red Deck", Format: "modern"}
+	existing := Deck{ID: "00000000-0000-0000-0000-000000000001", Name: "Red Deck", Format: "modern"}
 	repo := &fakeRepository{findByIDDeck: existing, updateErr: errors.New("update failed")}
 	service := NewService(repo)
 
 	newName := "New Name"
 	req := updateDeckRequest{Name: &newName}
 
-	_, err := service.UpdateDeck(context.Background(), testUserID, 1, req)
+	_, err := service.UpdateDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", req)
 
 	assert.Error(t, err)
 }
@@ -345,7 +345,7 @@ func TestService_DeleteDeck_PassesUserIDToRepository(t *testing.T) {
 	repo := &fakeRepository{}
 	service := NewService(repo)
 
-	err := service.DeleteDeck(context.Background(), testUserID, 1)
+	err := service.DeleteDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 
 	require.NoError(t, err)
 	assert.Equal(t, testUserID, repo.lastUserID)
@@ -355,7 +355,7 @@ func TestService_DeleteDeck_PropagatesNotFoundError(t *testing.T) {
 	repo := &fakeRepository{deleteErr: ErrNotFound}
 	service := NewService(repo)
 
-	err := service.DeleteDeck(context.Background(), testUserID, 999)
+	err := service.DeleteDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000999")
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
@@ -364,16 +364,16 @@ func TestService_DeleteDeck_PropagatesRepositoryError(t *testing.T) {
 	repo := &fakeRepository{deleteErr: errors.New("delete failed")}
 	service := NewService(repo)
 
-	err := service.DeleteDeck(context.Background(), testUserID, 1)
+	err := service.DeleteDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 
 	assert.Error(t, err)
 }
 
 func TestService_GetDeckCards_PassesUserIDToRepository(t *testing.T) {
-	repo := &fakeRepository{findByIDDeck: Deck{ID: 1}}
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001"}}
 	service := NewService(repo)
 
-	_, err := service.GetDeckCards(context.Background(), testUserID, 1, "updated", true)
+	_, err := service.GetDeckCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", "updated", true)
 
 	require.NoError(t, err)
 	assert.Equal(t, testUserID, repo.lastUserID)
@@ -384,10 +384,10 @@ func TestService_GetDeckCards_ReturnsCardsFromRepository(t *testing.T) {
 		{ID: 1, Name: "Black Lotus", SetCode: "lea"},
 		{ID: 2, Name: "Lightning Bolt", SetCode: "2xm"},
 	}
-	repo := &fakeRepository{findByIDDeck: Deck{ID: 1}, getDeckCards: expected}
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001"}, getDeckCards: expected}
 	service := NewService(repo)
 
-	result, err := service.GetDeckCards(context.Background(), testUserID, 1, "updated", true)
+	result, err := service.GetDeckCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", "updated", true)
 
 	require.NoError(t, err)
 	assert.Equal(t, expected, result)
@@ -397,26 +397,26 @@ func TestService_GetDeckCards_ReturnsNotFoundWhenDeckDoesNotBelongToUser(t *test
 	repo := &fakeRepository{findByIDErr: ErrNotFound}
 	service := NewService(repo)
 
-	_, err := service.GetDeckCards(context.Background(), otherUserID, 999, "updated", true)
+	_, err := service.GetDeckCards(context.Background(), otherUserID, "00000000-0000-0000-0000-000000000999", "updated", true)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
 func TestService_GetDeckCards_PropagatesRepositoryError(t *testing.T) {
-	repo := &fakeRepository{findByIDDeck: Deck{ID: 1}, getDeckCardsErr: errors.New("connection lost")}
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001"}, getDeckCardsErr: errors.New("connection lost")}
 	service := NewService(repo)
 
-	result, err := service.GetDeckCards(context.Background(), testUserID, 1, "updated", true)
+	result, err := service.GetDeckCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", "updated", true)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
 }
 
 func TestService_PutCardInDeck_ChecksDeckOwnershipBeforeLinking(t *testing.T) {
-	repo := &fakeRepository{findByIDDeck: Deck{ID: 1}}
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001"}}
 	service := NewService(repo)
 
-	err := service.PutCardInDeck(context.Background(), testUserID, 1, 4)
+	err := service.PutCardInDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 4)
 
 	assert.NoError(t, err)
 }
@@ -425,34 +425,34 @@ func TestService_PutCardInDeck_ReturnsNotFoundWhenDeckDoesNotBelongToUser(t *tes
 	repo := &fakeRepository{findByIDErr: ErrNotFound}
 	service := NewService(repo)
 
-	err := service.PutCardInDeck(context.Background(), otherUserID, 1, 4)
+	err := service.PutCardInDeck(context.Background(), otherUserID, "00000000-0000-0000-0000-000000000001", 4)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
 func TestService_PutCardInDeck_PropagatesCardNotFoundError(t *testing.T) {
-	repo := &fakeRepository{findByIDDeck: Deck{ID: 1}, linkErr: ErrCardNotFound}
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001"}, linkErr: ErrCardNotFound}
 	service := NewService(repo)
 
-	err := service.PutCardInDeck(context.Background(), testUserID, 1, 9999)
+	err := service.PutCardInDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 9999)
 
 	assert.ErrorIs(t, err, ErrCardNotFound)
 }
 
 func TestService_PutCardInDeck_PropagatesRepositoryError(t *testing.T) {
-	repo := &fakeRepository{findByIDDeck: Deck{ID: 1}, linkErr: errors.New("insert failed")}
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001"}, linkErr: errors.New("insert failed")}
 	service := NewService(repo)
 
-	err := service.PutCardInDeck(context.Background(), testUserID, 1, 4)
+	err := service.PutCardInDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 4)
 
 	assert.Error(t, err)
 }
 
 func TestService_RemoveCardFromDeck_ChecksDeckOwnershipBeforeUnlinking(t *testing.T) {
-	repo := &fakeRepository{findByIDDeck: Deck{ID: 1}}
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001"}}
 	service := NewService(repo)
 
-	err := service.RemoveCardFromDeck(context.Background(), testUserID, 1, 4)
+	err := service.RemoveCardFromDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 4)
 
 	assert.NoError(t, err)
 }
@@ -461,29 +461,29 @@ func TestService_RemoveCardFromDeck_ReturnsNotFoundWhenDeckDoesNotBelongToUser(t
 	repo := &fakeRepository{findByIDErr: ErrNotFound}
 	service := NewService(repo)
 
-	err := service.RemoveCardFromDeck(context.Background(), otherUserID, 1, 4)
+	err := service.RemoveCardFromDeck(context.Background(), otherUserID, "00000000-0000-0000-0000-000000000001", 4)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
 func TestService_RemoveCardFromDeck_PropagatesRepositoryError(t *testing.T) {
-	repo := &fakeRepository{findByIDDeck: Deck{ID: 1}, unlinkErr: errors.New("delete failed")}
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001"}, unlinkErr: errors.New("delete failed")}
 	service := NewService(repo)
 
-	err := service.RemoveCardFromDeck(context.Background(), testUserID, 1, 4)
+	err := service.RemoveCardFromDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 4)
 
 	assert.Error(t, err)
 }
 
 func TestService_AddPendingCard_SetsTheDeck(t *testing.T) {
-	repo := &fakeRepository{findByIDDeck: Deck{ID: 3}}
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000003"}}
 	service := NewService(repo)
 
-	created, err := service.AddPendingCard(context.Background(), testUserID, 3, PendingCard{Name: "Sol Ring", Quantity: 1})
+	created, err := service.AddPendingCard(context.Background(), testUserID, "00000000-0000-0000-0000-000000000003", PendingCard{Name: "Sol Ring", Quantity: 1})
 
 	require.NoError(t, err)
 	assert.Equal(t, 7, created.ID)
-	assert.Equal(t, 3, repo.createdPending.DeckID)
+	assert.Equal(t, "00000000-0000-0000-0000-000000000003", repo.createdPending.DeckID)
 	assert.Equal(t, testUserID, repo.lastUserID)
 }
 
@@ -491,22 +491,22 @@ func TestService_PendingCards_RequireTheDeckToBelongToTheUser(t *testing.T) {
 	repo := &fakeRepository{findByIDErr: ErrNotFound}
 	service := NewService(repo)
 
-	_, err := service.GetPendingCards(context.Background(), testUserID, 3)
+	_, err := service.GetPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000003")
 	assert.ErrorIs(t, err, ErrNotFound)
 
-	_, err = service.AddPendingCard(context.Background(), testUserID, 3, PendingCard{Name: "Sol Ring"})
+	_, err = service.AddPendingCard(context.Background(), testUserID, "00000000-0000-0000-0000-000000000003", PendingCard{Name: "Sol Ring"})
 	assert.ErrorIs(t, err, ErrNotFound)
 
-	err = service.RemovePendingCard(context.Background(), testUserID, 3, 1)
+	err = service.RemovePendingCard(context.Background(), testUserID, "00000000-0000-0000-0000-000000000003", 1)
 	assert.ErrorIs(t, err, ErrNotFound)
 	assert.Zero(t, repo.lastPendingID)
 }
 
 func TestService_RemovePendingCard_PropagatesNotFound(t *testing.T) {
-	repo := &fakeRepository{findByIDDeck: Deck{ID: 3}, deletePendingErr: ErrPendingCardNotFound}
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000003"}, deletePendingErr: ErrPendingCardNotFound}
 	service := NewService(repo)
 
-	err := service.RemovePendingCard(context.Background(), testUserID, 3, 9)
+	err := service.RemovePendingCard(context.Background(), testUserID, "00000000-0000-0000-0000-000000000003", 9)
 
 	assert.ErrorIs(t, err, ErrPendingCardNotFound)
 	assert.Equal(t, 9, repo.lastPendingID)
@@ -515,13 +515,13 @@ func TestService_RemovePendingCard_PropagatesNotFound(t *testing.T) {
 func TestService_UpdateDeck_SetsAPendingCommander(t *testing.T) {
 	commanderID := 4
 	repo := &fakeRepository{
-		findByIDDeck: Deck{ID: 1, Name: "Deck", Format: "commander", CommanderID: &commanderID},
-		pending:      []PendingCard{{ID: 7, DeckID: 1, Name: "Atraxa"}},
+		findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", Name: "Deck", Format: "commander", CommanderID: &commanderID},
+		pending:      []PendingCard{{ID: 7, DeckID: "00000000-0000-0000-0000-000000000001", Name: "Atraxa"}},
 	}
 	service := NewService(repo)
 
 	pendingID := 7
-	result, err := service.UpdateDeck(context.Background(), testUserID, 1, updateDeckRequest{CommanderPendingID: &pendingID})
+	result, err := service.UpdateDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", updateDeckRequest{CommanderPendingID: &pendingID})
 
 	require.NoError(t, err)
 	require.NotNil(t, result.CommanderPendingID)
@@ -530,22 +530,22 @@ func TestService_UpdateDeck_SetsAPendingCommander(t *testing.T) {
 }
 
 func TestService_UpdateDeck_RejectsAPendingCommanderFromAnotherDeck(t *testing.T) {
-	repo := &fakeRepository{findByIDDeck: Deck{ID: 1}, pending: []PendingCard{{ID: 7, DeckID: 1}}}
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001"}, pending: []PendingCard{{ID: 7, DeckID: "00000000-0000-0000-0000-000000000001"}}}
 	service := NewService(repo)
 
 	pendingID := 8
-	_, err := service.UpdateDeck(context.Background(), testUserID, 1, updateDeckRequest{CommanderPendingID: &pendingID})
+	_, err := service.UpdateDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", updateDeckRequest{CommanderPendingID: &pendingID})
 
 	assert.ErrorIs(t, err, ErrCommanderNotFound)
 }
 
 func TestService_UpdateDeck_RealCommanderReplacesThePendingOne(t *testing.T) {
 	pendingID := 7
-	repo := &fakeRepository{findByIDDeck: Deck{ID: 1, CommanderPendingID: &pendingID}}
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", CommanderPendingID: &pendingID}}
 	service := NewService(repo)
 
 	commanderID := 4
-	result, err := service.UpdateDeck(context.Background(), testUserID, 1, updateDeckRequest{CommanderID: &commanderID})
+	result, err := service.UpdateDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", updateDeckRequest{CommanderID: &commanderID})
 
 	require.NoError(t, err)
 	assert.Nil(t, result.CommanderPendingID)
@@ -555,10 +555,10 @@ func TestService_UpdateDeck_RealCommanderReplacesThePendingOne(t *testing.T) {
 
 func TestService_UpdateDeck_ClearCommanderClearsBoth(t *testing.T) {
 	pendingID := 7
-	repo := &fakeRepository{findByIDDeck: Deck{ID: 1, CommanderPendingID: &pendingID}}
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", CommanderPendingID: &pendingID}}
 	service := NewService(repo)
 
-	result, err := service.UpdateDeck(context.Background(), testUserID, 1, updateDeckRequest{ClearCommanderID: true})
+	result, err := service.UpdateDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", updateDeckRequest{ClearCommanderID: true})
 
 	require.NoError(t, err)
 	assert.Nil(t, result.CommanderPendingID)
@@ -567,10 +567,10 @@ func TestService_UpdateDeck_ClearCommanderClearsBoth(t *testing.T) {
 
 func TestService_PromotePendingCommander(t *testing.T) {
 	pendingID := 7
-	repo := &fakeRepository{findByIDDeck: Deck{ID: 1, CommanderPendingID: &pendingID}}
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", CommanderPendingID: &pendingID}}
 	service := NewService(repo)
 
-	require.NoError(t, service.PromotePendingCommander(context.Background(), testUserID, 1, 7, 42))
+	require.NoError(t, service.PromotePendingCommander(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 7, 42))
 
 	require.NotNil(t, repo.updatedDeck.CommanderID)
 	assert.Equal(t, 42, *repo.updatedDeck.CommanderID)
@@ -579,16 +579,16 @@ func TestService_PromotePendingCommander(t *testing.T) {
 
 func TestService_PromotePendingCommander_IgnoresOtherPendingCards(t *testing.T) {
 	pendingID := 7
-	repo := &fakeRepository{findByIDDeck: Deck{ID: 1, CommanderPendingID: &pendingID}}
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", CommanderPendingID: &pendingID}}
 	service := NewService(repo)
 
-	require.NoError(t, service.PromotePendingCommander(context.Background(), testUserID, 1, 8, 42))
+	require.NoError(t, service.PromotePendingCommander(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 8, 42))
 
 	assert.Zero(t, repo.updatedDeck.ID)
 }
 
 func TestService_GetSharedDeck_ReturnsOwnerAndDeck(t *testing.T) {
-	repo := &fakeRepository{sharedOwnerID: otherUserID, sharedDeck: Deck{ID: 4, Name: "Shared", ShareID: "abc"}}
+	repo := &fakeRepository{sharedOwnerID: otherUserID, sharedDeck: Deck{ID: "00000000-0000-0000-0000-000000000004", Name: "Shared"}}
 	service := NewService(repo)
 
 	ownerID, d, err := service.GetSharedDeck(context.Background(), "abc")
@@ -596,7 +596,7 @@ func TestService_GetSharedDeck_ReturnsOwnerAndDeck(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "abc", repo.lastShareID)
 	assert.Equal(t, otherUserID, ownerID)
-	assert.Equal(t, 4, d.ID)
+	assert.Equal(t, "00000000-0000-0000-0000-000000000004", d.ID)
 }
 
 func TestService_GetSharedDeck_PropagatesNotFound(t *testing.T) {

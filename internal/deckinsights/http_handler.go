@@ -3,17 +3,17 @@ package deckinsights
 import (
 	"context"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 
 	"Melrakkiie/Tamiyo/internal/apierr"
 	"Melrakkiie/Tamiyo/internal/auth"
+	"Melrakkiie/Tamiyo/internal/deck"
 )
 
 type insightsService interface {
-	GetDeckLegality(ctx context.Context, userID string, deckID int) (LegalityReport, error)
-	GetDeckStats(ctx context.Context, userID string, deckID int) (DeckStats, error)
+	GetDeckLegality(ctx context.Context, userID string, deckID string) (LegalityReport, error)
+	GetDeckStats(ctx context.Context, userID string, deckID string) (DeckStats, error)
 }
 
 type Handler struct {
@@ -59,17 +59,17 @@ func (h *Handler) getDeckStats(ctx *gin.Context) {
 	ctx.IndentedJSON(http.StatusOK, stats)
 }
 
-func (h *Handler) authAndParseID(ctx *gin.Context) (userID string, deckID int, ok bool) {
+func (h *Handler) authAndParseID(ctx *gin.Context) (userID string, deckID string, ok bool) {
 	userID, authed := auth.UserIDFromContext(ctx)
 	if !authed {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
-		return "", 0, false
+		return "", "", false
 	}
 
-	deckID, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
+	deckID, valid := deck.ParseID(ctx.Param("id"))
+	if !valid {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return "", 0, false
+		return "", "", false
 	}
 
 	return userID, deckID, true

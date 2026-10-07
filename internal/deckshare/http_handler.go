@@ -3,23 +3,22 @@ package deckshare
 import (
 	"context"
 	"net/http"
-	"regexp"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"Melrakkiie/Tamiyo/internal/apierr"
+	"Melrakkiie/Tamiyo/internal/deck"
 	"Melrakkiie/Tamiyo/internal/deckinsights"
 )
 
 type sharedDeckService interface {
-	GetSharedDeck(ctx context.Context, shareID string) (SharedDeck, error)
-	GetSharedDeckLegality(ctx context.Context, shareID string) (deckinsights.LegalityReport, error)
-	GetSharedDeckStats(ctx context.Context, shareID string) (deckinsights.DeckStats, error)
+	GetSharedDeck(ctx context.Context, deckID string) (SharedDeck, error)
+	GetSharedDeckLegality(ctx context.Context, deckID string) (deckinsights.LegalityReport, error)
+	GetSharedDeckStats(ctx context.Context, deckID string) (deckinsights.DeckStats, error)
 }
 
 type deckResponse struct {
-	ShareID              string  `json:"share_id"`
+	ID                   string  `json:"id"`
 	Name                 string  `json:"name"`
 	Format               string  `json:"format"`
 	Visibility           string  `json:"visibility"`
@@ -66,7 +65,7 @@ func toResponse(shared SharedDeck) sharedDeckResponse {
 	d := shared.Deck
 	return sharedDeckResponse{
 		Deck: deckResponse{
-			ShareID:              d.ShareID,
+			ID:                   d.ID,
 			Name:                 d.Name,
 			Format:               d.Format,
 			Visibility:           d.Visibility,
@@ -90,29 +89,27 @@ func NewHandler(service sharedDeckService) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(router gin.IRoutes) {
-	router.GET("/shared/decks/:share_id", h.getSharedDeck)
-	router.GET("/shared/decks/:share_id/legality", h.getSharedDeckLegality)
-	router.GET("/shared/decks/:share_id/stats", h.getSharedDeckStats)
+	router.GET("/shared/decks/:id", h.getSharedDeck)
+	router.GET("/shared/decks/:id/legality", h.getSharedDeckLegality)
+	router.GET("/shared/decks/:id/stats", h.getSharedDeckStats)
 }
 
-var shareIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-
-func parseShareID(ctx *gin.Context) (string, bool) {
-	shareID := strings.ToLower(ctx.Param("share_id"))
-	if !shareIDPattern.MatchString(shareID) {
+func parseDeckID(ctx *gin.Context) (string, bool) {
+	deckID, valid := deck.ParseID(ctx.Param("id"))
+	if !valid {
 		ctx.JSON(http.StatusNotFound, gin.H{"error": "deck not found"})
 		return "", false
 	}
-	return shareID, true
+	return deckID, true
 }
 
 func (h *Handler) getSharedDeck(ctx *gin.Context) {
-	shareID, ok := parseShareID(ctx)
+	deckID, ok := parseDeckID(ctx)
 	if !ok {
 		return
 	}
 
-	shared, err := h.service.GetSharedDeck(ctx.Request.Context(), shareID)
+	shared, err := h.service.GetSharedDeck(ctx.Request.Context(), deckID)
 	if err != nil {
 		h.respondError(ctx, err)
 		return
@@ -122,12 +119,12 @@ func (h *Handler) getSharedDeck(ctx *gin.Context) {
 }
 
 func (h *Handler) getSharedDeckLegality(ctx *gin.Context) {
-	shareID, ok := parseShareID(ctx)
+	deckID, ok := parseDeckID(ctx)
 	if !ok {
 		return
 	}
 
-	report, err := h.service.GetSharedDeckLegality(ctx.Request.Context(), shareID)
+	report, err := h.service.GetSharedDeckLegality(ctx.Request.Context(), deckID)
 	if err != nil {
 		h.respondError(ctx, err)
 		return
@@ -137,12 +134,12 @@ func (h *Handler) getSharedDeckLegality(ctx *gin.Context) {
 }
 
 func (h *Handler) getSharedDeckStats(ctx *gin.Context) {
-	shareID, ok := parseShareID(ctx)
+	deckID, ok := parseDeckID(ctx)
 	if !ok {
 		return
 	}
 
-	stats, err := h.service.GetSharedDeckStats(ctx.Request.Context(), shareID)
+	stats, err := h.service.GetSharedDeckStats(ctx.Request.Context(), deckID)
 	if err != nil {
 		h.respondError(ctx, err)
 		return

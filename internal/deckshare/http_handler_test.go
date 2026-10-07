@@ -22,21 +22,21 @@ type fakeSharedService struct {
 	stats    deckinsights.DeckStats
 	err      error
 
-	lastShareID string
+	lastDeckID string
 }
 
-func (f *fakeSharedService) GetSharedDeck(ctx context.Context, shareID string) (SharedDeck, error) {
-	f.lastShareID = shareID
+func (f *fakeSharedService) GetSharedDeck(ctx context.Context, deckID string) (SharedDeck, error) {
+	f.lastDeckID = deckID
 	return f.shared, f.err
 }
 
-func (f *fakeSharedService) GetSharedDeckLegality(ctx context.Context, shareID string) (deckinsights.LegalityReport, error) {
-	f.lastShareID = shareID
+func (f *fakeSharedService) GetSharedDeckLegality(ctx context.Context, deckID string) (deckinsights.LegalityReport, error) {
+	f.lastDeckID = deckID
 	return f.legality, f.err
 }
 
-func (f *fakeSharedService) GetSharedDeckStats(ctx context.Context, shareID string) (deckinsights.DeckStats, error) {
-	f.lastShareID = shareID
+func (f *fakeSharedService) GetSharedDeckStats(ctx context.Context, deckID string) (deckinsights.DeckStats, error) {
+	f.lastDeckID = deckID
 	return f.stats, f.err
 }
 
@@ -55,23 +55,22 @@ func get(router *gin.Engine, path string) *httptest.ResponseRecorder {
 
 func TestGetSharedDeck_ReturnsDeckOwnerAndCardsWithoutAuthentication(t *testing.T) {
 	service := &fakeSharedService{shared: SharedDeck{
-		Deck:  deck.Deck{ID: 9, Name: "Otters", Format: "commander", Visibility: deck.VisibilityUnlisted, ShareID: shareID, Added: time.Now(), Updated: time.Now()},
+		Deck:  deck.Deck{ID: deckID, Name: "Otters", Format: "commander", Visibility: deck.VisibilityUnlisted, Added: time.Now(), Updated: time.Now()},
 		Owner: Owner{ID: ownerID, DisplayName: strPtr("Alice")},
 		Cards: []Card{{Name: "Island", ScryfallID: "i", Quantity: 3}, {Name: "Tamiyo", ScryfallID: "t", Quantity: 1, Commander: true}},
 	}}
 	router := setupRouter(service)
 
-	w := get(router, "/shared/decks/"+shareID)
+	w := get(router, "/shared/decks/"+deckID)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, shareID, service.lastShareID)
+	assert.Equal(t, deckID, service.lastDeckID)
 	var got map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
 	gotDeck := got["deck"].(map[string]any)
 	assert.Equal(t, "Otters", gotDeck["name"])
-	assert.Equal(t, shareID, gotDeck["share_id"])
+	assert.Equal(t, deckID, gotDeck["id"])
 	assert.Equal(t, float64(4), gotDeck["card_count"])
-	assert.NotContains(t, gotDeck, "id")
 	assert.Equal(t, "Alice", got["owner"].(map[string]any)["display_name"])
 	cards := got["cards"].([]any)
 	require.Len(t, cards, 2)
@@ -87,7 +86,7 @@ func TestGetSharedDeck_AcceptsAnUppercaseShareID(t *testing.T) {
 	w := get(router, "/shared/decks/ABCDEF12-2222-2222-2222-222222222222")
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "abcdef12-2222-2222-2222-222222222222", service.lastShareID)
+	assert.Equal(t, "abcdef12-2222-2222-2222-222222222222", service.lastDeckID)
 }
 
 func TestGetSharedDeck_MalformedShareIDReturnsNotFound(t *testing.T) {
@@ -97,13 +96,13 @@ func TestGetSharedDeck_MalformedShareIDReturnsNotFound(t *testing.T) {
 	w := get(router, "/shared/decks/42")
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
-	assert.Empty(t, service.lastShareID)
+	assert.Empty(t, service.lastDeckID)
 }
 
 func TestGetSharedDeck_HiddenDeckReturnsNotFound(t *testing.T) {
 	router := setupRouter(&fakeSharedService{err: ErrNotFound})
 
-	w := get(router, "/shared/decks/"+shareID)
+	w := get(router, "/shared/decks/"+deckID)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
@@ -111,7 +110,7 @@ func TestGetSharedDeck_HiddenDeckReturnsNotFound(t *testing.T) {
 func TestGetSharedDeckLegality_ReturnsReport(t *testing.T) {
 	router := setupRouter(&fakeSharedService{legality: deckinsights.LegalityReport{Format: "commander", Legal: true}})
 
-	w := get(router, "/shared/decks/"+shareID+"/legality")
+	w := get(router, "/shared/decks/"+deckID+"/legality")
 
 	require.Equal(t, http.StatusOK, w.Code)
 	var got deckinsights.LegalityReport
@@ -122,7 +121,7 @@ func TestGetSharedDeckLegality_ReturnsReport(t *testing.T) {
 func TestGetSharedDeckLegality_UnknownFormatReturnsBadRequest(t *testing.T) {
 	router := setupRouter(&fakeSharedService{err: deckinsights.ErrUnknownFormat})
 
-	w := get(router, "/shared/decks/"+shareID+"/legality")
+	w := get(router, "/shared/decks/"+deckID+"/legality")
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
@@ -130,7 +129,7 @@ func TestGetSharedDeckLegality_UnknownFormatReturnsBadRequest(t *testing.T) {
 func TestGetSharedDeckStats_ReturnsStats(t *testing.T) {
 	router := setupRouter(&fakeSharedService{stats: deckinsights.DeckStats{CardCount: 100}})
 
-	w := get(router, "/shared/decks/"+shareID+"/stats")
+	w := get(router, "/shared/decks/"+deckID+"/stats")
 
 	require.Equal(t, http.StatusOK, w.Code)
 	var got deckinsights.DeckStats
@@ -141,7 +140,7 @@ func TestGetSharedDeckStats_ReturnsStats(t *testing.T) {
 func TestGetSharedDeckStats_ScryfallDownReturnsBadGateway(t *testing.T) {
 	router := setupRouter(&fakeSharedService{err: deckinsights.ErrScryfallUnavailable})
 
-	w := get(router, "/shared/decks/"+shareID+"/stats")
+	w := get(router, "/shared/decks/"+deckID+"/stats")
 
 	assert.Equal(t, http.StatusBadGateway, w.Code)
 }

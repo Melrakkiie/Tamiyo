@@ -21,18 +21,18 @@ func ptr(i int) *int { return &i }
 // --- fakes -------------------------------------------------------------
 
 type fakeDeckService struct {
-	decks           map[int]deck.Deck
-	cardsByDeck     map[int][]deck.DeckCard
-	pendingByDeck   map[int][]deck.PendingCard
+	decks           map[string]deck.Deck
+	cardsByDeck     map[string][]deck.DeckCard
+	pendingByDeck   map[string][]deck.PendingCard
 	getDeckErr      error
 	getDeckCardsErr error
 }
 
-func (f *fakeDeckService) GetPendingCards(ctx context.Context, userID string, deckID int) ([]deck.PendingCard, error) {
+func (f *fakeDeckService) GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error) {
 	return f.pendingByDeck[deckID], nil
 }
 
-func (f *fakeDeckService) GetDeck(ctx context.Context, userID string, id int) (deck.Deck, error) {
+func (f *fakeDeckService) GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error) {
 	if f.getDeckErr != nil {
 		return deck.Deck{}, f.getDeckErr
 	}
@@ -43,7 +43,7 @@ func (f *fakeDeckService) GetDeck(ctx context.Context, userID string, id int) (d
 	return d, nil
 }
 
-func (f *fakeDeckService) GetDeckCards(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]deck.DeckCard, error) {
+func (f *fakeDeckService) GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error) {
 	if f.getDeckCardsErr != nil {
 		return nil, f.getDeckCardsErr
 	}
@@ -73,9 +73,9 @@ func (f *fakeScryfallFetcher) Fetch(ctx context.Context, identifiers []scryfall.
 // --- GetDeckLegality ------------------------------------------------------
 
 func TestGetDeckLegality_UnknownDeckReturnsErrDeckNotFound(t *testing.T) {
-	svc := NewService(&fakeDeckService{decks: map[int]deck.Deck{}}, &fakeScryfallFetcher{})
+	svc := NewService(&fakeDeckService{decks: map[string]deck.Deck{}}, &fakeScryfallFetcher{})
 
-	_, err := svc.GetDeckLegality(context.Background(), testUserID, 999)
+	_, err := svc.GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000999")
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrDeckNotFound)
@@ -83,9 +83,9 @@ func TestGetDeckLegality_UnknownDeckReturnsErrDeckNotFound(t *testing.T) {
 
 func TestGetDeckLegality_AllLegalCardsReportsLegalTrue(t *testing.T) {
 	decks := &fakeDeckService{
-		decks: map[int]deck.Deck{1: {ID: 1, Name: "Pile", Format: "commander"}},
-		cardsByDeck: map[int][]deck.DeckCard{
-			1: {{ID: 10, Name: "Sol Ring", ScryfallID: "aaaa"}},
+		decks: map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Name: "Pile", Format: "commander"}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {{ID: 10, Name: "Sol Ring", ScryfallID: "aaaa"}},
 		},
 	}
 	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
@@ -93,7 +93,7 @@ func TestGetDeckLegality_AllLegalCardsReportsLegalTrue(t *testing.T) {
 	}}
 	svc := NewService(decks, fetcher)
 
-	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	report, err := svc.GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
@@ -104,9 +104,9 @@ func TestGetDeckLegality_AllLegalCardsReportsLegalTrue(t *testing.T) {
 
 func TestGetDeckLegality_BannedCardIsReportedAndMarksDeckIllegal(t *testing.T) {
 	decks := &fakeDeckService{
-		decks: map[int]deck.Deck{1: {ID: 1, Name: "Pile", Format: "commander"}},
-		cardsByDeck: map[int][]deck.DeckCard{
-			1: {{ID: 10, Name: "Channel", ScryfallID: "bbbb"}},
+		decks: map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Name: "Pile", Format: "commander"}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {{ID: 10, Name: "Channel", ScryfallID: "bbbb"}},
 		},
 	}
 	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
@@ -114,7 +114,7 @@ func TestGetDeckLegality_BannedCardIsReportedAndMarksDeckIllegal(t *testing.T) {
 	}}
 	svc := NewService(decks, fetcher)
 
-	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	report, err := svc.GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
@@ -125,9 +125,9 @@ func TestGetDeckLegality_BannedCardIsReportedAndMarksDeckIllegal(t *testing.T) {
 
 func TestGetDeckLegality_UnrecognizedFormatReturnsErrUnknownFormat(t *testing.T) {
 	decks := &fakeDeckService{
-		decks: map[int]deck.Deck{1: {ID: 1, Name: "Pile", Format: "not-a-real-format"}},
-		cardsByDeck: map[int][]deck.DeckCard{
-			1: {{ID: 10, Name: "Sol Ring", ScryfallID: "aaaa"}},
+		decks: map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Name: "Pile", Format: "not-a-real-format"}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {{ID: 10, Name: "Sol Ring", ScryfallID: "aaaa"}},
 		},
 	}
 	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
@@ -135,7 +135,7 @@ func TestGetDeckLegality_UnrecognizedFormatReturnsErrUnknownFormat(t *testing.T)
 	}}
 	svc := NewService(decks, fetcher)
 
-	_, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	_, err := svc.GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrUnknownFormat)
@@ -143,14 +143,14 @@ func TestGetDeckLegality_UnrecognizedFormatReturnsErrUnknownFormat(t *testing.T)
 
 func TestGetDeckLegality_CardNotFoundOnScryfallIsReportedAndMarksDeckIllegal(t *testing.T) {
 	decks := &fakeDeckService{
-		decks: map[int]deck.Deck{1: {ID: 1, Name: "Pile", Format: "commander"}},
-		cardsByDeck: map[int][]deck.DeckCard{
-			1: {{ID: 10, Name: "Ghost Card", ScryfallID: "cccc"}},
+		decks: map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Name: "Pile", Format: "commander"}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {{ID: 10, Name: "Ghost Card", ScryfallID: "cccc"}},
 		},
 	}
 	svc := NewService(decks, &fakeScryfallFetcher{})
 
-	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	report, err := svc.GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
@@ -161,9 +161,9 @@ func TestGetDeckLegality_CardNotFoundOnScryfallIsReportedAndMarksDeckIllegal(t *
 
 func TestGetDeckLegality_CommanderSingletonViolationIsReported(t *testing.T) {
 	decks := &fakeDeckService{
-		decks: map[int]deck.Deck{1: {ID: 1, Name: "Pile", Format: "commander"}},
-		cardsByDeck: map[int][]deck.DeckCard{
-			1: {
+		decks: map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Name: "Pile", Format: "commander"}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {
 				{ID: 10, Name: "Sol Ring", ScryfallID: "aaaa"},
 				{ID: 11, Name: "Sol Ring", ScryfallID: "aaaa"},
 			},
@@ -174,7 +174,7 @@ func TestGetDeckLegality_CommanderSingletonViolationIsReported(t *testing.T) {
 	}}
 	svc := NewService(decks, fetcher)
 
-	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	report, err := svc.GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
@@ -185,9 +185,9 @@ func TestGetDeckLegality_CommanderSingletonViolationIsReported(t *testing.T) {
 
 func TestGetDeckLegality_DuplicateBasicLandsAreExemptFromSingleton(t *testing.T) {
 	decks := &fakeDeckService{
-		decks: map[int]deck.Deck{1: {ID: 1, Name: "Pile", Format: "commander"}},
-		cardsByDeck: map[int][]deck.DeckCard{
-			1: {
+		decks: map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Name: "Pile", Format: "commander"}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {
 				{ID: 10, Name: "Mountain", ScryfallID: "mtn"},
 				{ID: 11, Name: "Mountain", ScryfallID: "mtn"},
 			},
@@ -198,7 +198,7 @@ func TestGetDeckLegality_DuplicateBasicLandsAreExemptFromSingleton(t *testing.T)
 	}}
 	svc := NewService(decks, fetcher)
 
-	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	report, err := svc.GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
@@ -208,9 +208,9 @@ func TestGetDeckLegality_DuplicateBasicLandsAreExemptFromSingleton(t *testing.T)
 
 func TestGetDeckLegality_CardOutsideCommanderColorIdentityIsReported(t *testing.T) {
 	decks := &fakeDeckService{
-		decks: map[int]deck.Deck{1: {ID: 1, Name: "Pile", Format: "commander", CommanderID: ptr(10)}},
-		cardsByDeck: map[int][]deck.DeckCard{
-			1: {
+		decks: map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Name: "Pile", Format: "commander", CommanderID: ptr(10)}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {
 				{ID: 10, Name: "Golos, Tireless Pilgrim", ScryfallID: "golos"},
 				{ID: 11, Name: "Lightning Bolt", ScryfallID: "bolt"},
 			},
@@ -222,7 +222,7 @@ func TestGetDeckLegality_CardOutsideCommanderColorIdentityIsReported(t *testing.
 	}}
 	svc := NewService(decks, fetcher)
 
-	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	report, err := svc.GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
@@ -233,9 +233,9 @@ func TestGetDeckLegality_CardOutsideCommanderColorIdentityIsReported(t *testing.
 
 func TestGetDeckLegality_CardWithinCommanderColorIdentityIsFine(t *testing.T) {
 	decks := &fakeDeckService{
-		decks: map[int]deck.Deck{1: {ID: 1, Name: "Pile", Format: "commander", CommanderID: ptr(10)}},
-		cardsByDeck: map[int][]deck.DeckCard{
-			1: {
+		decks: map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Name: "Pile", Format: "commander", CommanderID: ptr(10)}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {
 				{ID: 10, Name: "Krenko, Mob Boss", ScryfallID: "krenko"},
 				{ID: 11, Name: "Lightning Bolt", ScryfallID: "bolt"},
 			},
@@ -247,7 +247,7 @@ func TestGetDeckLegality_CardWithinCommanderColorIdentityIsFine(t *testing.T) {
 	}}
 	svc := NewService(decks, fetcher)
 
-	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	report, err := svc.GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
@@ -256,9 +256,9 @@ func TestGetDeckLegality_CardWithinCommanderColorIdentityIsFine(t *testing.T) {
 
 func TestGetDeckLegality_NonCommanderFormatSkipsConstructionRules(t *testing.T) {
 	decks := &fakeDeckService{
-		decks: map[int]deck.Deck{1: {ID: 1, Name: "Pile", Format: "modern"}},
-		cardsByDeck: map[int][]deck.DeckCard{
-			1: {
+		decks: map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Name: "Pile", Format: "modern"}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {
 				{ID: 10, Name: "Mountain", ScryfallID: "mtn"},
 				{ID: 11, Name: "Mountain", ScryfallID: "mtn"},
 			},
@@ -269,7 +269,7 @@ func TestGetDeckLegality_NonCommanderFormatSkipsConstructionRules(t *testing.T) 
 	}}
 	svc := NewService(decks, fetcher)
 
-	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	report, err := svc.GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
@@ -278,13 +278,13 @@ func TestGetDeckLegality_NonCommanderFormatSkipsConstructionRules(t *testing.T) 
 
 func TestGetDeckLegality_PropagatesScryfallError(t *testing.T) {
 	decks := &fakeDeckService{
-		decks:       map[int]deck.Deck{1: {ID: 1, Name: "Pile", Format: "commander"}},
-		cardsByDeck: map[int][]deck.DeckCard{1: {{ID: 10, Name: "Sol Ring", ScryfallID: "aaaa"}}},
+		decks:       map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Name: "Pile", Format: "commander"}},
+		cardsByDeck: map[string][]deck.DeckCard{"00000000-0000-0000-0000-000000000001": {{ID: 10, Name: "Sol Ring", ScryfallID: "aaaa"}}},
 	}
 	fetcher := &fakeScryfallFetcher{err: errors.New("network down")}
 	svc := NewService(decks, fetcher)
 
-	_, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	_, err := svc.GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrScryfallUnavailable)
@@ -294,9 +294,9 @@ func TestGetDeckLegality_PropagatesScryfallError(t *testing.T) {
 
 func TestGetDeckStats_SeparatesLandsFromNonlands(t *testing.T) {
 	decks := &fakeDeckService{
-		decks: map[int]deck.Deck{1: {ID: 1, Name: "Pile", Format: "commander"}},
-		cardsByDeck: map[int][]deck.DeckCard{
-			1: {
+		decks: map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Name: "Pile", Format: "commander"}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {
 				{ID: 10, Name: "Mountain", ScryfallID: "mtn"},
 				{ID: 11, Name: "Sol Ring", ScryfallID: "ring"},
 			},
@@ -308,7 +308,7 @@ func TestGetDeckStats_SeparatesLandsFromNonlands(t *testing.T) {
 	}}
 	svc := NewService(decks, fetcher)
 
-	stats, err := svc.GetDeckStats(context.Background(), testUserID, 1)
+	stats, err := svc.GetDeckStats(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, stats.CardCount)
@@ -320,9 +320,9 @@ func TestGetDeckStats_SeparatesLandsFromNonlands(t *testing.T) {
 
 func TestGetDeckStats_ReturnsEmptyManaCurveForLandsOnlyDeck(t *testing.T) {
 	decks := &fakeDeckService{
-		decks: map[int]deck.Deck{1: {ID: 1, Name: "Lands", Format: "commander"}},
-		cardsByDeck: map[int][]deck.DeckCard{
-			1: {{ID: 10, Name: "Mountain", ScryfallID: "mtn"}},
+		decks: map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Name: "Lands", Format: "commander"}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {{ID: 10, Name: "Mountain", ScryfallID: "mtn"}},
 		},
 	}
 	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
@@ -330,7 +330,7 @@ func TestGetDeckStats_ReturnsEmptyManaCurveForLandsOnlyDeck(t *testing.T) {
 	}}
 	svc := NewService(decks, fetcher)
 
-	stats, err := svc.GetDeckStats(context.Background(), testUserID, 1)
+	stats, err := svc.GetDeckStats(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 
 	require.NoError(t, err)
 	require.NotNil(t, stats.ManaCurve)
@@ -339,9 +339,9 @@ func TestGetDeckStats_ReturnsEmptyManaCurveForLandsOnlyDeck(t *testing.T) {
 
 func TestGetDeckStats_BuildsManaCurveSortedByManaValue(t *testing.T) {
 	decks := &fakeDeckService{
-		decks: map[int]deck.Deck{1: {ID: 1, Format: "commander"}},
-		cardsByDeck: map[int][]deck.DeckCard{
-			1: {
+		decks: map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Format: "commander"}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {
 				{ID: 10, Name: "A", ScryfallID: "a"},
 				{ID: 11, Name: "B", ScryfallID: "b"},
 				{ID: 12, Name: "C", ScryfallID: "c"},
@@ -355,7 +355,7 @@ func TestGetDeckStats_BuildsManaCurveSortedByManaValue(t *testing.T) {
 	}}
 	svc := NewService(decks, fetcher)
 
-	stats, err := svc.GetDeckStats(context.Background(), testUserID, 1)
+	stats, err := svc.GetDeckStats(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 
 	require.NoError(t, err)
 	require.Len(t, stats.ManaCurve, 2)
@@ -365,9 +365,9 @@ func TestGetDeckStats_BuildsManaCurveSortedByManaValue(t *testing.T) {
 
 func TestGetDeckStats_MulticolorCardCountsUnderEachColor(t *testing.T) {
 	decks := &fakeDeckService{
-		decks: map[int]deck.Deck{1: {ID: 1, Format: "commander"}},
-		cardsByDeck: map[int][]deck.DeckCard{
-			1: {{ID: 10, Name: "Atraxa", ScryfallID: "atraxa"}},
+		decks: map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Format: "commander"}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {{ID: 10, Name: "Atraxa", ScryfallID: "atraxa"}},
 		},
 	}
 	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
@@ -375,7 +375,7 @@ func TestGetDeckStats_MulticolorCardCountsUnderEachColor(t *testing.T) {
 	}}
 	svc := NewService(decks, fetcher)
 
-	stats, err := svc.GetDeckStats(context.Background(), testUserID, 1)
+	stats, err := svc.GetDeckStats(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, stats.ColorBreakdown["W"])
@@ -386,9 +386,9 @@ func TestGetDeckStats_MulticolorCardCountsUnderEachColor(t *testing.T) {
 
 func TestGetDeckStats_ArtifactCreatureCountsAsCreature(t *testing.T) {
 	decks := &fakeDeckService{
-		decks: map[int]deck.Deck{1: {ID: 1, Format: "commander"}},
-		cardsByDeck: map[int][]deck.DeckCard{
-			1: {{ID: 10, Name: "Construct", ScryfallID: "construct"}},
+		decks: map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Format: "commander"}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {{ID: 10, Name: "Construct", ScryfallID: "construct"}},
 		},
 	}
 	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
@@ -396,7 +396,7 @@ func TestGetDeckStats_ArtifactCreatureCountsAsCreature(t *testing.T) {
 	}}
 	svc := NewService(decks, fetcher)
 
-	stats, err := svc.GetDeckStats(context.Background(), testUserID, 1)
+	stats, err := svc.GetDeckStats(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, stats.TypeBreakdown["Creature"])
@@ -405,14 +405,14 @@ func TestGetDeckStats_ArtifactCreatureCountsAsCreature(t *testing.T) {
 
 func TestGetDeckStats_CardNotFoundOnScryfallCountsAsUnknownType(t *testing.T) {
 	decks := &fakeDeckService{
-		decks: map[int]deck.Deck{1: {ID: 1, Format: "commander"}},
-		cardsByDeck: map[int][]deck.DeckCard{
-			1: {{ID: 10, Name: "Ghost Card", ScryfallID: "ghost"}},
+		decks: map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Format: "commander"}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {{ID: 10, Name: "Ghost Card", ScryfallID: "ghost"}},
 		},
 	}
 	svc := NewService(decks, &fakeScryfallFetcher{})
 
-	stats, err := svc.GetDeckStats(context.Background(), testUserID, 1)
+	stats, err := svc.GetDeckStats(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, stats.CardCount)
@@ -422,9 +422,9 @@ func TestGetDeckStats_CardNotFoundOnScryfallCountsAsUnknownType(t *testing.T) {
 }
 
 func TestGetDeckStats_UnknownDeckReturnsErrDeckNotFound(t *testing.T) {
-	svc := NewService(&fakeDeckService{decks: map[int]deck.Deck{}}, &fakeScryfallFetcher{})
+	svc := NewService(&fakeDeckService{decks: map[string]deck.Deck{}}, &fakeScryfallFetcher{})
 
-	_, err := svc.GetDeckStats(context.Background(), testUserID, 999)
+	_, err := svc.GetDeckStats(context.Background(), testUserID, "00000000-0000-0000-0000-000000000999")
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrDeckNotFound)
@@ -432,9 +432,9 @@ func TestGetDeckStats_UnknownDeckReturnsErrDeckNotFound(t *testing.T) {
 
 func TestGetDeckStats_DistinctScryfallIDsAreOnlyFetchedOnce(t *testing.T) {
 	decks := &fakeDeckService{
-		decks: map[int]deck.Deck{1: {ID: 1, Format: "commander"}},
-		cardsByDeck: map[int][]deck.DeckCard{
-			1: {
+		decks: map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Format: "commander"}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {
 				{ID: 10, Name: "Mountain", ScryfallID: "mtn"},
 				{ID: 11, Name: "Mountain", ScryfallID: "mtn"},
 				{ID: 12, Name: "Mountain", ScryfallID: "mtn"},
@@ -446,7 +446,7 @@ func TestGetDeckStats_DistinctScryfallIDsAreOnlyFetchedOnce(t *testing.T) {
 	}}
 	svc := NewService(decks, fetcher)
 
-	_, err := svc.GetDeckStats(context.Background(), testUserID, 1)
+	_, err := svc.GetDeckStats(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 
 	require.NoError(t, err)
 	assert.Len(t, fetcher.lastRequest, 1)
@@ -454,12 +454,12 @@ func TestGetDeckStats_DistinctScryfallIDsAreOnlyFetchedOnce(t *testing.T) {
 
 func TestGetDeckLegality_UsesAPendingCommanderAndPendingCards(t *testing.T) {
 	decks := &fakeDeckService{
-		decks: map[int]deck.Deck{1: {ID: 1, Name: "Pile", Format: "commander", CommanderPendingID: ptr(5)}},
-		cardsByDeck: map[int][]deck.DeckCard{
-			1: {{ID: 11, Name: "Lightning Bolt", ScryfallID: "bolt"}},
+		decks: map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Name: "Pile", Format: "commander", CommanderPendingID: ptr(5)}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {{ID: 11, Name: "Lightning Bolt", ScryfallID: "bolt"}},
 		},
-		pendingByDeck: map[int][]deck.PendingCard{
-			1: {
+		pendingByDeck: map[string][]deck.PendingCard{
+			"00000000-0000-0000-0000-000000000001": {
 				{ID: 5, Name: "Golos, Tireless Pilgrim", ScryfallID: "golos", Quantity: 1},
 				{ID: 6, Name: "Counterspell", ScryfallID: "counter", Quantity: 1},
 			},
@@ -472,7 +472,7 @@ func TestGetDeckLegality_UsesAPendingCommanderAndPendingCards(t *testing.T) {
 	}}
 	svc := NewService(decks, fetcher)
 
-	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	report, err := svc.GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
@@ -487,10 +487,10 @@ func TestGetDeckLegality_UsesAPendingCommanderAndPendingCards(t *testing.T) {
 
 func TestGetDeckLegality_PendingCopiesCountForSingleton(t *testing.T) {
 	decks := &fakeDeckService{
-		decks:       map[int]deck.Deck{1: {ID: 1, Name: "Pile", Format: "commander"}},
-		cardsByDeck: map[int][]deck.DeckCard{1: {{ID: 11, Name: "Sol Ring", ScryfallID: "ring"}}},
-		pendingByDeck: map[int][]deck.PendingCard{
-			1: {{ID: 5, Name: "Sol Ring", ScryfallID: "ring", Quantity: 1}},
+		decks:       map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Name: "Pile", Format: "commander"}},
+		cardsByDeck: map[string][]deck.DeckCard{"00000000-0000-0000-0000-000000000001": {{ID: 11, Name: "Sol Ring", ScryfallID: "ring"}}},
+		pendingByDeck: map[string][]deck.PendingCard{
+			"00000000-0000-0000-0000-000000000001": {{ID: 5, Name: "Sol Ring", ScryfallID: "ring", Quantity: 1}},
 		},
 	}
 	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
@@ -498,7 +498,7 @@ func TestGetDeckLegality_PendingCopiesCountForSingleton(t *testing.T) {
 	}}
 	svc := NewService(decks, fetcher)
 
-	report, err := svc.GetDeckLegality(context.Background(), testUserID, 1)
+	report, err := svc.GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
@@ -509,10 +509,10 @@ func TestGetDeckLegality_PendingCopiesCountForSingleton(t *testing.T) {
 
 func TestGetDeckStats_CountsPendingCopies(t *testing.T) {
 	decks := &fakeDeckService{
-		decks:       map[int]deck.Deck{1: {ID: 1, Name: "Pile", Format: "commander"}},
-		cardsByDeck: map[int][]deck.DeckCard{1: {{ID: 10, Name: "Mountain", ScryfallID: "mtn"}}},
-		pendingByDeck: map[int][]deck.PendingCard{
-			1: {{ID: 5, Name: "Mountain", ScryfallID: "mtn", Quantity: 3}},
+		decks:       map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Name: "Pile", Format: "commander"}},
+		cardsByDeck: map[string][]deck.DeckCard{"00000000-0000-0000-0000-000000000001": {{ID: 10, Name: "Mountain", ScryfallID: "mtn"}}},
+		pendingByDeck: map[string][]deck.PendingCard{
+			"00000000-0000-0000-0000-000000000001": {{ID: 5, Name: "Mountain", ScryfallID: "mtn", Quantity: 3}},
 		},
 	}
 	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
@@ -520,7 +520,7 @@ func TestGetDeckStats_CountsPendingCopies(t *testing.T) {
 	}}
 	svc := NewService(decks, fetcher)
 
-	stats, err := svc.GetDeckStats(context.Background(), testUserID, 1)
+	stats, err := svc.GetDeckStats(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 
 	require.NoError(t, err)
 	assert.Equal(t, 4, stats.CardCount)
@@ -546,8 +546,8 @@ func deckOf(format string, count int) (*fakeDeckService, *fakeScryfallFetcher) {
 		cards = append(cards, deck.DeckCard{ID: i + 1, Name: "Forest", ScryfallID: "forest"})
 	}
 	decks := &fakeDeckService{
-		decks:       map[int]deck.Deck{1: {ID: 1, Name: "Pile", Format: format}},
-		cardsByDeck: map[int][]deck.DeckCard{1: cards},
+		decks:       map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Name: "Pile", Format: format}},
+		cardsByDeck: map[string][]deck.DeckCard{"00000000-0000-0000-0000-000000000001": cards},
 	}
 	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
 		"forest": {ID: "forest", Name: "Forest", TypeLine: "Basic Land — Forest", Legalities: map[string]string{format: "legal"}},
@@ -558,7 +558,7 @@ func deckOf(format string, count int) (*fakeDeckService, *fakeScryfallFetcher) {
 func TestGetDeckLegality_CommanderDeckOfExactlyAHundredCardsIsLegal(t *testing.T) {
 	decks, fetcher := deckOf("commander", 100)
 
-	report, err := NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, 1)
+	report, err := NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 
 	require.NoError(t, err)
 	assert.True(t, report.Legal)
@@ -569,7 +569,7 @@ func TestGetDeckLegality_CommanderDeckWithTheWrongCardCountIsNotLegal(t *testing
 	for _, count := range []int{99, 101} {
 		decks, fetcher := deckOf("commander", count)
 
-		report, err := NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, 1)
+		report, err := NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 
 		require.NoError(t, err)
 		assert.False(t, report.Legal)
@@ -581,23 +581,23 @@ func TestGetDeckLegality_CommanderDeckWithTheWrongCardCountIsNotLegal(t *testing
 
 func TestGetDeckLegality_ConstructedDeckNeedsAtLeastSixtyCards(t *testing.T) {
 	decks, fetcher := deckOf("modern", 59)
-	report, err := NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, 1)
+	report, err := NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
 	assert.False(t, report.Legal)
 	require.Len(t, report.Issues, 1)
 	assert.Equal(t, "deck size: 59 cards, modern requires at least 60", report.Issues[0].Reason)
 
 	decks, fetcher = deckOf("modern", 75)
-	report, err = NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, 1)
+	report, err = NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
 	assert.True(t, report.Legal)
 }
 
 func TestGetDeckLegality_CountsPendingCopiesInTheDeckSize(t *testing.T) {
 	decks, fetcher := deckOf("commander", 97)
-	decks.pendingByDeck = map[int][]deck.PendingCard{1: {{ID: 1, Name: "Forest", ScryfallID: "forest", Quantity: 3}}}
+	decks.pendingByDeck = map[string][]deck.PendingCard{"00000000-0000-0000-0000-000000000001": {{ID: 1, Name: "Forest", ScryfallID: "forest", Quantity: 3}}}
 
-	report, err := NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, 1)
+	report, err := NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 
 	require.NoError(t, err)
 	assert.True(t, report.Legal)
@@ -605,10 +605,10 @@ func TestGetDeckLegality_CountsPendingCopiesInTheDeckSize(t *testing.T) {
 
 func TestGetDeckLegality_PutsTheDeckSizeIssueFirst(t *testing.T) {
 	decks, fetcher := deckOf("commander", 2)
-	decks.cardsByDeck[1] = append(decks.cardsByDeck[1], deck.DeckCard{ID: 50, Name: "Channel", ScryfallID: "channel"})
+	decks.cardsByDeck["00000000-0000-0000-0000-000000000001"] = append(decks.cardsByDeck["00000000-0000-0000-0000-000000000001"], deck.DeckCard{ID: 50, Name: "Channel", ScryfallID: "channel"})
 	fetcher.cards["channel"] = scryfall.Card{ID: "channel", Name: "Channel", TypeLine: "Sorcery", Legalities: map[string]string{"commander": "banned"}}
 
-	report, err := NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, 1)
+	report, err := NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 
 	require.NoError(t, err)
 	require.Len(t, report.Issues, 2)
@@ -619,7 +619,7 @@ func TestGetDeckLegality_PutsTheDeckSizeIssueFirst(t *testing.T) {
 func TestGetDeckLegality_FormatsWithoutASizeRuleAreNotChecked(t *testing.T) {
 	decks, fetcher := deckOf("someformat", 3)
 
-	report, err := NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, 1)
+	report, err := NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 
 	require.NoError(t, err)
 	assert.True(t, report.Legal)

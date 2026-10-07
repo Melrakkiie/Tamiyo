@@ -98,10 +98,10 @@ func seedDecks(t *testing.T, db *sqlx.DB, userID string) {
 	t.Helper()
 
 	_, err := db.Exec(`
-		INSERT INTO tamiyo.deck (user_id, name, format, commander_id)
+		INSERT INTO tamiyo.deck (id, user_id, name, format, commander_id)
 		VALUES
-		    ($1, 'Otterly Playful', 'modern', null),
-		    ($1, 'Izzet Prowess', 'standard', null);
+		    ('00000000-0000-0000-0000-000000000001', $1, 'Otterly Playful', 'modern', null),
+		    ('00000000-0000-0000-0000-000000000002', $1, 'Izzet Prowess', 'standard', null);
 	`, userID)
 	require.NoError(t, err)
 }
@@ -119,7 +119,7 @@ func seedCardsWithoutStorage(t *testing.T, db *sqlx.DB, userID string) {
 	require.NoError(t, err)
 }
 
-func linkCardToDeck(t *testing.T, db *sqlx.DB, cardID, deckID int) {
+func linkCardToDeck(t *testing.T, db *sqlx.DB, cardID int, deckID string) {
 	t.Helper()
 
 	_, err := db.Exec(`
@@ -167,7 +167,7 @@ func TestPostgresRepository_FindAll_ReturnsCorrectCardCount(t *testing.T) {
 	seedDecks(t, db, userID)
 	seedCardsWithoutStorage(t, db, userID)
 
-	linkCardToDeck(t, db, 1, 1)
+	linkCardToDeck(t, db, 1, "00000000-0000-0000-0000-000000000001")
 
 	result, _, err := repo.FindAll(context.Background(), userID, defaultFilter())
 
@@ -271,7 +271,7 @@ func TestPostgresRepository_FindByID_ReturnsDeck(t *testing.T) {
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userID)
 
-	result, err := repo.FindByID(context.Background(), userID, 1)
+	result, err := repo.FindByID(context.Background(), userID, "00000000-0000-0000-0000-000000000001")
 
 	require.NoError(t, err)
 	assert.Equal(t, "Otterly Playful", result.Name)
@@ -282,7 +282,7 @@ func TestPostgresRepository_FindByID_ReturnsErrNotFoundWhenMissing(t *testing.T)
 	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
 
-	_, err := repo.FindByID(context.Background(), userID, 999)
+	_, err := repo.FindByID(context.Background(), userID, "00000000-0000-0000-0000-000000000999")
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
@@ -294,7 +294,7 @@ func TestPostgresRepository_FindByID_ReturnsErrNotFoundWhenDeckBelongsToAnotherU
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userA)
 
-	_, err := repo.FindByID(context.Background(), userB, 1)
+	_, err := repo.FindByID(context.Background(), userB, "00000000-0000-0000-0000-000000000001")
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
@@ -395,7 +395,7 @@ func TestPostgresRepository_Update_UpdatesAndReturnsDeck(t *testing.T) {
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userID)
 
-	existing, err := repo.FindByID(context.Background(), userID, 1)
+	existing, err := repo.FindByID(context.Background(), userID, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
 
 	existing.Name = "Renamed Deck"
@@ -404,7 +404,7 @@ func TestPostgresRepository_Update_UpdatesAndReturnsDeck(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Renamed Deck", updated.Name)
 
-	refetched, err := repo.FindByID(context.Background(), userID, 1)
+	refetched, err := repo.FindByID(context.Background(), userID, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
 	assert.Equal(t, "Renamed Deck", refetched.Name)
 }
@@ -414,7 +414,7 @@ func TestPostgresRepository_Update_ReturnsErrNotFoundWhenDeckDoesNotExist(t *tes
 	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
 
-	nonExistent := Deck{ID: 999, Name: "Non existent", Format: "modern"}
+	nonExistent := Deck{ID: "00000000-0000-0000-0000-000000000999", Name: "Non existent", Format: "modern"}
 
 	_, err := repo.Update(context.Background(), userID, nonExistent)
 
@@ -428,12 +428,12 @@ func TestPostgresRepository_Update_ReturnsErrNotFoundWhenDeckBelongsToAnotherUse
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userA)
 
-	deckFromA := Deck{ID: 1, Name: "Hijacked", Format: "modern"}
+	deckFromA := Deck{ID: "00000000-0000-0000-0000-000000000001", Name: "Hijacked", Format: "modern"}
 	_, err := repo.Update(context.Background(), userB, deckFromA)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 
-	untouched, err := repo.FindByID(context.Background(), userA, 1)
+	untouched, err := repo.FindByID(context.Background(), userA, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
 	assert.Equal(t, "Otterly Playful", untouched.Name)
 }
@@ -444,7 +444,7 @@ func TestPostgresRepository_Update_ReturnsErrCommanderNotFoundOnInvalidCommander
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userID)
 
-	existing, err := repo.FindByID(context.Background(), userID, 1)
+	existing, err := repo.FindByID(context.Background(), userID, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
 
 	invalidCommanderID := 9999
@@ -460,7 +460,7 @@ func TestPostgresRepository_Update_RefreshesUpdatedTimestamp(t *testing.T) {
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userID)
 
-	existing, err := repo.FindByID(context.Background(), userID, 1)
+	existing, err := repo.FindByID(context.Background(), userID, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
 
 	time.Sleep(10 * time.Millisecond)
@@ -480,7 +480,7 @@ func TestPostgresRepository_Update_ReturnsErrCommanderNotFoundWhenCardBelongsToA
 	seedDecks(t, db, userB)
 	seedCardsWithoutStorage(t, db, userA)
 
-	existing, err := repo.FindByID(context.Background(), userB, 1)
+	existing, err := repo.FindByID(context.Background(), userB, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
 
 	commanderID := 1
@@ -496,11 +496,11 @@ func TestPostgresRepository_Delete_RemovesDeck(t *testing.T) {
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userID)
 
-	err := repo.Delete(context.Background(), userID, 1)
+	err := repo.Delete(context.Background(), userID, "00000000-0000-0000-0000-000000000001")
 
 	require.NoError(t, err)
 
-	_, err = repo.FindByID(context.Background(), userID, 1)
+	_, err = repo.FindByID(context.Background(), userID, "00000000-0000-0000-0000-000000000001")
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
@@ -509,7 +509,7 @@ func TestPostgresRepository_Delete_ReturnsErrNotFoundWhenDeckDoesNotExist(t *tes
 	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
 
-	err := repo.Delete(context.Background(), userID, 999)
+	err := repo.Delete(context.Background(), userID, "00000000-0000-0000-0000-000000000999")
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
@@ -521,11 +521,11 @@ func TestPostgresRepository_Delete_DoesNotAffectAnotherUsersDeck(t *testing.T) {
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userA)
 
-	err := repo.Delete(context.Background(), userB, 1)
+	err := repo.Delete(context.Background(), userB, "00000000-0000-0000-0000-000000000001")
 
 	assert.ErrorIs(t, err, ErrNotFound)
 
-	result, err := repo.FindByID(context.Background(), userA, 1)
+	result, err := repo.FindByID(context.Background(), userA, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
 	assert.Equal(t, "Otterly Playful", result.Name)
 }
@@ -537,10 +537,10 @@ func TestPostgresRepository_FindCardsByDeckID_ReturnsCardsInDeck(t *testing.T) {
 	seedDecks(t, db, userID)
 	seedCardsWithoutStorage(t, db, userID)
 
-	linkCardToDeck(t, db, 1, 1)
-	linkCardToDeck(t, db, 2, 1)
+	linkCardToDeck(t, db, 1, "00000000-0000-0000-0000-000000000001")
+	linkCardToDeck(t, db, 2, "00000000-0000-0000-0000-000000000001")
 
-	result, err := repo.FindCardsByDeckID(context.Background(), userID, 1, "updated", true)
+	result, err := repo.FindCardsByDeckID(context.Background(), userID, "00000000-0000-0000-0000-000000000001", "updated", true)
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -559,10 +559,10 @@ func TestPostgresRepository_FindCardsByDeckID_ReturnsColorsAndType(t *testing.T)
 	_, err := db.Exec(`UPDATE tamiyo.cards SET colors = 'R', card_type = 'Instant', color_identity = 'R' WHERE id = 2`)
 	require.NoError(t, err)
 
-	linkCardToDeck(t, db, 1, 1)
-	linkCardToDeck(t, db, 2, 1)
+	linkCardToDeck(t, db, 1, "00000000-0000-0000-0000-000000000001")
+	linkCardToDeck(t, db, 2, "00000000-0000-0000-0000-000000000001")
 
-	result, err := repo.FindCardsByDeckID(context.Background(), userID, 1, "name", false)
+	result, err := repo.FindCardsByDeckID(context.Background(), userID, "00000000-0000-0000-0000-000000000001", "name", false)
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -584,7 +584,7 @@ func TestPostgresRepository_FindCardsByDeckID_ReturnsEmptySliceWhenDeckHasNoCard
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userID)
 
-	result, err := repo.FindCardsByDeckID(context.Background(), userID, 1, "updated", true)
+	result, err := repo.FindCardsByDeckID(context.Background(), userID, "00000000-0000-0000-0000-000000000001", "updated", true)
 
 	require.NoError(t, err)
 	assert.Empty(t, result)
@@ -597,11 +597,11 @@ func TestPostgresRepository_FindCardsByDeckID_OnlyReturnsCardsFromRequestedDeck(
 	seedDecks(t, db, userID)
 	seedCardsWithoutStorage(t, db, userID)
 
-	linkCardToDeck(t, db, 1, 1)
-	linkCardToDeck(t, db, 2, 2)
-	linkCardToDeck(t, db, 3, 2)
+	linkCardToDeck(t, db, 1, "00000000-0000-0000-0000-000000000001")
+	linkCardToDeck(t, db, 2, "00000000-0000-0000-0000-000000000002")
+	linkCardToDeck(t, db, 3, "00000000-0000-0000-0000-000000000002")
 
-	result, err := repo.FindCardsByDeckID(context.Background(), userID, 1, "updated", true)
+	result, err := repo.FindCardsByDeckID(context.Background(), userID, "00000000-0000-0000-0000-000000000001", "updated", true)
 
 	require.NoError(t, err)
 	require.Len(t, result, 1)
@@ -615,16 +615,16 @@ func TestPostgresRepository_FindCardsByDeckID_SortsByManaValue(t *testing.T) {
 	seedDecks(t, db, userID)
 	seedCardsWithoutStorage(t, db, userID)
 
-	linkCardToDeck(t, db, 1, 1) // Black Lotus, mana_value 0
-	linkCardToDeck(t, db, 2, 1) // Lightning Bolt, mana_value 1
-	linkCardToDeck(t, db, 3, 1) // Counterspell, mana_value 2
+	linkCardToDeck(t, db, 1, "00000000-0000-0000-0000-000000000001") // Black Lotus, mana_value 0
+	linkCardToDeck(t, db, 2, "00000000-0000-0000-0000-000000000001") // Lightning Bolt, mana_value 1
+	linkCardToDeck(t, db, 3, "00000000-0000-0000-0000-000000000001") // Counterspell, mana_value 2
 
-	ascending, err := repo.FindCardsByDeckID(context.Background(), userID, 1, "mana_value", false)
+	ascending, err := repo.FindCardsByDeckID(context.Background(), userID, "00000000-0000-0000-0000-000000000001", "mana_value", false)
 	require.NoError(t, err)
 	require.Len(t, ascending, 3)
 	assert.Equal(t, []string{"Black Lotus", "Lightning Bolt", "Counterspell"}, []string{ascending[0].Name, ascending[1].Name, ascending[2].Name})
 
-	descending, err := repo.FindCardsByDeckID(context.Background(), userID, 1, "mana_value", true)
+	descending, err := repo.FindCardsByDeckID(context.Background(), userID, "00000000-0000-0000-0000-000000000001", "mana_value", true)
 	require.NoError(t, err)
 	require.Len(t, descending, 3)
 	assert.Equal(t, []string{"Counterspell", "Lightning Bolt", "Black Lotus"}, []string{descending[0].Name, descending[1].Name, descending[2].Name})
@@ -637,11 +637,11 @@ func TestPostgresRepository_LinkCardToDeck_CreatesLink(t *testing.T) {
 	seedDecks(t, db, userID)
 	seedCardsWithoutStorage(t, db, userID)
 
-	err := repo.LinkCardToDeck(context.Background(), userID, 1, 1)
+	err := repo.LinkCardToDeck(context.Background(), userID, "00000000-0000-0000-0000-000000000001", 1)
 
 	require.NoError(t, err)
 
-	cards, err := repo.FindCardsByDeckID(context.Background(), userID, 1, "updated", true)
+	cards, err := repo.FindCardsByDeckID(context.Background(), userID, "00000000-0000-0000-0000-000000000001", "updated", true)
 	require.NoError(t, err)
 	require.Len(t, cards, 1)
 	assert.Equal(t, "Black Lotus", cards[0].Name)
@@ -654,13 +654,13 @@ func TestPostgresRepository_LinkCardToDeck_IsIdempotent(t *testing.T) {
 	seedDecks(t, db, userID)
 	seedCardsWithoutStorage(t, db, userID)
 
-	err1 := repo.LinkCardToDeck(context.Background(), userID, 1, 1)
+	err1 := repo.LinkCardToDeck(context.Background(), userID, "00000000-0000-0000-0000-000000000001", 1)
 	require.NoError(t, err1)
 
-	err2 := repo.LinkCardToDeck(context.Background(), userID, 1, 1)
+	err2 := repo.LinkCardToDeck(context.Background(), userID, "00000000-0000-0000-0000-000000000001", 1)
 	require.NoError(t, err2)
 
-	cards, err := repo.FindCardsByDeckID(context.Background(), userID, 1, "updated", true)
+	cards, err := repo.FindCardsByDeckID(context.Background(), userID, "00000000-0000-0000-0000-000000000001", "updated", true)
 	require.NoError(t, err)
 	assert.Len(t, cards, 1)
 }
@@ -671,7 +671,7 @@ func TestPostgresRepository_LinkCardToDeck_ReturnsErrCardNotFoundOnInvalidCardID
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userID)
 
-	err := repo.LinkCardToDeck(context.Background(), userID, 1, 9999)
+	err := repo.LinkCardToDeck(context.Background(), userID, "00000000-0000-0000-0000-000000000001", 9999)
 
 	assert.ErrorIs(t, err, ErrCardNotFound)
 }
@@ -684,7 +684,7 @@ func TestPostgresRepository_LinkCardToDeck_ReturnsErrCardNotFoundWhenCardBelongs
 	seedDecks(t, db, userA)
 	seedCardsWithoutStorage(t, db, userB)
 
-	err := repo.LinkCardToDeck(context.Background(), userA, 1, 1)
+	err := repo.LinkCardToDeck(context.Background(), userA, "00000000-0000-0000-0000-000000000001", 1)
 
 	assert.ErrorIs(t, err, ErrCardNotFound)
 }
@@ -696,10 +696,10 @@ func TestPostgresRepository_LinkCardToDeck_DoesNotAffectOtherDecks(t *testing.T)
 	seedDecks(t, db, userID)
 	seedCardsWithoutStorage(t, db, userID)
 
-	err := repo.LinkCardToDeck(context.Background(), userID, 1, 1)
+	err := repo.LinkCardToDeck(context.Background(), userID, "00000000-0000-0000-0000-000000000001", 1)
 	require.NoError(t, err)
 
-	cardsInDeck2, err := repo.FindCardsByDeckID(context.Background(), userID, 2, "updated", true)
+	cardsInDeck2, err := repo.FindCardsByDeckID(context.Background(), userID, "00000000-0000-0000-0000-000000000002", "updated", true)
 	require.NoError(t, err)
 	assert.Empty(t, cardsInDeck2)
 }
@@ -710,13 +710,13 @@ func TestPostgresRepository_UnlinkCardFromDeck_RemovesLink(t *testing.T) {
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userID)
 	seedCardsWithoutStorage(t, db, userID)
-	linkCardToDeck(t, db, 1, 1)
+	linkCardToDeck(t, db, 1, "00000000-0000-0000-0000-000000000001")
 
-	err := repo.UnlinkCardFromDeck(context.Background(), userID, 1, 1)
+	err := repo.UnlinkCardFromDeck(context.Background(), userID, "00000000-0000-0000-0000-000000000001", 1)
 
 	require.NoError(t, err)
 
-	cards, err := repo.FindCardsByDeckID(context.Background(), userID, 1, "updated", true)
+	cards, err := repo.FindCardsByDeckID(context.Background(), userID, "00000000-0000-0000-0000-000000000001", "updated", true)
 	require.NoError(t, err)
 	assert.Empty(t, cards)
 }
@@ -728,7 +728,7 @@ func TestPostgresRepository_UnlinkCardFromDeck_SucceedsWhenLinkDoesNotExist(t *t
 	seedDecks(t, db, userID)
 	seedCardsWithoutStorage(t, db, userID)
 
-	err := repo.UnlinkCardFromDeck(context.Background(), userID, 1, 1)
+	err := repo.UnlinkCardFromDeck(context.Background(), userID, "00000000-0000-0000-0000-000000000001", 1)
 
 	assert.NoError(t, err)
 }
@@ -740,12 +740,12 @@ func TestPostgresRepository_UnlinkCardFromDeck_DoesNotRemoveLinkWhenDeckBelongsT
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userA)
 	seedCardsWithoutStorage(t, db, userA)
-	linkCardToDeck(t, db, 1, 1)
+	linkCardToDeck(t, db, 1, "00000000-0000-0000-0000-000000000001")
 
-	err := repo.UnlinkCardFromDeck(context.Background(), userB, 1, 1)
+	err := repo.UnlinkCardFromDeck(context.Background(), userB, "00000000-0000-0000-0000-000000000001", 1)
 	require.NoError(t, err) // idempotent, pas d'erreur, mais rien ne doit changer
 
-	cards, err := repo.FindCardsByDeckID(context.Background(), userA, 1, "updated", true)
+	cards, err := repo.FindCardsByDeckID(context.Background(), userA, "00000000-0000-0000-0000-000000000001", "updated", true)
 	require.NoError(t, err)
 	require.Len(t, cards, 1)
 }
@@ -757,25 +757,25 @@ func TestPostgresRepository_CardLinks_RefreshUpdatedTimestamp(t *testing.T) {
 	seedDecks(t, db, userID)
 	seedCardsWithoutStorage(t, db, userID)
 
-	before, err := repo.FindByID(context.Background(), userID, 1)
+	before, err := repo.FindByID(context.Background(), userID, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
-	other, err := repo.FindByID(context.Background(), userID, 2)
+	other, err := repo.FindByID(context.Background(), userID, "00000000-0000-0000-0000-000000000002")
 	require.NoError(t, err)
 
 	time.Sleep(10 * time.Millisecond)
-	require.NoError(t, repo.LinkCardToDeck(context.Background(), userID, 1, 1))
+	require.NoError(t, repo.LinkCardToDeck(context.Background(), userID, "00000000-0000-0000-0000-000000000001", 1))
 
-	afterLink, err := repo.FindByID(context.Background(), userID, 1)
+	afterLink, err := repo.FindByID(context.Background(), userID, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
 	assert.True(t, afterLink.Updated.After(before.Updated))
-	untouched, err := repo.FindByID(context.Background(), userID, 2)
+	untouched, err := repo.FindByID(context.Background(), userID, "00000000-0000-0000-0000-000000000002")
 	require.NoError(t, err)
 	assert.Equal(t, other.Updated, untouched.Updated)
 
 	time.Sleep(10 * time.Millisecond)
-	require.NoError(t, repo.UnlinkCardFromDeck(context.Background(), userID, 1, 1))
+	require.NoError(t, repo.UnlinkCardFromDeck(context.Background(), userID, "00000000-0000-0000-0000-000000000001", 1))
 
-	afterUnlink, err := repo.FindByID(context.Background(), userID, 1)
+	afterUnlink, err := repo.FindByID(context.Background(), userID, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
 	assert.True(t, afterUnlink.Updated.After(afterLink.Updated))
 }
@@ -817,7 +817,7 @@ func TestPostgresRepository_PendingCards(t *testing.T) {
 
 	colors := "R"
 	created, err := repo.CreatePendingCard(context.Background(), alice, PendingCard{
-		DeckID: 1, Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d",
+		DeckID: "00000000-0000-0000-0000-000000000001", Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d",
 		SetCode: "2xm", CollectorNumber: "129", Quantity: 2, ManaValue: 1, Colors: &colors,
 	})
 	require.NoError(t, err)
@@ -827,25 +827,25 @@ func TestPostgresRepository_PendingCards(t *testing.T) {
 	assert.Equal(t, "R", *created.Colors)
 
 	_, err = repo.CreatePendingCard(context.Background(), alice, PendingCard{
-		DeckID: 1, Name: "Abrade", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1e", SetCode: "dmu", CollectorNumber: "116", Quantity: 1,
+		DeckID: "00000000-0000-0000-0000-000000000001", Name: "Abrade", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1e", SetCode: "dmu", CollectorNumber: "116", Quantity: 1,
 	})
 	require.NoError(t, err)
 
-	found, err := repo.FindPendingCards(context.Background(), alice, 1)
+	found, err := repo.FindPendingCards(context.Background(), alice, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
 	require.Len(t, found, 2)
 	assert.Equal(t, "Abrade", found[0].Name)
 
-	others, err := repo.FindPendingCards(context.Background(), bob, 1)
+	others, err := repo.FindPendingCards(context.Background(), bob, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
 	assert.Empty(t, others)
 
-	assert.ErrorIs(t, repo.DeletePendingCard(context.Background(), bob, 1, created.ID), ErrPendingCardNotFound)
-	require.NoError(t, repo.DeletePendingCard(context.Background(), alice, 1, created.ID))
-	assert.ErrorIs(t, repo.DeletePendingCard(context.Background(), alice, 1, created.ID), ErrPendingCardNotFound)
+	assert.ErrorIs(t, repo.DeletePendingCard(context.Background(), bob, "00000000-0000-0000-0000-000000000001", created.ID), ErrPendingCardNotFound)
+	require.NoError(t, repo.DeletePendingCard(context.Background(), alice, "00000000-0000-0000-0000-000000000001", created.ID))
+	assert.ErrorIs(t, repo.DeletePendingCard(context.Background(), alice, "00000000-0000-0000-0000-000000000001", created.ID), ErrPendingCardNotFound)
 
-	require.NoError(t, repo.Delete(context.Background(), alice, 1))
-	found, err = repo.FindPendingCards(context.Background(), alice, 1)
+	require.NoError(t, repo.Delete(context.Background(), alice, "00000000-0000-0000-0000-000000000001"))
+	found, err = repo.FindPendingCards(context.Background(), alice, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
 	assert.Empty(t, found)
 }
@@ -858,22 +858,22 @@ func TestPostgresRepository_CountsPendingCopies(t *testing.T) {
 
 	for _, quantity := range []int{2, 1} {
 		_, err := repo.CreatePendingCard(context.Background(), userID, PendingCard{
-			DeckID: 1, Name: "Sol Ring", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "c21", CollectorNumber: "263", Quantity: quantity,
+			DeckID: "00000000-0000-0000-0000-000000000001", Name: "Sol Ring", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "c21", CollectorNumber: "263", Quantity: quantity,
 		})
 		require.NoError(t, err)
 	}
 
-	found, err := repo.FindByID(context.Background(), userID, 1)
+	found, err := repo.FindByID(context.Background(), userID, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
 	assert.Equal(t, 3, found.PendingCount)
 
 	all, _, err := repo.FindAll(context.Background(), userID, Filter{Page: 1, Limit: 25, SortField: "name"})
 	require.NoError(t, err)
-	counts := map[int]int{}
+	counts := map[string]int{}
 	for _, d := range all {
 		counts[d.ID] = d.PendingCount
 	}
-	assert.Equal(t, map[int]int{1: 3, 2: 0}, counts)
+	assert.Equal(t, map[string]int{"00000000-0000-0000-0000-000000000001": 3, "00000000-0000-0000-0000-000000000002": 0}, counts)
 }
 
 func TestPostgresRepository_PendingCommander(t *testing.T) {
@@ -883,11 +883,11 @@ func TestPostgresRepository_PendingCommander(t *testing.T) {
 	seedDecks(t, db, userID)
 
 	pending, err := repo.CreatePendingCard(context.Background(), userID, PendingCard{
-		DeckID: 1, Name: "Atraxa", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: "190", Quantity: 1,
+		DeckID: "00000000-0000-0000-0000-000000000001", Name: "Atraxa", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "2xm", CollectorNumber: "190", Quantity: 1,
 	})
 	require.NoError(t, err)
 
-	deck, err := repo.FindByID(context.Background(), userID, 1)
+	deck, err := repo.FindByID(context.Background(), userID, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
 	deck.CommanderPendingID = &pending.ID
 	updated, err := repo.Update(context.Background(), userID, deck)
@@ -897,8 +897,8 @@ func TestPostgresRepository_PendingCommander(t *testing.T) {
 	require.NotNil(t, updated.CommanderScryfallID)
 	assert.Equal(t, "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", *updated.CommanderScryfallID)
 
-	require.NoError(t, repo.DeletePendingCard(context.Background(), userID, 1, pending.ID))
-	found, err := repo.FindByID(context.Background(), userID, 1)
+	require.NoError(t, repo.DeletePendingCard(context.Background(), userID, "00000000-0000-0000-0000-000000000001", pending.ID))
+	found, err := repo.FindByID(context.Background(), userID, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
 	assert.Nil(t, found.CommanderPendingID)
 	assert.Nil(t, found.CommanderScryfallID)
@@ -910,9 +910,9 @@ func TestPostgresRepository_DeletingTheCommanderCardKeepsItAsPendingCommander(t 
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userID)
 	seedCardsWithoutStorage(t, db, userID)
-	linkCardToDeck(t, db, 1, 1)
+	linkCardToDeck(t, db, 1, "00000000-0000-0000-0000-000000000001")
 
-	deck, err := repo.FindByID(context.Background(), userID, 1)
+	deck, err := repo.FindByID(context.Background(), userID, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
 	commanderID := 1
 	deck.CommanderID = &commanderID
@@ -922,11 +922,11 @@ func TestPostgresRepository_DeletingTheCommanderCardKeepsItAsPendingCommander(t 
 	_, err = db.Exec(`DELETE FROM tamiyo.cards WHERE id = 1`)
 	require.NoError(t, err)
 
-	found, err := repo.FindByID(context.Background(), userID, 1)
+	found, err := repo.FindByID(context.Background(), userID, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
 	assert.Nil(t, found.CommanderID)
 	require.NotNil(t, found.CommanderPendingID)
-	pending, err := repo.FindPendingCards(context.Background(), userID, 1)
+	pending, err := repo.FindPendingCards(context.Background(), userID, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
 	require.Len(t, pending, 1)
 	assert.Equal(t, pending[0].ID, *found.CommanderPendingID)
@@ -979,7 +979,7 @@ func TestPostgresRepository_FindAll_FiltersByVisibility(t *testing.T) {
 	assert.Equal(t, "Shown", decks[0].Name)
 }
 
-func TestPostgresRepository_ShareID_IsGeneratedAndStable(t *testing.T) {
+func TestPostgresRepository_Create_GeneratesARandomUUID(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
@@ -988,17 +988,18 @@ func TestPostgresRepository_ShareID_IsGeneratedAndStable(t *testing.T) {
 	require.NoError(t, err)
 	second, err := repo.Create(context.Background(), userID, Deck{Name: "Birds", Format: "commander"})
 	require.NoError(t, err)
-	assert.Len(t, first.ShareID, 36)
-	assert.NotEqual(t, first.ShareID, second.ShareID)
+	_, valid := ParseID(first.ID)
+	assert.True(t, valid)
+	assert.NotEqual(t, first.ID, second.ID)
 
 	first.Name = "Sea otters"
 	updated, err := repo.Update(context.Background(), userID, first)
 	require.NoError(t, err)
-	assert.Equal(t, first.ShareID, updated.ShareID)
+	assert.Equal(t, first.ID, updated.ID)
 
 	found, err := repo.FindByID(context.Background(), userID, first.ID)
 	require.NoError(t, err)
-	assert.Equal(t, first.ShareID, found.ShareID)
+	assert.Equal(t, "Sea otters", found.Name)
 }
 
 func TestPostgresRepository_FindShared_ReturnsPublicAndUnlistedDecksWithTheirOwner(t *testing.T) {
@@ -1010,7 +1011,7 @@ func TestPostgresRepository_FindShared_ReturnsPublicAndUnlistedDecksWithTheirOwn
 		created, err := repo.Create(context.Background(), userID, Deck{Name: "Otters", Format: "commander", Visibility: visibility})
 		require.NoError(t, err)
 
-		ownerID, found, err := repo.FindShared(context.Background(), created.ShareID)
+		ownerID, found, err := repo.FindShared(context.Background(), created.ID)
 
 		require.NoError(t, err)
 		assert.Equal(t, userID, ownerID)
@@ -1027,7 +1028,7 @@ func TestPostgresRepository_FindShared_HidesPrivateAndUnknownDecks(t *testing.T)
 	created, err := repo.Create(context.Background(), userID, Deck{Name: "Secret", Format: "commander", Visibility: VisibilityPrivate})
 	require.NoError(t, err)
 
-	_, _, err = repo.FindShared(context.Background(), created.ShareID)
+	_, _, err = repo.FindShared(context.Background(), created.ID)
 	assert.ErrorIs(t, err, ErrNotFound)
 
 	_, _, err = repo.FindShared(context.Background(), "00000000-0000-0000-0000-000000000000")

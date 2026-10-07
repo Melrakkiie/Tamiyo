@@ -23,6 +23,7 @@ type fakeService struct {
 
 	getDeck    Deck
 	getDeckErr error
+	lastDeckID string
 
 	createErr error
 
@@ -47,12 +48,12 @@ type fakeService struct {
 	removePendingErr error
 }
 
-func (f *fakeService) GetPendingCards(ctx context.Context, userID string, deckID int) ([]PendingCard, error) {
+func (f *fakeService) GetPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error) {
 	f.lastUserID = userID
 	return f.pending, f.pendingErr
 }
 
-func (f *fakeService) AddPendingCard(ctx context.Context, userID string, deckID int, p PendingCard) (PendingCard, error) {
+func (f *fakeService) AddPendingCard(ctx context.Context, userID string, deckID string, p PendingCard) (PendingCard, error) {
 	f.lastUserID = userID
 	if f.pendingErr != nil {
 		return PendingCard{}, f.pendingErr
@@ -63,7 +64,7 @@ func (f *fakeService) AddPendingCard(ctx context.Context, userID string, deckID 
 	return p, nil
 }
 
-func (f *fakeService) RemovePendingCard(ctx context.Context, userID string, deckID, id int) error {
+func (f *fakeService) RemovePendingCard(ctx context.Context, userID string, deckID string, id int) error {
 	f.lastUserID = userID
 	return f.removePendingErr
 }
@@ -74,8 +75,9 @@ func (f *fakeService) GetAllDecks(ctx context.Context, userID string, filter Fil
 	return f.decks, f.getAllTotal, f.getAllErr
 }
 
-func (f *fakeService) GetDeck(ctx context.Context, userID string, id int) (Deck, error) {
+func (f *fakeService) GetDeck(ctx context.Context, userID string, id string) (Deck, error) {
 	f.lastUserID = userID
+	f.lastDeckID = id
 	if f.getDeckErr != nil {
 		return Deck{}, f.getDeckErr
 	}
@@ -88,11 +90,11 @@ func (f *fakeService) CreateDeck(ctx context.Context, userID string, d Deck) (De
 	if f.createErr != nil {
 		return Deck{}, f.createErr
 	}
-	d.ID = 1
+	d.ID = "00000000-0000-0000-0000-000000000001"
 	return d, nil
 }
 
-func (f *fakeService) UpdateDeck(ctx context.Context, userID string, id int, req updateDeckRequest) (Deck, error) {
+func (f *fakeService) UpdateDeck(ctx context.Context, userID string, id string, req updateDeckRequest) (Deck, error) {
 	f.lastUserID = userID
 	f.lastUpdateRequest = req
 	if f.updateErr != nil {
@@ -101,12 +103,12 @@ func (f *fakeService) UpdateDeck(ctx context.Context, userID string, id int, req
 	return f.updateDeck, nil
 }
 
-func (f *fakeService) DeleteDeck(ctx context.Context, userID string, id int) error {
+func (f *fakeService) DeleteDeck(ctx context.Context, userID string, id string) error {
 	f.lastUserID = userID
 	return f.deleteErr
 }
 
-func (f *fakeService) GetDeckCards(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]DeckCard, error) {
+func (f *fakeService) GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]DeckCard, error) {
 	f.lastUserID = userID
 	f.lastDeckCardsSort = sortField
 	f.lastDeckCardsSortDesc = sortDesc
@@ -116,12 +118,12 @@ func (f *fakeService) GetDeckCards(ctx context.Context, userID string, id int, s
 	return f.getDeckCards, nil
 }
 
-func (f *fakeService) PutCardInDeck(ctx context.Context, userID string, deckID, cardID int) error {
+func (f *fakeService) PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int) error {
 	f.lastUserID = userID
 	return f.putCardErr
 }
 
-func (f *fakeService) RemoveCardFromDeck(ctx context.Context, userID string, deckID, cardID int) error {
+func (f *fakeService) RemoveCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error {
 	f.lastUserID = userID
 	return f.removeCardErr
 }
@@ -139,7 +141,7 @@ func setupRouter(service deckService) *gin.Engine {
 
 func TestHandler_GetDecks_PassesUserIDToService(t *testing.T) {
 	service := &fakeService{
-		decks:       []Deck{{ID: 1, Name: "Otterly Playful", Format: "commander"}},
+		decks:       []Deck{{ID: "00000000-0000-0000-0000-000000000001", Name: "Otterly Playful", Format: "commander"}},
 		getAllTotal: 1,
 	}
 	router := setupRouter(service)
@@ -270,7 +272,7 @@ func TestHandler_GetDecks_ReturnsBadRequestOnInvalidSort(t *testing.T) {
 
 func TestHandler_GetDecks_ReturnsPaginationEnvelope(t *testing.T) {
 	service := &fakeService{
-		decks:       []Deck{{ID: 1, Name: "Otterly Playful", Format: "commander"}},
+		decks:       []Deck{{ID: "00000000-0000-0000-0000-000000000001", Name: "Otterly Playful", Format: "commander"}},
 		getAllTotal: 1,
 	}
 	router := setupRouter(service)
@@ -302,10 +304,10 @@ func TestHandler_GetDecks_ReturnsErrorOnServiceFailure(t *testing.T) {
 }
 
 func TestHandler_GetDeck_ReturnsDeckAsJSON(t *testing.T) {
-	service := &fakeService{getDeck: Deck{ID: 1, Name: "Otterly Playful", Format: "commander"}}
+	service := &fakeService{getDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", Name: "Otterly Playful", Format: "commander"}}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -332,7 +334,7 @@ func TestHandler_GetDeck_ReturnsNotFoundWhenDeckDoesNotBelongToUser(t *testing.T
 	service := &fakeService{getDeckErr: ErrNotFound}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/999", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000999", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -343,7 +345,7 @@ func TestHandler_GetDeck_ReturnsErrorOnServiceFailure(t *testing.T) {
 	service := &fakeService{getDeckErr: errors.New("database unreachable")}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -367,7 +369,7 @@ func TestHandler_CreateDeck_ReturnsCreatedDeck(t *testing.T) {
 	var response deckResponse
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	assert.Equal(t, 1, response.ID)
+	assert.Equal(t, "00000000-0000-0000-0000-000000000001", response.ID)
 	assert.Equal(t, "Otterly Playful", response.Name)
 }
 
@@ -419,12 +421,12 @@ func TestHandler_CreateDeck_ReturnsBadRequestWhenCommanderDoesNotExist(t *testin
 }
 
 func TestHandler_UpdateDeck_ReturnsUpdatedDeck(t *testing.T) {
-	service := &fakeService{updateDeck: Deck{ID: 1, Name: "Renamed", Format: "modern"}}
+	service := &fakeService{updateDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", Name: "Renamed", Format: "modern"}}
 	router := setupRouter(service)
 
 	body := `{"name": "Renamed"}`
 
-	req := httptest.NewRequest(http.MethodPatch, "/deck/1", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPatch, "/deck/00000000-0000-0000-0000-000000000001", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -439,10 +441,10 @@ func TestHandler_UpdateDeck_ReturnsUpdatedDeck(t *testing.T) {
 
 func TestHandler_UpdateDeck_ReturnsBackgroundScryfallID(t *testing.T) {
 	background := "436d6a84-4cea-4ca7-94aa-9d08280652af"
-	service := &fakeService{updateDeck: Deck{ID: 1, Name: "Deck", Format: "commander", BackgroundScryfallID: &background}}
+	service := &fakeService{updateDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", Name: "Deck", Format: "commander", BackgroundScryfallID: &background}}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodPatch, "/deck/1", bytes.NewBufferString(`{"background_scryfall_id": "`+background+`"}`))
+	req := httptest.NewRequest(http.MethodPatch, "/deck/00000000-0000-0000-0000-000000000001", bytes.NewBufferString(`{"background_scryfall_id": "`+background+`"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -457,7 +459,7 @@ func TestHandler_UpdateDeck_ReturnsBackgroundScryfallID(t *testing.T) {
 func TestHandler_UpdateDeck_RejectsInvalidBackgroundScryfallID(t *testing.T) {
 	router := setupRouter(&fakeService{})
 
-	req := httptest.NewRequest(http.MethodPatch, "/deck/1", bytes.NewBufferString(`{"background_scryfall_id": "not-a-uuid"}`))
+	req := httptest.NewRequest(http.MethodPatch, "/deck/00000000-0000-0000-0000-000000000001", bytes.NewBufferString(`{"background_scryfall_id": "not-a-uuid"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -485,7 +487,7 @@ func TestHandler_UpdateDeck_ReturnsBadRequestOnInvalidBody(t *testing.T) {
 
 	body := `{"name": 1}`
 
-	req := httptest.NewRequest(http.MethodPatch, "/deck/1", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPatch, "/deck/00000000-0000-0000-0000-000000000001", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -499,7 +501,7 @@ func TestHandler_UpdateDeck_ReturnsNotFoundWhenDeckDoesNotBelongToUser(t *testin
 
 	body := `{"name": "Renamed"}`
 
-	req := httptest.NewRequest(http.MethodPatch, "/deck/999", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPatch, "/deck/00000000-0000-0000-0000-000000000999", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -513,7 +515,7 @@ func TestHandler_UpdateDeck_ReturnsBadRequestWhenCommanderDoesNotExist(t *testin
 
 	body := `{"name": "Renamed", "commander_id": 999}`
 
-	req := httptest.NewRequest(http.MethodPatch, "/deck/1", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPatch, "/deck/00000000-0000-0000-0000-000000000001", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -527,7 +529,7 @@ func TestHandler_UpdateDeck_ReturnsErrorOnServiceFailure(t *testing.T) {
 
 	body := `{"name": "Renamed"}`
 
-	req := httptest.NewRequest(http.MethodPatch, "/deck/1", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPatch, "/deck/00000000-0000-0000-0000-000000000001", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -539,7 +541,7 @@ func TestHandler_DeleteDeck_ReturnsNoContent(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodDelete, "/deck/1", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/deck/00000000-0000-0000-0000-000000000001", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -562,7 +564,7 @@ func TestHandler_DeleteDeck_ReturnsNotFoundWhenDeckDoesNotBelongToUser(t *testin
 	service := &fakeService{deleteErr: ErrNotFound}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodDelete, "/deck/999", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/deck/00000000-0000-0000-0000-000000000999", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -573,7 +575,7 @@ func TestHandler_DeleteDeck_ReturnsErrorOnServiceFailure(t *testing.T) {
 	service := &fakeService{deleteErr: errors.New("delete failed")}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodDelete, "/deck/1", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/deck/00000000-0000-0000-0000-000000000001", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -588,7 +590,7 @@ func TestHandler_GetDeckCards_ReturnsCardsAsJSON(t *testing.T) {
 	}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/1/cards", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/cards", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -611,7 +613,7 @@ func TestHandler_GetDeckCards_IncludesColorsAndType(t *testing.T) {
 	}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/1/cards", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/cards", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -632,7 +634,7 @@ func TestHandler_GetDeckCards_PassesManaValueSortToService(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/1/cards?sort=-mana_value", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/cards?sort=-mana_value", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -645,7 +647,7 @@ func TestHandler_GetDeckCards_ReturnsBadRequestOnInvalidSort(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/1/cards?sort=price", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/cards?sort=price", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -667,7 +669,7 @@ func TestHandler_GetDeckCards_ReturnsNotFoundWhenDeckDoesNotBelongToUser(t *test
 	service := &fakeService{getDeckCardsErr: ErrNotFound}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/999/cards", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000999/cards", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -678,7 +680,7 @@ func TestHandler_GetDeckCards_ReturnsErrorOnServiceFailure(t *testing.T) {
 	service := &fakeService{getDeckCardsErr: errors.New("database unreachable")}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/1/cards", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/cards", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -689,7 +691,7 @@ func TestHandler_PutCardInDeck_ReturnsNoContent(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodPut, "/deck/1/cards/4", nil)
+	req := httptest.NewRequest(http.MethodPut, "/deck/00000000-0000-0000-0000-000000000001/cards/4", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -712,7 +714,7 @@ func TestHandler_PutCardInDeck_ReturnsBadRequestOnInvalidCardID(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodPut, "/deck/1/cards/abc", nil)
+	req := httptest.NewRequest(http.MethodPut, "/deck/00000000-0000-0000-0000-000000000001/cards/abc", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -723,7 +725,7 @@ func TestHandler_PutCardInDeck_ReturnsNotFoundWhenDeckDoesNotBelongToUser(t *tes
 	service := &fakeService{putCardErr: ErrNotFound}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodPut, "/deck/999/cards/4", nil)
+	req := httptest.NewRequest(http.MethodPut, "/deck/00000000-0000-0000-0000-000000000999/cards/4", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -739,7 +741,7 @@ func TestHandler_PutCardInDeck_ReturnsNotFoundWhenCardDoesNotExist(t *testing.T)
 	service := &fakeService{putCardErr: ErrCardNotFound}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodPut, "/deck/1/cards/9999", nil)
+	req := httptest.NewRequest(http.MethodPut, "/deck/00000000-0000-0000-0000-000000000001/cards/9999", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -755,7 +757,7 @@ func TestHandler_PutCardInDeck_ReturnsErrorOnServiceFailure(t *testing.T) {
 	service := &fakeService{putCardErr: errors.New("insert failed")}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodPut, "/deck/1/cards/4", nil)
+	req := httptest.NewRequest(http.MethodPut, "/deck/00000000-0000-0000-0000-000000000001/cards/4", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -766,7 +768,7 @@ func TestHandler_RemoveCardFromDeck_ReturnsNoContent(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodDelete, "/deck/1/cards/4", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/deck/00000000-0000-0000-0000-000000000001/cards/4", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -789,7 +791,7 @@ func TestHandler_RemoveCardFromDeck_ReturnsBadRequestOnInvalidCardID(t *testing.
 	service := &fakeService{}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodDelete, "/deck/1/cards/abc", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/deck/00000000-0000-0000-0000-000000000001/cards/abc", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -800,7 +802,7 @@ func TestHandler_RemoveCardFromDeck_ReturnsNotFoundWhenDeckDoesNotBelongToUser(t
 	service := &fakeService{removeCardErr: ErrNotFound}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodDelete, "/deck/999/cards/4", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/deck/00000000-0000-0000-0000-000000000999/cards/4", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -811,7 +813,7 @@ func TestHandler_RemoveCardFromDeck_ReturnsErrorOnServiceFailure(t *testing.T) {
 	service := &fakeService{removeCardErr: errors.New("delete failed")}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodDelete, "/deck/1/cards/4", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/deck/00000000-0000-0000-0000-000000000001/cards/4", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -819,10 +821,10 @@ func TestHandler_RemoveCardFromDeck_ReturnsErrorOnServiceFailure(t *testing.T) {
 }
 
 func TestHandler_GetPendingCards_ReturnsTheList(t *testing.T) {
-	service := &fakeService{pending: []PendingCard{{ID: 1, DeckID: 2, Name: "Sol Ring", Quantity: 2}}}
+	service := &fakeService{pending: []PendingCard{{ID: 1, DeckID: "00000000-0000-0000-0000-000000000002", Name: "Sol Ring", Quantity: 2}}}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/2/pending", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000002/pending", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -837,7 +839,7 @@ func TestHandler_GetPendingCards_ReturnsTheList(t *testing.T) {
 func TestHandler_GetPendingCards_ReturnsNotFoundForAnotherUsersDeck(t *testing.T) {
 	router := setupRouter(&fakeService{pendingErr: ErrNotFound})
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/2/pending", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000002/pending", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -849,14 +851,14 @@ func TestHandler_AddPendingCard_NormalizesAndDefaultsQuantity(t *testing.T) {
 	router := setupRouter(service)
 
 	body := `{"name": "Lightning Helix", "scryfall_id": "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f", "set_code": "rav", "collector_number": "213", "colors": "rw", "color_identity": "rw", "card_type": "Instant", "mana_value": 2}`
-	req := httptest.NewRequest(http.MethodPost, "/deck/2/pending", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/deck/00000000-0000-0000-0000-000000000002/pending", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusCreated, w.Code)
 	assert.Equal(t, 1, service.addedPending.Quantity)
-	assert.Equal(t, 2, service.addedPending.DeckID)
+	assert.Equal(t, "00000000-0000-0000-0000-000000000002", service.addedPending.DeckID)
 	assert.Equal(t, "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f", service.addedPending.ScryfallID)
 	require.NotNil(t, service.addedPending.Colors)
 	assert.Equal(t, "WR", *service.addedPending.Colors)
@@ -872,7 +874,7 @@ func TestHandler_AddPendingCard_RejectsInvalidBodies(t *testing.T) {
 	}
 	for _, body := range bodies {
 		router := setupRouter(&fakeService{})
-		req := httptest.NewRequest(http.MethodPost, "/deck/2/pending", bytes.NewBufferString(body))
+		req := httptest.NewRequest(http.MethodPost, "/deck/00000000-0000-0000-0000-000000000002/pending", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
@@ -884,7 +886,7 @@ func TestHandler_RemovePendingCard(t *testing.T) {
 	cases := map[error]int{nil: http.StatusNoContent, ErrPendingCardNotFound: http.StatusNotFound, ErrNotFound: http.StatusNotFound}
 	for removeErr, expected := range cases {
 		router := setupRouter(&fakeService{removePendingErr: removeErr})
-		req := httptest.NewRequest(http.MethodDelete, "/deck/2/pending/4", nil)
+		req := httptest.NewRequest(http.MethodDelete, "/deck/00000000-0000-0000-0000-000000000002/pending/4", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 		assert.Equal(t, expected, w.Code)
@@ -892,9 +894,9 @@ func TestHandler_RemovePendingCard(t *testing.T) {
 }
 
 func TestHandler_GetDeck_ReturnsPendingCount(t *testing.T) {
-	router := setupRouter(&fakeService{getDeck: Deck{ID: 1, Name: "Deck", Format: "commander", CardCount: 98, PendingCount: 2}})
+	router := setupRouter(&fakeService{getDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", Name: "Deck", Format: "commander", CardCount: 98, PendingCount: 2}})
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -907,10 +909,10 @@ func TestHandler_GetDeck_ReturnsPendingCount(t *testing.T) {
 
 func TestHandler_UpdateDeck_AcceptsAPendingCommander(t *testing.T) {
 	pendingID := 7
-	service := &fakeService{updateDeck: Deck{ID: 1, Name: "Deck", Format: "commander", CommanderPendingID: &pendingID}}
+	service := &fakeService{updateDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", Name: "Deck", Format: "commander", CommanderPendingID: &pendingID}}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodPatch, "/deck/1", bytes.NewBufferString(`{"commander_pending_id": 7}`))
+	req := httptest.NewRequest(http.MethodPatch, "/deck/00000000-0000-0000-0000-000000000001", bytes.NewBufferString(`{"commander_pending_id": 7}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -962,10 +964,10 @@ func TestHandler_CreateDeck_RejectsAnUnknownVisibility(t *testing.T) {
 }
 
 func TestHandler_UpdateDeck_PassesTheVisibility(t *testing.T) {
-	service := &fakeService{updateDeck: Deck{ID: 1, Name: "Deck", Format: "commander", Visibility: VisibilityPublic}}
+	service := &fakeService{updateDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", Name: "Deck", Format: "commander", Visibility: VisibilityPublic}}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodPatch, "/deck/1", bytes.NewBufferString(`{"visibility": "public"}`))
+	req := httptest.NewRequest(http.MethodPatch, "/deck/00000000-0000-0000-0000-000000000001", bytes.NewBufferString(`{"visibility": "public"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -981,7 +983,7 @@ func TestHandler_UpdateDeck_PassesTheVisibility(t *testing.T) {
 func TestHandler_UpdateDeck_RejectsAnUnknownVisibility(t *testing.T) {
 	router := setupRouter(&fakeService{})
 
-	req := httptest.NewRequest(http.MethodPatch, "/deck/1", bytes.NewBufferString(`{"visibility": "everyone"}`))
+	req := httptest.NewRequest(http.MethodPatch, "/deck/00000000-0000-0000-0000-000000000001", bytes.NewBufferString(`{"visibility": "everyone"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -1000,7 +1002,7 @@ func TestUpdateDeckRequest_ChangesTheVisibilityOnlyWhenGiven(t *testing.T) {
 }
 
 func TestHandler_GetUserPublicDecks_ListsOnlyThatUsersPublicDecks(t *testing.T) {
-	service := &fakeService{decks: []Deck{{ID: 3, Name: "Otters", Format: "commander", Visibility: VisibilityPublic}}, getAllTotal: 1}
+	service := &fakeService{decks: []Deck{{ID: "00000000-0000-0000-0000-000000000003", Name: "Otters", Format: "commander", Visibility: VisibilityPublic}}, getAllTotal: 1}
 	router := setupRouter(service)
 
 	req := httptest.NewRequest(http.MethodGet, "/users/22222222-2222-2222-2222-222222222222/decks?sort=name", nil)
@@ -1040,16 +1042,27 @@ func TestHandler_GetDecks_DoesNotFilterOnVisibility(t *testing.T) {
 	assert.Equal(t, testUserID, service.lastUserID)
 }
 
-func TestHandler_GetDeck_ExposesTheShareID(t *testing.T) {
-	service := &fakeService{getDeck: Deck{ID: 1, Name: "Deck", Format: "commander", ShareID: "6f0d3c5e-8a51-4c0b-9b1e-2d7c4a3f9e10"}}
+func TestHandler_GetDeck_ReturnsTheUUIDAsID(t *testing.T) {
+	service := &fakeService{getDeck: Deck{ID: "6f0d3c5e-8a51-4c0b-9b1e-2d7c4a3f9e10", Name: "Deck", Format: "commander"}}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/6F0D3C5E-8A51-4C0B-9B1E-2D7C4A3F9E10", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "6f0d3c5e-8a51-4c0b-9b1e-2d7c4a3f9e10", service.lastDeckID)
 	var response deckResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
-	assert.Equal(t, "6f0d3c5e-8a51-4c0b-9b1e-2d7c4a3f9e10", response.ShareID)
+	assert.Equal(t, "6f0d3c5e-8a51-4c0b-9b1e-2d7c4a3f9e10", response.ID)
+}
+
+func TestHandler_GetDeck_RejectsANumericID(t *testing.T) {
+	router := setupRouter(&fakeService{})
+
+	req := httptest.NewRequest(http.MethodGet, "/deck/42", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }

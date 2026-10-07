@@ -173,7 +173,7 @@ curl -X GET localhost:8080/export/manabox \
   -H "Authorization: Bearer <token>" \
   -o ManaBox_Collection_export.csv
 
-curl -X GET localhost:8080/export/moxfield/deck/1 \
+curl -X GET localhost:8080/export/moxfield/deck/<deck-id> \
   -H "Authorization: Bearer <token>" \
   -o Moxfield_Deck_export.txt
 ```
@@ -188,13 +188,13 @@ Two read-only, player-facing routes analyze a deck — nothing financial, nothin
 See [`doc/API.md`](./doc/API.md#deck-insights) for the exact response shapes and known limitations (e.g. no partner commanders, no named singleton exceptions like Relentless Rats).
 
 ```bash
-curl localhost:8080/deck/1/legality -H "Authorization: Bearer <token>"
-curl localhost:8080/deck/1/stats -H "Authorization: Bearer <token>"
+curl localhost:8080/deck/<deck-id>/legality -H "Authorization: Bearer <token>"
+curl localhost:8080/deck/<deck-id>/stats -H "Authorization: Bearer <token>"
 ```
 
 ### Shared decks
 
-Every deck has a random `share_id`. `GET /shared/decks/:share_id` (plus `/legality` and `/stats`) serves a public or unlisted deck read-only, without authentication: its name, format, owner profile and card list, with no storage, proxy or ownership details. A private deck answers `404`, like an unknown link. These routes are rate-limited per client IP (60 requests per minute by default, `SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`). See [`doc/API.md`](./doc/API.md#shared-decks).
+Deck ids are random UUIDs, so they can't be guessed from one another. `GET /shared/decks/:id` (plus `/legality` and `/stats`) serves a public or unlisted deck read-only, without authentication: its name, format, owner profile and card list, with no storage, proxy or ownership details. A private deck answers `404`, like an unknown link. These routes are rate-limited per client IP (60 requests per minute by default, `SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`). See [`doc/API.md`](./doc/API.md#shared-decks).
 
 ### Importing a ManaBox Collection via script (alternative)
 

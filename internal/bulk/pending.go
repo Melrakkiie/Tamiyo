@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 
@@ -21,7 +20,7 @@ type PendingCommitSummary struct {
 	CardsCreated int `json:"cards_created"`
 }
 
-func (s *Service) CommitPendingCards(ctx context.Context, userID string, deckID int, storageID, pendingID *int) (PendingCommitSummary, error) {
+func (s *Service) CommitPendingCards(ctx context.Context, userID string, deckID string, storageID, pendingID *int) (PendingCommitSummary, error) {
 	var summary PendingCommitSummary
 
 	pending, err := s.decks.GetPendingCards(ctx, userID, deckID)
@@ -103,8 +102,8 @@ func (h *Handler) commitPendingCards(ctx *gin.Context) {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
 		return
 	}
-	deckID, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
+	deckID, valid := deck.ParseID(ctx.Param("id"))
+	if !valid {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}

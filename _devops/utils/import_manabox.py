@@ -143,7 +143,7 @@ class TamiyoClient:
             },
         )
 
-    def link_card_to_deck(self, deck_id: int, card_id: int) -> None:
+    def link_card_to_deck(self, deck_id: str, card_id: int) -> None:
         self._put(f"/deck/{deck_id}/cards/{card_id}")
 
 
@@ -155,7 +155,7 @@ def get_or_create_storage(client: TamiyoClient, cache: dict, name: str, storage_
     return created["id"]
 
 
-def get_or_create_deck(client: TamiyoClient, cache: dict, name: str) -> int:
+def get_or_create_deck(client: TamiyoClient, cache: dict, name: str) -> str:
     if name in cache:
         return cache[name]
     created = client.create_deck(name, DEFAULT_DECK_FORMAT)

@@ -14,7 +14,7 @@ import (
 )
 
 const ownerID = "11111111-1111-1111-1111-111111111111"
-const shareID = "22222222-2222-2222-2222-222222222222"
+const deckID = "22222222-2222-2222-2222-222222222222"
 
 type fakeDecks struct {
 	ownerID   string
@@ -25,24 +25,24 @@ type fakeDecks struct {
 
 	lastShareID string
 	lastUserID  string
-	lastDeckID  int
+	lastDeckID  string
 }
 
-func (f *fakeDecks) GetSharedDeck(ctx context.Context, shareID string) (string, deck.Deck, error) {
-	f.lastShareID = shareID
+func (f *fakeDecks) GetSharedDeck(ctx context.Context, deckID string) (string, deck.Deck, error) {
+	f.lastShareID = deckID
 	if f.sharedErr != nil {
 		return "", deck.Deck{}, f.sharedErr
 	}
 	return f.ownerID, f.deck, nil
 }
 
-func (f *fakeDecks) GetDeckCards(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]deck.DeckCard, error) {
+func (f *fakeDecks) GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error) {
 	f.lastUserID = userID
 	f.lastDeckID = id
 	return f.cards, nil
 }
 
-func (f *fakeDecks) GetPendingCards(ctx context.Context, userID string, deckID int) ([]deck.PendingCard, error) {
+func (f *fakeDecks) GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error) {
 	return f.pending, nil
 }
 
@@ -63,16 +63,16 @@ type fakeInsights struct {
 	stats      deckinsights.DeckStats
 	err        error
 	lastUserID string
-	lastDeckID int
+	lastDeckID string
 }
 
-func (f *fakeInsights) GetDeckLegality(ctx context.Context, userID string, deckID int) (deckinsights.LegalityReport, error) {
+func (f *fakeInsights) GetDeckLegality(ctx context.Context, userID string, deckID string) (deckinsights.LegalityReport, error) {
 	f.lastUserID = userID
 	f.lastDeckID = deckID
 	return f.report, f.err
 }
 
-func (f *fakeInsights) GetDeckStats(ctx context.Context, userID string, deckID int) (deckinsights.DeckStats, error) {
+func (f *fakeInsights) GetDeckStats(ctx context.Context, userID string, deckID string) (deckinsights.DeckStats, error) {
 	f.lastUserID = userID
 	f.lastDeckID = deckID
 	return f.stats, f.err
@@ -89,15 +89,15 @@ func newService(decks *fakeDecks, insights *fakeInsights) *Service {
 }
 
 func TestService_GetSharedDeck_LoadsCardsAsTheOwner(t *testing.T) {
-	decks := &fakeDecks{ownerID: ownerID, deck: deck.Deck{ID: 9, Name: "Otters"}}
+	decks := &fakeDecks{ownerID: ownerID, deck: deck.Deck{ID: "00000000-0000-0000-0000-000000000009", Name: "Otters"}}
 	service := newService(decks, &fakeInsights{})
 
-	shared, err := service.GetSharedDeck(context.Background(), shareID)
+	shared, err := service.GetSharedDeck(context.Background(), deckID)
 
 	require.NoError(t, err)
-	assert.Equal(t, shareID, decks.lastShareID)
+	assert.Equal(t, deckID, decks.lastShareID)
 	assert.Equal(t, ownerID, decks.lastUserID)
-	assert.Equal(t, 9, decks.lastDeckID)
+	assert.Equal(t, "00000000-0000-0000-0000-000000000009", decks.lastDeckID)
 	assert.Equal(t, "Otters", shared.Deck.Name)
 	assert.Equal(t, Owner{ID: ownerID, DisplayName: strPtr("Alice"), AvatarScryfallID: strPtr("art")}, shared.Owner)
 }
@@ -105,7 +105,7 @@ func TestService_GetSharedDeck_LoadsCardsAsTheOwner(t *testing.T) {
 func TestService_GetSharedDeck_MapsMissingDeckToErrNotFound(t *testing.T) {
 	service := newService(&fakeDecks{sharedErr: deck.ErrNotFound}, &fakeInsights{})
 
-	_, err := service.GetSharedDeck(context.Background(), shareID)
+	_, err := service.GetSharedDeck(context.Background(), deckID)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
@@ -113,7 +113,7 @@ func TestService_GetSharedDeck_MapsMissingDeckToErrNotFound(t *testing.T) {
 func TestService_GetSharedDeck_MergesCopiesAndPendingCardsWithoutOwnership(t *testing.T) {
 	decks := &fakeDecks{
 		ownerID: ownerID,
-		deck:    deck.Deck{ID: 9, CommanderID: intPtr(1)},
+		deck:    deck.Deck{ID: "00000000-0000-0000-0000-000000000009", CommanderID: intPtr(1)},
 		cards: []deck.DeckCard{
 			{ID: 1, Name: "Tamiyo", ScryfallID: "t", SetCode: "neo"},
 			{ID: 2, Name: "Island", ScryfallID: "i", SetCode: "neo", StorageID: intPtr(3), Proxy: true},
@@ -127,7 +127,7 @@ func TestService_GetSharedDeck_MergesCopiesAndPendingCardsWithoutOwnership(t *te
 	}
 	service := newService(decks, &fakeInsights{})
 
-	shared, err := service.GetSharedDeck(context.Background(), shareID)
+	shared, err := service.GetSharedDeck(context.Background(), deckID)
 
 	require.NoError(t, err)
 	assert.Equal(t, []Card{
@@ -141,12 +141,12 @@ func TestService_GetSharedDeck_MergesCopiesAndPendingCardsWithoutOwnership(t *te
 func TestService_GetSharedDeck_FlagsAPendingCommander(t *testing.T) {
 	decks := &fakeDecks{
 		ownerID: ownerID,
-		deck:    deck.Deck{ID: 9, CommanderPendingID: intPtr(5)},
+		deck:    deck.Deck{ID: "00000000-0000-0000-0000-000000000009", CommanderPendingID: intPtr(5)},
 		pending: []deck.PendingCard{{ID: 5, Name: "Tamiyo", ScryfallID: "t", SetCode: "neo", Quantity: 1}},
 	}
 	service := newService(decks, &fakeInsights{})
 
-	shared, err := service.GetSharedDeck(context.Background(), shareID)
+	shared, err := service.GetSharedDeck(context.Background(), deckID)
 
 	require.NoError(t, err)
 	assert.Equal(t, []Card{{Name: "Tamiyo", ScryfallID: "t", SetCode: "neo", Quantity: 1, Commander: true}}, shared.Cards)
@@ -157,21 +157,21 @@ func TestService_GetSharedDeckLegality_ChecksAsTheOwnerAndHidesCardIDs(t *testin
 		Format: "commander",
 		Issues: []deckinsights.LegalityIssue{{CardID: 12, CardName: "Black Lotus", Reason: "banned in commander"}},
 	}}
-	service := newService(&fakeDecks{ownerID: ownerID, deck: deck.Deck{ID: 9}}, insights)
+	service := newService(&fakeDecks{ownerID: ownerID, deck: deck.Deck{ID: "00000000-0000-0000-0000-000000000009"}}, insights)
 
-	report, err := service.GetSharedDeckLegality(context.Background(), shareID)
+	report, err := service.GetSharedDeckLegality(context.Background(), deckID)
 
 	require.NoError(t, err)
 	assert.Equal(t, ownerID, insights.lastUserID)
-	assert.Equal(t, 9, insights.lastDeckID)
+	assert.Equal(t, "00000000-0000-0000-0000-000000000009", insights.lastDeckID)
 	assert.Equal(t, []deckinsights.LegalityIssue{{CardName: "Black Lotus", Reason: "banned in commander"}}, report.Issues)
 }
 
 func TestService_GetSharedDeckStats_ComputesAsTheOwner(t *testing.T) {
 	insights := &fakeInsights{stats: deckinsights.DeckStats{CardCount: 100}}
-	service := newService(&fakeDecks{ownerID: ownerID, deck: deck.Deck{ID: 9}}, insights)
+	service := newService(&fakeDecks{ownerID: ownerID, deck: deck.Deck{ID: "00000000-0000-0000-0000-000000000009"}}, insights)
 
-	stats, err := service.GetSharedDeckStats(context.Background(), shareID)
+	stats, err := service.GetSharedDeckStats(context.Background(), deckID)
 
 	require.NoError(t, err)
 	assert.Equal(t, 100, stats.CardCount)
@@ -182,7 +182,7 @@ func TestService_GetSharedDeckStats_DoesNotComputeForAHiddenDeck(t *testing.T) {
 	insights := &fakeInsights{}
 	service := newService(&fakeDecks{sharedErr: deck.ErrNotFound}, insights)
 
-	_, err := service.GetSharedDeckStats(context.Background(), shareID)
+	_, err := service.GetSharedDeckStats(context.Background(), deckID)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 	assert.Empty(t, insights.lastUserID)
@@ -190,9 +190,9 @@ func TestService_GetSharedDeckStats_DoesNotComputeForAHiddenDeck(t *testing.T) {
 
 func TestService_GetSharedDeckStats_PropagatesInsightErrors(t *testing.T) {
 	boom := errors.New("boom")
-	service := newService(&fakeDecks{ownerID: ownerID, deck: deck.Deck{ID: 9}}, &fakeInsights{err: boom})
+	service := newService(&fakeDecks{ownerID: ownerID, deck: deck.Deck{ID: "00000000-0000-0000-0000-000000000009"}}, &fakeInsights{err: boom})
 
-	_, err := service.GetSharedDeckStats(context.Background(), shareID)
+	_, err := service.GetSharedDeckStats(context.Background(), deckID)
 
 	assert.ErrorIs(t, err, boom)
 }

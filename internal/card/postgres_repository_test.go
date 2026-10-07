@@ -816,7 +816,7 @@ func TestPostgresRepository_Delete_KeepsDeckCardsAsPending(t *testing.T) {
 
 	first := createCardWithDetails(t, repo, userID, "Sol Ring", strPtr(""), strPtr("Artifact"))
 	second := createCardWithDetails(t, repo, userID, "Sol Ring", strPtr(""), strPtr("Artifact"))
-	var deckID int
+	var deckID string
 	require.NoError(t, db.Get(&deckID, `INSERT INTO tamiyo.deck (user_id, name, format) VALUES ($1, 'Deck', 'commander') RETURNING id`, userID))
 	_, err := db.Exec(`INSERT INTO tamiyo.card_deck (card_id, deck_id) VALUES ($1, $3), ($2, $3)`, first.ID, second.ID, deckID)
 	require.NoError(t, err)

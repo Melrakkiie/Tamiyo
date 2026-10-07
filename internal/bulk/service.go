@@ -29,13 +29,13 @@ type storageService interface {
 
 type deckService interface {
 	GetAllDecks(ctx context.Context, userID string, filter deck.Filter) ([]deck.Deck, int, error)
-	GetDeck(ctx context.Context, userID string, id int) (deck.Deck, error)
+	GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error)
 	CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error)
-	PutCardInDeck(ctx context.Context, userID string, deckID, cardID int) error
-	GetDeckCards(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]deck.DeckCard, error)
-	GetPendingCards(ctx context.Context, userID string, deckID int) ([]deck.PendingCard, error)
-	RemovePendingCard(ctx context.Context, userID string, deckID, id int) error
-	PromotePendingCommander(ctx context.Context, userID string, deckID, pendingID, cardID int) error
+	PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int) error
+	GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error)
+	GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error)
+	RemovePendingCard(ctx context.Context, userID string, deckID string, id int) error
+	PromotePendingCommander(ctx context.Context, userID string, deckID string, pendingID, cardID int) error
 }
 
 type Service struct {
@@ -102,7 +102,7 @@ func (s *Service) ImportManaBox(ctx context.Context, userID string, r io.Reader)
 			summary.StoragesCreated++
 		}
 
-		var deckID *int
+		var deckID *string
 		if row.BinderType == "deck" {
 			id, created, err := s.getOrCreateDeck(ctx, userID, deckCache, row.BinderName, defaultManaBoxDeckFormat)
 			if err != nil {
@@ -366,8 +366,8 @@ func (s *Service) loadStorageCache(ctx context.Context, userID string) (map[stri
 	}
 }
 
-func (s *Service) loadDeckCache(ctx context.Context, userID string) (map[string]int, error) {
-	cache := make(map[string]int)
+func (s *Service) loadDeckCache(ctx context.Context, userID string) (map[string]string, error) {
+	cache := make(map[string]string)
 	const limit = 100
 	for page := 1; ; page++ {
 		items, total, err := s.decks.GetAllDecks(ctx, userID, deck.Filter{Page: page, Limit: limit})
@@ -395,13 +395,13 @@ func (s *Service) getOrCreateStorage(ctx context.Context, userID string, cache m
 	return st.ID, true, nil
 }
 
-func (s *Service) getOrCreateDeck(ctx context.Context, userID string, cache map[string]int, name, format string) (id int, created bool, err error) {
+func (s *Service) getOrCreateDeck(ctx context.Context, userID string, cache map[string]string, name, format string) (id string, created bool, err error) {
 	if id, ok := cache[name]; ok {
 		return id, false, nil
 	}
 	d, err := s.decks.CreateDeck(ctx, userID, deck.Deck{Name: name, Format: format})
 	if err != nil {
-		return 0, false, err
+		return "", false, err
 	}
 	cache[name] = d.ID
 	return d.ID, true, nil

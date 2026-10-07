@@ -173,9 +173,9 @@ func TestExportMoxfieldCollection_PropagatesCardLoadError(t *testing.T) {
 
 func TestExportMoxfieldDeck_CommanderLineIsWrittenFirst(t *testing.T) {
 	decks := &fakeDeckService{
-		decks: []deck.Deck{{ID: 1, Name: "Atraxa", CommanderID: ptr(100)}},
-		cardsByDeck: map[int][]deck.DeckCard{
-			1: {
+		decks: []deck.Deck{{ID: "00000000-0000-0000-0000-000000000001", Name: "Atraxa", CommanderID: ptr(100)}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {
 				{ID: 100, Name: "Atraxa, Praetors' Voice", SetCode: "CMR", CollectorNumber: "1"},
 				{ID: 101, Name: "Sol Ring", SetCode: "SLD", CollectorNumber: "1011"},
 			},
@@ -184,7 +184,7 @@ func TestExportMoxfieldDeck_CommanderLineIsWrittenFirst(t *testing.T) {
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	var buf bytes.Buffer
-	err := svc.ExportMoxfieldDeck(context.Background(), testUserID, 1, &buf)
+	err := svc.ExportMoxfieldDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", &buf)
 
 	require.NoError(t, err)
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
@@ -195,9 +195,9 @@ func TestExportMoxfieldDeck_CommanderLineIsWrittenFirst(t *testing.T) {
 
 func TestExportMoxfieldDeck_CommanderLineIncludesFullQuantityOfThatPrinting(t *testing.T) {
 	decks := &fakeDeckService{
-		decks: []deck.Deck{{ID: 1, Name: "Mono Mountain", CommanderID: ptr(200)}},
-		cardsByDeck: map[int][]deck.DeckCard{
-			1: {
+		decks: []deck.Deck{{ID: "00000000-0000-0000-0000-000000000001", Name: "Mono Mountain", CommanderID: ptr(200)}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {
 				{ID: 200, Name: "Mountain", SetCode: "WOE", CollectorNumber: "265"},
 				{ID: 201, Name: "Mountain", SetCode: "WOE", CollectorNumber: "265"},
 			},
@@ -206,7 +206,7 @@ func TestExportMoxfieldDeck_CommanderLineIncludesFullQuantityOfThatPrinting(t *t
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	var buf bytes.Buffer
-	require.NoError(t, svc.ExportMoxfieldDeck(context.Background(), testUserID, 1, &buf))
+	require.NoError(t, svc.ExportMoxfieldDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", &buf))
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	require.Len(t, lines, 1)
@@ -215,9 +215,9 @@ func TestExportMoxfieldDeck_CommanderLineIncludesFullQuantityOfThatPrinting(t *t
 
 func TestExportMoxfieldDeck_NoCommanderSortsAlphabeticallyWithNoSpecialFirstLine(t *testing.T) {
 	decks := &fakeDeckService{
-		decks: []deck.Deck{{ID: 1, Name: "Pile"}},
-		cardsByDeck: map[int][]deck.DeckCard{
-			1: {
+		decks: []deck.Deck{{ID: "00000000-0000-0000-0000-000000000001", Name: "Pile"}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {
 				{ID: 1, Name: "Sol Ring", SetCode: "SLD", CollectorNumber: "1011"},
 				{ID: 2, Name: "Lightning Bolt", SetCode: "CMM", CollectorNumber: "456"},
 			},
@@ -226,7 +226,7 @@ func TestExportMoxfieldDeck_NoCommanderSortsAlphabeticallyWithNoSpecialFirstLine
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	var buf bytes.Buffer
-	require.NoError(t, svc.ExportMoxfieldDeck(context.Background(), testUserID, 1, &buf))
+	require.NoError(t, svc.ExportMoxfieldDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", &buf))
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	require.Len(t, lines, 2)
@@ -236,15 +236,15 @@ func TestExportMoxfieldDeck_NoCommanderSortsAlphabeticallyWithNoSpecialFirstLine
 
 func TestExportMoxfieldDeck_FoilSuffix(t *testing.T) {
 	decks := &fakeDeckService{
-		decks: []deck.Deck{{ID: 1, Name: "Pile"}},
-		cardsByDeck: map[int][]deck.DeckCard{
-			1: {{ID: 1, Name: "Sol Ring", SetCode: "SLD", CollectorNumber: "1011", Foil: true}},
+		decks: []deck.Deck{{ID: "00000000-0000-0000-0000-000000000001", Name: "Pile"}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {{ID: 1, Name: "Sol Ring", SetCode: "SLD", CollectorNumber: "1011", Foil: true}},
 		},
 	}
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	var buf bytes.Buffer
-	require.NoError(t, svc.ExportMoxfieldDeck(context.Background(), testUserID, 1, &buf))
+	require.NoError(t, svc.ExportMoxfieldDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", &buf))
 
 	assert.Equal(t, "1 Sol Ring (SLD) 1011 *F*\n", buf.String())
 }
@@ -252,7 +252,7 @@ func TestExportMoxfieldDeck_FoilSuffix(t *testing.T) {
 func TestExportMoxfieldDeck_UnknownDeckReturnsErrDeckNotFound(t *testing.T) {
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
-	err := svc.ExportMoxfieldDeck(context.Background(), testUserID, 999, &bytes.Buffer{})
+	err := svc.ExportMoxfieldDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000999", &bytes.Buffer{})
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrDeckNotFound)
@@ -260,12 +260,12 @@ func TestExportMoxfieldDeck_UnknownDeckReturnsErrDeckNotFound(t *testing.T) {
 
 func TestExportMoxfieldDeck_PropagatesGetDeckCardsError(t *testing.T) {
 	decks := &fakeDeckService{
-		decks:           []deck.Deck{{ID: 1, Name: "Pile"}},
+		decks:           []deck.Deck{{ID: "00000000-0000-0000-0000-000000000001", Name: "Pile"}},
 		getDeckCardsErr: errors.New("db down"),
 	}
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
-	err := svc.ExportMoxfieldDeck(context.Background(), testUserID, 1, &bytes.Buffer{})
+	err := svc.ExportMoxfieldDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", &bytes.Buffer{})
 
 	require.Error(t, err)
 }

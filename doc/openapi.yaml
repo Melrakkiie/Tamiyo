@@ -30,7 +30,7 @@ tags:
   - name: deck-cards
     description: Deck ↔ card relationship
   - name: shared-decks
-    description: Read-only access to public and unlisted decks through their share link, without signing in
+    description: Read-only access to public and unlisted decks by their id, without signing in
 
 paths:
   /health:
@@ -1164,7 +1164,7 @@ paths:
         "204":
           description: No Content
         "400":
-          description: id or card_id is not a valid integer
+          description: id is not a UUID, or card_id is not a valid integer
           content:
             application/json:
               schema:
@@ -1190,7 +1190,7 @@ paths:
         "204":
           description: No Content
         "400":
-          description: id or card_id is not a valid integer
+          description: id is not a UUID, or card_id is not a valid integer
           content:
             application/json:
               schema:
@@ -1358,7 +1358,7 @@ paths:
                 $ref: "#/components/schemas/LegalityReport"
         "400":
           description: >
-            id is not a valid integer, or the deck's format isn't one
+            id is not a UUID, or the deck's format isn't one
             Scryfall recognizes.
           content:
             application/json:
@@ -1397,7 +1397,7 @@ paths:
                 $ref: "#/components/schemas/DeckStats"
         "400":
           description: >
-            id is not a valid integer, or the deck's format isn't one
+            id is not a UUID, or the deck's format isn't one
             Scryfall recognizes.
           content:
             application/json:
@@ -1416,9 +1416,9 @@ paths:
         "502":
           $ref: "#/components/responses/BadGateway"
 
-  /shared/decks/{share_id}:
+  /shared/decks/{id}:
     parameters:
-      - $ref: "#/components/parameters/ShareID"
+      - $ref: "#/components/parameters/DeckID"
     get:
       tags: [shared-decks]
       summary: A shared deck, its owner and its cards
@@ -1436,7 +1436,7 @@ paths:
                 $ref: "#/components/schemas/SharedDeck"
         "404":
           description: >
-            No deck has this share_id, or the deck is private.
+            No deck has this id, or the deck is private.
           content:
             application/json:
               schema:
@@ -1446,9 +1446,9 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /shared/decks/{share_id}/legality:
+  /shared/decks/{id}/legality:
     parameters:
-      - $ref: "#/components/parameters/ShareID"
+      - $ref: "#/components/parameters/DeckID"
     get:
       tags: [shared-decks]
       summary: Legality of a shared deck
@@ -1471,7 +1471,7 @@ paths:
                 $ref: "#/components/schemas/Error"
         "404":
           description: >
-            No deck has this share_id, or the deck is private.
+            No deck has this id, or the deck is private.
           content:
             application/json:
               schema:
@@ -1483,9 +1483,9 @@ paths:
         "502":
           $ref: "#/components/responses/BadGateway"
 
-  /shared/decks/{share_id}/stats:
+  /shared/decks/{id}/stats:
     parameters:
-      - $ref: "#/components/parameters/ShareID"
+      - $ref: "#/components/parameters/DeckID"
     get:
       tags: [shared-decks]
       summary: Statistics of a shared deck
@@ -1506,7 +1506,7 @@ paths:
                 $ref: "#/components/schemas/Error"
         "404":
           description: >
-            No deck has this share_id, or the deck is private.
+            No deck has this id, or the deck is private.
           content:
             application/json:
               schema:
@@ -1855,21 +1855,14 @@ components:
       schema:
         type: integer
       description: Storage ID
-    ShareID:
-      name: share_id
-      in: path
-      required: true
-      description: A deck's share_id. Anything that isn't a UUID is answered with 404.
-      schema:
-        type: string
-        format: uuid
     DeckID:
       name: id
       in: path
       required: true
       schema:
-        type: integer
-      description: Deck ID
+        type: string
+        format: uuid
+      description: Deck ID (a UUID)
     CardIDPath:
       name: card_id
       in: path
@@ -1880,7 +1873,7 @@ components:
 
   responses:
     InvalidID:
-      description: id is not a valid integer
+      description: id is not a valid integer (a UUID for decks)
       content:
         application/json:
           schema:
@@ -2232,7 +2225,8 @@ components:
         id:
           type: integer
         deck_id:
-          type: integer
+          type: string
+          format: uuid
         name:
           type: string
         scryfall_id:
@@ -2497,7 +2491,13 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
+          format: uuid
+          readOnly: true
+          description: >
+            Random identifier generated when the deck is created. It is also
+            the id of the deck's read-only page (GET /shared/decks/{id}),
+            which only resolves while the deck is public or unlisted.
         name:
           type: string
         format:
@@ -2527,14 +2527,6 @@ components:
           description: Scryfall id of the commander card, null without a commander.
         visibility:
           $ref: "#/components/schemas/DeckVisibility"
-        share_id:
-          type: string
-          format: uuid
-          readOnly: true
-          description: >
-            Random identifier of the deck's share link (GET
-            /shared/decks/{share_id}). Only resolves while the deck is
-            public or unlisted.
         card_count:
           type: integer
         pending_count:
@@ -2544,12 +2536,12 @@ components:
           type: string
         updated:
           type: string
-      required: [id, name, format, visibility, share_id, card_count, added, updated]
+      required: [id, name, format, visibility, card_count, added, updated]
 
     SharedDeckInfo:
       type: object
       properties:
-        share_id:
+        id:
           type: string
           format: uuid
         name:
@@ -2574,7 +2566,7 @@ components:
           type: string
         updated:
           type: string
-      required: [share_id, name, format, visibility, background_scryfall_id, commander_scryfall_id, card_count, added, updated]
+      required: [id, name, format, visibility, background_scryfall_id, commander_scryfall_id, card_count, added, updated]
 
     SharedDeckCard:
       type: object

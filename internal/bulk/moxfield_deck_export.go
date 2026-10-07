@@ -10,7 +10,7 @@ import (
 	"Melrakkiie/Tamiyo/internal/deck"
 )
 
-func (s *Service) ExportMoxfieldDeck(ctx context.Context, userID string, deckID int, w io.Writer) error {
+func (s *Service) ExportMoxfieldDeck(ctx context.Context, userID string, deckID string, w io.Writer) error {
 	d, err := s.decks.GetDeck(ctx, userID, deckID)
 	if err != nil {
 		if errors.Is(err, deck.ErrNotFound) {

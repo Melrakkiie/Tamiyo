@@ -29,19 +29,19 @@ type fakeImportService struct {
 	exportContent  string
 	exportErr      error
 	lastExportUser string
-	lastExportDeck int
+	lastExportDeck string
 
 	refreshSummary DetailsRefreshSummary
 	lastAfterID    int
 
 	commitSummary PendingCommitSummary
-	lastDeckID    int
+	lastDeckID    string
 	lastStorageID *int
 	lastPendingID *int
 	commitCalled  bool
 }
 
-func (f *fakeImportService) CommitPendingCards(ctx context.Context, userID string, deckID int, storageID, pendingID *int) (PendingCommitSummary, error) {
+func (f *fakeImportService) CommitPendingCards(ctx context.Context, userID string, deckID string, storageID, pendingID *int) (PendingCommitSummary, error) {
 	f.lastUserID = userID
 	f.lastDeckID = deckID
 	f.lastStorageID = storageID
@@ -99,7 +99,7 @@ func (f *fakeImportService) ExportMoxfieldCollection(ctx context.Context, userID
 	return err
 }
 
-func (f *fakeImportService) ExportMoxfieldDeck(ctx context.Context, userID string, deckID int, w io.Writer) error {
+func (f *fakeImportService) ExportMoxfieldDeck(ctx context.Context, userID string, deckID string, w io.Writer) error {
 	f.lastExportUser = userID
 	f.lastExportDeck = deckID
 	if f.exportErr != nil {
@@ -380,7 +380,7 @@ func TestExportMoxfieldDeck_ReturnsPlainTextWithAttachmentHeaders(t *testing.T) 
 	service := &fakeImportService{exportContent: "1 Sol Ring (SLD) 1011\n"}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodGet, "/export/moxfield/deck/42", nil)
+	req := httptest.NewRequest(http.MethodGet, "/export/moxfield/deck/00000000-0000-0000-0000-000000000042", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -388,7 +388,7 @@ func TestExportMoxfieldDeck_ReturnsPlainTextWithAttachmentHeaders(t *testing.T) 
 	assert.Equal(t, `attachment; filename="Moxfield_Deck_export.txt"`, w.Header().Get("Content-Disposition"))
 	assert.Equal(t, "text/plain; charset=utf-8", w.Header().Get("Content-Type"))
 	assert.Equal(t, "1 Sol Ring (SLD) 1011\n", w.Body.String())
-	assert.Equal(t, 42, service.lastExportDeck)
+	assert.Equal(t, "00000000-0000-0000-0000-000000000042", service.lastExportDeck)
 	assert.Equal(t, testUserID, service.lastExportUser)
 }
 
@@ -405,7 +405,7 @@ func TestExportMoxfieldDeck_InvalidIDReturnsBadRequest(t *testing.T) {
 func TestExportMoxfieldDeck_UnknownDeckReturnsNotFound(t *testing.T) {
 	router := setupRouter(&fakeImportService{exportErr: ErrDeckNotFound})
 
-	req := httptest.NewRequest(http.MethodGet, "/export/moxfield/deck/999", nil)
+	req := httptest.NewRequest(http.MethodGet, "/export/moxfield/deck/00000000-0000-0000-0000-000000000999", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -415,7 +415,7 @@ func TestExportMoxfieldDeck_UnknownDeckReturnsNotFound(t *testing.T) {
 func TestExportMoxfieldDeck_ServiceErrorReturnsInternalServerError(t *testing.T) {
 	router := setupRouter(&fakeImportService{exportErr: assertAnError{}})
 
-	req := httptest.NewRequest(http.MethodGet, "/export/moxfield/deck/1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/export/moxfield/deck/00000000-0000-0000-0000-000000000001", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -479,14 +479,14 @@ func TestHandler_CommitPendingCards(t *testing.T) {
 	service := &fakeImportService{commitSummary: PendingCommitSummary{CardsCreated: 3}}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodPost, "/deck/9/pending/commit", bytes.NewBufferString(`{"storage_id": 4}`))
+	req := httptest.NewRequest(http.MethodPost, "/deck/00000000-0000-0000-0000-000000000009/pending/commit", bytes.NewBufferString(`{"storage_id": 4}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.JSONEq(t, `{"cards_created": 3}`, w.Body.String())
-	assert.Equal(t, 9, service.lastDeckID)
+	assert.Equal(t, "00000000-0000-0000-0000-000000000009", service.lastDeckID)
 	require.NotNil(t, service.lastStorageID)
 	assert.Equal(t, 4, *service.lastStorageID)
 }
@@ -495,7 +495,7 @@ func TestHandler_CommitPendingCards_WorksWithoutABody(t *testing.T) {
 	service := &fakeImportService{}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodPost, "/deck/9/pending/commit", nil)
+	req := httptest.NewRequest(http.MethodPost, "/deck/00000000-0000-0000-0000-000000000009/pending/commit", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -507,7 +507,7 @@ func TestHandler_CommitPendingCards_MapsErrors(t *testing.T) {
 	cases := map[error]int{ErrDeckNotFound: http.StatusNotFound, ErrTargetStorageNotFound: http.StatusBadRequest}
 	for commitErr, expected := range cases {
 		router := setupRouter(&fakeImportService{err: commitErr})
-		req := httptest.NewRequest(http.MethodPost, "/deck/9/pending/commit", nil)
+		req := httptest.NewRequest(http.MethodPost, "/deck/00000000-0000-0000-0000-000000000009/pending/commit", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 		assert.Equal(t, expected, w.Code)
@@ -518,7 +518,7 @@ func TestHandler_CommitPendingCards_RejectsABadStorageID(t *testing.T) {
 	service := &fakeImportService{}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodPost, "/deck/9/pending/commit", bytes.NewBufferString(`{"storage_id": 0}`))
+	req := httptest.NewRequest(http.MethodPost, "/deck/00000000-0000-0000-0000-000000000009/pending/commit", bytes.NewBufferString(`{"storage_id": 0}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -531,7 +531,7 @@ func TestHandler_CommitPendingCards_CanTargetOneCard(t *testing.T) {
 	service := &fakeImportService{commitSummary: PendingCommitSummary{CardsCreated: 1}}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodPost, "/deck/9/pending/commit", bytes.NewBufferString(`{"pending_id": 5}`))
+	req := httptest.NewRequest(http.MethodPost, "/deck/00000000-0000-0000-0000-000000000009/pending/commit", bytes.NewBufferString(`{"pending_id": 5}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -545,7 +545,7 @@ func TestHandler_CommitPendingCards_CanTargetOneCard(t *testing.T) {
 func TestHandler_CommitPendingCards_ReturnsNotFoundForAnUnknownPendingCard(t *testing.T) {
 	router := setupRouter(&fakeImportService{err: deck.ErrPendingCardNotFound})
 
-	req := httptest.NewRequest(http.MethodPost, "/deck/9/pending/commit", bytes.NewBufferString(`{"pending_id": 5}`))
+	req := httptest.NewRequest(http.MethodPost, "/deck/00000000-0000-0000-0000-000000000009/pending/commit", bytes.NewBufferString(`{"pending_id": 5}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)

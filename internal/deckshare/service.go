@@ -14,9 +14,9 @@ import (
 var ErrNotFound = errors.New("shared deck not found")
 
 type deckService interface {
-	GetSharedDeck(ctx context.Context, shareID string) (string, deck.Deck, error)
-	GetDeckCards(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]deck.DeckCard, error)
-	GetPendingCards(ctx context.Context, userID string, deckID int) ([]deck.PendingCard, error)
+	GetSharedDeck(ctx context.Context, deckID string) (string, deck.Deck, error)
+	GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error)
+	GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error)
 }
 
 type userService interface {
@@ -24,8 +24,8 @@ type userService interface {
 }
 
 type insightsService interface {
-	GetDeckLegality(ctx context.Context, userID string, deckID int) (deckinsights.LegalityReport, error)
-	GetDeckStats(ctx context.Context, userID string, deckID int) (deckinsights.DeckStats, error)
+	GetDeckLegality(ctx context.Context, userID string, deckID string) (deckinsights.LegalityReport, error)
+	GetDeckStats(ctx context.Context, userID string, deckID string) (deckinsights.DeckStats, error)
 }
 
 type Owner struct {
@@ -64,8 +64,8 @@ func NewService(decks deckService, users userService, insights insightsService) 
 	return &Service{decks: decks, users: users, insights: insights}
 }
 
-func (s *Service) resolve(ctx context.Context, shareID string) (string, deck.Deck, error) {
-	ownerID, d, err := s.decks.GetSharedDeck(ctx, shareID)
+func (s *Service) resolve(ctx context.Context, deckID string) (string, deck.Deck, error) {
+	ownerID, d, err := s.decks.GetSharedDeck(ctx, deckID)
 	if err != nil {
 		if errors.Is(err, deck.ErrNotFound) {
 			return "", deck.Deck{}, ErrNotFound
@@ -75,8 +75,8 @@ func (s *Service) resolve(ctx context.Context, shareID string) (string, deck.Dec
 	return ownerID, d, nil
 }
 
-func (s *Service) GetSharedDeck(ctx context.Context, shareID string) (SharedDeck, error) {
-	ownerID, d, err := s.resolve(ctx, shareID)
+func (s *Service) GetSharedDeck(ctx context.Context, deckID string) (SharedDeck, error) {
+	ownerID, d, err := s.resolve(ctx, deckID)
 	if err != nil {
 		return SharedDeck{}, err
 	}
@@ -103,8 +103,8 @@ func (s *Service) GetSharedDeck(ctx context.Context, shareID string) (SharedDeck
 	}, nil
 }
 
-func (s *Service) GetSharedDeckLegality(ctx context.Context, shareID string) (deckinsights.LegalityReport, error) {
-	ownerID, d, err := s.resolve(ctx, shareID)
+func (s *Service) GetSharedDeckLegality(ctx context.Context, deckID string) (deckinsights.LegalityReport, error) {
+	ownerID, d, err := s.resolve(ctx, deckID)
 	if err != nil {
 		return deckinsights.LegalityReport{}, err
 	}
@@ -118,8 +118,8 @@ func (s *Service) GetSharedDeckLegality(ctx context.Context, shareID string) (de
 	return report, nil
 }
 
-func (s *Service) GetSharedDeckStats(ctx context.Context, shareID string) (deckinsights.DeckStats, error) {
-	ownerID, d, err := s.resolve(ctx, shareID)
+func (s *Service) GetSharedDeckStats(ctx context.Context, deckID string) (deckinsights.DeckStats, error) {
+	ownerID, d, err := s.resolve(ctx, deckID)
 	if err != nil {
 		return deckinsights.DeckStats{}, err
 	}

@@ -21,7 +21,7 @@ const (
 )
 
 type deckResponse struct {
-	ID                   int     `json:"id"`
+	ID                   string  `json:"id"`
 	Name                 string  `json:"name"`
 	Format               string  `json:"format"`
 	CommanderID          *int    `json:"commander_id"`
@@ -29,7 +29,6 @@ type deckResponse struct {
 	BackgroundScryfallID *string `json:"background_scryfall_id"`
 	CommanderScryfallID  *string `json:"commander_scryfall_id"`
 	Visibility           string  `json:"visibility"`
-	ShareID              string  `json:"share_id"`
 	CardCount            int     `json:"card_count"`
 	PendingCount         int     `json:"pending_count"`
 	Added                string  `json:"added"`
@@ -46,7 +45,6 @@ func toResponse(d Deck) deckResponse {
 		BackgroundScryfallID: d.BackgroundScryfallID,
 		CommanderScryfallID:  d.CommanderScryfallID,
 		Visibility:           d.Visibility,
-		ShareID:              d.ShareID,
 		CardCount:            d.CardCount,
 		PendingCount:         d.PendingCount,
 		Added:                d.Added.Format("2006-01-02 15:04:05"),
@@ -161,18 +159,18 @@ func toDeckCardResponse(dc DeckCard) deckCardResponse {
 
 type deckService interface {
 	GetAllDecks(ctx context.Context, userID string, filter Filter) ([]Deck, int, error)
-	GetDeck(ctx context.Context, userID string, id int) (Deck, error)
+	GetDeck(ctx context.Context, userID string, id string) (Deck, error)
 	CreateDeck(ctx context.Context, userID string, d Deck) (Deck, error)
-	UpdateDeck(ctx context.Context, userID string, id int, req updateDeckRequest) (Deck, error)
-	DeleteDeck(ctx context.Context, userID string, id int) error
+	UpdateDeck(ctx context.Context, userID string, id string, req updateDeckRequest) (Deck, error)
+	DeleteDeck(ctx context.Context, userID string, id string) error
 
-	GetDeckCards(ctx context.Context, userID string, deckID int, sortField string, sortDesc bool) ([]DeckCard, error)
-	PutCardInDeck(ctx context.Context, userID string, deckID int, cardID int) error
-	RemoveCardFromDeck(ctx context.Context, userID string, deckID int, cardID int) error
+	GetDeckCards(ctx context.Context, userID string, deckID string, sortField string, sortDesc bool) ([]DeckCard, error)
+	PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int) error
+	RemoveCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error
 
-	GetPendingCards(ctx context.Context, userID string, deckID int) ([]PendingCard, error)
-	AddPendingCard(ctx context.Context, userID string, deckID int, p PendingCard) (PendingCard, error)
-	RemovePendingCard(ctx context.Context, userID string, deckID, id int) error
+	GetPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error)
+	AddPendingCard(ctx context.Context, userID string, deckID string, p PendingCard) (PendingCard, error)
+	RemovePendingCard(ctx context.Context, userID string, deckID string, id int) error
 }
 
 type Handler struct {
@@ -310,8 +308,8 @@ func (h *Handler) getDeck(ctx *gin.Context) {
 		return
 	}
 
-	id, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
+	id, valid := ParseID(ctx.Param("id"))
+	if !valid {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
@@ -354,8 +352,8 @@ func (h *Handler) updateDeck(ctx *gin.Context) {
 		return
 	}
 
-	id, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
+	id, valid := ParseID(ctx.Param("id"))
+	if !valid {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
@@ -385,8 +383,8 @@ func (h *Handler) deleteDeck(ctx *gin.Context) {
 		return
 	}
 
-	id, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
+	id, valid := ParseID(ctx.Param("id"))
+	if !valid {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
@@ -406,8 +404,8 @@ func (h *Handler) getDeckCards(ctx *gin.Context) {
 		return
 	}
 
-	id, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
+	id, valid := ParseID(ctx.Param("id"))
+	if !valid {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
@@ -451,8 +449,8 @@ func (h *Handler) putCardInDeck(ctx *gin.Context) {
 		return
 	}
 
-	deckID, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
+	deckID, valid := ParseID(ctx.Param("id"))
+	if !valid {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid deck_id"})
 		return
 	}
@@ -481,8 +479,8 @@ func (h *Handler) removeCardFromDeck(ctx *gin.Context) {
 		return
 	}
 
-	deckID, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
+	deckID, valid := ParseID(ctx.Param("id"))
+	if !valid {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid deck_id"})
 		return
 	}

@@ -3,6 +3,7 @@ package bulk
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -120,10 +121,10 @@ type fakeDeckService struct {
 	decks       []deck.Deck
 	nextID      int
 	created     []deck.Deck
-	linkedCards map[int][]int
+	linkedCards map[string][]int
 	linkErr     error
 
-	cardsByDeck     map[int][]deck.DeckCard
+	cardsByDeck     map[string][]deck.DeckCard
 	getDeckErr      error
 	getDeckCardsErr error
 	createDeckErr   error
@@ -133,7 +134,7 @@ type fakeDeckService struct {
 	promoted       map[int]int
 }
 
-func (f *fakeDeckService) PromotePendingCommander(ctx context.Context, userID string, deckID, pendingID, cardID int) error {
+func (f *fakeDeckService) PromotePendingCommander(ctx context.Context, userID string, deckID string, pendingID, cardID int) error {
 	if f.promoted == nil {
 		f.promoted = map[int]int{}
 	}
@@ -141,14 +142,14 @@ func (f *fakeDeckService) PromotePendingCommander(ctx context.Context, userID st
 	return nil
 }
 
-func (f *fakeDeckService) GetPendingCards(ctx context.Context, userID string, deckID int) ([]deck.PendingCard, error) {
+func (f *fakeDeckService) GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error) {
 	if f.getDeckErr != nil {
 		return nil, f.getDeckErr
 	}
 	return f.pending, nil
 }
 
-func (f *fakeDeckService) RemovePendingCard(ctx context.Context, userID string, deckID, id int) error {
+func (f *fakeDeckService) RemovePendingCard(ctx context.Context, userID string, deckID string, id int) error {
 	f.removedPending = append(f.removedPending, id)
 	return nil
 }
@@ -157,7 +158,7 @@ func (f *fakeDeckService) GetAllDecks(ctx context.Context, userID string, filter
 	return f.decks, len(f.decks), nil
 }
 
-func (f *fakeDeckService) GetDeck(ctx context.Context, userID string, id int) (deck.Deck, error) {
+func (f *fakeDeckService) GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error) {
 	if f.getDeckErr != nil {
 		return deck.Deck{}, f.getDeckErr
 	}
@@ -169,7 +170,7 @@ func (f *fakeDeckService) GetDeck(ctx context.Context, userID string, id int) (d
 	return deck.Deck{}, deck.ErrNotFound
 }
 
-func (f *fakeDeckService) GetDeckCards(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]deck.DeckCard, error) {
+func (f *fakeDeckService) GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error) {
 	if f.getDeckCardsErr != nil {
 		return nil, f.getDeckCardsErr
 	}
@@ -181,18 +182,18 @@ func (f *fakeDeckService) CreateDeck(ctx context.Context, userID string, d deck.
 		return deck.Deck{}, f.createDeckErr
 	}
 	f.nextID++
-	d.ID = f.nextID
+	d.ID = fmt.Sprintf("00000000-0000-0000-0000-%012d", f.nextID)
 	f.decks = append(f.decks, d)
 	f.created = append(f.created, d)
 	return d, nil
 }
 
-func (f *fakeDeckService) PutCardInDeck(ctx context.Context, userID string, deckID, cardID int) error {
+func (f *fakeDeckService) PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int) error {
 	if f.linkErr != nil {
 		return f.linkErr
 	}
 	if f.linkedCards == nil {
-		f.linkedCards = make(map[int][]int)
+		f.linkedCards = make(map[string][]int)
 	}
 	f.linkedCards[deckID] = append(f.linkedCards[deckID], cardID)
 	return nil
@@ -720,7 +721,7 @@ func TestCommitPendingCards_CreatesEachCopyAndPutsItInTheDeck(t *testing.T) {
 	svc := NewService(cards, storages, decks, &fakeResolver{})
 	storageID := 4
 
-	summary, err := svc.CommitPendingCards(context.Background(), testUserID, 9, &storageID, nil)
+	summary, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", &storageID, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, 3, summary.CardsCreated)
@@ -731,7 +732,7 @@ func TestCommitPendingCards_CreatesEachCopyAndPutsItInTheDeck(t *testing.T) {
 	require.NotNil(t, cards.created[0].StorageID)
 	assert.Equal(t, 4, *cards.created[0].StorageID)
 	assert.True(t, cards.created[2].Foil)
-	assert.Len(t, decks.linkedCards[9], 3)
+	assert.Len(t, decks.linkedCards["00000000-0000-0000-0000-000000000009"], 3)
 	assert.Equal(t, []int{1, 2}, decks.removedPending)
 }
 
@@ -741,7 +742,7 @@ func TestCommitPendingCards_RejectsAnUnknownStorage(t *testing.T) {
 	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 	storageID := 42
 
-	_, err := svc.CommitPendingCards(context.Background(), testUserID, 9, &storageID, nil)
+	_, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", &storageID, nil)
 
 	assert.ErrorIs(t, err, ErrTargetStorageNotFound)
 	assert.Empty(t, cards.created)
@@ -752,7 +753,7 @@ func TestCommitPendingCards_ReturnsDeckNotFound(t *testing.T) {
 	decks := &fakeDeckService{getDeckErr: deck.ErrNotFound}
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
-	_, err := svc.CommitPendingCards(context.Background(), testUserID, 9, nil, nil)
+	_, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, nil)
 
 	assert.ErrorIs(t, err, ErrDeckNotFound)
 }
@@ -762,7 +763,7 @@ func TestCommitPendingCards_KeepsTheItemWhenCreationFails(t *testing.T) {
 	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 1, Name: "Sol Ring", Quantity: 1}}}
 	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
-	_, err := svc.CommitPendingCards(context.Background(), testUserID, 9, nil, nil)
+	_, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, nil)
 
 	assert.Error(t, err)
 	assert.Empty(t, decks.removedPending)
@@ -777,7 +778,7 @@ func TestCommitPendingCards_CanCommitASingleCard(t *testing.T) {
 	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 	pendingID := 2
 
-	summary, err := svc.CommitPendingCards(context.Background(), testUserID, 9, nil, &pendingID)
+	summary, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, &pendingID)
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, summary.CardsCreated)
@@ -792,7 +793,7 @@ func TestCommitPendingCards_ReturnsNotFoundForAnUnknownPendingCard(t *testing.T)
 	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 	pendingID := 42
 
-	_, err := svc.CommitPendingCards(context.Background(), testUserID, 9, nil, &pendingID)
+	_, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, &pendingID)
 
 	assert.ErrorIs(t, err, deck.ErrPendingCardNotFound)
 	assert.Empty(t, cards.created)
@@ -803,7 +804,7 @@ func TestCommitPendingCards_OffersEachItemAsCommanderOnce(t *testing.T) {
 	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 3, Name: "Atraxa", Quantity: 2}}}
 	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
-	_, err := svc.CommitPendingCards(context.Background(), testUserID, 9, nil, nil)
+	_, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, nil)
 
 	require.NoError(t, err)
 	require.Len(t, cards.created, 2)

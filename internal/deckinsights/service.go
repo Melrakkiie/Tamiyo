@@ -10,9 +10,9 @@ import (
 )
 
 type deckService interface {
-	GetDeck(ctx context.Context, userID string, id int) (deck.Deck, error)
-	GetDeckCards(ctx context.Context, userID string, id int, sortField string, sortDesc bool) ([]deck.DeckCard, error)
-	GetPendingCards(ctx context.Context, userID string, deckID int) ([]deck.PendingCard, error)
+	GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error)
+	GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error)
+	GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error)
 }
 
 type scryfallFetcher interface {
@@ -28,7 +28,7 @@ func NewService(decks deckService, scryfall scryfallFetcher) *Service {
 	return &Service{decks: decks, scryfall: scryfall}
 }
 
-func (s *Service) GetDeckLegality(ctx context.Context, userID string, deckID int) (LegalityReport, error) {
+func (s *Service) GetDeckLegality(ctx context.Context, userID string, deckID string) (LegalityReport, error) {
 	d, cards, scryfallByID, err := s.loadDeckWithScryfallData(ctx, userID, deckID)
 	if err != nil {
 		return LegalityReport{}, err
@@ -42,7 +42,7 @@ func (s *Service) GetDeckLegality(ctx context.Context, userID string, deckID int
 	return report, err
 }
 
-func (s *Service) GetDeckStats(ctx context.Context, userID string, deckID int) (DeckStats, error) {
+func (s *Service) GetDeckStats(ctx context.Context, userID string, deckID string) (DeckStats, error) {
 	_, cards, scryfallByID, err := s.loadDeckWithScryfallData(ctx, userID, deckID)
 	if err != nil {
 		return DeckStats{}, err
@@ -50,7 +50,7 @@ func (s *Service) GetDeckStats(ctx context.Context, userID string, deckID int) (
 	return computeStats(cards, scryfallByID), nil
 }
 
-func (s *Service) loadDeckWithScryfallData(ctx context.Context, userID string, deckID int) (deck.Deck, []deck.DeckCard, map[string]scryfall.Card, error) {
+func (s *Service) loadDeckWithScryfallData(ctx context.Context, userID string, deckID string) (deck.Deck, []deck.DeckCard, map[string]scryfall.Card, error) {
 	d, err := s.decks.GetDeck(ctx, userID, deckID)
 	if err != nil {
 		if errors.Is(err, deck.ErrNotFound) {

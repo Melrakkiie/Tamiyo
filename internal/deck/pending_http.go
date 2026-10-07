@@ -15,7 +15,7 @@ import (
 
 type pendingCardResponse struct {
 	ID              int     `json:"id"`
-	DeckID          int     `json:"deck_id"`
+	DeckID          string  `json:"deck_id"`
 	Name            string  `json:"name"`
 	ScryfallID      string  `json:"scryfall_id"`
 	SetCode         string  `json:"set_code"`
@@ -111,8 +111,8 @@ func (h *Handler) getPendingCards(ctx *gin.Context) {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
 		return
 	}
-	deckID, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
+	deckID, valid := ParseID(ctx.Param("id"))
+	if !valid {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
@@ -136,8 +136,8 @@ func (h *Handler) addPendingCard(ctx *gin.Context) {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
 		return
 	}
-	deckID, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
+	deckID, valid := ParseID(ctx.Param("id"))
+	if !valid {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
@@ -167,8 +167,8 @@ func (h *Handler) removePendingCard(ctx *gin.Context) {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
 		return
 	}
-	deckID, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
+	deckID, valid := ParseID(ctx.Param("id"))
+	if !valid {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
