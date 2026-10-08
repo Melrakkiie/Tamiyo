@@ -143,7 +143,7 @@ Log in as the seeded account with `seed@tamiyo.local` / `password123` (see `POST
 
 Three authenticated routes import a collection or decklist export produced by a third-party tool in one request, instead of one `POST /cards` call per card — see [`openapi.yaml`](./openapi.yaml) and [`doc/API.md`](./doc/API.md#bulk-import) for the full request/response shapes:
 
-- `POST /import/manabox` — a [ManaBox](https://manabox.app/) collection CSV export. Carries its own storage/binder and Scryfall ID, so nothing else is needed.
+- `POST /import/manabox` — a [ManaBox](https://manabox.app/) collection CSV export. Carries its own storage/binder and Scryfall ID, so nothing else is needed; pass an optional `storage_id` to put every card in that storage instead.
 - `POST /import/moxfield/collection` — a [Moxfield](https://www.moxfield.com/) "Export Collection" CSV. Has no storage concept, so every imported card is assigned to an existing `storage_id` you pass in; has no Scryfall ID either, so each row is resolved by set + collector number against the [Scryfall API](https://scryfall.com/docs/api/cards/collection).
 - `POST /deck/:id/import` — a decklist added to an existing deck: a Moxfield plain-text export (deck page → **More → Export → Plain Text**), a plain `4 Lightning Bolt` list matched by name, or any format `GET /deck/:id/export` produces. It never creates cards: owned copies of each printing go in the deck, and missing ones are added as pending cards. With `commander_from_first_line=true`, the first line becomes the commander if the deck has none.
 
@@ -162,11 +162,11 @@ A bulk import never fails outright over a single bad row — it returns `200 OK`
 
 Routes export back out in the same formats the import routes above read — see [`doc/API.md`](./doc/API.md#bulk-export) for details:
 
-- `GET /export/manabox` — the whole collection as a ManaBox-compatible CSV, grouped by storage (a card with no storage lands in a synthetic "Unsorted" binder).
-- `GET /export/moxfield/collection` — the whole collection as a Moxfield-compatible "Export Collection" CSV; Moxfield's format has no storage concept, so this groups the entire collection together regardless of storage.
+- `GET /export/manabox` — the collection as a ManaBox-compatible CSV, grouped by storage (a card with no storage lands in a synthetic "Unsorted" binder).
+- `GET /export/moxfield/collection` — the collection as a Moxfield-compatible "Export Collection" CSV; Moxfield's format has no storage concept, so this groups the entire collection together regardless of storage.
 - `GET /deck/:id/export?format=moxfield|plain|arena` — **one deck** (not the whole collection) as text: a Moxfield deck export, a plain `4 Lightning Bolt` list, or MTG Arena's `Commander` / `Deck` sections. The commander comes first, so re-importing reconstructs it; pending cards are included.
 
-The two collection-wide routes always export everything (no filtering by storage or deck) and return a raw CSV download, not JSON; the deck route returns a raw `.txt` download:
+The two collection routes export everything, or a single storage with `?storage_id=4`, and return a raw CSV download, not JSON; the deck route returns a raw `.txt` download:
 
 ```bash
 curl -X GET localhost:8080/export/manabox \

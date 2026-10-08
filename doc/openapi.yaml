@@ -1653,6 +1653,13 @@ paths:
                     The ManaBox_Collection.csv file. Required columns:
                     Binder Name, Binder Type, Name, Set code, Scryfall ID,
                     Collector number, Foil, Quantity (order doesn't matter).
+                storage_id:
+                  type: integer
+                  minimum: 1
+                  description: >
+                    Put every card in this existing storage instead:
+                    Binder Name and Binder Type are then ignored, and no
+                    storage or deck is created.
       responses:
         "200":
           description: >
@@ -1663,7 +1670,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/ImportSummary"
         "400":
-          description: No file field, or the file couldn't be parsed.
+          description: >
+            No file field, the file couldn't be parsed, or storage_id is
+            invalid or does not reference an existing storage.
           content:
             application/json:
               schema:
@@ -1731,8 +1740,8 @@ paths:
       tags: [bulk-export]
       summary: Export the collection as a ManaBox CSV
       description: >
-        Exports the account's entire collection as a ManaBox-compatible
-        CSV (ManaBox_Collection_export.csv), matching the columns
+        Exports the account's collection, or only one storage with
+        storage_id, as a ManaBox-compatible CSV (ManaBox_Collection_export.csv), matching the columns
         POST /import/manabox reads. Identical physical copies within the
         same storage collapse into one row with a Quantity. Cards are
         grouped by storage (ManaBox's only organizing concept); a card
@@ -1741,6 +1750,14 @@ paths:
         independently of storage in Tamiyo and isn't reflected here —
         only a storage whose own type is "deck" is exported as
         Binder Type "deck".
+      parameters:
+        - name: storage_id
+          in: query
+          required: false
+          description: Only export the cards in this storage.
+          schema:
+            type: integer
+            minimum: 1
       responses:
         "200":
           description: The CSV file, served as a download.
@@ -1754,8 +1771,20 @@ paths:
               schema:
                 type: string
                 format: binary
+        "400":
+          description: storage_id is not a positive integer.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: storage_id does not reference an existing storage.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1764,13 +1793,21 @@ paths:
       tags: [bulk-export]
       summary: Export the collection as a Moxfield collection CSV
       description: >
-        Exports the account's entire collection as a Moxfield-compatible
-        "Export Collection" CSV, matching the columns
+        Exports the account's collection, or only one storage with
+        storage_id, as a Moxfield-compatible "Export Collection" CSV, matching the columns
         POST /import/moxfield/collection reads. Identical physical copies
         collapse into one row with a Count. Moxfield's format has no
         storage concept, so — unlike the ManaBox export — cards are
         grouped across every storage (and unsorted cards) without
         distinction.
+      parameters:
+        - name: storage_id
+          in: query
+          required: false
+          description: Only export the cards in this storage.
+          schema:
+            type: integer
+            minimum: 1
       responses:
         "200":
           description: The CSV file, served as a download.
@@ -1784,8 +1821,20 @@ paths:
               schema:
                 type: string
                 format: binary
+        "400":
+          description: storage_id is not a positive integer.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: storage_id does not reference an existing storage.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "500":
           $ref: "#/components/responses/InternalError"
 

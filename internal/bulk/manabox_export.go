@@ -25,10 +25,10 @@ type cardGroupKey struct {
 
 const unsortedStorageID = 0
 
-func (s *Service) ExportManaBox(ctx context.Context, userID string, w io.Writer) error {
-	cards, err := s.loadAllCards(ctx, userID)
+func (s *Service) ExportManaBox(ctx context.Context, userID string, storageID *int, w io.Writer) error {
+	cards, err := s.exportedCards(ctx, userID, storageID)
 	if err != nil {
-		return fmt.Errorf("loading cards: %w", err)
+		return err
 	}
 	storagesByID, err := s.loadAllStoragesByID(ctx, userID)
 	if err != nil {

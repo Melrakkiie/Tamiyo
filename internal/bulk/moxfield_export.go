@@ -19,10 +19,10 @@ type moxfieldGroupKey struct {
 	Foil            bool
 }
 
-func (s *Service) ExportMoxfieldCollection(ctx context.Context, userID string, w io.Writer) error {
-	cards, err := s.loadAllCards(ctx, userID)
+func (s *Service) ExportMoxfieldCollection(ctx context.Context, userID string, storageID *int, w io.Writer) error {
+	cards, err := s.exportedCards(ctx, userID, storageID)
 	if err != nil {
-		return fmt.Errorf("loading cards: %w", err)
+		return err
 	}
 
 	groups := make(map[moxfieldGroupKey]int)

@@ -28,7 +28,7 @@ func TestExportManaBox_GroupsIdenticalCardsByStorageIntoOneRowWithQuantity(t *te
 	svc := NewService(cards, storages, &fakeDeckService{}, &fakeResolver{})
 
 	var buf bytes.Buffer
-	err := svc.ExportManaBox(context.Background(), testUserID, &buf)
+	err := svc.ExportManaBox(context.Background(), testUserID, nil, &buf)
 
 	require.NoError(t, err)
 	out := buf.String()
@@ -45,7 +45,7 @@ func TestExportManaBox_UsesDeckBinderTypeForDeckStorages(t *testing.T) {
 	svc := NewService(cards, storages, &fakeDeckService{}, &fakeResolver{})
 
 	var buf bytes.Buffer
-	require.NoError(t, svc.ExportManaBox(context.Background(), testUserID, &buf))
+	require.NoError(t, svc.ExportManaBox(context.Background(), testUserID, nil, &buf))
 
 	assert.Contains(t, buf.String(), "Atraxa Deck,deck,Sol Ring,CMM,,123,,1")
 }
@@ -59,7 +59,7 @@ func TestExportManaBox_GroupsCardsWithNilStorageUnderUnsortedBucketSortedLast(t 
 	svc := NewService(cards, storages, &fakeDeckService{}, &fakeResolver{})
 
 	var buf bytes.Buffer
-	require.NoError(t, svc.ExportManaBox(context.Background(), testUserID, &buf))
+	require.NoError(t, svc.ExportManaBox(context.Background(), testUserID, nil, &buf))
 
 	lines := splitCSVLines(buf.String())
 	require.Len(t, lines, 3) // header + 2 rows
@@ -76,7 +76,7 @@ func TestExportManaBox_DistinguishesFoilFromNonFoilAsSeparateRows(t *testing.T) 
 	svc := NewService(cards, storages, &fakeDeckService{}, &fakeResolver{})
 
 	var buf bytes.Buffer
-	require.NoError(t, svc.ExportManaBox(context.Background(), testUserID, &buf))
+	require.NoError(t, svc.ExportManaBox(context.Background(), testUserID, nil, &buf))
 
 	lines := splitCSVLines(buf.String())
 	require.Len(t, lines, 3)
@@ -88,7 +88,7 @@ func TestExportManaBox_PropagatesCardLoadError(t *testing.T) {
 	cards := &fakeCardService{getAllErr: errors.New("db down")}
 	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
-	err := svc.ExportManaBox(context.Background(), testUserID, &bytes.Buffer{})
+	err := svc.ExportManaBox(context.Background(), testUserID, nil, &bytes.Buffer{})
 
 	require.Error(t, err)
 }
@@ -98,7 +98,7 @@ func TestExportManaBox_PropagatesStorageLoadError(t *testing.T) {
 	storages := &fakeStorageService{getAllErr: errors.New("db down")}
 	svc := NewService(cards, storages, &fakeDeckService{}, &fakeResolver{})
 
-	err := svc.ExportManaBox(context.Background(), testUserID, &bytes.Buffer{})
+	err := svc.ExportManaBox(context.Background(), testUserID, nil, &bytes.Buffer{})
 
 	require.Error(t, err)
 }
@@ -107,7 +107,7 @@ func TestExportManaBox_EmptyCollectionProducesHeaderOnly(t *testing.T) {
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
 	var buf bytes.Buffer
-	require.NoError(t, svc.ExportManaBox(context.Background(), testUserID, &buf))
+	require.NoError(t, svc.ExportManaBox(context.Background(), testUserID, nil, &buf))
 
 	assert.Equal(t, 1, len(splitCSVLines(buf.String())))
 }
@@ -122,7 +122,7 @@ func TestExportMoxfieldCollection_GroupsAcrossStoragesRegardlessOfBucket(t *test
 	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
 	var buf bytes.Buffer
-	require.NoError(t, svc.ExportMoxfieldCollection(context.Background(), testUserID, &buf))
+	require.NoError(t, svc.ExportMoxfieldCollection(context.Background(), testUserID, nil, &buf))
 
 	lines := splitCSVLines(buf.String())
 	require.Len(t, lines, 2) // header + one merged row
@@ -137,7 +137,7 @@ func TestExportMoxfieldCollection_LowercasesSetCode(t *testing.T) {
 	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
 	var buf bytes.Buffer
-	require.NoError(t, svc.ExportMoxfieldCollection(context.Background(), testUserID, &buf))
+	require.NoError(t, svc.ExportMoxfieldCollection(context.Background(), testUserID, nil, &buf))
 
 	assert.Contains(t, buf.String(), ",sld,")
 }
@@ -151,7 +151,7 @@ func TestExportMoxfieldCollection_MarksFoilCardsAndSortsByNameThenSetThenCollect
 	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
 	var buf bytes.Buffer
-	require.NoError(t, svc.ExportMoxfieldCollection(context.Background(), testUserID, &buf))
+	require.NoError(t, svc.ExportMoxfieldCollection(context.Background(), testUserID, nil, &buf))
 
 	lines := splitCSVLines(buf.String())
 	require.Len(t, lines, 4) // header + 3 rows
@@ -164,9 +164,43 @@ func TestExportMoxfieldCollection_PropagatesCardLoadError(t *testing.T) {
 	cards := &fakeCardService{getAllErr: errors.New("db down")}
 	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
-	err := svc.ExportMoxfieldCollection(context.Background(), testUserID, &bytes.Buffer{})
+	err := svc.ExportMoxfieldCollection(context.Background(), testUserID, nil, &bytes.Buffer{})
 
 	require.Error(t, err)
+}
+
+// --- storage filter --------------------------------------------------------
+
+func TestExportCollection_OnlyExportsTheGivenStorage(t *testing.T) {
+	cards := &fakeCardService{allCards: []card.Card{
+		{Name: "Sol Ring", SetCode: "SLD", ScryfallID: "aaaa", CollectorNumber: "1011", StorageID: ptr(7)},
+		{Name: "Counterspell", SetCode: "CLB", ScryfallID: "bbbb", CollectorNumber: "1", StorageID: ptr(8)},
+		{Name: "Lightning Bolt", SetCode: "CMM", ScryfallID: "cccc", CollectorNumber: "2"},
+	}}
+	storages := &fakeStorageService{storages: []storage.Storage{
+		{ID: 7, Name: "Main Binder", Type: "binder"},
+		{ID: 8, Name: "Box", Type: "box"},
+	}}
+	svc := NewService(cards, storages, &fakeDeckService{}, &fakeResolver{})
+
+	var manabox bytes.Buffer
+	require.NoError(t, svc.ExportManaBox(context.Background(), testUserID, ptr(7), &manabox))
+	lines := splitCSVLines(manabox.String())
+	require.Len(t, lines, 2)
+	assert.Equal(t, "Main Binder,binder,Sol Ring,SLD,aaaa,1011,,1", lines[1])
+
+	var moxfield bytes.Buffer
+	require.NoError(t, svc.ExportMoxfieldCollection(context.Background(), testUserID, ptr(8), &moxfield))
+	lines = splitCSVLines(moxfield.String())
+	require.Len(t, lines, 2)
+	assert.Equal(t, "1,Counterspell,clb,,1", lines[1])
+}
+
+func TestExportCollection_UnknownStorageIsAnError(t *testing.T) {
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
+
+	assert.ErrorIs(t, svc.ExportManaBox(context.Background(), testUserID, ptr(3), &bytes.Buffer{}), ErrTargetStorageNotFound)
+	assert.ErrorIs(t, svc.ExportMoxfieldCollection(context.Background(), testUserID, ptr(3), &bytes.Buffer{}), ErrTargetStorageNotFound)
 }
 
 // --- ExportDeck ------------------------------------------------------------

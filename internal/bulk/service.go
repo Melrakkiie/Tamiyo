@@ -53,19 +53,25 @@ func NewService(cards cardService, storages storageService, decks deckService, s
 	return &Service{cards: cards, storages: storages, decks: decks, scryfall: scryfall}
 }
 
-func (s *Service) ImportManaBox(ctx context.Context, userID string, r io.Reader) (Summary, error) {
+func (s *Service) ImportManaBox(ctx context.Context, userID string, targetStorageID *int, r io.Reader) (Summary, error) {
 	rows, err := parseManaBoxCSV(r)
 	if err != nil {
 		return Summary{}, err
 	}
 
-	storageCache, err := s.loadStorageCache(ctx, userID)
-	if err != nil {
-		return Summary{}, fmt.Errorf("loading existing storages: %w", err)
-	}
-	deckCache, err := s.loadDeckCache(ctx, userID)
-	if err != nil {
-		return Summary{}, fmt.Errorf("loading existing decks: %w", err)
+	var storageCache map[string]int
+	var deckCache map[string]string
+	if targetStorageID != nil {
+		if err := s.checkStorage(ctx, userID, *targetStorageID); err != nil {
+			return Summary{}, err
+		}
+	} else {
+		if storageCache, err = s.loadStorageCache(ctx, userID); err != nil {
+			return Summary{}, fmt.Errorf("loading existing storages: %w", err)
+		}
+		if deckCache, err = s.loadDeckCache(ctx, userID); err != nil {
+			return Summary{}, fmt.Errorf("loading existing decks: %w", err)
+		}
 	}
 
 	resolvedByScryfallID := make(map[string]ResolvedCard)
@@ -89,24 +95,30 @@ func (s *Service) ImportManaBox(ctx context.Context, userID string, r io.Reader)
 	}
 
 	for _, row := range rows {
-		storageID, created, err := s.getOrCreateStorage(ctx, userID, storageCache, row.BinderName, row.BinderType)
-		if err != nil {
-			return summary, fmt.Errorf("line %d: creating storage %q: %w", row.LineNo, row.BinderName, err)
-		}
-		if created {
-			summary.StoragesCreated++
-		}
-
+		var storageID int
 		var deckID *string
-		if row.BinderType == "deck" {
-			id, created, err := s.getOrCreateDeck(ctx, userID, deckCache, row.BinderName, defaultManaBoxDeckFormat)
+		if targetStorageID != nil {
+			storageID = *targetStorageID
+		} else {
+			id, created, err := s.getOrCreateStorage(ctx, userID, storageCache, row.BinderName, row.BinderType)
 			if err != nil {
-				return summary, fmt.Errorf("line %d: creating deck %q: %w", row.LineNo, row.BinderName, err)
+				return summary, fmt.Errorf("line %d: creating storage %q: %w", row.LineNo, row.BinderName, err)
 			}
 			if created {
-				summary.DecksCreated++
+				summary.StoragesCreated++
 			}
-			deckID = &id
+			storageID = id
+
+			if row.BinderType == "deck" {
+				id, created, err := s.getOrCreateDeck(ctx, userID, deckCache, row.BinderName, defaultManaBoxDeckFormat)
+				if err != nil {
+					return summary, fmt.Errorf("line %d: creating deck %q: %w", row.LineNo, row.BinderName, err)
+				}
+				if created {
+					summary.DecksCreated++
+				}
+				deckID = &id
+			}
 		}
 
 		rc, resolvedOK := resolvedByScryfallID[row.ScryfallID]
@@ -152,10 +164,7 @@ func (s *Service) ImportMoxfieldCollection(ctx context.Context, userID string, s
 		return Summary{}, err
 	}
 
-	if _, err := s.storages.GetStorage(ctx, userID, storageID); err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return Summary{}, ErrTargetStorageNotFound
-		}
+	if err := s.checkStorage(ctx, userID, storageID); err != nil {
 		return Summary{}, err
 	}
 
@@ -204,11 +213,38 @@ func (s *Service) ImportMoxfieldCollection(ctx context.Context, userID string, s
 	return summary, nil
 }
 
+func (s *Service) checkStorage(ctx context.Context, userID string, storageID int) error {
+	if _, err := s.storages.GetStorage(ctx, userID, storageID); err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			return ErrTargetStorageNotFound
+		}
+		return err
+	}
+	return nil
+}
+
+func (s *Service) exportedCards(ctx context.Context, userID string, storageID *int) ([]card.Card, error) {
+	if storageID != nil {
+		if err := s.checkStorage(ctx, userID, *storageID); err != nil {
+			return nil, err
+		}
+	}
+	cards, err := s.loadCards(ctx, userID, storageID)
+	if err != nil {
+		return nil, fmt.Errorf("loading cards: %w", err)
+	}
+	return cards, nil
+}
+
 func (s *Service) loadAllCards(ctx context.Context, userID string) ([]card.Card, error) {
+	return s.loadCards(ctx, userID, nil)
+}
+
+func (s *Service) loadCards(ctx context.Context, userID string, storageID *int) ([]card.Card, error) {
 	var all []card.Card
 	const limit = 100
 	for page := 1; ; page++ {
-		items, total, err := s.cards.GetAllCards(ctx, userID, card.CardFilter{Page: page, Limit: limit})
+		items, total, err := s.cards.GetAllCards(ctx, userID, card.CardFilter{StorageID: storageID, Page: page, Limit: limit})
 		if err != nil {
 			return nil, err
 		}

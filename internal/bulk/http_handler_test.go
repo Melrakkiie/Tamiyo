@@ -23,6 +23,8 @@ type fakeImportService struct {
 
 	lastUserID            string
 	lastMoxfieldStorageID int
+	lastManaBoxStorageID  *int
+	lastExportStorageID   *int
 	lastFileContent       string
 
 	exportContent    string
@@ -54,8 +56,9 @@ func (f *fakeImportService) CommitPendingCards(ctx context.Context, userID strin
 	return f.commitSummary, f.err
 }
 
-func (f *fakeImportService) ImportManaBox(ctx context.Context, userID string, r io.Reader) (Summary, error) {
+func (f *fakeImportService) ImportManaBox(ctx context.Context, userID string, storageID *int, r io.Reader) (Summary, error) {
 	f.lastUserID = userID
+	f.lastManaBoxStorageID = storageID
 	f.readFile(r)
 	return f.summary, f.err
 }
@@ -78,8 +81,9 @@ func (f *fakeImportService) readFile(r io.Reader) {
 	f.lastFileContent = string(b)
 }
 
-func (f *fakeImportService) ExportManaBox(ctx context.Context, userID string, w io.Writer) error {
+func (f *fakeImportService) ExportManaBox(ctx context.Context, userID string, storageID *int, w io.Writer) error {
 	f.lastExportUser = userID
+	f.lastExportStorageID = storageID
 	if f.exportErr != nil {
 		return f.exportErr
 	}
@@ -87,8 +91,9 @@ func (f *fakeImportService) ExportManaBox(ctx context.Context, userID string, w 
 	return err
 }
 
-func (f *fakeImportService) ExportMoxfieldCollection(ctx context.Context, userID string, w io.Writer) error {
+func (f *fakeImportService) ExportMoxfieldCollection(ctx context.Context, userID string, storageID *int, w io.Writer) error {
 	f.lastExportUser = userID
+	f.lastExportStorageID = storageID
 	if f.exportErr != nil {
 		return f.exportErr
 	}
@@ -181,6 +186,51 @@ func TestImportManaBox_InvalidFileReturnsBadRequest(t *testing.T) {
 	router := setupRouter(&fakeImportService{err: ErrInvalidFile})
 
 	req := multipartRequest(t, "/import/manabox", "garbage", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestImportManaBox_StorageIDIsOptional(t *testing.T) {
+	service := &fakeImportService{}
+	router := setupRouter(service)
+
+	req := multipartRequest(t, "/import/manabox", "csv content", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Nil(t, service.lastManaBoxStorageID)
+}
+
+func TestImportManaBox_PassesStorageIDToService(t *testing.T) {
+	service := &fakeImportService{}
+	router := setupRouter(service)
+
+	req := multipartRequest(t, "/import/manabox", "csv content", map[string]string{"storage_id": "7"})
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, service.lastManaBoxStorageID)
+	assert.Equal(t, 7, *service.lastManaBoxStorageID)
+}
+
+func TestImportManaBox_RejectsInvalidStorageID(t *testing.T) {
+	router := setupRouter(&fakeImportService{})
+
+	req := multipartRequest(t, "/import/manabox", "csv content", map[string]string{"storage_id": "abc"})
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestImportManaBox_UnknownStorageReturnsBadRequest(t *testing.T) {
+	router := setupRouter(&fakeImportService{err: ErrTargetStorageNotFound})
+
+	req := multipartRequest(t, "/import/manabox", "csv content", map[string]string{"storage_id": "999"})
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -314,6 +364,46 @@ func TestExportMoxfieldCollection_ServiceErrorReturnsInternalServerError(t *test
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestExportCollection_PassesTheStorageFilter(t *testing.T) {
+	for _, path := range []string{"/export/manabox", "/export/moxfield/collection"} {
+		service := &fakeImportService{}
+		router := setupRouter(service)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path+"?storage_id=4", nil))
+		require.Equal(t, http.StatusOK, w.Code, path)
+		require.NotNil(t, service.lastExportStorageID, path)
+		assert.Equal(t, 4, *service.lastExportStorageID, path)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		require.Equal(t, http.StatusOK, w.Code, path)
+		assert.Nil(t, service.lastExportStorageID, path)
+	}
+}
+
+func TestExportCollection_RejectsInvalidStorageID(t *testing.T) {
+	for _, path := range []string{"/export/manabox", "/export/moxfield/collection"} {
+		router := setupRouter(&fakeImportService{})
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path+"?storage_id=0", nil))
+
+		assert.Equal(t, http.StatusBadRequest, w.Code, path)
+	}
+}
+
+func TestExportCollection_UnknownStorageReturnsNotFound(t *testing.T) {
+	for _, path := range []string{"/export/manabox", "/export/moxfield/collection"} {
+		router := setupRouter(&fakeImportService{exportErr: ErrTargetStorageNotFound})
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path+"?storage_id=999", nil))
+
+		assert.Equal(t, http.StatusNotFound, w.Code, path)
+	}
 }
 
 func TestExportDeck_InvalidIDReturnsBadRequest(t *testing.T) {

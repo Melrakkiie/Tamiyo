@@ -66,7 +66,16 @@ func (f *fakeCardService) GetAllCards(ctx context.Context, userID string, filter
 	if f.getAllErr != nil {
 		return nil, 0, f.getAllErr
 	}
-	total := len(f.allCards)
+	matching := f.allCards
+	if filter.StorageID != nil {
+		matching = nil
+		for _, c := range f.allCards {
+			if c.StorageID != nil && *c.StorageID == *filter.StorageID {
+				matching = append(matching, c)
+			}
+		}
+	}
+	total := len(matching)
 	limit := filter.Limit
 	if limit <= 0 {
 		limit = total
@@ -79,7 +88,7 @@ func (f *fakeCardService) GetAllCards(ctx context.Context, userID string, filter
 	if end > total {
 		end = total
 	}
-	return f.allCards[start:end], total, nil
+	return matching[start:end], total, nil
 }
 
 type fakeStorageService struct {
@@ -263,7 +272,7 @@ Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,2
 	decks := &fakeDeckService{}
 	svc := NewService(cards, storages, decks, &fakeResolver{})
 
-	summary, err := svc.ImportManaBox(context.Background(), testUserID, strings.NewReader(csv))
+	summary, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, summary.CardsCreated)
@@ -273,6 +282,45 @@ Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,2
 	assert.Equal(t, "Sol Ring", cards.created[0].Name)
 	require.NotNil(t, cards.created[0].StorageID)
 	assert.Equal(t, storages.created[0].ID, *cards.created[0].StorageID)
+}
+
+func TestImportManaBox_IntoAStoragePutsEveryCardThereAndCreatesNothingElse(t *testing.T) {
+	csv := `Binder Name,Binder Type,Name,Set code,Scryfall ID,Collector number,Foil,Quantity
+Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,2
+Atraxa Deck,deck,Counterspell,CLB,bbbbbbbb-0000-0000-0000-000000000000,1,,1
+`
+	cards := &fakeCardService{}
+	storages := &fakeStorageService{storages: []storage.Storage{{ID: 4, Name: "Box", Type: "box"}}}
+	decks := &fakeDeckService{}
+	svc := NewService(cards, storages, decks, &fakeResolver{})
+
+	summary, err := svc.ImportManaBox(context.Background(), testUserID, ptr(4), strings.NewReader(csv))
+
+	require.NoError(t, err)
+	assert.Equal(t, 3, summary.CardsCreated)
+	assert.Equal(t, 0, summary.StoragesCreated)
+	assert.Equal(t, 0, summary.DecksCreated)
+	assert.Empty(t, storages.created)
+	assert.Empty(t, decks.created)
+	assert.Empty(t, decks.linkedCards)
+	require.Len(t, cards.created, 3)
+	for _, c := range cards.created {
+		require.NotNil(t, c.StorageID)
+		assert.Equal(t, 4, *c.StorageID)
+	}
+}
+
+func TestImportManaBox_IntoAnUnknownStorageFails(t *testing.T) {
+	csv := `Binder Name,Binder Type,Name,Set code,Scryfall ID,Collector number,Foil,Quantity
+Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
+`
+	cards := &fakeCardService{}
+	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
+
+	_, err := svc.ImportManaBox(context.Background(), testUserID, ptr(4), strings.NewReader(csv))
+
+	assert.ErrorIs(t, err, ErrTargetStorageNotFound)
+	assert.Empty(t, cards.created)
 }
 
 func TestImportManaBox_ResolvesManaValueFromScryfallByID(t *testing.T) {
@@ -287,7 +335,7 @@ Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
 	}}
 	svc := NewService(cards, storages, decks, resolver)
 
-	_, err := svc.ImportManaBox(context.Background(), testUserID, strings.NewReader(csv))
+	_, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
 	require.NoError(t, err)
 	require.Len(t, cards.created, 1)
@@ -304,7 +352,7 @@ Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
 	resolver := &fakeResolver{err: errors.New("scryfall unreachable")}
 	svc := NewService(cards, storages, decks, resolver)
 
-	summary, err := svc.ImportManaBox(context.Background(), testUserID, strings.NewReader(csv))
+	summary, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
 	require.NoError(t, err, "a scryfall outage must not break a manabox import, which never depended on it before")
 	require.Len(t, cards.created, 1)
@@ -323,7 +371,7 @@ Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
 	decks := &fakeDeckService{}
 	svc := NewService(cards, storages, decks, &fakeResolver{})
 
-	summary, err := svc.ImportManaBox(context.Background(), testUserID, strings.NewReader(csv))
+	summary, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
 	require.NoError(t, err)
 	assert.Equal(t, 0, summary.StoragesCreated)
@@ -339,7 +387,7 @@ Atraxa Deck,deck,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
 	decks := &fakeDeckService{}
 	svc := NewService(cards, storages, decks, &fakeResolver{})
 
-	summary, err := svc.ImportManaBox(context.Background(), testUserID, strings.NewReader(csv))
+	summary, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, summary.DecksCreated)
@@ -358,7 +406,7 @@ Atraxa Deck,deck,Lightning Bolt,CMM,bbbbbbbb-0000-0000-0000-000000000000,456,,1
 	decks := &fakeDeckService{}
 	svc := NewService(cards, storages, decks, &fakeResolver{})
 
-	summary, err := svc.ImportManaBox(context.Background(), testUserID, strings.NewReader(csv))
+	summary, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, summary.DecksCreated)
@@ -375,7 +423,7 @@ Atraxa Deck,deck,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
 	decks := &fakeDeckService{createDeckErr: errors.New("db is down")}
 	svc := NewService(cards, storages, decks, &fakeResolver{})
 
-	_, err := svc.ImportManaBox(context.Background(), testUserID, strings.NewReader(csv))
+	_, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
 	require.Error(t, err)
 }
@@ -390,7 +438,7 @@ Main Binder,binder,Lightning Bolt,CMM,bbbbbbbb-0000-0000-0000-000000000000,456,,
 	decks := &fakeDeckService{}
 	svc := NewService(cards, storages, decks, &fakeResolver{})
 
-	summary, err := svc.ImportManaBox(context.Background(), testUserID, strings.NewReader(csv))
+	summary, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
 	require.NoError(t, err)
 	assert.Equal(t, 0, summary.CardsCreated)
@@ -401,7 +449,7 @@ Main Binder,binder,Lightning Bolt,CMM,bbbbbbbb-0000-0000-0000-000000000000,456,,
 func TestImportManaBox_InvalidFileReturnsErrInvalidFile(t *testing.T) {
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
-	_, err := svc.ImportManaBox(context.Background(), testUserID, strings.NewReader("not,a,valid,header\n"))
+	_, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader("not,a,valid,header\n"))
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrInvalidFile)
@@ -814,7 +862,7 @@ Main Binder,binder,Lightning Helix,RAV,aaaaaaaa-0000-0000-0000-000000000000,213,
 	}}
 	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, resolver)
 
-	_, err := svc.ImportManaBox(context.Background(), testUserID, strings.NewReader(csv))
+	_, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
 	require.NoError(t, err)
 	require.Len(t, cards.created, 1)
@@ -833,7 +881,7 @@ Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
 	cards := &fakeCardService{}
 	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
-	_, err := svc.ImportManaBox(context.Background(), testUserID, strings.NewReader(csv))
+	_, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
 	require.NoError(t, err)
 	require.Len(t, cards.created, 1)

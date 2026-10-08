@@ -17,12 +17,12 @@ import (
 )
 
 type importService interface {
-	ImportManaBox(ctx context.Context, userID string, r io.Reader) (Summary, error)
+	ImportManaBox(ctx context.Context, userID string, storageID *int, r io.Reader) (Summary, error)
 	ImportMoxfieldCollection(ctx context.Context, userID string, storageID int, r io.Reader) (Summary, error)
 	ImportIntoDeck(ctx context.Context, userID string, deckID string, commanderFromFirstLine bool, r io.Reader) (Summary, error)
 
-	ExportManaBox(ctx context.Context, userID string, w io.Writer) error
-	ExportMoxfieldCollection(ctx context.Context, userID string, w io.Writer) error
+	ExportManaBox(ctx context.Context, userID string, storageID *int, w io.Writer) error
+	ExportMoxfieldCollection(ctx context.Context, userID string, storageID *int, w io.Writer) error
 	ExportDeck(ctx context.Context, userID string, deckID string, format string, w io.Writer) error
 
 	RefreshCardDetails(ctx context.Context, userID string, afterID int) (DetailsRefreshSummary, error)
@@ -83,6 +83,12 @@ func (h *Handler) importManaBox(ctx *gin.Context) {
 		return
 	}
 
+	storageID, valid := optionalStorageID(ctx.PostForm("storage_id"))
+	if !valid {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": errInvalidStorageID.Error()})
+		return
+	}
+
 	file, err := openUploadedFile(ctx, "file")
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -92,7 +98,7 @@ func (h *Handler) importManaBox(ctx *gin.Context) {
 		_ = file.Close()
 	}()
 
-	summary, err := h.service.ImportManaBox(ctx.Request.Context(), userID, file)
+	summary, err := h.service.ImportManaBox(ctx.Request.Context(), userID, storageID, file)
 	h.respondImport(ctx, summary, err)
 }
 
@@ -174,9 +180,15 @@ func (h *Handler) exportManaBox(ctx *gin.Context) {
 		return
 	}
 
+	storageID, valid := optionalStorageID(ctx.Query("storage_id"))
+	if !valid {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": errInvalidStorageID.Error()})
+		return
+	}
+
 	var buf bytes.Buffer
-	if err := h.service.ExportManaBox(ctx.Request.Context(), userID, &buf); err != nil {
-		apierr.Respond(ctx, err)
+	if err := h.service.ExportManaBox(ctx.Request.Context(), userID, storageID, &buf); err != nil {
+		respondExportError(ctx, err)
 		return
 	}
 
@@ -191,9 +203,15 @@ func (h *Handler) exportMoxfieldCollection(ctx *gin.Context) {
 		return
 	}
 
+	storageID, valid := optionalStorageID(ctx.Query("storage_id"))
+	if !valid {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": errInvalidStorageID.Error()})
+		return
+	}
+
 	var buf bytes.Buffer
-	if err := h.service.ExportMoxfieldCollection(ctx.Request.Context(), userID, &buf); err != nil {
-		apierr.Respond(ctx, err)
+	if err := h.service.ExportMoxfieldCollection(ctx.Request.Context(), userID, storageID, &buf); err != nil {
+		respondExportError(ctx, err)
 		return
 	}
 
@@ -253,6 +271,21 @@ func (h *Handler) respondImport(ctx *gin.Context, summary Summary, err error) {
 	ctx.IndentedJSON(http.StatusOK, summary)
 }
 
+func respondExportError(ctx *gin.Context, err error) {
+	apierr.Respond(ctx, err, apierr.Mapping{Err: ErrTargetStorageNotFound, Status: http.StatusNotFound, Message: "storage not found"})
+}
+
+func optionalStorageID(raw string) (*int, bool) {
+	if raw == "" {
+		return nil, true
+	}
+	id, err := strconv.Atoi(raw)
+	if err != nil || id < 1 {
+		return nil, false
+	}
+	return &id, true
+}
+
 func openUploadedFile(ctx *gin.Context, field string) (multipartFile, error) {
 	header, err := ctx.FormFile(field)
 	if err != nil {
@@ -271,6 +304,7 @@ type multipartFile interface {
 }
 
 var (
-	errMissingFile    = errors.New("a file is required (multipart field \"file\")")
-	errUnreadableFile = errors.New("could not read the uploaded file")
+	errMissingFile      = errors.New("a file is required (multipart field \"file\")")
+	errUnreadableFile   = errors.New("could not read the uploaded file")
+	errInvalidStorageID = errors.New("storage_id must be a positive integer")
 )

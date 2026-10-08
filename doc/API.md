@@ -996,6 +996,7 @@ Import a [ManaBox](https://manabox.app/) collection export (`ManaBox_Collection.
 | Field | Required | Notes |
 |---|---|---|
 | `file` | Yes | The `ManaBox_Collection.csv` file. |
+| `storage_id` | No | An existing storage for this account. When given, every card goes in it: `Binder Name` and `Binder Type` are ignored, and no storage or deck is created. Unknown storage → `400`. |
 
 **Required CSV columns:** `Binder Name`, `Binder Type`, `Name`, `Set code`, `Scryfall ID`, `Collector number`, `Foil`, `Quantity` (column order doesn't matter).
 
@@ -1044,25 +1045,27 @@ A plain list works too, one `<quantity> <name>` per line (`4 Lightning Bolt`, `1
 
 ## Bulk Export
 
-Two routes export your entire collection as a CSV file in the same format the matching [Bulk Import](#bulk-import) route reads — so round-tripping a collection out and back in is a no-op. Both are plain `GET` requests (no body, no query parameters): the response is the CSV file itself, not JSON, served with `Content-Type: text/csv; charset=utf-8` and a `Content-Disposition: attachment; filename="..."` header so a browser or HTTP client downloads it directly.
+Two routes export your collection as a CSV file in the same format the matching [Bulk Import](#bulk-import) route reads — so round-tripping a collection out and back in is a no-op. Both are plain `GET` requests (no body): the response is the CSV file itself, not JSON, served with `Content-Type: text/csv; charset=utf-8` and a `Content-Disposition: attachment; filename="..."` header so a browser or HTTP client downloads it directly.
 
-Both routes always export the whole collection regardless of storage or deck — there's no filtering by `storage_id` or `deck_id`. Every physical copy of the same printing (same name, set, collector number and foil status) is collapsed into a single CSV row with a quantity/count column, the reverse of how importing that same row expands it back into that many individual cards.
+Both export the whole collection by default. With the optional `storage_id` query parameter (`GET /export/manabox?storage_id=4`), only the cards in that storage are exported; there's no filtering by deck (see [`GET /deck/:id/export`](#get-deckidexport) for that). Every physical copy of the same printing (same name, set, collector number and foil status) is collapsed into a single CSV row with a quantity/count column, the reverse of how importing that same row expands it back into that many individual cards.
 
 **Errors common to both**
+- `400` — `storage_id` isn't a positive integer
 - `401` — unauthenticated, like every other route under this section
+- `404` — `storage_id` doesn't reference an existing storage for this account
 - `500` — unexpected failure reading the collection
 
 ---
 
 ### `GET /export/manabox`
 
-Exports the account's entire collection as a ManaBox-compatible CSV (`ManaBox_Collection_export.csv`), matching the columns `POST /import/manabox` reads: `Binder Name, Binder Type, Name, Set code, Scryfall ID, Collector number, Foil, Quantity`.
+Exports the account's collection (or one storage) as a ManaBox-compatible CSV (`ManaBox_Collection_export.csv`), matching the columns `POST /import/manabox` reads: `Binder Name, Binder Type, Name, Set code, Scryfall ID, Collector number, Foil, Quantity`.
 
 Cards are grouped by storage, since storage (`Binder Name`/`Binder Type`) is ManaBox's only organizing concept. A card with no storage (`storage_id: null`) is grouped under a synthetic `Unsorted` / `binder` bucket rather than being dropped, sorted after every real storage. A card's deck membership is tracked independently of storage in Tamiyo (see [Deck ↔ Card relationship](#deck--card-relationship)) and isn't reflected here — only a storage whose own `type` is `deck` is exported as `Binder Type: deck`, mirroring exactly how `POST /import/manabox` derives deck membership on the way in.
 
 ### `GET /export/moxfield/collection`
 
-Exports the account's entire collection as a Moxfield-compatible "Export Collection" CSV, matching the columns `POST /import/moxfield/collection` reads: `Count, Name, Edition, Foil, Collector Number`. Moxfield's own format has no storage concept at all, so unlike the ManaBox export, cards are grouped across every storage (and unsorted cards) with no distinction — the only way to see a card's storage is via `GET /cards`, not this export.
+Exports the account's collection (or one storage) as a Moxfield-compatible "Export Collection" CSV, matching the columns `POST /import/moxfield/collection` reads: `Count, Name, Edition, Foil, Collector Number`. Moxfield's own format has no storage concept at all, so unlike the ManaBox export, cards are grouped across every storage (and unsorted cards) with no distinction — the only way to see a card's storage is via `GET /cards`, not this export.
 
 ### `GET /deck/:id/export`
 
