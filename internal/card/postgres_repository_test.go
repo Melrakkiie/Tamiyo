@@ -720,6 +720,47 @@ func TestPostgresRepository_FindAll_SortsByTypeGroupThenName(t *testing.T) {
 	assert.Equal(t, []string{"Birds of Paradise", "Llanowar Elves", "Counterspell", "Forest"}, names)
 }
 
+func TestPostgresRepository_FindAll_SortsWithinGroups(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+
+	forest := createCardWithDetails(t, repo, userID, "Forest", strPtr(""), strPtr("Land"))
+	elves := createCardWithDetails(t, repo, userID, "Llanowar Elves", strPtr("G"), strPtr("Creature"))
+	counterspell := createCardWithDetails(t, repo, userID, "Counterspell", strPtr("U"), strPtr("Instant"))
+	birds := createCardWithDetails(t, repo, userID, "Birds of Paradise", strPtr("G"), strPtr("Creature"))
+	thragtusk := createCardWithDetails(t, repo, userID, "Thragtusk", strPtr("G"), strPtr("Creature"))
+	for id, manaValue := range map[int]float64{forest.ID: 0, elves.ID: 1, counterspell.ID: 2, birds.ID: 1, thragtusk.ID: 5} {
+		_, err := db.Exec(`UPDATE tamiyo.cards SET mana_value = $1 WHERE id = $2`, manaValue, id)
+		require.NoError(t, err)
+	}
+
+	names := func(filter CardFilter) []string {
+		t.Helper()
+		filter.Page, filter.Limit = 1, 25
+		result, _, err := repo.FindAll(context.Background(), userID, filter)
+		require.NoError(t, err)
+		out := make([]string, len(result))
+		for i, c := range result {
+			out[i] = c.Name
+		}
+		return out
+	}
+
+	assert.Equal(t,
+		[]string{"Thragtusk", "Llanowar Elves", "Birds of Paradise", "Counterspell", "Forest"},
+		names(CardFilter{GroupBy: "type", SortField: "name", SortDesc: true}))
+	assert.Equal(t,
+		[]string{"Thragtusk", "Birds of Paradise", "Llanowar Elves", "Counterspell", "Forest"},
+		names(CardFilter{GroupBy: "type", SortField: "mana_value", SortDesc: true, Stack: true}))
+	assert.Equal(t,
+		[]string{"Forest", "Birds of Paradise", "Llanowar Elves", "Counterspell", "Thragtusk"},
+		names(CardFilter{GroupBy: "mana", SortField: "name"}))
+	assert.Equal(t,
+		[]string{"Counterspell", "Birds of Paradise", "Llanowar Elves", "Thragtusk", "Forest"},
+		names(CardFilter{GroupBy: "color", SortField: "name"}))
+}
+
 func TestPostgresRepository_FindMissingDetails_AndSetDetails(t *testing.T) {
 	db := getTestDB(t)
 	userA := seedUser(t, db, "alice@example.com")

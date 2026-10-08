@@ -518,6 +518,16 @@ paths:
           description: >
             Sort field, with an optional "-" prefix for descending order.
             id is always used as a secondary tie-breaker for a stable order.
+        - name: group
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [type, color, mana]
+          description: >
+            Order the cards by group first (primary type, color group as
+            for sort=color, or mana value rounded down), then by sort within
+            each group, so a client can show grouped pages sorted its way.
             "color" groups cards as white, blue, black, red, green, multicolor,
             colorless, lands, then cards whose colors aren't known yet; "type"
             by primary type (creature, planeswalker, battle, instant, sorcery,

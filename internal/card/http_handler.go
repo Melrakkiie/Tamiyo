@@ -310,6 +310,14 @@ func (h *Handler) getCards(ctx *gin.Context) {
 		}
 	}
 
+	groupBy := ctx.Query("group")
+	switch groupBy {
+	case "", "type", "color", "mana":
+	default:
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "group must be one of: type, color, mana"})
+		return
+	}
+
 	var colorIdentity *string
 	if raw, present := ctx.GetQuery("color_identity"); present {
 		if err := validateColorIdentity(&raw); err != nil {
@@ -334,6 +342,7 @@ func (h *Handler) getCards(ctx *gin.Context) {
 		ColorIdentity: colorIdentity,
 		Stack:         stack,
 		Name:          ctx.Query("name"),
+		GroupBy:       groupBy,
 		SortField:     sortField,
 		SortDesc:      sortDesc,
 		Page:          page,

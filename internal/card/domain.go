@@ -33,6 +33,7 @@ type CardFilter struct {
 	ColorIdentity *string
 	Stack         bool
 
+	GroupBy   string
 	SortField string
 	SortDesc  bool
 

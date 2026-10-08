@@ -197,28 +197,40 @@ const typeGroupSQL = `CASE card_type
 		ELSE 10
 	END`
 
+var groupOrderSQL = map[string]string{
+	"type":  typeGroupSQL + " ASC",
+	"color": colorGroupSQL + " ASC, colors ASC",
+	"mana":  "floor(mana_value) ASC",
+}
+
 func orderByClause(filter CardFilter) string {
 	dir := "ASC"
 	if filter.SortDesc {
 		dir = "DESC"
 	}
 
+	var sortTerms string
 	switch filter.SortField {
 	case "name":
-		return fmt.Sprintf(" ORDER BY name %s, id %s", dir, dir)
+		sortTerms = fmt.Sprintf("name %s, id %s", dir, dir)
 	case "added":
-		return fmt.Sprintf(" ORDER BY added %s, id %s", dir, dir)
+		sortTerms = fmt.Sprintf("added %s, id %s", dir, dir)
 	case "updated":
-		return fmt.Sprintf(" ORDER BY updated %s, id %s", dir, dir)
+		sortTerms = fmt.Sprintf("updated %s, id %s", dir, dir)
 	case "mana_value":
-		return fmt.Sprintf(" ORDER BY mana_value %s, id %s", dir, dir)
+		sortTerms = fmt.Sprintf("mana_value %s, id %s", dir, dir)
 	case "color":
-		return fmt.Sprintf(" ORDER BY %s %s, colors %s, name ASC, id ASC", colorGroupSQL, dir, dir)
+		sortTerms = fmt.Sprintf("%s %s, colors %s, name ASC, id ASC", colorGroupSQL, dir, dir)
 	case "type":
-		return fmt.Sprintf(" ORDER BY %s %s, name ASC, id ASC", typeGroupSQL, dir)
+		sortTerms = fmt.Sprintf("%s %s, name ASC, id ASC", typeGroupSQL, dir)
 	default:
-		return " ORDER BY updated DESC, id DESC"
+		sortTerms = "updated DESC, id DESC"
 	}
+
+	if group, ok := groupOrderSQL[filter.GroupBy]; ok {
+		return " ORDER BY " + group + ", " + sortTerms
+	}
+	return " ORDER BY " + sortTerms
 }
 
 func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int) (Card, error) {

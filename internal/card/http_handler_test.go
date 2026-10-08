@@ -155,6 +155,23 @@ func TestHandler_GetCards_PassesSortToService(t *testing.T) {
 	assert.True(t, service.lastFilter.SortDesc)
 }
 
+func TestHandler_GetCards_PassesTheGroupingToService(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards?group=mana&sort=-name", nil))
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "mana", service.lastFilter.GroupBy)
+	assert.Equal(t, "name", service.lastFilter.SortField)
+	assert.True(t, service.lastFilter.SortDesc)
+
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards?group=storage", nil))
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
 func TestHandler_GetCards_PassesManaValueSortToService(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)
