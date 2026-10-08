@@ -21,16 +21,18 @@ type comparedDeckResponse struct {
 }
 
 type comparedCardResponse struct {
-	Name           string  `json:"name"`
-	ScryfallID     string  `json:"scryfall_id"`
-	ManaValue      float64 `json:"mana_value"`
-	Colors         *string `json:"colors"`
-	CardType       *string `json:"card_type"`
-	ColorIdentity  *string `json:"color_identity"`
-	Quantity       int     `json:"quantity"`
-	OtherQuantity  int     `json:"other_quantity"`
-	Commander      bool    `json:"commander"`
-	OtherCommander bool    `json:"other_commander"`
+	Name           string   `json:"name"`
+	ScryfallID     string   `json:"scryfall_id"`
+	ManaValue      float64  `json:"mana_value"`
+	Colors         *string  `json:"colors"`
+	CardType       *string  `json:"card_type"`
+	ColorIdentity  *string  `json:"color_identity"`
+	Quantity       int      `json:"quantity"`
+	OtherQuantity  int      `json:"other_quantity"`
+	Commander      bool     `json:"commander"`
+	OtherCommander bool     `json:"other_commander"`
+	Tags           []string `json:"tags"`
+	OtherTags      []string `json:"other_tags"`
 }
 
 type comparisonResponse struct {
@@ -56,7 +58,10 @@ func toComparedDeckResponse(c ComparedDeck) comparedDeckResponse {
 func toComparedCardsResponse(cards []ComparedCard) []comparedCardResponse {
 	out := make([]comparedCardResponse, 0, len(cards))
 	for _, c := range cards {
-		out = append(out, comparedCardResponse(c))
+		response := comparedCardResponse(c)
+		response.Tags = nonNilTags(response.Tags)
+		response.OtherTags = nonNilTags(response.OtherTags)
+		out = append(out, response)
 	}
 	return out
 }

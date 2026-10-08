@@ -1059,3 +1059,52 @@ func TestPostgresRepository_UpdatePendingQuantity(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 24, found.PendingCount)
 }
+
+func TestPostgresRepository_CardTags(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	otherID := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+	d, err := repo.Create(ctx, userID, Deck{Name: "Kess", Format: "commander"})
+	require.NoError(t, err)
+	before, err := repo.FindByID(ctx, userID, d.ID)
+	require.NoError(t, err)
+
+	require.NoError(t, repo.ReplaceCardTags(ctx, userID, d.ID, "sol ring", []string{"Ramp", "Artefact"}))
+	require.NoError(t, repo.ReplaceCardTags(ctx, userID, d.ID, "cultivate", []string{"Ramp"}))
+	tags, err := repo.FindCardTags(ctx, userID, d.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []CardTag{
+		{CardName: "cultivate", Tag: "Ramp"},
+		{CardName: "sol ring", Tag: "Artefact"},
+		{CardName: "sol ring", Tag: "Ramp"},
+	}, tags)
+
+	after, err := repo.FindByID(ctx, userID, d.ID)
+	require.NoError(t, err)
+	assert.True(t, after.Updated.After(before.Updated) || after.Updated.Equal(before.Updated))
+
+	require.NoError(t, repo.ReplaceCardTags(ctx, userID, d.ID, "sol ring", []string{"Mana"}))
+	require.NoError(t, repo.RenameTag(ctx, userID, d.ID, "Ramp", "Mana"))
+	tags, err = repo.FindCardTags(ctx, userID, d.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []CardTag{{CardName: "cultivate", Tag: "Mana"}, {CardName: "sol ring", Tag: "Mana"}}, tags)
+
+	require.NoError(t, repo.DeleteTag(ctx, otherID, d.ID, "Mana"))
+	assert.ErrorIs(t, repo.ReplaceCardTags(ctx, otherID, d.ID, "sol ring", []string{"Stolen"}), ErrNotFound)
+	tags, err = repo.FindCardTags(ctx, otherID, d.ID)
+	require.NoError(t, err)
+	assert.Empty(t, tags)
+
+	require.NoError(t, repo.DeleteTag(ctx, userID, d.ID, "Mana"))
+	tags, err = repo.FindCardTags(ctx, userID, d.ID)
+	require.NoError(t, err)
+	assert.Empty(t, tags)
+
+	require.NoError(t, repo.ReplaceCardTags(ctx, userID, d.ID, "sol ring", []string{"Ramp"}))
+	require.NoError(t, repo.Delete(ctx, userID, d.ID))
+	var remaining int
+	require.NoError(t, db.Get(&remaining, `SELECT count(*) FROM tamiyo.deck_card_tags`))
+	assert.Zero(t, remaining)
+}

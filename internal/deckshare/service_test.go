@@ -22,6 +22,8 @@ type fakeDecks struct {
 	sharedErr error
 	cards     []deck.DeckCard
 	pending   []deck.PendingCard
+	tags      deck.DeckTags
+	tagsErr   error
 
 	lastShareID string
 	lastUserID  string
@@ -34,6 +36,10 @@ func (f *fakeDecks) GetSharedDeck(ctx context.Context, deckID string) (string, d
 		return "", deck.Deck{}, f.sharedErr
 	}
 	return f.ownerID, f.deck, nil
+}
+
+func (f *fakeDecks) GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error) {
+	return f.tags, f.tagsErr
 }
 
 func (f *fakeDecks) GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error) {
@@ -140,6 +146,42 @@ func TestService_GetSharedDeck_MergesCopiesAndPendingCardsWithoutOwnership(t *te
 		{Name: "Island", ScryfallID: "i", SetCode: "neo", Foil: true, Quantity: 1},
 		{Name: "Tamiyo", ScryfallID: "t", SetCode: "neo", Quantity: 1, Commander: true},
 	}, shared.Cards)
+}
+
+func TestService_GetSharedDeck_AddsEachCardsTagsWhateverThePrinting(t *testing.T) {
+	decks := &fakeDecks{
+		ownerID: ownerID,
+		deck:    deck.Deck{ID: "00000000-0000-0000-0000-000000000009"},
+		cards: []deck.DeckCard{
+			{ID: 1, Name: "Island", ScryfallID: "i", SetCode: "neo"},
+			{ID: 2, Name: "Island", ScryfallID: "i", SetCode: "neo", Foil: true},
+			{ID: 3, Name: "Fire // Ice", ScryfallID: "f", SetCode: "mh2"},
+		},
+		pending: []deck.PendingCard{{ID: 6, Name: "Brainstorm", ScryfallID: "b", SetCode: "ice", Quantity: 1}},
+		tags: deck.DeckTags{Cards: []deck.TaggedCard{
+			{Name: "Island", Tags: []string{"Terrain"}},
+			{Name: "Fire / Ice", Tags: []string{"Removal", "Pioche"}},
+		}},
+	}
+	service := newService(decks, &fakeInsights{})
+
+	shared, err := service.GetSharedDeck(context.Background(), deckID)
+
+	require.NoError(t, err)
+	require.Len(t, shared.Cards, 4)
+	assert.Nil(t, shared.Cards[0].Tags)
+	assert.Equal(t, []string{"Removal", "Pioche"}, shared.Cards[1].Tags)
+	assert.Equal(t, []string{"Terrain"}, shared.Cards[2].Tags)
+	assert.Equal(t, []string{"Terrain"}, shared.Cards[3].Tags)
+}
+
+func TestService_GetSharedDeck_PropagatesTagErrors(t *testing.T) {
+	decks := &fakeDecks{ownerID: ownerID, deck: deck.Deck{ID: deckID}, tagsErr: errors.New("db is down")}
+	service := newService(decks, &fakeInsights{})
+
+	_, err := service.GetSharedDeck(context.Background(), deckID)
+
+	require.Error(t, err)
 }
 
 func TestService_GetSharedDeck_FlagsAPendingCommander(t *testing.T) {

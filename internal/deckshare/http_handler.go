@@ -37,17 +37,18 @@ type ownerResponse struct {
 }
 
 type cardResponse struct {
-	Name            string  `json:"name"`
-	ScryfallID      string  `json:"scryfall_id"`
-	SetCode         string  `json:"set_code"`
-	CollectorNumber string  `json:"collector_number"`
-	Foil            bool    `json:"foil"`
-	Quantity        int     `json:"quantity"`
-	ManaValue       float64 `json:"mana_value"`
-	Colors          *string `json:"colors"`
-	CardType        *string `json:"card_type"`
-	ColorIdentity   *string `json:"color_identity"`
-	Commander       bool    `json:"commander"`
+	Name            string   `json:"name"`
+	ScryfallID      string   `json:"scryfall_id"`
+	SetCode         string   `json:"set_code"`
+	CollectorNumber string   `json:"collector_number"`
+	Foil            bool     `json:"foil"`
+	Quantity        int      `json:"quantity"`
+	ManaValue       float64  `json:"mana_value"`
+	Colors          *string  `json:"colors"`
+	CardType        *string  `json:"card_type"`
+	ColorIdentity   *string  `json:"color_identity"`
+	Commander       bool     `json:"commander"`
+	Tags            []string `json:"tags"`
 }
 
 type sharedDeckResponse struct {
@@ -61,7 +62,9 @@ func toResponse(shared SharedDeck) sharedDeckResponse {
 	total := 0
 	for _, c := range shared.Cards {
 		total += c.Quantity
-		cards = append(cards, cardResponse(c))
+		response := cardResponse(c)
+		response.Tags = nonNilTags(response.Tags)
+		cards = append(cards, response)
 	}
 	d := shared.Deck
 	return sharedDeckResponse{
@@ -79,6 +82,13 @@ func toResponse(shared SharedDeck) sharedDeckResponse {
 		Owner: ownerResponse(shared.Owner),
 		Cards: cards,
 	}
+}
+
+func nonNilTags(tags []string) []string {
+	if tags == nil {
+		return []string{}
+	}
+	return tags
 }
 
 type Handler struct {

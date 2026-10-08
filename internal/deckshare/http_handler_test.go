@@ -80,7 +80,7 @@ func TestGetSharedDeck_ReturnsDeckOwnerAndCardsWithoutAuthentication(t *testing.
 	service := &fakeSharedService{shared: SharedDeck{
 		Deck:  deck.Deck{ID: deckID, Name: "Otters", Format: "commander", Visibility: deck.VisibilityUnlisted, Added: time.Now(), Updated: time.Now()},
 		Owner: Owner{ID: ownerID, DisplayName: strPtr("Alice")},
-		Cards: []Card{{Name: "Island", ScryfallID: "i", Quantity: 3}, {Name: "Tamiyo", ScryfallID: "t", Quantity: 1, Commander: true}},
+		Cards: []Card{{Name: "Island", ScryfallID: "i", Quantity: 3, Tags: []string{"Terrain"}}, {Name: "Tamiyo", ScryfallID: "t", Quantity: 1, Commander: true}},
 	}}
 	router := setupRouter(service)
 
@@ -98,6 +98,8 @@ func TestGetSharedDeck_ReturnsDeckOwnerAndCardsWithoutAuthentication(t *testing.
 	cards := got["cards"].([]any)
 	require.Len(t, cards, 2)
 	assert.Equal(t, true, cards[1].(map[string]any)["commander"])
+	assert.Equal(t, []any{"Terrain"}, cards[0].(map[string]any)["tags"])
+	assert.Equal(t, []any{}, cards[1].(map[string]any)["tags"])
 	assert.NotContains(t, cards[0], "storage_id")
 	assert.NotContains(t, cards[0], "proxy")
 }

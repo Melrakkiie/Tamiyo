@@ -24,7 +24,7 @@ func (o *ownedCopies) takePrinting(scryfallID string, foil bool, quantity int) [
 }
 
 func (o *ownedCopies) takeName(name string, foil bool, quantity int) []int {
-	return o.take(o.byName[cardNameKey(name)], foil, quantity)
+	return o.take(o.byName[deck.CardNameKey(name)], foil, quantity)
 }
 
 func (o *ownedCopies) take(copies []card.Card, foil bool, quantity int) []int {
@@ -67,7 +67,7 @@ func (s *Service) loadOwnedCopies(ctx context.Context, userID string, targetDeck
 	for _, c := range cards {
 		key := strings.ToLower(c.ScryfallID)
 		owned.byPrinting[key] = append(owned.byPrinting[key], c)
-		full, front := cardNameKey(c.Name), cardNameKey(frontFaceName(c.Name))
+		full, front := deck.CardNameKey(c.Name), deck.CardNameKey(frontFaceName(c.Name))
 		owned.byName[full] = append(owned.byName[full], c)
 		if front != full {
 			owned.byName[front] = append(owned.byName[front], c)

@@ -48,6 +48,39 @@ type fakeService struct {
 	removePendingErr error
 
 	lastPendingQuantity int
+
+	deckTags     DeckTags
+	tagErr       error
+	lastTagName  string
+	lastTags     []string
+	lastRenameTo string
+	lastTag      string
+}
+
+func (f *fakeService) GetCardTags(ctx context.Context, userID string, deckID string) (DeckTags, error) {
+	f.lastUserID = userID
+	f.lastDeckID = deckID
+	return f.deckTags, f.tagErr
+}
+
+func (f *fakeService) SetCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) (TaggedCard, error) {
+	f.lastTagName = cardName
+	f.lastTags = tags
+	if f.tagErr != nil {
+		return TaggedCard{}, f.tagErr
+	}
+	return TaggedCard{Name: cardName, Tags: tags}, nil
+}
+
+func (f *fakeService) RenameTag(ctx context.Context, userID string, deckID string, from string, to string) error {
+	f.lastTag = from
+	f.lastRenameTo = to
+	return f.tagErr
+}
+
+func (f *fakeService) DeleteTag(ctx context.Context, userID string, deckID string, tag string) error {
+	f.lastTag = tag
+	return f.tagErr
 }
 
 func (f *fakeService) GetPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error) {

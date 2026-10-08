@@ -47,6 +47,39 @@ type fakeRepository struct {
 	lastPendingID    int
 
 	lastPendingQuantity int
+
+	cardTags     []CardTag
+	replacedName string
+	replacedTags []string
+	renamedFrom  string
+	renamedTo    string
+	deletedTag   string
+	tagRepoCalls int
+}
+
+func (f *fakeRepository) FindCardTags(ctx context.Context, userID string, deckID string) ([]CardTag, error) {
+	f.lastUserID = userID
+	return f.cardTags, nil
+}
+
+func (f *fakeRepository) ReplaceCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) error {
+	f.tagRepoCalls++
+	f.replacedName = cardName
+	f.replacedTags = tags
+	return nil
+}
+
+func (f *fakeRepository) RenameTag(ctx context.Context, userID string, deckID string, from string, to string) error {
+	f.tagRepoCalls++
+	f.renamedFrom = from
+	f.renamedTo = to
+	return nil
+}
+
+func (f *fakeRepository) DeleteTag(ctx context.Context, userID string, deckID string, tag string) error {
+	f.tagRepoCalls++
+	f.deletedTag = tag
+	return nil
 }
 
 func (f *fakeRepository) FindPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error) {

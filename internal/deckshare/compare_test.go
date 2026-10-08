@@ -28,6 +28,7 @@ type storedDeck struct {
 	shared  bool
 	cards   []deck.DeckCard
 	pending []deck.PendingCard
+	tags    deck.DeckTags
 }
 
 type fakeDeckStore struct {
@@ -60,6 +61,10 @@ func (f *fakeDeckStore) GetDeckCards(ctx context.Context, userID string, id stri
 	return f.decks[id].cards, nil
 }
 
+func (f *fakeDeckStore) GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error) {
+	return f.decks[deckID].tags, nil
+}
+
 func (f *fakeDeckStore) GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error) {
 	return f.decks[deckID].pending, nil
 }
@@ -77,6 +82,7 @@ func compareStore() *fakeDeckStore {
 				{ID: 5, Name: "Fire // Ice", ScryfallID: "fire-mh2", CardType: strPtr("Instant"), Colors: strPtr("UR"), ColorIdentity: strPtr("UR")},
 			},
 			pending: []deck.PendingCard{{ID: 9, Name: "Counterspell", ScryfallID: "cs", Quantity: 2}},
+			tags:    deck.DeckTags{Cards: []deck.TaggedCard{{Name: "Sol Ring", Tags: []string{"Ramp"}}}},
 		},
 		theirDeck: {
 			ownerID: strangerID,
@@ -89,6 +95,10 @@ func compareStore() *fakeDeckStore {
 				{ID: 23, Name: "Fire / Ice", ScryfallID: "fire-other"},
 				{ID: 24, Name: "Lightning Bolt", ScryfallID: "bolt"},
 			},
+			tags: deck.DeckTags{Cards: []deck.TaggedCard{
+				{Name: "Sol Ring", Tags: []string{"Mana"}},
+				{Name: "Fire / Ice", Tags: []string{"Removal"}},
+			}},
 		},
 		privateID: {
 			ownerID: strangerID,
@@ -129,6 +139,10 @@ func TestCompareDecks_SplitsCardsByNameIgnoringPrintings(t *testing.T) {
 	solRing := comparison.Common[2]
 	assert.Equal(t, 2, solRing.Quantity)
 	assert.Equal(t, 1, solRing.OtherQuantity)
+	assert.Equal(t, []string{"Ramp"}, solRing.Tags)
+	assert.Equal(t, []string{"Mana"}, solRing.OtherTags)
+	assert.Nil(t, comparison.Common[0].Tags)
+	assert.Equal(t, []string{"Removal"}, comparison.Common[0].OtherTags)
 	assert.Equal(t, "Instant", *comparison.Common[0].CardType)
 	assert.Equal(t, "UR", *comparison.Common[0].Colors)
 	assert.Equal(t, "UR", *comparison.Common[0].ColorIdentity)
@@ -218,6 +232,8 @@ func TestCompareDecksHandler_ReturnsTheComparison(t *testing.T) {
 	assert.Nil(t, common["color_identity"])
 	assert.Equal(t, true, body["only_in_deck"].([]any)[0].(map[string]any)["commander"])
 	assert.Equal(t, []any{}, body["only_in_other"])
+	assert.Equal(t, []any{}, common["tags"])
+	assert.Equal(t, []any{}, common["other_tags"])
 }
 
 func TestCompareDecksHandler_Errors(t *testing.T) {

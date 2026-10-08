@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"strings"
+
+	"Melrakkiie/Tamiyo/internal/deck"
 )
 
 var ErrInvalidFile = errors.New("could not parse the uploaded file")
@@ -63,12 +65,7 @@ func resolveKey(setCode, collectorNumber string) string {
 }
 
 func resolveKeyByName(name string) string {
-	return "name:" + cardNameKey(name)
-}
-
-func cardNameKey(name string) string {
-	key := strings.ToLower(strings.ReplaceAll(name, "//", "/"))
-	return strings.Join(strings.Fields(key), " ")
+	return "name:" + deck.CardNameKey(name)
 }
 
 func frontFaceName(name string) string {

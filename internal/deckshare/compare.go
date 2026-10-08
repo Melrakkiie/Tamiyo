@@ -27,6 +27,8 @@ type ComparedCard struct {
 	OtherQuantity  int
 	Commander      bool
 	OtherCommander bool
+	Tags           []string
+	OtherTags      []string
 }
 
 type Comparison struct {
@@ -51,7 +53,7 @@ func (s *Service) CompareDecks(ctx context.Context, userID string, deckID string
 	var order []string
 	add := func(cards []Card, other bool) {
 		for _, c := range cards {
-			key := cardNameKey(c.Name)
+			key := deck.CardNameKey(c.Name)
 			entry, ok := byName[key]
 			if !ok {
 				entry = &ComparedCard{
@@ -68,9 +70,11 @@ func (s *Service) CompareDecks(ctx context.Context, userID string, deckID string
 			if other {
 				entry.OtherQuantity += c.Quantity
 				entry.OtherCommander = entry.OtherCommander || c.Commander
+				entry.OtherTags = c.Tags
 			} else {
 				entry.Quantity += c.Quantity
 				entry.Commander = entry.Commander || c.Commander
+				entry.Tags = c.Tags
 			}
 		}
 	}
@@ -129,8 +133,4 @@ func (s *Service) loadVisibleDeck(ctx context.Context, userID string, deckID str
 		Mine:      ownerID == userID,
 		CardCount: total,
 	}, cards, nil
-}
-
-func cardNameKey(name string) string {
-	return strings.ToLower(strings.Join(strings.Fields(strings.ReplaceAll(name, "//", "/")), " "))
 }

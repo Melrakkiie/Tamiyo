@@ -18,6 +18,7 @@ type deckService interface {
 	GetSharedDeck(ctx context.Context, deckID string) (string, deck.Deck, error)
 	GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error)
 	GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error)
+	GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error)
 }
 
 type userService interface {
@@ -47,6 +48,7 @@ type Card struct {
 	CardType        *string
 	ColorIdentity   *string
 	Commander       bool
+	Tags            []string
 }
 
 type SharedDeck struct {
@@ -105,7 +107,18 @@ func (s *Service) loadContent(ctx context.Context, ownerID string, d deck.Deck) 
 		return Owner{}, nil, fmt.Errorf("loading pending cards: %w", err)
 	}
 
-	return Owner{ID: owner.ID, DisplayName: owner.DisplayName, AvatarScryfallID: owner.AvatarScryfallID}, mergeCards(d, owned, pending), nil
+	tags, err := s.decks.GetCardTags(ctx, ownerID, d.ID)
+	if err != nil {
+		return Owner{}, nil, fmt.Errorf("loading card tags: %w", err)
+	}
+
+	cards := mergeCards(d, owned, pending)
+	byName := tags.ByCardName()
+	for i := range cards {
+		cards[i].Tags = byName[deck.CardNameKey(cards[i].Name)]
+	}
+
+	return Owner{ID: owner.ID, DisplayName: owner.DisplayName, AvatarScryfallID: owner.AvatarScryfallID}, cards, nil
 }
 
 func (s *Service) GetSharedDeckLegality(ctx context.Context, deckID string) (deckinsights.LegalityReport, error) {

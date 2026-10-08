@@ -1200,6 +1200,143 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /deck/{id}/tags:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    get:
+      tags: [deck-cards]
+      summary: List the deck's card tags
+      description: >
+        Every tag used in the deck and the tagged cards (untagged ones are
+        left out), sorted alphabetically ignoring case. A tag belongs to a
+        card name within the deck: every copy shares it, pending ones
+        included, whatever the printing. Tags of cards no longer in the
+        deck are kept but not returned.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeckTags"
+        "400":
+          description: id is not a UUID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found (or not owned by the authenticated user).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    patch:
+      tags: [deck-cards]
+      summary: Rename a tag on every card of the deck
+      description: >
+        Renaming into a tag the deck already uses (ignoring case) merges
+        the two.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenameTagRequest"
+      responses:
+        "204":
+          description: Renamed
+        "400":
+          description: Invalid id, a missing field, or a new name that's blank or over 40 characters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found, or the deck doesn't use this tag.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [deck-cards]
+      summary: Remove a tag from every card of the deck
+      parameters:
+        - name: tag
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Removed
+        "400":
+          description: Invalid id, or no tag given.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found, or the deck doesn't use this tag.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /deck/{id}/tags/cards:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    put:
+      tags: [deck-cards]
+      summary: Replace a card's tags in the deck
+      description: >
+        Tags are trimmed (inner spaces collapsed), must have 1 to 40
+        characters, at most 20 per card, and reuse the deck's spelling of a
+        tag that matches ignoring case. An empty list removes every tag of
+        the card. The card is matched by name, ignoring case and " / "
+        versus " // ".
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetCardTagsRequest"
+      responses:
+        "200":
+          description: The card's tags, sorted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaggedCard"
+        "400":
+          description: Invalid id, a missing field, a blank or too long tag, or more than 20 tags.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found, or no card of this name in the deck.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /deck/{id}/pending:
     parameters:
       - $ref: "#/components/parameters/DeckID"
@@ -2796,7 +2933,12 @@ components:
         commander:
           type: boolean
           description: True for the deck's commander, which is always listed on its own.
-      required: [name, scryfall_id, set_code, collector_number, foil, quantity, mana_value, colors, card_type, color_identity, commander]
+        tags:
+          type: array
+          description: The owner's tags for this card, shared by every printing.
+          items:
+            type: string
+      required: [name, scryfall_id, set_code, collector_number, foil, quantity, mana_value, colors, card_type, color_identity, commander, tags]
 
     SharedDeck:
       type: object
@@ -2863,7 +3005,17 @@ components:
           type: boolean
         other_commander:
           type: boolean
-      required: [name, scryfall_id, mana_value, colors, card_type, color_identity, quantity, other_quantity, commander, other_commander]
+        tags:
+          type: array
+          description: The card's tags in the first deck.
+          items:
+            type: string
+        other_tags:
+          type: array
+          description: The card's tags in the other deck.
+          items:
+            type: string
+      required: [name, scryfall_id, mana_value, colors, card_type, color_identity, quantity, other_quantity, commander, other_commander, tags, other_tags]
 
     DeckComparison:
       type: object
@@ -2885,6 +3037,54 @@ components:
           items:
             $ref: "#/components/schemas/ComparedCard"
       required: [deck, other, common, only_in_deck, only_in_other]
+
+    TaggedCard:
+      type: object
+      properties:
+        name:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+      required: [name, tags]
+
+    DeckTags:
+      type: object
+      properties:
+        tags:
+          type: array
+          description: Every tag used in the deck.
+          items:
+            type: string
+        cards:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaggedCard"
+      required: [tags, cards]
+
+    SetCardTagsRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        tags:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            maxLength: 40
+      required: [name, tags]
+
+    RenameTagRequest:
+      type: object
+      properties:
+        from:
+          type: string
+        to:
+          type: string
+          maxLength: 40
+      required: [from, to]
 
     PaginatedDecks:
       type: object

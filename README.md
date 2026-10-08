@@ -193,6 +193,10 @@ curl localhost:8080/deck/<deck-id>/legality -H "Authorization: Bearer <token>"
 curl localhost:8080/deck/<deck-id>/stats -H "Authorization: Bearer <token>"
 ```
 
+### Card tags
+
+A deck's owner can tag its cards (`Ramp`, `Pioche`, `Removal`…) to organize deckbuilding. A tag belongs to a card name within a deck: every copy shares it, pending ones included, whatever the printing. A card can have several tags, and each deck has its own. `GET /deck/:id/tags` lists them, `PUT /deck/:id/tags/cards` sets a card's tags, `PATCH` / `DELETE /deck/:id/tags` rename or remove a tag on every card. Shared decks and deck comparisons include each card's tags. See [`doc/API.md`](./doc/API.md#card-tags-deckidtags).
+
 ### Shared decks
 
 Deck ids are random UUIDs, so they can't be guessed from one another. `GET /shared/decks/:id` (plus `/legality` and `/stats`) serves a public or unlisted deck read-only, without authentication: its name, format, owner profile and card list, with no storage, proxy or ownership details. A private deck answers `404`, like an unknown link. These routes are rate-limited per client IP (60 requests per minute by default, `SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`). Signed in, `GET /deck/:id/compare/:other_id` compares two decks (yours, or anyone's public or unlisted ones) by card name, ignoring printings: cards in common with each deck's quantity, and cards only in one of them. See [`doc/API.md`](./doc/API.md#shared-decks).

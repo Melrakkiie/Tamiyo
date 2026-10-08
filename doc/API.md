@@ -830,6 +830,21 @@ Cards wanted in a deck but not in the collection yet (typically picked on Scryfa
 
 **Errors:** `400` invalid id or body, unknown `storage_id` · `404` deck or pending card not found
 
+### Card tags (`/deck/:id/tags`)
+
+Tags the owner puts on a deck's cards to help deckbuilding (`Ramp`, `Pioche`, `Removal`…). A tag belongs to a **card name within a deck**, not to a physical card: every copy of that card in the deck shares it, pending ones included, whatever the printing, and it stays when a copy is swapped for another printing. A card can have several tags. Each deck has its own tags.
+
+Tags are trimmed (inner spaces collapsed) and must have 1 to 40 characters; a card has at most 20. They're matched case-insensitively within the deck: tagging a card `ramp` when the deck already uses `Ramp` stores `Ramp`. Tags of a card that has left the deck are kept (they come back if the card does) but aren't returned.
+
+- `GET /deck/:id/tags` — `{ "tags": ["Pioche", "Ramp"], "cards": [{ "name": "Sol Ring", "tags": ["Ramp"] }] }`: every tag used in the deck, and the tagged cards (untagged ones are left out). Sorted alphabetically, ignoring case.
+- `PUT /deck/:id/tags/cards` — replace a card's tags. Body: `{ "name": "Sol Ring", "tags": ["Ramp", "Artefact"] }` (`[]` removes them all). `name` is matched like the deck comparison does (case, ` / ` or ` // `). Returns the card's tags in the same shape as an entry of `cards`.
+- `PATCH /deck/:id/tags` — rename a tag on every card. Body: `{ "from": "Ramp", "to": "Accélération" }`. Renaming into a tag the deck already uses merges them. `204`.
+- `DELETE /deck/:id/tags?tag=Ramp` — remove a tag from every card. `204`.
+
+Tagging changes the deck's `updated` date. Shared decks and the deck comparison show tags too (see [Shared decks](#shared-decks)).
+
+**Errors:** `400` invalid id, a missing field, a tag that's blank or over 40 characters, more than 20 tags · `404` deck not found, card not in the deck, unknown tag
+
 ---
 
 ## Deck Insights
@@ -933,13 +948,14 @@ The three `/shared/decks` routes share a per-client-IP limit, separate from the 
       "colors": null,
       "card_type": "Land",
       "color_identity": "U",
-      "commander": false
+      "commander": false,
+      "tags": ["Terrain"]
     }
   ]
 }
 ```
 
-The owner's copies and the deck's pending cards are merged into one list, one entry per printing and finish with its `quantity`, sorted by name. Nothing tells them apart, and storages, proxies and card ids are left out. The commander is always its own entry with `commander: true`. `card_count` counts every card, pending ones included. `owner` has the shape of [`GET /users/:id`](#get-usersid).
+The owner's copies and the deck's pending cards are merged into one list, one entry per printing and finish with its `quantity`, sorted by name. Nothing tells them apart, and storages, proxies and card ids are left out. The commander is always its own entry with `commander: true`. `tags` are the owner's [card tags](#card-tags-deckidtags), shared by every printing of the card. `card_count` counts every card, pending ones included. `owner` has the shape of [`GET /users/:id`](#get-usersid).
 
 **Errors:** `404` unknown, private or malformed id · `429` rate limit exceeded
 
@@ -975,10 +991,10 @@ Cards are matched **by name only**: printings and finishes are ignored, and a sp
   },
   "other": { "id": "…", "name": "Kess Spellslinger", "format": "commander", "visibility": "unlisted", "owner": { "id": "…", "display_name": "Alice", "avatar_scryfall_id": null }, "mine": false, "card_count": 100 },
   "common": [
-    { "name": "Island", "scryfall_id": "fc3f6a8f-0b5e-4b5f-9a1a-1d4b0e3c4c2f", "mana_value": 0, "colors": "", "card_type": "Land", "color_identity": "U", "quantity": 12, "other_quantity": 9, "commander": false, "other_commander": false }
+    { "name": "Island", "scryfall_id": "fc3f6a8f-0b5e-4b5f-9a1a-1d4b0e3c4c2f", "mana_value": 0, "colors": "", "card_type": "Land", "color_identity": "U", "quantity": 12, "other_quantity": 9, "commander": false, "other_commander": false, "tags": ["Terrain"], "other_tags": [] }
   ],
   "only_in_deck": [
-    { "name": "Kess, Dissident Mage", "scryfall_id": "…", "mana_value": 4, "colors": "UBR", "card_type": "Creature", "color_identity": "UBR", "quantity": 1, "other_quantity": 0, "commander": true, "other_commander": false }
+    { "name": "Kess, Dissident Mage", "scryfall_id": "…", "mana_value": 4, "colors": "UBR", "card_type": "Creature", "color_identity": "UBR", "quantity": 1, "other_quantity": 0, "commander": true, "other_commander": false, "tags": ["Commandant"], "other_tags": [] }
   ],
   "only_in_other": []
 }
@@ -986,7 +1002,7 @@ Cards are matched **by name only**: printings and finishes are ignored, and a sp
 
 - `common`: names in both decks, with how many copies each one has (`quantity` for `:id`, `other_quantity` for `:other_id`) — they can differ.
 - `only_in_deck` / `only_in_other`: names in only one of them (the other quantity is `0`).
-- Every list is sorted by name and always present, possibly empty. `scryfall_id`, `mana_value`, `colors`, `card_type` and `color_identity` come from one of the matching printings, preferring `:id`'s. `commander` / `other_commander` tell whether the card is that deck's commander. `mine` tells whether the deck belongs to the caller.
+- Every list is sorted by name and always present, possibly empty. `scryfall_id`, `mana_value`, `colors`, `card_type` and `color_identity` come from one of the matching printings, preferring `:id`'s. `commander` / `other_commander` tell whether the card is that deck's commander, and `tags` / `other_tags` are its [tags](#card-tags-deckidtags) in each deck. `mine` tells whether the deck belongs to the caller.
 
 **Errors:** `400` an id isn't a UUID · `401` unauthenticated · `404` a deck doesn't exist, or is someone else's private deck
 
