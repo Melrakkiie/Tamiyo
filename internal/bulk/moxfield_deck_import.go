@@ -119,15 +119,7 @@ func describeDeckLine(line moxfieldDeckLine) string {
 	return fmt.Sprintf("%q (%s #%s)", line.CardName, line.SetCode, line.CollectorNumber)
 }
 
-type deckLinePlacement struct {
-	line      moxfieldDeckLine
-	resolved  ResolvedCard
-	ownedIDs  []int
-	missing   int
-	commander bool
-}
-
-func (s *Service) placeDeckLines(ctx context.Context, userID string, lines []moxfieldDeckLine, commanderFromFirstLine bool, targetDeckID string) ([]deckLinePlacement, Summary, error) {
+func (s *Service) resolveDeckLines(ctx context.Context, lines []moxfieldDeckLine) (map[string]ResolvedCard, error) {
 	identifiers := make([]CardIdentifier, len(lines))
 	for i, line := range lines {
 		if line.SetCode == "" {
@@ -138,7 +130,30 @@ func (s *Service) placeDeckLines(ctx context.Context, userID string, lines []mox
 	}
 	resolved, err := s.scryfall.Resolve(ctx, dedupeIdentifiers(identifiers))
 	if err != nil {
-		return nil, Summary{}, fmt.Errorf("%w: %v", ErrScryfallUnavailable, err)
+		return nil, fmt.Errorf("%w: %v", ErrScryfallUnavailable, err)
+	}
+	return resolved, nil
+}
+
+func (line moxfieldDeckLine) printing(resolved ResolvedCard) (name, setCode, collectorNumber string) {
+	if line.SetCode == "" {
+		return resolved.Name, resolved.SetCode, resolved.CollectorNumber
+	}
+	return line.CardName, line.SetCode, line.CollectorNumber
+}
+
+type deckLinePlacement struct {
+	line      moxfieldDeckLine
+	resolved  ResolvedCard
+	ownedIDs  []int
+	missing   int
+	commander bool
+}
+
+func (s *Service) placeDeckLines(ctx context.Context, userID string, lines []moxfieldDeckLine, commanderFromFirstLine bool, targetDeckID string) ([]deckLinePlacement, Summary, error) {
+	resolved, err := s.resolveDeckLines(ctx, lines)
+	if err != nil {
+		return nil, Summary{}, err
 	}
 
 	owned, err := s.loadOwnedCopies(ctx, userID, targetDeckID)
@@ -198,10 +213,7 @@ func (s *Service) fillDeck(ctx context.Context, userID string, deckID string, pl
 		}
 
 		colors, cardType, identity := p.resolved.details()
-		name, setCode, collectorNumber := p.line.CardName, p.line.SetCode, p.line.CollectorNumber
-		if setCode == "" {
-			name, setCode, collectorNumber = p.resolved.Name, p.resolved.SetCode, p.resolved.CollectorNumber
-		}
+		name, setCode, collectorNumber := p.line.printing(p.resolved)
 		pending, err := s.decks.AddPendingCard(ctx, userID, deckID, deck.PendingCard{
 			Name:            name,
 			ScryfallID:      p.resolved.ScryfallID,

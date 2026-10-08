@@ -959,11 +959,11 @@ Same statistics as [`GET /deck/:id/stats`](#get-deckidstats).
 
 ## Bulk Import
 
-Three routes import a collection or decklist export produced by a third-party tool in bulk, instead of one `POST /cards` call per card. The two collection imports create cards (and, for ManaBox, storages/decks); the deck import fills an existing deck with cards already in the collection and never creates any. All three are `multipart/form-data` requests (not JSON) with the file itself in a field named `file`.
+Four routes import cards in bulk, instead of one `POST /cards` call per card: a collection export from a third-party tool, a plain card list, or a decklist. The collection and list imports create cards (and, for ManaBox, storages/decks); the deck import fills an existing deck with cards already in the collection and never creates any. All four are `multipart/form-data` requests (not JSON) with the file itself in a field named `file`.
 
 A bulk import never fails outright just because some rows couldn't be resolved: a request that parses successfully always returns `200 OK` with a summary of what happened, including a `warnings` list for any row that was skipped (card not found on Scryfall, a duplicate, a transient error). The import only fails as a whole (non-`200`) when the file itself can't be parsed, a referenced `storage_id` doesn't exist, or Scryfall couldn't be reached at all.
 
-**Response shape (all three routes)**
+**Response shape (all four routes)**
 ```json
 {
   "cards_created": 182,
@@ -979,7 +979,7 @@ A bulk import never fails outright just because some rows couldn't be resolved: 
 ```
 `warnings` is omitted entirely when empty. `cards_linked` and `cards_pending` are only ever non-zero for the deck import.
 
-**Errors common to all three**
+**Errors common to all four**
 - `400` — no `file` field, or the file couldn't be parsed (wrong columns, malformed line) — message explains what's wrong
 - `400` — a `storage_id` field doesn't reference an existing storage for this account
 - `502` — Scryfall (used to resolve Moxfield rows — see below) couldn't be reached or returned an unexpected response after retrying; a rate-limited (`429`) response from Scryfall is retried automatically (honoring its `Retry-After` header when present) before this is returned
@@ -1014,6 +1014,19 @@ Import a Moxfield "Export Collection" CSV. Moxfield's own export has no storage/
 | `storage_id` | Yes | Must reference an existing storage for this account. Every imported card is assigned here. |
 
 **Required CSV columns:** `Count`, `Name`, `Edition`, `Foil`, `Collector Number` (column order doesn't matter — Moxfield itself documents that only the names are checked).
+
+---
+
+### `POST /import/list`
+
+Add a card list to the collection: one card is created per copy, in the storage given by `storage_id`, or in no storage without it. The list uses the same line format as [`POST /deck/:id/import`](#post-deckidimport) (see *Expected line format* there): `1 Sol Ring (SLD) 1011 *F*` creates that exact printing, foil; `4 Lightning Bolt` creates the printing Scryfall returns by default for that name. Section headers are skipped. A line that can't be resolved on Scryfall is skipped (counted in `cards_skipped`, noted in `warnings`); the rest is still imported.
+
+**Form fields**
+
+| Field | Required | Notes |
+|---|---|---|
+| `file` | Yes | The list, as plain text. |
+| `storage_id` | No | An existing storage for this account. Unknown storage → `400`. |
 
 ---
 

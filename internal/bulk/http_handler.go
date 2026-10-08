@@ -19,6 +19,7 @@ import (
 type importService interface {
 	ImportManaBox(ctx context.Context, userID string, storageID *int, r io.Reader) (Summary, error)
 	ImportMoxfieldCollection(ctx context.Context, userID string, storageID int, r io.Reader) (Summary, error)
+	ImportCardList(ctx context.Context, userID string, storageID *int, r io.Reader) (Summary, error)
 	ImportIntoDeck(ctx context.Context, userID string, deckID string, commanderFromFirstLine bool, r io.Reader) (Summary, error)
 
 	ExportManaBox(ctx context.Context, userID string, storageID *int, w io.Writer) error
@@ -40,6 +41,7 @@ func NewHandler(service importService) *Handler {
 func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.POST("/import/manabox", h.importManaBox)
 	router.POST("/import/moxfield/collection", h.importMoxfieldCollection)
+	router.POST("/import/list", h.importCardList)
 
 	router.GET("/export/manabox", h.exportManaBox)
 	router.GET("/export/moxfield/collection", h.exportMoxfieldCollection)
@@ -125,6 +127,32 @@ func (h *Handler) importMoxfieldCollection(ctx *gin.Context) {
 	}()
 
 	summary, err := h.service.ImportMoxfieldCollection(ctx.Request.Context(), userID, storageID, file)
+	h.respondImport(ctx, summary, err)
+}
+
+func (h *Handler) importCardList(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
+	storageID, valid := optionalStorageID(ctx.PostForm("storage_id"))
+	if !valid {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": errInvalidStorageID.Error()})
+		return
+	}
+
+	file, err := openUploadedFile(ctx, "file")
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	summary, err := h.service.ImportCardList(ctx.Request.Context(), userID, storageID, file)
 	h.respondImport(ctx, summary, err)
 }
 

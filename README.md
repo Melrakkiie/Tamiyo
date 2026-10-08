@@ -141,13 +141,14 @@ Log in as the seeded account with `seed@tamiyo.local` / `password123` (see `POST
 
 ## Bulk Import
 
-Three authenticated routes import a collection or decklist export produced by a third-party tool in one request, instead of one `POST /cards` call per card — see [`openapi.yaml`](./openapi.yaml) and [`doc/API.md`](./doc/API.md#bulk-import) for the full request/response shapes:
+Four authenticated routes import a collection export, a card list or a decklist produced by a third-party tool in one request, instead of one `POST /cards` call per card — see [`openapi.yaml`](./openapi.yaml) and [`doc/API.md`](./doc/API.md#bulk-import) for the full request/response shapes:
 
 - `POST /import/manabox` — a [ManaBox](https://manabox.app/) collection CSV export. Carries its own storage/binder and Scryfall ID, so nothing else is needed; pass an optional `storage_id` to put every card in that storage instead.
 - `POST /import/moxfield/collection` — a [Moxfield](https://www.moxfield.com/) "Export Collection" CSV. Has no storage concept, so every imported card is assigned to an existing `storage_id` you pass in; has no Scryfall ID either, so each row is resolved by set + collector number against the [Scryfall API](https://scryfall.com/docs/api/cards/collection).
+- `POST /import/list` — a plain card list (`4 Lightning Bolt`, or `1 Sol Ring (SLD) 1011 *F*` for an exact printing), one card created per copy, in the optional `storage_id`.
 - `POST /deck/:id/import` — a decklist added to an existing deck: a Moxfield plain-text export (deck page → **More → Export → Plain Text**), a plain `4 Lightning Bolt` list matched by name, or any format `GET /deck/:id/export` produces. It never creates cards: owned copies of each printing go in the deck, and missing ones are added as pending cards. With `commander_from_first_line=true`, the first line becomes the commander if the deck has none.
 
-All three are `multipart/form-data` requests with the file in a field named `file`, e.g.:
+All four are `multipart/form-data` requests with the file in a field named `file`, e.g.:
 
 ```bash
 curl -X POST localhost:8080/import/moxfield/collection \

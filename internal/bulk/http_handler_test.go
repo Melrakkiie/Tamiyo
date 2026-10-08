@@ -24,6 +24,7 @@ type fakeImportService struct {
 	lastUserID            string
 	lastMoxfieldStorageID int
 	lastManaBoxStorageID  *int
+	lastListStorageID     *int
 	lastExportStorageID   *int
 	lastFileContent       string
 
@@ -66,6 +67,13 @@ func (f *fakeImportService) ImportManaBox(ctx context.Context, userID string, st
 func (f *fakeImportService) ImportMoxfieldCollection(ctx context.Context, userID string, storageID int, r io.Reader) (Summary, error) {
 	f.lastUserID = userID
 	f.lastMoxfieldStorageID = storageID
+	f.readFile(r)
+	return f.summary, f.err
+}
+
+func (f *fakeImportService) ImportCardList(ctx context.Context, userID string, storageID *int, r io.Reader) (Summary, error) {
+	f.lastUserID = userID
+	f.lastListStorageID = storageID
 	f.readFile(r)
 	return f.summary, f.err
 }
@@ -287,6 +295,56 @@ func TestImportMoxfieldCollection_ScryfallFailureReturnsBadGateway(t *testing.T)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadGateway, w.Code)
+}
+
+func TestImportCardList_PassesTheListAndStorage(t *testing.T) {
+	service := &fakeImportService{summary: Summary{CardsCreated: 4}}
+	router := setupRouter(service)
+
+	req := multipartRequest(t, "/import/list", "4 Lightning Bolt", map[string]string{"storage_id": "3"})
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "4 Lightning Bolt", service.lastFileContent)
+	require.NotNil(t, service.lastListStorageID)
+	assert.Equal(t, 3, *service.lastListStorageID)
+	assert.Contains(t, w.Body.String(), `"cards_created": 4`)
+}
+
+func TestImportCardList_StorageIsOptional(t *testing.T) {
+	service := &fakeImportService{}
+	router := setupRouter(service)
+
+	req := multipartRequest(t, "/import/list", "4 Lightning Bolt", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Nil(t, service.lastListStorageID)
+}
+
+func TestImportCardList_RejectsBadRequests(t *testing.T) {
+	cases := map[string]struct {
+		service *fakeImportService
+		content string
+		fields  map[string]string
+	}{
+		"invalid storage_id": {&fakeImportService{}, "1 Sol Ring", map[string]string{"storage_id": "x"}},
+		"missing file":       {&fakeImportService{}, "", nil},
+		"unreadable list":    {&fakeImportService{err: ErrInvalidFile}, "nope", nil},
+		"unknown storage":    {&fakeImportService{err: ErrTargetStorageNotFound}, "1 Sol Ring", map[string]string{"storage_id": "9"}},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			router := setupRouter(tc.service)
+
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, multipartRequest(t, "/import/list", tc.content, tc.fields))
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+		})
+	}
 }
 
 func TestImportMoxfieldDeck_OldRouteIsGone(t *testing.T) {

@@ -1735,6 +1735,58 @@ paths:
         "502":
           $ref: "#/components/responses/BadGateway"
 
+  /import/list:
+    post:
+      tags: [bulk-import]
+      summary: Bulk import a plain card list
+      description: >
+        Creates one card per copy from a card list, in the storage given by
+        storage_id or in no storage. Same line format as
+        POST /deck/{id}/import: "1 Sol Ring (SLD) 1011 *F*" creates that
+        printing (resolved by set and collector number against Scryfall),
+        "4 Lightning Bolt" creates the printing Scryfall returns by default
+        for that name; section headers are skipped. Lines that can't be
+        resolved are skipped and reported in ImportSummary.warnings.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The list, one card per line.
+                storage_id:
+                  type: integer
+                  minimum: 1
+                  description: An existing storage for this account.
+      responses:
+        "200":
+          description: >
+            Import finished (possibly with some lines skipped — see
+            ImportSummary.warnings).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportSummary"
+        "400":
+          description: >
+            No file field, the list couldn't be parsed, or storage_id is
+            invalid or does not reference an existing storage.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
   /export/manabox:
     get:
       tags: [bulk-export]
