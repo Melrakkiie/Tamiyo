@@ -975,10 +975,10 @@ Cards are matched **by name only**: printings and finishes are ignored, and a sp
   },
   "other": { "id": "…", "name": "Kess Spellslinger", "format": "commander", "visibility": "unlisted", "owner": { "id": "…", "display_name": "Alice", "avatar_scryfall_id": null }, "mine": false, "card_count": 100 },
   "common": [
-    { "name": "Island", "scryfall_id": "fc3f6a8f-0b5e-4b5f-9a1a-1d4b0e3c4c2f", "mana_value": 0, "card_type": "Land", "quantity": 12, "other_quantity": 9, "commander": false, "other_commander": false }
+    { "name": "Island", "scryfall_id": "fc3f6a8f-0b5e-4b5f-9a1a-1d4b0e3c4c2f", "mana_value": 0, "colors": "", "card_type": "Land", "color_identity": "U", "quantity": 12, "other_quantity": 9, "commander": false, "other_commander": false }
   ],
   "only_in_deck": [
-    { "name": "Kess, Dissident Mage", "scryfall_id": "…", "mana_value": 4, "card_type": "Creature", "quantity": 1, "other_quantity": 0, "commander": true, "other_commander": false }
+    { "name": "Kess, Dissident Mage", "scryfall_id": "…", "mana_value": 4, "colors": "UBR", "card_type": "Creature", "color_identity": "UBR", "quantity": 1, "other_quantity": 0, "commander": true, "other_commander": false }
   ],
   "only_in_other": []
 }
@@ -986,7 +986,7 @@ Cards are matched **by name only**: printings and finishes are ignored, and a sp
 
 - `common`: names in both decks, with how many copies each one has (`quantity` for `:id`, `other_quantity` for `:other_id`) — they can differ.
 - `only_in_deck` / `only_in_other`: names in only one of them (the other quantity is `0`).
-- Every list is sorted by name and always present, possibly empty. `scryfall_id`, `mana_value` and `card_type` come from one of the matching printings, preferring `:id`'s. `commander` / `other_commander` tell whether the card is that deck's commander. `mine` tells whether the deck belongs to the caller.
+- Every list is sorted by name and always present, possibly empty. `scryfall_id`, `mana_value`, `colors`, `card_type` and `color_identity` come from one of the matching printings, preferring `:id`'s. `commander` / `other_commander` tell whether the card is that deck's commander. `mine` tells whether the deck belongs to the caller.
 
 **Errors:** `400` an id isn't a UUID · `401` unauthenticated · `404` a deck doesn't exist, or is someone else's private deck
 

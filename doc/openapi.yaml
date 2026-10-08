@@ -2844,7 +2844,13 @@ components:
           description: One of the matching printings, preferring the first deck's.
         mana_value:
           type: number
+        colors:
+          type: string
+          nullable: true
         card_type:
+          type: string
+          nullable: true
+        color_identity:
           type: string
           nullable: true
         quantity:
@@ -2857,7 +2863,7 @@ components:
           type: boolean
         other_commander:
           type: boolean
-      required: [name, scryfall_id, mana_value, card_type, quantity, other_quantity, commander, other_commander]
+      required: [name, scryfall_id, mana_value, colors, card_type, color_identity, quantity, other_quantity, commander, other_commander]
 
     DeckComparison:
       type: object

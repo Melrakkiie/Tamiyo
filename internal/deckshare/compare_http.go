@@ -24,7 +24,9 @@ type comparedCardResponse struct {
 	Name           string  `json:"name"`
 	ScryfallID     string  `json:"scryfall_id"`
 	ManaValue      float64 `json:"mana_value"`
+	Colors         *string `json:"colors"`
 	CardType       *string `json:"card_type"`
+	ColorIdentity  *string `json:"color_identity"`
 	Quantity       int     `json:"quantity"`
 	OtherQuantity  int     `json:"other_quantity"`
 	Commander      bool    `json:"commander"`

@@ -20,7 +20,9 @@ type ComparedCard struct {
 	Name           string
 	ScryfallID     string
 	ManaValue      float64
+	Colors         *string
 	CardType       *string
+	ColorIdentity  *string
 	Quantity       int
 	OtherQuantity  int
 	Commander      bool
@@ -52,7 +54,14 @@ func (s *Service) CompareDecks(ctx context.Context, userID string, deckID string
 			key := cardNameKey(c.Name)
 			entry, ok := byName[key]
 			if !ok {
-				entry = &ComparedCard{Name: c.Name, ScryfallID: c.ScryfallID, ManaValue: c.ManaValue, CardType: c.CardType}
+				entry = &ComparedCard{
+					Name:          c.Name,
+					ScryfallID:    c.ScryfallID,
+					ManaValue:     c.ManaValue,
+					Colors:        c.Colors,
+					CardType:      c.CardType,
+					ColorIdentity: c.ColorIdentity,
+				}
 				byName[key] = entry
 				order = append(order, key)
 			}

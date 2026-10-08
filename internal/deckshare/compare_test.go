@@ -74,7 +74,7 @@ func compareStore() *fakeDeckStore {
 				{ID: 2, Name: "Sol Ring", ScryfallID: "sol-sld"},
 				{ID: 3, Name: "Sol Ring", ScryfallID: "sol-cmm"},
 				{ID: 4, Name: "Island", ScryfallID: "island-a"},
-				{ID: 5, Name: "Fire // Ice", ScryfallID: "fire-mh2", CardType: strPtr("Instant")},
+				{ID: 5, Name: "Fire // Ice", ScryfallID: "fire-mh2", CardType: strPtr("Instant"), Colors: strPtr("UR"), ColorIdentity: strPtr("UR")},
 			},
 			pending: []deck.PendingCard{{ID: 9, Name: "Counterspell", ScryfallID: "cs", Quantity: 2}},
 		},
@@ -130,6 +130,8 @@ func TestCompareDecks_SplitsCardsByNameIgnoringPrintings(t *testing.T) {
 	assert.Equal(t, 2, solRing.Quantity)
 	assert.Equal(t, 1, solRing.OtherQuantity)
 	assert.Equal(t, "Instant", *comparison.Common[0].CardType)
+	assert.Equal(t, "UR", *comparison.Common[0].Colors)
+	assert.Equal(t, "UR", *comparison.Common[0].ColorIdentity)
 
 	atraxa := comparison.OnlyInDeck[0]
 	assert.True(t, atraxa.Commander)
@@ -192,7 +194,7 @@ func TestCompareDecksHandler_ReturnsTheComparison(t *testing.T) {
 	service := &fakeSharedService{compared: Comparison{
 		Deck:        ComparedDeck{Deck: deck.Deck{ID: myDeckID, Name: "Mine"}, Mine: true, CardCount: 3},
 		Other:       ComparedDeck{Deck: deck.Deck{ID: theirDeck, Name: "Theirs"}, Owner: Owner{ID: strangerID, DisplayName: strPtr("Alice")}, CardCount: 2},
-		Common:      []ComparedCard{{Name: "Sol Ring", ScryfallID: "sol", Quantity: 1, OtherQuantity: 2}},
+		Common:      []ComparedCard{{Name: "Sol Ring", ScryfallID: "sol", Colors: strPtr(""), Quantity: 1, OtherQuantity: 2}},
 		OnlyInDeck:  []ComparedCard{{Name: "Atraxa", Quantity: 1, Commander: true}},
 		OnlyInOther: []ComparedCard{},
 	}}
@@ -212,6 +214,8 @@ func TestCompareDecksHandler_ReturnsTheComparison(t *testing.T) {
 	common := body["common"].([]any)[0].(map[string]any)
 	assert.Equal(t, "Sol Ring", common["name"])
 	assert.Equal(t, 2.0, common["other_quantity"])
+	assert.Equal(t, "", common["colors"])
+	assert.Nil(t, common["color_identity"])
 	assert.Equal(t, true, body["only_in_deck"].([]any)[0].(map[string]any)["commander"])
 	assert.Equal(t, []any{}, body["only_in_other"])
 }
