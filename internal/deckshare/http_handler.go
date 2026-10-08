@@ -15,6 +15,7 @@ type sharedDeckService interface {
 	GetSharedDeck(ctx context.Context, deckID string) (SharedDeck, error)
 	GetSharedDeckLegality(ctx context.Context, deckID string) (deckinsights.LegalityReport, error)
 	GetSharedDeckStats(ctx context.Context, deckID string) (deckinsights.DeckStats, error)
+	CompareDecks(ctx context.Context, userID string, deckID string, otherID string) (Comparison, error)
 }
 
 type deckResponse struct {

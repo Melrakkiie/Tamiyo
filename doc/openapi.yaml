@@ -30,7 +30,7 @@ tags:
   - name: deck-cards
     description: Deck ↔ card relationship
   - name: shared-decks
-    description: Read-only access to public and unlisted decks by their id, without signing in
+    description: Read-only access to public and unlisted decks by their id, without signing in, and deck comparison for signed-in users
 
 paths:
   /health:
@@ -1626,6 +1626,50 @@ paths:
         "502":
           $ref: "#/components/responses/BadGateway"
 
+  /deck/{id}/compare/{other_id}:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+      - name: other_id
+        in: path
+        required: true
+        description: The deck to compare with.
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [shared-decks]
+      summary: Compare two decks by card name
+      description: >
+        Compares two decks card by card, matching cards by name only
+        (printings and finishes are ignored; " / " and " // " in split or
+        double-faced card names are equivalent). Owned copies and pending
+        cards both count. Each deck can be one of the caller's, whatever
+        its visibility, or anyone's public or unlisted deck. Every list is
+        sorted by name.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeckComparison"
+        "400":
+          description: An id is not a UUID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: A deck doesn't exist, or is someone else's private deck.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /import/manabox:
     post:
       tags: [bulk-import]
@@ -2766,6 +2810,75 @@ components:
           items:
             $ref: "#/components/schemas/SharedDeckCard"
       required: [deck, owner, cards]
+
+    ComparedDeck:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        format:
+          type: string
+        visibility:
+          type: string
+          enum: [private, unlisted, public]
+        owner:
+          $ref: "#/components/schemas/Profile"
+        mine:
+          type: boolean
+          description: Whether the deck belongs to the caller.
+        card_count:
+          type: integer
+          description: Every card in the deck, pending ones included.
+      required: [id, name, format, visibility, owner, mine, card_count]
+
+    ComparedCard:
+      type: object
+      properties:
+        name:
+          type: string
+        scryfall_id:
+          type: string
+          description: One of the matching printings, preferring the first deck's.
+        mana_value:
+          type: number
+        card_type:
+          type: string
+          nullable: true
+        quantity:
+          type: integer
+          description: Copies in the first deck (0 when only in the other).
+        other_quantity:
+          type: integer
+          description: Copies in the other deck (0 when only in the first).
+        commander:
+          type: boolean
+        other_commander:
+          type: boolean
+      required: [name, scryfall_id, mana_value, card_type, quantity, other_quantity, commander, other_commander]
+
+    DeckComparison:
+      type: object
+      properties:
+        deck:
+          $ref: "#/components/schemas/ComparedDeck"
+        other:
+          $ref: "#/components/schemas/ComparedDeck"
+        common:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComparedCard"
+        only_in_deck:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComparedCard"
+        only_in_other:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComparedCard"
+      required: [deck, other, common, only_in_deck, only_in_other]
 
     PaginatedDecks:
       type: object

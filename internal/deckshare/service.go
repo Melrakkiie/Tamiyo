@@ -14,6 +14,7 @@ import (
 var ErrNotFound = errors.New("shared deck not found")
 
 type deckService interface {
+	GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error)
 	GetSharedDeck(ctx context.Context, deckID string) (string, deck.Deck, error)
 	GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error)
 	GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error)
@@ -81,26 +82,30 @@ func (s *Service) GetSharedDeck(ctx context.Context, deckID string) (SharedDeck,
 		return SharedDeck{}, err
 	}
 
+	owner, cards, err := s.loadContent(ctx, ownerID, d)
+	if err != nil {
+		return SharedDeck{}, err
+	}
+	return SharedDeck{Deck: d, Owner: owner, Cards: cards}, nil
+}
+
+func (s *Service) loadContent(ctx context.Context, ownerID string, d deck.Deck) (Owner, []Card, error) {
 	owner, err := s.users.GetUser(ctx, ownerID)
 	if err != nil {
-		return SharedDeck{}, fmt.Errorf("loading deck owner: %w", err)
+		return Owner{}, nil, fmt.Errorf("loading deck owner: %w", err)
 	}
 
 	owned, err := s.decks.GetDeckCards(ctx, ownerID, d.ID, "name", false)
 	if err != nil {
-		return SharedDeck{}, fmt.Errorf("loading deck cards: %w", err)
+		return Owner{}, nil, fmt.Errorf("loading deck cards: %w", err)
 	}
 
 	pending, err := s.decks.GetPendingCards(ctx, ownerID, d.ID)
 	if err != nil {
-		return SharedDeck{}, fmt.Errorf("loading pending cards: %w", err)
+		return Owner{}, nil, fmt.Errorf("loading pending cards: %w", err)
 	}
 
-	return SharedDeck{
-		Deck:  d,
-		Owner: Owner{ID: owner.ID, DisplayName: owner.DisplayName, AvatarScryfallID: owner.AvatarScryfallID},
-		Cards: mergeCards(d, owned, pending),
-	}, nil
+	return Owner{ID: owner.ID, DisplayName: owner.DisplayName, AvatarScryfallID: owner.AvatarScryfallID}, mergeCards(d, owned, pending), nil
 }
 
 func (s *Service) GetSharedDeckLegality(ctx context.Context, deckID string) (deckinsights.LegalityReport, error) {

@@ -20,9 +20,19 @@ type fakeSharedService struct {
 	shared   SharedDeck
 	legality deckinsights.LegalityReport
 	stats    deckinsights.DeckStats
+	compared Comparison
 	err      error
 
-	lastDeckID string
+	lastUserID  string
+	lastDeckID  string
+	lastOtherID string
+}
+
+func (f *fakeSharedService) CompareDecks(ctx context.Context, userID string, deckID string, otherID string) (Comparison, error) {
+	f.lastUserID = userID
+	f.lastDeckID = deckID
+	f.lastOtherID = otherID
+	return f.compared, f.err
 }
 
 func (f *fakeSharedService) GetSharedDeck(ctx context.Context, deckID string) (SharedDeck, error) {
@@ -44,6 +54,19 @@ func setupRouter(service sharedDeckService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	NewHandler(service).RegisterRoutes(router)
+	return router
+}
+
+func setupProtectedRouter(service sharedDeckService, userID string) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		if userID != "" {
+			c.Set("user_id", userID)
+		}
+		c.Next()
+	})
+	NewHandler(service).RegisterProtectedRoutes(router)
 	return router
 }
 

@@ -36,6 +36,10 @@ func (f *fakeDecks) GetSharedDeck(ctx context.Context, deckID string) (string, d
 	return f.ownerID, f.deck, nil
 }
 
+func (f *fakeDecks) GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error) {
+	return deck.Deck{}, deck.ErrNotFound
+}
+
 func (f *fakeDecks) GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error) {
 	f.lastUserID = userID
 	f.lastDeckID = id

@@ -157,6 +157,7 @@ func main() {
 	deckHandler.RegisterRoutes(protected)
 	importHandler.RegisterRoutes(protected)
 	insightsHandler.RegisterRoutes(protected)
+	shareHandler.RegisterProtectedRoutes(protected)
 	userHandler.RegisterProtectedRoutes(protected)
 	emailChangeHandler.RegisterProtectedRoutes(protected)
 

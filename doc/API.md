@@ -900,9 +900,9 @@ A multicolor card counts once per color it has in `color_breakdown`; a dual-type
 
 ## Shared decks
 
-Read-only access to a deck by its id. **No authentication required.** Deck ids are random UUIDs, so an unlisted deck can only be found by someone who was given its id or link. Only `public` and `unlisted` decks resolve: a private deck, an unknown id or anything that isn't a UUID all answer `404`, so the response never tells whether a private deck exists.
+Read-only access to a deck by its id. **No authentication required** for the three `/shared/decks` routes ([comparing two decks](#get-deckidcompareother_id) needs a signed-in user). Deck ids are random UUIDs, so an unlisted deck can only be found by someone who was given its id or link. Only `public` and `unlisted` decks resolve: a private deck, an unknown id or anything that isn't a UUID all answer `404`, so the response never tells whether a private deck exists.
 
-The three routes share a per-client-IP limit, separate from the auth one: 60 requests per 60-second window by default (`SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns `429` with a `Retry-After` header, as described in [Rate limiting](#rate-limiting).
+The three `/shared/decks` routes share a per-client-IP limit, separate from the auth one: 60 requests per 60-second window by default (`SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns `429` with a `Retry-After` header, as described in [Rate limiting](#rate-limiting).
 
 ### `GET /shared/decks/:id`
 
@@ -954,6 +954,41 @@ Same report as [`GET /deck/:id/legality`](#get-deckidlegality), without `card_id
 Same statistics as [`GET /deck/:id/stats`](#get-deckidstats).
 
 **Errors:** `400` the deck's format isn't one Scryfall recognizes · `404` as above · `429` rate limit exceeded · `502` Scryfall unreachable
+
+### `GET /deck/:id/compare/:other_id`
+
+Compare two decks card by card. **Requires authentication** (it is not rate-limited like the routes above). Each deck can be one of yours, whatever its visibility, or someone else's `public` or `unlisted` deck; the same deck can be given twice.
+
+Cards are matched **by name only**: printings and finishes are ignored, and a split or double-faced card matches whether it's written with ` / ` or ` // `. Owned copies and pending cards both count.
+
+**Response `200 OK`**
+```json
+{
+  "deck": {
+    "id": "6f0d3c5e-8a51-4c0b-9b1e-2d7c4a3f9e10",
+    "name": "Kess Commander",
+    "format": "commander",
+    "visibility": "private",
+    "owner": { "id": "4b8a0a9e-2f1c-4c8e-9d3a-1e2f3a4b5c6d", "display_name": "Tamiyo", "avatar_scryfall_id": null },
+    "mine": true,
+    "card_count": 100
+  },
+  "other": { "id": "…", "name": "Kess Spellslinger", "format": "commander", "visibility": "unlisted", "owner": { "id": "…", "display_name": "Alice", "avatar_scryfall_id": null }, "mine": false, "card_count": 100 },
+  "common": [
+    { "name": "Island", "scryfall_id": "fc3f6a8f-0b5e-4b5f-9a1a-1d4b0e3c4c2f", "mana_value": 0, "card_type": "Land", "quantity": 12, "other_quantity": 9, "commander": false, "other_commander": false }
+  ],
+  "only_in_deck": [
+    { "name": "Kess, Dissident Mage", "scryfall_id": "…", "mana_value": 4, "card_type": "Creature", "quantity": 1, "other_quantity": 0, "commander": true, "other_commander": false }
+  ],
+  "only_in_other": []
+}
+```
+
+- `common`: names in both decks, with how many copies each one has (`quantity` for `:id`, `other_quantity` for `:other_id`) — they can differ.
+- `only_in_deck` / `only_in_other`: names in only one of them (the other quantity is `0`).
+- Every list is sorted by name and always present, possibly empty. `scryfall_id`, `mana_value` and `card_type` come from one of the matching printings, preferring `:id`'s. `commander` / `other_commander` tell whether the card is that deck's commander. `mine` tells whether the deck belongs to the caller.
+
+**Errors:** `400` an id isn't a UUID · `401` unauthenticated · `404` a deck doesn't exist, or is someone else's private deck
 
 ---
 
