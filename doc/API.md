@@ -330,6 +330,18 @@ List cards, with optional filtering, sorting, and pagination.
 | `stack` | bool | No | `true` returns one entry per stack of identical copies (same printing, foil, proxy and storage) instead of one per card: the stack's lowest-id copy, plus `quantity` and `copy_ids` (lowest first). `total`, `page` and `limit` then count stacks; `added` is the oldest copy's and `updated` the most recent one's. Defaults to `false`. |
 | `sort` | string | No | One of `name`, `-name`, `added`, `-added`, `updated`, `-updated`, `mana_value`, `-mana_value`, `color`, `-color`, `type`, `-type`. Defaults to `-updated`. A `-` prefix means descending. `color` groups white, blue, black, red, green, multicolor, colorless, lands, then unknown; `type` groups by primary type (creature, planeswalker, battle, instant, sorcery, artifact, enchantment, land, other, unknown); both sort by name within a group. `id` is always used as a stable secondary tie-breaker. |
 | `group` | string | No | One of `type`, `color`, `mana`. Orders the cards by that group first (primary type and color groups in the same order as `sort=type` / `sort=color`, mana value rounded down), then by `sort` within each group, so a grouped display keeps the chosen sort. |
+| `colors` | string | No | WUBRG letters, read with `color_mode`. Cards whose colors aren't known yet are left out. |
+| `color_mode` | string | No | How `colors` is matched: `exact` (default, exactly these colors; an empty `colors=` keeps colorless cards), `include` (at least these colors), `within` (only colors among these, colorless included). |
+| `mana_value` | number | No | Compared with `mana_value_op`. |
+| `mana_value_op` | string | No | `eq` (default), `lt`, `lte`, `gt`, `gte`. |
+| `type` | string | No | A card type: `Creature`, `Planeswalker`, `Battle`, `Instant`, `Sorcery`, `Artifact`, `Enchantment` or `Land`. Matches the primary type, and any type of the card's type line (an artifact creature is also an `Artifact`). |
+| `subtype` | string | No | Part of the subtypes, after the dash of the type line (`elf`, `vehicle`…), case-insensitive. At most 50 characters. |
+| `legal_in` | string | No | A Scryfall format (`commander`, `modern`, `pioneer`, `standard`, `pauper`, `legacy`, `vintage`…): only cards legal or restricted in it. |
+| `color_count` | int | No | Number of colors, `0` to `5`. |
+| `foil` | bool | No | `true` for foil cards only, `false` for non-foil ones. |
+| `storage_type` | string | No | Only cards in a storage of this type (`binder`, `box`, `deckbox`…), case-insensitive. |
+
+`type` (beyond the primary type), `subtype` and `legal_in` rely on each printing's type line and legalities, which the API fetches from Scryfall in the background: a newly added printing becomes searchable by them within a few minutes, and legalities are refreshed every day so bans show up.
 
 **Example**
 ```

@@ -310,6 +310,12 @@ func (h *Handler) getCards(ctx *gin.Context) {
 		}
 	}
 
+	advanced, err := parseAdvancedFilters(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	groupBy := ctx.Query("group")
 	switch groupBy {
 	case "", "type", "color", "mana":
@@ -342,6 +348,16 @@ func (h *Handler) getCards(ctx *gin.Context) {
 		ColorIdentity: colorIdentity,
 		Stack:         stack,
 		Name:          ctx.Query("name"),
+		Colors:        advanced.Colors,
+		ColorMode:     advanced.ColorMode,
+		ManaValue:     advanced.ManaValue,
+		ManaValueOp:   advanced.ManaValueOp,
+		Type:          advanced.Type,
+		Subtype:       advanced.Subtype,
+		LegalIn:       advanced.LegalIn,
+		ColorCount:    advanced.ColorCount,
+		Foil:          advanced.Foil,
+		StorageType:   advanced.StorageType,
 		GroupBy:       groupBy,
 		SortField:     sortField,
 		SortDesc:      sortDesc,

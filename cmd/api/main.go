@@ -30,6 +30,7 @@ import (
 	"Melrakkiie/Tamiyo/internal/httplog"
 	"Melrakkiie/Tamiyo/internal/mail"
 	"Melrakkiie/Tamiyo/internal/passwordreset"
+	"Melrakkiie/Tamiyo/internal/printing"
 	"Melrakkiie/Tamiyo/internal/ratelimit"
 	"Melrakkiie/Tamiyo/internal/scryfall"
 	"Melrakkiie/Tamiyo/internal/security"
@@ -128,6 +129,10 @@ func main() {
 
 	healthHandler := health.NewHandler(db)
 
+	refresherCtx, stopRefresher := context.WithCancel(context.Background())
+	defer stopRefresher()
+	go printing.NewRefresher(printing.NewPostgresRepository(db), scryfall.NewClient(), logger).Run(refresherCtx)
+
 	authLimiter := ratelimit.NewLimiter(cfg.AuthRateLimitMax, cfg.AuthRateLimitWindow)
 	shareLimiter := ratelimit.NewLimiter(cfg.ShareRateLimitMax, cfg.ShareRateLimitWindow)
 
@@ -182,6 +187,7 @@ func main() {
 	stop()
 
 	logger.Info("shutting down server")
+	stopRefresher()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -74,7 +74,7 @@ func getTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
 
 	_, err := testDB.Exec(`
-		TRUNCATE TABLE tamiyo.card_deck, tamiyo.deck, tamiyo.cards, tamiyo.storage, tamiyo.users
+		TRUNCATE TABLE tamiyo.card_deck, tamiyo.deck, tamiyo.cards, tamiyo.storage, tamiyo.users, tamiyo.printings
 		RESTART IDENTITY CASCADE
 	`)
 	require.NoError(t, err)
@@ -924,4 +924,75 @@ func TestPostgresRepository_FindAll_DoesNotStackProxiesWithRealCopies(t *testing
 		quantities[c.Proxy] = len(c.CopyIDs)
 	}
 	assert.Equal(t, map[bool]int{false: 1, true: 2}, quantities)
+}
+
+func TestPostgresRepository_FindAll_AdvancedFilters(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+
+	var binderID, deckboxID int
+	require.NoError(t, db.Get(&binderID, `INSERT INTO tamiyo.storage (user_id, name, type) VALUES ($1, 'Binder', 'binder') RETURNING id`, userID))
+	require.NoError(t, db.Get(&deckboxID, `INSERT INTO tamiyo.storage (user_id, name, type) VALUES ($1, 'Kess', 'Deckbox ') RETURNING id`, userID))
+
+	type seed struct {
+		name, scryfallID, colors, cardType, typeLine string
+		manaValue                                    float64
+		foil                                         bool
+		storageID                                    *int
+		legal                                        []string
+	}
+	seeds := []seed{
+		{"Llanowar Elves", "11111111-1111-1111-1111-111111111111", "G", "Creature", "Creature — Elf Druid", 1, false, &binderID, []string{"modern", "commander"}},
+		{"Lightning Helix", "22222222-2222-2222-2222-222222222222", "RW", "Instant", "Instant", 2, true, &deckboxID, []string{"modern", "commander"}},
+		{"Sol Ring", "33333333-3333-3333-3333-333333333333", "", "Artifact", "Artifact", 1, false, &deckboxID, []string{"commander"}},
+		{"Esika's Chariot", "44444444-4444-4444-4444-444444444444", "G", "Artifact", "Legendary Artifact — Vehicle", 4, true, nil, []string{"commander", "pioneer"}},
+		{"Grist, the Hunger Tide", "55555555-5555-5555-5555-555555555555", "BG", "Planeswalker", "Legendary Planeswalker — Grist", 3, false, &binderID, []string{"modern"}},
+		{"Unknown", "66666666-6666-6666-6666-666666666666", "", "", "", 7, false, nil, nil},
+	}
+	for _, s := range seeds {
+		c := Card{Name: s.name, ScryfallID: s.scryfallID, SetCode: "tst", CollectorNumber: "1", Foil: s.foil, StorageID: s.storageID, ManaValue: s.manaValue}
+		if s.name != "Unknown" {
+			colors, cardType := s.colors, s.cardType
+			c.Colors, c.CardType, c.ColorIdentity = &colors, &cardType, &colors
+		}
+		_, err := repo.Create(ctx, userID, c)
+		require.NoError(t, err)
+		if s.typeLine != "" {
+			_, err = db.Exec(`INSERT INTO tamiyo.printings (scryfall_id, type_line, legal_formats) VALUES ($1, $2, $3)`, s.scryfallID, s.typeLine, pq.Array(s.legal))
+			require.NoError(t, err)
+		}
+	}
+
+	names := func(filter CardFilter) []string {
+		t.Helper()
+		filter.Page, filter.Limit, filter.SortField = 1, 25, "name"
+		result, _, err := repo.FindAll(ctx, userID, filter)
+		require.NoError(t, err)
+		out := make([]string, len(result))
+		for i, c := range result {
+			out[i] = c.Name
+		}
+		return out
+	}
+	str := func(s string) *string { return &s }
+	num := func(f float64) *float64 { return &f }
+	count := func(i int) *int { return &i }
+	yes := true
+
+	assert.Equal(t, []string{"Esika's Chariot", "Llanowar Elves"}, names(CardFilter{Colors: str("G"), ColorMode: ColorModeExact}))
+	assert.Equal(t, []string{"Esika's Chariot", "Grist, the Hunger Tide", "Llanowar Elves"}, names(CardFilter{Colors: str("G"), ColorMode: ColorModeInclude}))
+	assert.Equal(t, []string{"Esika's Chariot", "Llanowar Elves", "Sol Ring"}, names(CardFilter{Colors: str("G"), ColorMode: ColorModeWithin}))
+	assert.Equal(t, []string{"Sol Ring"}, names(CardFilter{Colors: str(""), ColorMode: ColorModeExact}))
+	assert.Equal(t, []string{"Esika's Chariot", "Grist, the Hunger Tide", "Unknown"}, names(CardFilter{ManaValue: num(3), ManaValueOp: "gte"}))
+	assert.Equal(t, []string{"Llanowar Elves", "Sol Ring"}, names(CardFilter{ManaValue: num(1), ManaValueOp: "eq"}))
+	assert.Equal(t, []string{"Esika's Chariot", "Sol Ring"}, names(CardFilter{Type: "Artifact"}))
+	assert.Equal(t, []string{"Llanowar Elves"}, names(CardFilter{Subtype: "elf"}))
+	assert.Equal(t, []string{"Esika's Chariot"}, names(CardFilter{Subtype: "vehicle", Type: "Artifact"}))
+	assert.Equal(t, []string{"Esika's Chariot"}, names(CardFilter{LegalIn: "pioneer"}))
+	assert.Equal(t, []string{"Grist, the Hunger Tide", "Lightning Helix"}, names(CardFilter{ColorCount: count(2)}))
+	assert.Equal(t, []string{"Esika's Chariot", "Lightning Helix"}, names(CardFilter{Foil: &yes}))
+	assert.Equal(t, []string{"Lightning Helix", "Sol Ring"}, names(CardFilter{StorageType: "deckbox"}))
+	assert.Equal(t, []string{"Lightning Helix"}, names(CardFilter{StorageType: "deckbox", LegalIn: "modern", Stack: true}))
 }

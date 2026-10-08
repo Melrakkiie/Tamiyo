@@ -33,6 +33,17 @@ type CardFilter struct {
 	ColorIdentity *string
 	Stack         bool
 
+	Colors      *string
+	ColorMode   string
+	ManaValue   *float64
+	ManaValueOp string
+	Type        string
+	Subtype     string
+	LegalIn     string
+	ColorCount  *int
+	Foil        *bool
+	StorageType string
+
 	GroupBy   string
 	SortField string
 	SortDesc  bool
@@ -58,4 +69,26 @@ type Details struct {
 	CardType      string
 	ColorIdentity string
 	ManaValue     float64
+}
+
+const (
+	ColorModeExact   = "exact"
+	ColorModeInclude = "include"
+	ColorModeWithin  = "within"
+)
+
+var manaValueOperators = map[string]string{
+	"eq":  "=",
+	"lt":  "<",
+	"lte": "<=",
+	"gt":  ">",
+	"gte": ">=",
+}
+
+var legalFormats = map[string]bool{
+	"standard": true, "future": true, "historic": true, "timeless": true, "gladiator": true,
+	"pioneer": true, "explorer": true, "modern": true, "legacy": true, "pauper": true,
+	"vintage": true, "penny": true, "commander": true, "oathbreaker": true, "standardbrawl": true,
+	"brawl": true, "alchemy": true, "paupercommander": true, "duel": true, "oldschool": true,
+	"premodern": true, "predh": true,
 }

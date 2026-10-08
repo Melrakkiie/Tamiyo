@@ -518,6 +518,79 @@ paths:
           description: >
             Sort field, with an optional "-" prefix for descending order.
             id is always used as a secondary tie-breaker for a stable order.
+        - name: colors
+          in: query
+          required: false
+          schema:
+            type: string
+          description: WUBRG letters, read with color_mode. Cards whose colors aren't known are left out.
+        - name: color_mode
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [exact, include, within]
+            default: exact
+          description: >
+            exact (exactly these colors; an empty colors keeps colorless
+            cards), include (at least these colors) or within (only colors
+            among these, colorless included).
+        - name: mana_value
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 0
+        - name: mana_value_op
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [eq, lt, lte, gt, gte]
+            default: eq
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [Creature, Planeswalker, Battle, Instant, Sorcery, Artifact, Enchantment, Land]
+          description: >
+            Matches the primary type and any type of the card's type line
+            (fetched from Scryfall in the background).
+        - name: subtype
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 50
+          description: Part of the subtypes, after the dash of the type line, case-insensitive.
+        - name: legal_in
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >
+            A Scryfall format (commander, modern, pioneer…): only cards legal
+            or restricted in it. Legalities are refreshed daily.
+        - name: color_count
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 5
+        - name: foil
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: storage_type
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 50
+          description: Only cards in a storage of this type, case-insensitive.
         - name: group
           in: query
           required: false
