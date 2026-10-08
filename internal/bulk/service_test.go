@@ -394,6 +394,8 @@ Atraxa Deck,deck,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
 	require.Len(t, decks.created, 1)
 	assert.Equal(t, "commander", decks.created[0].Format)
 	assert.Equal(t, []int{cards.created[0].ID}, decks.linkedCards[decks.created[0].ID])
+	require.Len(t, storages.created, 1)
+	assert.Equal(t, "deckbox", storages.created[0].Type)
 }
 
 func TestImportManaBox_ReusesSameDeckAcrossMultipleRows(t *testing.T) {

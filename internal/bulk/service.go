@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"Melrakkiie/Tamiyo/internal/card"
 	"Melrakkiie/Tamiyo/internal/deck"
@@ -12,6 +13,26 @@ import (
 )
 
 const defaultManaBoxDeckFormat = "commander"
+
+const (
+	manaBoxDeckBinderType = "deck"
+	deckboxStorageType    = "deckbox"
+)
+
+func storageTypeFromManaBox(binderType string) string {
+	if strings.EqualFold(strings.TrimSpace(binderType), manaBoxDeckBinderType) {
+		return deckboxStorageType
+	}
+	return binderType
+}
+
+func manaBoxBinderType(storageType string) string {
+	switch strings.ToLower(strings.TrimSpace(storageType)) {
+	case deckboxStorageType, manaBoxDeckBinderType:
+		return manaBoxDeckBinderType
+	}
+	return storageType
+}
 
 type cardService interface {
 	CreateCard(ctx context.Context, userID string, c card.Card) (card.Card, error)
@@ -100,7 +121,7 @@ func (s *Service) ImportManaBox(ctx context.Context, userID string, targetStorag
 		if targetStorageID != nil {
 			storageID = *targetStorageID
 		} else {
-			id, created, err := s.getOrCreateStorage(ctx, userID, storageCache, row.BinderName, row.BinderType)
+			id, created, err := s.getOrCreateStorage(ctx, userID, storageCache, row.BinderName, storageTypeFromManaBox(row.BinderType))
 			if err != nil {
 				return summary, fmt.Errorf("line %d: creating storage %q: %w", row.LineNo, row.BinderName, err)
 			}
@@ -109,7 +130,7 @@ func (s *Service) ImportManaBox(ctx context.Context, userID string, targetStorag
 			}
 			storageID = id
 
-			if row.BinderType == "deck" {
+			if row.BinderType == manaBoxDeckBinderType {
 				id, created, err := s.getOrCreateDeck(ctx, userID, deckCache, row.BinderName, defaultManaBoxDeckFormat)
 				if err != nil {
 					return summary, fmt.Errorf("line %d: creating deck %q: %w", row.LineNo, row.BinderName, err)

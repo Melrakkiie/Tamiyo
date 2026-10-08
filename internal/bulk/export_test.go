@@ -37,17 +37,22 @@ func TestExportManaBox_GroupsIdenticalCardsByStorageIntoOneRowWithQuantity(t *te
 	assert.Equal(t, 1, len(splitCSVLines(out))-1) // the two identical copies collapse into a single row
 }
 
-func TestExportManaBox_UsesDeckBinderTypeForDeckStorages(t *testing.T) {
+func TestExportManaBox_UsesDeckBinderTypeForDeckboxStorages(t *testing.T) {
 	cards := &fakeCardService{allCards: []card.Card{
 		{Name: "Sol Ring", SetCode: "CMM", CollectorNumber: "123", StorageID: ptr(9)},
+		{Name: "Island", SetCode: "NEO", CollectorNumber: "294", StorageID: ptr(10)},
 	}}
-	storages := &fakeStorageService{storages: []storage.Storage{{ID: 9, Name: "Atraxa Deck", Type: "deck"}}}
+	storages := &fakeStorageService{storages: []storage.Storage{
+		{ID: 9, Name: "Atraxa Deck", Type: "deckbox"},
+		{ID: 10, Name: "Old Deck", Type: "Deck"},
+	}}
 	svc := NewService(cards, storages, &fakeDeckService{}, &fakeResolver{})
 
 	var buf bytes.Buffer
 	require.NoError(t, svc.ExportManaBox(context.Background(), testUserID, nil, &buf))
 
 	assert.Contains(t, buf.String(), "Atraxa Deck,deck,Sol Ring,CMM,,123,,1")
+	assert.Contains(t, buf.String(), "Old Deck,deck,Island,NEO,,294,,1")
 }
 
 func TestExportManaBox_GroupsCardsWithNilStorageUnderUnsortedBucketSortedLast(t *testing.T) {

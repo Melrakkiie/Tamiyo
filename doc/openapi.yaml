@@ -1813,8 +1813,9 @@ paths:
       summary: Bulk import a ManaBox collection export
       description: >
         Imports a ManaBox_Collection.csv export. For each row, gets or
-        creates the matching storage (Binder Name/Binder Type), gets or
-        creates a deck too if Binder Type is "deck" (format defaults to
+        creates the matching storage (Binder Name/Binder Type, a "deck"
+        binder becoming a storage of type "deckbox"), gets or creates a
+        deck too if Binder Type is "deck" (format defaults to
         "commander" — correct it afterwards with PATCH /deck/:id if
         needed), creates one card per physical copy (Quantity), and links
         deck cards accordingly. The export already carries the Scryfall ID
@@ -1981,7 +1982,7 @@ paths:
         with no storage is grouped under a synthetic "Unsorted" binder
         rather than dropped. A card's deck membership is tracked
         independently of storage in Tamiyo and isn't reflected here —
-        only a storage whose own type is "deck" is exported as
+        only a storage whose own type is "deckbox" is exported as
         Binder Type "deck".
       parameters:
         - name: storage_id

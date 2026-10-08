@@ -3,7 +3,8 @@
 Import a ManaBox collection export (CSV) into the Tamiyo API.
 
 For each row:
-  - Gets or creates the Storage matching "Binder Name" (type = "Binder Type").
+  - Gets or creates the Storage matching "Binder Name" (type = "Binder Type",
+    a "deck" binder becoming a "deckbox" storage).
   - If "Binder Type" is "deck", also gets or creates a Deck with the same name.
   - Creates one Card per physical copy ("Quantity"), attached to the storage.
   - If the row belongs to a deck, links each created card to that deck.
@@ -221,7 +222,8 @@ def main():
             foil = row["Foil"] == "foil"
             quantity = int(row["Quantity"])
 
-            storage_id = get_or_create_storage(client, storage_cache, binder_name, binder_type)
+            storage_type = "deckbox" if binder_type == "deck" else binder_type
+            storage_id = get_or_create_storage(client, storage_cache, binder_name, storage_type)
 
             deck_id = None
             if binder_type == "deck":

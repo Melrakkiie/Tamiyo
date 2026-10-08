@@ -66,7 +66,7 @@ func (s *Service) ExportManaBox(ctx context.Context, userID string, storageID *i
 			infoByBucket[bucketID] = bucketInfo{name: "Unsorted", typ: "binder", order: math.MaxInt32}
 		case storagesByID[bucketID].ID != 0:
 			st := storagesByID[bucketID]
-			infoByBucket[bucketID] = bucketInfo{name: st.Name, typ: st.Type, order: bucketID}
+			infoByBucket[bucketID] = bucketInfo{name: st.Name, typ: manaBoxBinderType(st.Type), order: bucketID}
 		default:
 			infoByBucket[bucketID] = bucketInfo{name: fmt.Sprintf("storage-%d", bucketID), typ: "binder", order: bucketID}
 		}
