@@ -36,7 +36,7 @@ func (h *Handler) registerTagRoutes(router gin.IRoutes) {
 	router.DELETE("/deck/:id/tags", h.deleteTag)
 }
 
-func (h *Handler) tagRequestContext(ctx *gin.Context) (string, string, bool) {
+func (h *Handler) deckRequestContext(ctx *gin.Context) (string, string, bool) {
 	userID, ok := auth.UserIDFromContext(ctx)
 	if !ok {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
@@ -69,7 +69,7 @@ func toTaggedCardResponse(c TaggedCard) taggedCardResponse {
 }
 
 func (h *Handler) getDeckTags(ctx *gin.Context) {
-	userID, deckID, ok := h.tagRequestContext(ctx)
+	userID, deckID, ok := h.deckRequestContext(ctx)
 	if !ok {
 		return
 	}
@@ -91,7 +91,7 @@ func (h *Handler) getDeckTags(ctx *gin.Context) {
 }
 
 func (h *Handler) setCardTags(ctx *gin.Context) {
-	userID, deckID, ok := h.tagRequestContext(ctx)
+	userID, deckID, ok := h.deckRequestContext(ctx)
 	if !ok {
 		return
 	}
@@ -111,7 +111,7 @@ func (h *Handler) setCardTags(ctx *gin.Context) {
 }
 
 func (h *Handler) renameTag(ctx *gin.Context) {
-	userID, deckID, ok := h.tagRequestContext(ctx)
+	userID, deckID, ok := h.deckRequestContext(ctx)
 	if !ok {
 		return
 	}
@@ -130,7 +130,7 @@ func (h *Handler) renameTag(ctx *gin.Context) {
 }
 
 func (h *Handler) deleteTag(ctx *gin.Context) {
-	userID, deckID, ok := h.tagRequestContext(ctx)
+	userID, deckID, ok := h.deckRequestContext(ctx)
 	if !ok {
 		return
 	}

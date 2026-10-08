@@ -55,6 +55,21 @@ type fakeRepository struct {
 	renamedTo    string
 	deletedTag   string
 	tagRepoCalls int
+
+	view      View
+	viewFound bool
+	savedView *View
+}
+
+func (f *fakeRepository) FindView(ctx context.Context, userID string, deckID string) (View, bool, error) {
+	f.lastUserID = userID
+	return f.view, f.viewFound, nil
+}
+
+func (f *fakeRepository) SaveView(ctx context.Context, userID string, deckID string, v View) error {
+	f.lastUserID = userID
+	f.savedView = &v
+	return nil
 }
 
 func (f *fakeRepository) FindCardTags(ctx context.Context, userID string, deckID string) ([]CardTag, error) {

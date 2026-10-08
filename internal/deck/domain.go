@@ -82,4 +82,5 @@ type Repository interface {
 
 	PendingRepository
 	TagRepository
+	ViewRepository
 }

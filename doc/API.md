@@ -846,6 +846,15 @@ Tagging changes the deck's `updated` date. Shared decks and the deck comparison 
 
 **Errors:** `400` invalid id, a missing field, a tag that's blank or over 40 characters, more than 20 tags · `404` deck not found, card not in the deck, unknown tag
 
+### Display settings (`/deck/:id/view`)
+
+How the owner last displayed the deck's cards, so the deck page opens the same way next time. It's the owner's own setting: shared decks don't use it. Changing it doesn't change the deck's `updated` date.
+
+- `GET /deck/:id/view` — `{ "grouping": "type", "sort": "mana_value" }`. Those are also the values before anything is saved.
+- `PUT /deck/:id/view` — save them. Body: `grouping` (`type`, `color`, `mana`, `storage`, `tag`, or `null` for no grouping) and `sort` (required, same values as the `sort` of `GET /deck/:id/cards`). Returns the saved settings.
+
+**Errors:** `400` invalid id, missing `sort`, unknown `grouping` or `sort` · `404` deck not found
+
 ---
 
 ## Deck Insights

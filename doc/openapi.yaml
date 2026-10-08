@@ -1210,6 +1210,72 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /deck/{id}/view:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    get:
+      tags: [decks]
+      summary: The owner's display settings for the deck page
+      description: >
+        Grouping and sort the owner last used to display the deck's cards.
+        Defaults to grouping by type, sorted by mana value, until saved.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeckView"
+        "400":
+          description: id is not a UUID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found (or not owned by the authenticated user).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    put:
+      tags: [decks]
+      summary: Save the owner's display settings for the deck page
+      description: Doesn't change the deck's updated date.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeckView"
+      responses:
+        "200":
+          description: The saved settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeckView"
+        "400":
+          description: Invalid id, missing sort, or unknown grouping or sort.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found (or not owned by the authenticated user).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /deck/{id}/tags:
     parameters:
       - $ref: "#/components/parameters/DeckID"
@@ -3059,6 +3125,19 @@ components:
           items:
             $ref: "#/components/schemas/ComparedCard"
       required: [deck, other, common, only_in_deck, only_in_other]
+
+    DeckView:
+      type: object
+      properties:
+        grouping:
+          type: string
+          nullable: true
+          enum: [type, color, mana, storage, tag]
+          description: null for no grouping.
+        sort:
+          type: string
+          enum: [name, -name, added, -added, updated, -updated, mana_value, -mana_value]
+      required: [grouping, sort]
 
     TaggedCard:
       type: object

@@ -177,6 +177,9 @@ type deckService interface {
 	SetCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) (TaggedCard, error)
 	RenameTag(ctx context.Context, userID string, deckID string, from string, to string) error
 	DeleteTag(ctx context.Context, userID string, deckID string, tag string) error
+
+	GetView(ctx context.Context, userID string, deckID string) (View, error)
+	SetView(ctx context.Context, userID string, deckID string, v View) (View, error)
 }
 
 type Handler struct {
@@ -205,6 +208,7 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.DELETE("/deck/:id/pending/:pending_id", h.removePendingCard)
 
 	h.registerTagRoutes(router)
+	h.registerViewRoutes(router)
 }
 
 func (h *Handler) getDecks(ctx *gin.Context) {

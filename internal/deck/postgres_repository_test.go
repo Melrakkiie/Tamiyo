@@ -1160,3 +1160,36 @@ func TestPostgresRepository_FindPendingCards_CountsOwnedCopiesOutsideTheDeck(t *
 	assert.Equal(t, 0, byName["Counterspell"].OwnedCopies)
 	assert.Equal(t, 0, byName["Counterspell"].OwnedSamePrinting)
 }
+
+func TestPostgresRepository_View(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	otherID := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+	d, err := repo.Create(ctx, userID, Deck{Name: "Kess", Format: "commander"})
+	require.NoError(t, err)
+	before, err := repo.FindByID(ctx, userID, d.ID)
+	require.NoError(t, err)
+
+	_, found, err := repo.FindView(ctx, userID, d.ID)
+	require.NoError(t, err)
+	assert.False(t, found)
+
+	grouping := "tag"
+	require.NoError(t, repo.SaveView(ctx, userID, d.ID, View{Grouping: &grouping, Sort: "-name"}))
+	require.NoError(t, repo.SaveView(ctx, userID, d.ID, View{Sort: "name"}))
+	v, found, err := repo.FindView(ctx, userID, d.ID)
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, View{Sort: "name"}, v)
+
+	after, err := repo.FindByID(ctx, userID, d.ID)
+	require.NoError(t, err)
+	assert.Equal(t, before.Updated, after.Updated)
+
+	assert.ErrorIs(t, repo.SaveView(ctx, otherID, d.ID, View{Sort: "name"}), ErrNotFound)
+	_, found, err = repo.FindView(ctx, otherID, d.ID)
+	require.NoError(t, err)
+	assert.False(t, found)
+}

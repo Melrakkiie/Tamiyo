@@ -55,6 +55,23 @@ type fakeService struct {
 	lastTags     []string
 	lastRenameTo string
 	lastTag      string
+
+	view     View
+	viewErr  error
+	lastView View
+}
+
+func (f *fakeService) GetView(ctx context.Context, userID string, deckID string) (View, error) {
+	f.lastDeckID = deckID
+	return f.view, f.viewErr
+}
+
+func (f *fakeService) SetView(ctx context.Context, userID string, deckID string, v View) (View, error) {
+	f.lastView = v
+	if f.viewErr != nil {
+		return View{}, f.viewErr
+	}
+	return v, nil
 }
 
 func (f *fakeService) GetCardTags(ctx context.Context, userID string, deckID string) (DeckTags, error) {
