@@ -1108,3 +1108,55 @@ func TestPostgresRepository_CardTags(t *testing.T) {
 	require.NoError(t, db.Get(&remaining, `SELECT count(*) FROM tamiyo.deck_card_tags`))
 	assert.Zero(t, remaining)
 }
+
+func TestPostgresRepository_FindPendingCards_CountsOwnedCopiesOutsideTheDeck(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	otherID := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+	d, err := repo.Create(ctx, userID, Deck{Name: "Kess", Format: "commander"})
+	require.NoError(t, err)
+	other, err := repo.Create(ctx, userID, Deck{Name: "Other", Format: "commander"})
+	require.NoError(t, err)
+
+	const solRingSLD = "11111111-1111-1111-1111-111111111111"
+	const solRingCMM = "22222222-2222-2222-2222-222222222222"
+	const solRingC21 = "33333333-3333-3333-3333-333333333333"
+	var ids []int
+	require.NoError(t, db.Select(&ids, `
+		INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value)
+		VALUES
+		    ($1, 'Sol Ring', $3, 'sld', '1011', false, null, 1),
+		    ($1, 'Sol Ring', $4, 'cmm', '464', false, null, 1),
+		    ($1, 'Sol Ring', $5, 'c21', '263', true, null, 1),
+		    ($1, 'Fire // Ice', '44444444-4444-4444-4444-444444444444', 'mh2', '290', false, null, 4),
+		    ($2, 'Counterspell', '55555555-5555-5555-5555-555555555555', 'mh2', '267', false, null, 2)
+		RETURNING id
+	`, userID, otherID, solRingSLD, solRingCMM, solRingC21))
+	linkCardToDeck(t, db, ids[1], d.ID)
+	linkCardToDeck(t, db, ids[2], other.ID)
+
+	for _, p := range []PendingCard{
+		{DeckID: d.ID, Name: "Sol Ring", ScryfallID: solRingSLD, SetCode: "sld", CollectorNumber: "1011", Quantity: 1},
+		{DeckID: d.ID, Name: "Fire / Ice", ScryfallID: "66666666-6666-6666-6666-666666666666", SetCode: "uma", CollectorNumber: "225", Quantity: 1},
+		{DeckID: d.ID, Name: "Counterspell", ScryfallID: "55555555-5555-5555-5555-555555555555", SetCode: "mh2", CollectorNumber: "267", Quantity: 2},
+	} {
+		_, err := repo.CreatePendingCard(ctx, userID, p)
+		require.NoError(t, err)
+	}
+
+	pending, err := repo.FindPendingCards(ctx, userID, d.ID)
+	require.NoError(t, err)
+	require.Len(t, pending, 3)
+	byName := map[string]PendingCard{}
+	for _, p := range pending {
+		byName[p.Name] = p
+	}
+	assert.Equal(t, 2, byName["Sol Ring"].OwnedCopies)
+	assert.Equal(t, 1, byName["Sol Ring"].OwnedSamePrinting)
+	assert.Equal(t, 1, byName["Fire / Ice"].OwnedCopies)
+	assert.Equal(t, 0, byName["Fire / Ice"].OwnedSamePrinting)
+	assert.Equal(t, 0, byName["Counterspell"].OwnedCopies)
+	assert.Equal(t, 0, byName["Counterspell"].OwnedSamePrinting)
+}

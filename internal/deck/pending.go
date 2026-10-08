@@ -23,6 +23,9 @@ type PendingCard struct {
 	CardType        *string
 	ColorIdentity   *string
 	Added           time.Time
+
+	OwnedCopies       int
+	OwnedSamePrinting int
 }
 
 type PendingRepository interface {

@@ -865,7 +865,7 @@ func TestHandler_RemoveCardFromDeck_ReturnsErrorOnServiceFailure(t *testing.T) {
 }
 
 func TestHandler_GetPendingCards_ReturnsTheList(t *testing.T) {
-	service := &fakeService{pending: []PendingCard{{ID: 1, DeckID: "00000000-0000-0000-0000-000000000002", Name: "Sol Ring", Quantity: 2}}}
+	service := &fakeService{pending: []PendingCard{{ID: 1, DeckID: "00000000-0000-0000-0000-000000000002", Name: "Sol Ring", Quantity: 2, OwnedCopies: 3, OwnedSamePrinting: 1}}}
 	router := setupRouter(service)
 
 	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000002/pending", nil)
@@ -878,6 +878,10 @@ func TestHandler_GetPendingCards_ReturnsTheList(t *testing.T) {
 	require.Len(t, response, 1)
 	assert.Equal(t, "Sol Ring", response[0].Name)
 	assert.Equal(t, 2, response[0].Quantity)
+	assert.Equal(t, 3, response[0].OwnedCopies)
+	assert.Equal(t, 1, response[0].OwnedSamePrinting)
+	assert.Contains(t, w.Body.String(), `"owned_copies":3`)
+	assert.Contains(t, w.Body.String(), `"owned_same_printing":1`)
 }
 
 func TestHandler_GetPendingCards_ReturnsNotFoundForAnotherUsersDeck(t *testing.T) {

@@ -27,6 +27,9 @@ type pendingCardResponse struct {
 	CardType        *string `json:"card_type"`
 	ColorIdentity   *string `json:"color_identity"`
 	Added           string  `json:"added"`
+
+	OwnedCopies       int `json:"owned_copies"`
+	OwnedSamePrinting int `json:"owned_same_printing"`
 }
 
 func toPendingResponse(p PendingCard) pendingCardResponse {
@@ -44,6 +47,9 @@ func toPendingResponse(p PendingCard) pendingCardResponse {
 		CardType:        p.CardType,
 		ColorIdentity:   p.ColorIdentity,
 		Added:           p.Added.Format("2006-01-02 15:04:05"),
+
+		OwnedCopies:       p.OwnedCopies,
+		OwnedSamePrinting: p.OwnedSamePrinting,
 	}
 }
 

@@ -22,6 +22,9 @@ type pendingRow struct {
 	CardType        *string   `db:"card_type"`
 	ColorIdentity   *string   `db:"color_identity"`
 	Added           time.Time `db:"added"`
+
+	OwnedCopies       int `db:"owned_copies"`
+	OwnedSamePrinting int `db:"owned_same_printing"`
 }
 
 func (r pendingRow) toDomain() PendingCard {
@@ -39,6 +42,9 @@ func (r pendingRow) toDomain() PendingCard {
 		CardType:        r.CardType,
 		ColorIdentity:   r.ColorIdentity,
 		Added:           r.Added,
+
+		OwnedCopies:       r.OwnedCopies,
+		OwnedSamePrinting: r.OwnedSamePrinting,
 	}
 }
 
@@ -46,7 +52,19 @@ const pendingColumns = `id, deck_id, name, scryfall_id, set_code, collector_numb
 
 func (r *PostgresRepository) FindPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error) {
 	var rows []pendingRow
-	query := `SELECT ` + pendingColumns + ` FROM tamiyo.deck_pending_cards WHERE user_id = $1 AND deck_id = $2 ORDER BY name, id`
+	query := `
+		WITH available AS (
+			SELECT c.scryfall_id, ` + normalizedNameSQL("c.name") + ` AS name_key
+			FROM tamiyo.cards c
+			WHERE c.user_id = $1
+			  AND NOT EXISTS (SELECT 1 FROM tamiyo.card_deck cd WHERE cd.card_id = c.id AND cd.deck_id = $2)
+		)
+		SELECT ` + pendingColumns + `,
+			(SELECT count(*) FROM available a WHERE a.name_key = ` + normalizedNameSQL("p.name") + `) AS owned_copies,
+			(SELECT count(*) FROM available a WHERE a.scryfall_id = p.scryfall_id) AS owned_same_printing
+		FROM tamiyo.deck_pending_cards p
+		WHERE p.user_id = $1 AND p.deck_id = $2
+		ORDER BY p.name, p.id`
 	if err := r.db.SelectContext(ctx, &rows, query, userID, deckID); err != nil {
 		return nil, err
 	}
@@ -55,6 +73,10 @@ func (r *PostgresRepository) FindPendingCards(ctx context.Context, userID string
 		cards = append(cards, row.toDomain())
 	}
 	return cards, nil
+}
+
+func normalizedNameSQL(column string) string {
+	return `lower(btrim(regexp_replace(replace(` + column + `, '//', '/'), '\s+', ' ', 'g')))`
 }
 
 func (r *PostgresRepository) CreatePendingCard(ctx context.Context, userID string, p PendingCard) (PendingCard, error) {

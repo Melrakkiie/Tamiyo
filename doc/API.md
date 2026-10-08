@@ -821,7 +821,7 @@ Remove a card from a deck. **Idempotent** — always returns success, whether or
 
 Cards wanted in a deck but not in the collection yet (typically picked on Scryfall from the deck page). They are stored per deck until they're added to the collection all at once.
 
-- `GET /deck/:id/pending` — the list, sorted by name.
+- `GET /deck/:id/pending` — the list, sorted by name. Each item also tells what the collection already holds, outside this deck: `owned_copies` counts the cards of the same name (any printing, ` / ` and ` // ` alike, including copies in other decks), and `owned_same_printing` those of this exact printing. A client can tell a card missing from the collection (`0`) from one owned in another printing. Both are `0` in the responses of the routes below.
 - `POST /deck/:id/pending` — add one. Body: `name`, `scryfall_id`, `set_code`, `collector_number` (required), `foil`, `quantity` (1–100, default 1), `mana_value`, `colors`, `card_type`, `color_identity` (same rules as `POST /cards`). Returns `201` with the item. If the deck already has a pending card of the same printing and finish (other than its pending commander), its quantity is raised instead and that item is returned.
 - `PATCH /deck/:id/pending/:pending_id` — change how many copies it stands for. Body: `{ "quantity": 12 }` (1–1000). Returns the item.
 - `DELETE /deck/:id/pending/:pending_id` — remove one. `204`, or `404` if it doesn't exist.

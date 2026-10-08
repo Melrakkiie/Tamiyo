@@ -2588,7 +2588,18 @@ components:
           nullable: true
         added:
           type: string
-      required: [id, deck_id, name, scryfall_id, set_code, collector_number, foil, quantity, mana_value, added]
+        owned_copies:
+          type: integer
+          description: >
+            Cards of the same name in the collection, any printing, outside
+            this deck (copies in other decks count). Only computed by
+            GET /deck/{id}/pending, 0 elsewhere.
+        owned_same_printing:
+          type: integer
+          description: >
+            Among them, the copies of this exact printing. Only computed by
+            GET /deck/{id}/pending, 0 elsewhere.
+      required: [id, deck_id, name, scryfall_id, set_code, collector_number, foil, quantity, mana_value, added, owned_copies, owned_same_printing]
 
     AddPendingCardRequest:
       type: object
