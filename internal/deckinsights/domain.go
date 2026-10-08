@@ -9,6 +9,7 @@ var ErrScryfallUnavailable = errors.New("could not resolve cards against scryfal
 type LegalityIssue struct {
 	CardID   int    `json:"card_id,omitempty"`
 	CardName string `json:"card_name"`
+	Board    string `json:"board,omitempty"`
 	Reason   string `json:"reason"`
 }
 

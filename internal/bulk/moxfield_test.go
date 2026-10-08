@@ -130,10 +130,10 @@ func TestParseMoxfieldDeckList_ParsesAPlainList(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, lines, 5)
-	assert.Equal(t, moxfieldDeckLine{LineNo: 1, Quantity: 4, CardName: "Lightning Bolt"}, lines[0])
-	assert.Equal(t, moxfieldDeckLine{LineNo: 2, Quantity: 1, CardName: "Sol Ring"}, lines[1])
+	assert.Equal(t, moxfieldDeckLine{LineNo: 1, Quantity: 4, CardName: "Lightning Bolt", Board: "main"}, lines[0])
+	assert.Equal(t, moxfieldDeckLine{LineNo: 2, Quantity: 1, CardName: "Sol Ring", Board: "main"}, lines[1])
 	assert.Equal(t, "Fire // Ice", lines[2].CardName)
-	assert.Equal(t, moxfieldDeckLine{LineNo: 4, Quantity: 2, CardName: "Island", Foil: true}, lines[3])
+	assert.Equal(t, moxfieldDeckLine{LineNo: 4, Quantity: 2, CardName: "Island", Foil: true, Board: "main"}, lines[3])
 	assert.Equal(t, "DMR", lines[4].SetCode)
 	assert.Equal(t, "45", lines[4].CollectorNumber)
 }
@@ -147,6 +147,20 @@ func TestParseMoxfieldDeckList_SkipsSectionHeaders(t *testing.T) {
 	require.Len(t, lines, 2)
 	assert.Equal(t, "Maeve, Insidious Singer", lines[0].CardName)
 	assert.Equal(t, 32, lines[1].Quantity)
+}
+
+func TestParseMoxfieldDeckList_AssignsSectionsToBoards(t *testing.T) {
+	list := "1 Maeve, Insidious Singer\n\nSIDEBOARD:\n1 Duress\n\nMaybeboard\n1 Thoughtseize\n\nConsidering:\n1 Opt\nDeck\n1 Island\n"
+
+	lines, err := parseMoxfieldDeckList(strings.NewReader(list))
+
+	require.NoError(t, err)
+	require.Len(t, lines, 5)
+	boards := make([]string, 0, len(lines))
+	for _, line := range lines {
+		boards = append(boards, line.Board)
+	}
+	assert.Equal(t, []string{"main", "sideboard", "considering", "considering", "main"}, boards)
 }
 
 func TestParseMoxfieldDeckList_RejectsUnrecognizedLine(t *testing.T) {

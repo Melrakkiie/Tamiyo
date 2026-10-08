@@ -1215,13 +1215,13 @@ paths:
             id is always used as a secondary tie-breaker for a stable order.
       responses:
         "200":
-          description: OK (empty array if the deck has no cards)
+          description: OK (empty array if the deck has no cards). Every board is returned.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Card"
+                  $ref: "#/components/schemas/DeckCard"
         "400":
           $ref: "#/components/responses/InvalidID"
         "401":
@@ -1239,15 +1239,25 @@ paths:
       - $ref: "#/components/parameters/CardIDPath"
     put:
       tags: [deck-cards]
-      summary: Add a card to a deck
+      summary: Add a card to a deck, or move it to another board
       description: >
-        Idempotent: calling this again with the same id/card_id succeeds
-        silently if the card is already in the deck.
+        Idempotent: calling this again with the same id/card_id and board
+        succeeds silently. A card already in the deck is moved to the given
+        board. The deck's commander can't leave the main board.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                board:
+                  $ref: "#/components/schemas/DeckBoard"
       responses:
         "204":
           description: No Content
         "400":
-          description: id is not a UUID, or card_id is not a valid integer
+          description: id is not a UUID, card_id is not a valid integer, or board is unknown
           content:
             application/json:
               schema:
@@ -1256,6 +1266,12 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           description: Deck not found or card not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The card is the deck's commander and board isn't main
           content:
             application/json:
               schema:
@@ -1519,9 +1535,9 @@ paths:
       tags: [deck-cards]
       summary: Add a card to the deck's pending list
       description: >
-        When the deck already has a pending card of the same printing and
-        finish (other than its pending commander), its quantity is raised
-        instead, and that item is returned.
+        When the deck already has a pending card of the same printing,
+        finish and board (other than its pending commander), its quantity
+        is raised instead, and that item is returned.
       requestBody:
         required: true
         content:
@@ -1561,19 +1577,25 @@ paths:
         description: Pending card ID
     patch:
       tags: [deck-cards]
-      summary: Change how many copies a pending card stands for
+      summary: Change how many copies a pending card stands for, or its board
+      description: >
+        At least one of quantity and board is required. Moved onto a board
+        that already has a pending card of the same printing and finish,
+        the two are merged and the remaining item is returned. The pending
+        commander can't leave the main board.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [quantity]
               properties:
                 quantity:
                   type: integer
                   minimum: 1
                   maximum: 1000
+                board:
+                  $ref: "#/components/schemas/DeckBoard"
       responses:
         "200":
           description: OK
@@ -1582,7 +1604,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/PendingCard"
         "400":
-          description: Invalid id, pending_id or quantity
+          description: Invalid id, pending_id, quantity or board, or neither quantity nor board
           content:
             application/json:
               schema:
@@ -1591,6 +1613,12 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           description: Deck or pending card not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The pending card is the deck's commander and board isn't main
           content:
             application/json:
               schema:
@@ -1621,7 +1649,9 @@ paths:
       description: >
         Creates one card per copy of every pending card (or only the one
         given as pending_id), in the given storage (or without storage),
-        adds each one to the deck, and removes it from the pending list. Items are handled one at a time: if something fails,
+        adds each one to the deck on the board it was pending on, and
+        removes it from the pending list. Without pending_id, pending cards
+        on the considering board are left out. Items are handled one at a time: if something fails,
         the items already handled stay done and the rest stay pending.
       requestBody:
         required: false
@@ -1680,14 +1710,16 @@ paths:
         1011 *F*", resolved by set and collector number against Scryfall),
         a plain "4 Lightning Bolt" list (resolved by name, any owned
         printing can be used, missing copies are added in Scryfall's
-        default printing), or a mix of both; section headers such as
-        Commander or Deck are skipped. Owned copies go in the deck
+        default printing), or a mix of both. Owned copies go in the deck
         (cards_linked), copies in no deck and of the same finish first,
         each copy used once and copies already in this deck never used
-        twice; missing copies become pending cards (cards_pending). With
-        commander_from_first_line, the first card line becomes the
-        commander only if the deck has none yet: an owned one becomes
-        commander_id, a missing one the pending commander.
+        twice; missing copies become pending cards (cards_pending). Section
+        headers choose the board of the lines below them: Sideboard for
+        sideboard, Maybeboard or Considering for considering, main
+        otherwise. With commander_from_first_line, the first card line of
+        the main board becomes the commander only if the deck has none
+        yet: an owned one becomes commander_id, a missing one the pending
+        commander.
       requestBody:
         required: true
         content:
@@ -2235,7 +2267,11 @@ paths:
         commander. plain: one line per card name, "4 Lightning Bolt",
         the commander first. arena: MTG Arena's format, a "Commander"
         section (when the deck has one) then a "Deck" section, one line per
-        card name, split cards written with " // ".
+        card name, split cards written with " // ". The sideboard follows in
+        a section of its own ("SIDEBOARD:" in moxfield, "Sideboard"
+        otherwise), then the considered cards ("MAYBEBOARD:" in moxfield,
+        "Maybeboard" in plain, left out of arena), each section only when
+        it has cards.
       parameters:
         - name: format
           in: query
@@ -2414,6 +2450,24 @@ components:
             $ref: "#/components/schemas/Error"
 
   schemas:
+    DeckBoard:
+      type: string
+      enum: [main, sideboard, considering]
+      default: main
+      description: >
+        Where a card sits in its deck: the deck itself, its sideboard, or the
+        cards being considered for it. Only main counts in card counts,
+        statistics, the deck size and comparisons.
+
+    DeckCard:
+      allOf:
+        - $ref: "#/components/schemas/Card"
+        - type: object
+          properties:
+            board:
+              $ref: "#/components/schemas/DeckBoard"
+          required: [board]
+
     LegalityIssue:
       type: object
       properties:
@@ -2422,6 +2476,8 @@ components:
         card_name:
           type: string
           description: Empty for an issue about the whole deck, such as its size.
+        board:
+          $ref: "#/components/schemas/DeckBoard"
         reason:
           type: string
       required: [card_name, reason]
@@ -2735,6 +2791,8 @@ components:
         color_identity:
           type: string
           nullable: true
+        board:
+          $ref: "#/components/schemas/DeckBoard"
         added:
           type: string
         owned_copies:
@@ -2748,7 +2806,7 @@ components:
           description: >
             Among them, the copies of this exact printing. Only computed by
             GET /deck/{id}/pending, 0 elsewhere.
-      required: [id, deck_id, name, scryfall_id, set_code, collector_number, foil, quantity, mana_value, added, owned_copies, owned_same_printing]
+      required: [id, deck_id, name, scryfall_id, set_code, collector_number, foil, quantity, mana_value, board, added, owned_copies, owned_same_printing]
 
     AddPendingCardRequest:
       type: object
@@ -2784,6 +2842,8 @@ components:
           type: string
           nullable: true
           pattern: "^[WUBRGwubrg]*$"
+        board:
+          $ref: "#/components/schemas/DeckBoard"
       required: [name, scryfall_id, set_code, collector_number]
 
     PendingCommitSummary:
@@ -3023,9 +3083,10 @@ components:
           $ref: "#/components/schemas/DeckVisibility"
         card_count:
           type: integer
+          description: Cards of the main board.
         pending_count:
           type: integer
-          description: Copies waiting in the deck's pending list (not in the collection yet), not counted in card_count.
+          description: Copies waiting in the main board's pending list (not in the collection yet), not counted in card_count.
         added:
           type: string
         updated:
@@ -3055,7 +3116,7 @@ components:
           nullable: true
         card_count:
           type: integer
-          description: Every card of the deck, owned or pending.
+          description: Every card of the main board, owned or pending.
         added:
           type: string
         updated:
@@ -3094,12 +3155,14 @@ components:
         commander:
           type: boolean
           description: True for the deck's commander, which is always listed on its own.
+        board:
+          $ref: "#/components/schemas/DeckBoard"
         tags:
           type: array
           description: The owner's tags for this card, shared by every printing.
           items:
             type: string
-      required: [name, scryfall_id, set_code, collector_number, foil, quantity, mana_value, colors, card_type, color_identity, commander, tags]
+      required: [name, scryfall_id, set_code, collector_number, foil, quantity, mana_value, colors, card_type, color_identity, commander, board, tags]
 
     SharedDeck:
       type: object
@@ -3134,7 +3197,7 @@ components:
           description: Whether the deck belongs to the caller.
         card_count:
           type: integer
-          description: Every card in the deck, pending ones included.
+          description: Every card of the main board, pending ones included.
       required: [id, name, format, visibility, owner, mine, card_count]
 
     ComparedCard:
@@ -3210,6 +3273,15 @@ components:
         sort:
           type: string
           enum: [name, -name, added, -added, updated, -updated, mana_value, -mana_value]
+        collapsed_boards:
+          type: array
+          description: >
+            The boards folded on the deck page, among sideboard and
+            considering. Always returned; optional when saving, where
+            leaving it out means [considering].
+          items:
+            type: string
+            enum: [sideboard, considering]
       required: [grouping, sort]
 
     TaggedCard:

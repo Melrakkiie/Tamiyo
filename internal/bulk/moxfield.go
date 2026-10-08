@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"Melrakkiie/Tamiyo/internal/deck"
 )
 
 type moxfieldCollectionRow struct {
@@ -73,17 +75,19 @@ type moxfieldDeckLine struct {
 	SetCode         string
 	CollectorNumber string
 	Foil            bool
+	Board           string
 }
 
 var moxfieldDeckLineRE = regexp.MustCompile(`^(\d+)x?\s+(.+?)\s+\(([A-Za-z0-9]+)\)\s+(\S+?)(\s+\*[FE]\*)?$`)
 
-var deckSectionHeaders = map[string]bool{
-	"commander":  true,
-	"companion":  true,
-	"deck":       true,
-	"mainboard":  true,
-	"sideboard":  true,
-	"maybeboard": true,
+var deckSectionHeaders = map[string]string{
+	"commander":   deck.BoardMain,
+	"companion":   deck.BoardMain,
+	"deck":        deck.BoardMain,
+	"mainboard":   deck.BoardMain,
+	"sideboard":   deck.BoardSideboard,
+	"maybeboard":  deck.BoardConsidering,
+	"considering": deck.BoardConsidering,
 }
 
 var plainDeckLineRE = regexp.MustCompile(`^(\d+)x?\s+(\S.*?)(\s+\*[FE]\*)?$`)
@@ -93,10 +97,15 @@ func parseMoxfieldDeckList(r io.Reader) ([]moxfieldDeckLine, error) {
 
 	var lines []moxfieldDeckLine
 	lineNo := 0
+	board := deck.BoardMain
 	for scanner.Scan() {
 		lineNo++
 		text := strings.TrimSpace(scanner.Text())
-		if text == "" || deckSectionHeaders[strings.ToLower(strings.TrimSuffix(text, ":"))] {
+		if text == "" {
+			continue
+		}
+		if section, ok := deckSectionHeaders[strings.ToLower(strings.TrimSpace(strings.TrimSuffix(text, ":")))]; ok {
+			board = section
 			continue
 		}
 
@@ -121,6 +130,7 @@ func parseMoxfieldDeckList(r io.Reader) ([]moxfieldDeckLine, error) {
 			SetCode:         matches[3],
 			CollectorNumber: matches[4],
 			Foil:            matches[5] != "",
+			Board:           board,
 		})
 	}
 	if err := scanner.Err(); err != nil {

@@ -103,11 +103,15 @@ func (s *Service) GetDeckCards(ctx context.Context, userID string, id string, so
 	return s.repo.FindCardsByDeckID(ctx, userID, id, sortField, sortDesc)
 }
 
-func (s *Service) PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int) error {
-	if _, err := s.repo.FindByID(ctx, userID, deckID); err != nil {
+func (s *Service) PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error {
+	d, err := s.repo.FindByID(ctx, userID, deckID)
+	if err != nil {
 		return err
 	}
-	return s.repo.LinkCardToDeck(ctx, userID, deckID, cardID)
+	if !InMainBoard(board) && d.CommanderID != nil && *d.CommanderID == cardID {
+		return ErrCommanderBoard
+	}
+	return s.repo.LinkCardToDeck(ctx, userID, deckID, cardID, board)
 }
 
 func (s *Service) RemoveCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error {

@@ -47,7 +47,7 @@ func (s *Service) GetDeckStats(ctx context.Context, userID string, deckID string
 	if err != nil {
 		return DeckStats{}, err
 	}
-	return computeStats(cards, scryfallByID), nil
+	return computeStats(mainBoard(cards), scryfallByID), nil
 }
 
 func (s *Service) loadDeckWithScryfallData(ctx context.Context, userID string, deckID string) (deck.Deck, []deck.DeckCard, map[string]scryfall.Card, error) {
@@ -115,6 +115,7 @@ func withPendingCards(d deck.Deck, cards []deck.DeckCard, pending []deck.Pending
 				Colors:          p.Colors,
 				CardType:        p.CardType,
 				ColorIdentity:   p.ColorIdentity,
+				Board:           p.Board,
 			})
 		}
 	}

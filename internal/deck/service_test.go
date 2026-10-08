@@ -47,6 +47,8 @@ type fakeRepository struct {
 	lastPendingID    int
 
 	lastPendingQuantity int
+	lastPendingBoard    string
+	linkedBoard         string
 
 	cardTags     []CardTag
 	replacedName string
@@ -122,6 +124,13 @@ func (f *fakeRepository) UpdatePendingQuantity(ctx context.Context, userID strin
 	return PendingCard{ID: id, DeckID: deckID, Quantity: quantity}, nil
 }
 
+func (f *fakeRepository) UpdatePendingBoard(ctx context.Context, userID string, deckID string, id int, board string) (PendingCard, error) {
+	f.lastUserID = userID
+	f.lastPendingID = id
+	f.lastPendingBoard = board
+	return PendingCard{ID: id, DeckID: deckID, Board: board}, nil
+}
+
 func (f *fakeRepository) FindAll(ctx context.Context, userID string, filter Filter) ([]Deck, int, error) {
 	f.lastUserID = userID
 	f.lastFilter = filter
@@ -176,8 +185,9 @@ func (f *fakeRepository) FindCardsByDeckID(ctx context.Context, userID string, i
 	return f.getDeckCards, nil
 }
 
-func (f *fakeRepository) LinkCardToDeck(ctx context.Context, userID string, deckID string, cardID int) error {
+func (f *fakeRepository) LinkCardToDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error {
 	f.lastUserID = userID
+	f.linkedBoard = board
 	return f.linkErr
 }
 
@@ -473,7 +483,7 @@ func TestService_PutCardInDeck_ChecksDeckOwnershipBeforeLinking(t *testing.T) {
 	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001"}}
 	service := NewService(repo)
 
-	err := service.PutCardInDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 4)
+	err := service.PutCardInDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 4, BoardMain)
 
 	assert.NoError(t, err)
 }
@@ -482,7 +492,7 @@ func TestService_PutCardInDeck_ReturnsNotFoundWhenDeckDoesNotBelongToUser(t *tes
 	repo := &fakeRepository{findByIDErr: ErrNotFound}
 	service := NewService(repo)
 
-	err := service.PutCardInDeck(context.Background(), otherUserID, "00000000-0000-0000-0000-000000000001", 4)
+	err := service.PutCardInDeck(context.Background(), otherUserID, "00000000-0000-0000-0000-000000000001", 4, BoardMain)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
@@ -491,7 +501,7 @@ func TestService_PutCardInDeck_PropagatesCardNotFoundError(t *testing.T) {
 	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001"}, linkErr: ErrCardNotFound}
 	service := NewService(repo)
 
-	err := service.PutCardInDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 9999)
+	err := service.PutCardInDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 9999, BoardMain)
 
 	assert.ErrorIs(t, err, ErrCardNotFound)
 }
@@ -500,7 +510,7 @@ func TestService_PutCardInDeck_PropagatesRepositoryError(t *testing.T) {
 	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001"}, linkErr: errors.New("insert failed")}
 	service := NewService(repo)
 
-	err := service.PutCardInDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 4)
+	err := service.PutCardInDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 4, BoardMain)
 
 	assert.Error(t, err)
 }
@@ -704,8 +714,8 @@ func TestService_AddPendingCard_MergesWithTheSamePrintingAndFinish(t *testing.T)
 	repo := &fakeRepository{
 		findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000003"},
 		pending: []PendingCard{
-			{ID: 4, ScryfallID: "AAAA", Foil: true, Quantity: 2},
-			{ID: 5, ScryfallID: "aaaa", Foil: false, Quantity: 3},
+			{ID: 4, ScryfallID: "AAAA", Foil: true, Quantity: 2, Board: BoardMain},
+			{ID: 5, ScryfallID: "aaaa", Foil: false, Quantity: 3, Board: BoardMain},
 		},
 	}
 	service := NewService(repo)
@@ -716,6 +726,112 @@ func TestService_AddPendingCard_MergesWithTheSamePrintingAndFinish(t *testing.T)
 	assert.Equal(t, 5, merged.ID)
 	assert.Equal(t, 7, repo.lastPendingQuantity)
 	assert.Empty(t, repo.createdPending.Name)
+}
+
+func TestService_AddPendingCard_MergesOnlyWithinTheSameBoard(t *testing.T) {
+	repo := &fakeRepository{
+		findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000003"},
+		pending:      []PendingCard{{ID: 5, ScryfallID: "aaaa", Quantity: 3, Board: BoardMain}},
+	}
+	service := NewService(repo)
+
+	created, err := service.AddPendingCard(context.Background(), testUserID, "00000000-0000-0000-0000-000000000003", PendingCard{Name: "Duress", ScryfallID: "aaaa", Quantity: 1, Board: BoardSideboard})
+
+	require.NoError(t, err)
+	assert.Equal(t, 7, created.ID)
+	assert.Equal(t, BoardSideboard, repo.createdPending.Board)
+	assert.Zero(t, repo.lastPendingQuantity)
+}
+
+func TestService_AddPendingCard_DefaultsToTheMainBoard(t *testing.T) {
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000003"}}
+	service := NewService(repo)
+
+	_, err := service.AddPendingCard(context.Background(), testUserID, "00000000-0000-0000-0000-000000000003", PendingCard{Name: "Duress", ScryfallID: "aaaa", Quantity: 1})
+
+	require.NoError(t, err)
+	assert.Equal(t, BoardMain, repo.createdPending.Board)
+}
+
+func TestService_UpdatePendingCard_MovesToAnotherBoard(t *testing.T) {
+	repo := &fakeRepository{
+		findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000003"},
+		pending:      []PendingCard{{ID: 5, ScryfallID: "aaaa", Quantity: 3, Board: BoardMain}},
+	}
+	service := NewService(repo)
+	board := BoardConsidering
+
+	moved, err := service.UpdatePendingCard(context.Background(), testUserID, "00000000-0000-0000-0000-000000000003", 5, nil, &board)
+
+	require.NoError(t, err)
+	assert.Equal(t, BoardConsidering, moved.Board)
+	assert.Equal(t, BoardConsidering, repo.lastPendingBoard)
+}
+
+func TestService_UpdatePendingCard_MergesIntoTheSamePrintingOnTheTargetBoard(t *testing.T) {
+	repo := &fakeRepository{
+		findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000003"},
+		pending: []PendingCard{
+			{ID: 5, ScryfallID: "aaaa", Quantity: 3, Board: BoardMain},
+			{ID: 6, ScryfallID: "AAAA", Quantity: 1, Board: BoardSideboard},
+		},
+	}
+	service := NewService(repo)
+	board := BoardSideboard
+
+	merged, err := service.UpdatePendingCard(context.Background(), testUserID, "00000000-0000-0000-0000-000000000003", 5, nil, &board)
+
+	require.NoError(t, err)
+	assert.Equal(t, 6, merged.ID)
+	assert.Equal(t, 4, merged.Quantity)
+	assert.Equal(t, 5, repo.lastPendingID)
+	assert.Empty(t, repo.lastPendingBoard)
+}
+
+func TestService_UpdatePendingCard_KeepsThePendingCommanderInTheMainBoard(t *testing.T) {
+	commander := 5
+	repo := &fakeRepository{
+		findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000003", CommanderPendingID: &commander},
+		pending:      []PendingCard{{ID: 5, ScryfallID: "aaaa", Quantity: 1, Board: BoardMain}},
+	}
+	service := NewService(repo)
+	board := BoardSideboard
+
+	_, err := service.UpdatePendingCard(context.Background(), testUserID, "00000000-0000-0000-0000-000000000003", 5, nil, &board)
+
+	assert.ErrorIs(t, err, ErrCommanderBoard)
+	assert.Empty(t, repo.lastPendingBoard)
+}
+
+func TestService_UpdatePendingCard_UnknownCard(t *testing.T) {
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000003"}}
+	service := NewService(repo)
+	quantity := 2
+
+	_, err := service.UpdatePendingCard(context.Background(), testUserID, "00000000-0000-0000-0000-000000000003", 5, &quantity, nil)
+
+	assert.ErrorIs(t, err, ErrPendingCardNotFound)
+}
+
+func TestService_PutCardInDeck_KeepsTheCommanderInTheMainBoard(t *testing.T) {
+	commander := 4
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", CommanderID: &commander}}
+	service := NewService(repo)
+
+	err := service.PutCardInDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 4, BoardSideboard)
+
+	assert.ErrorIs(t, err, ErrCommanderBoard)
+	assert.Empty(t, repo.linkedBoard)
+}
+
+func TestService_PutCardInDeck_PassesTheBoard(t *testing.T) {
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001"}}
+	service := NewService(repo)
+
+	err := service.PutCardInDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 4, BoardConsidering)
+
+	require.NoError(t, err)
+	assert.Equal(t, BoardConsidering, repo.linkedBoard)
 }
 
 func TestService_AddPendingCard_DoesNotMergeIntoThePendingCommander(t *testing.T) {

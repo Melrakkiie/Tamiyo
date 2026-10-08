@@ -665,7 +665,7 @@ GET /deck?format=commander&sort=-added&page=1&limit=25
 }
 ```
 
-`pending_count` is the number of copies in the deck's pending list (see [Pending cards](#pending-cards-deckidpending)), not counted in `card_count`. `commander_scryfall_id` is read-only: the Scryfall id of the commander card, so a client can show its art without another call. `background_scryfall_id` is the art the user picked for the deck (`null` when none was chosen). `visibility` says who may see the deck: `private` (only its owner), `unlisted` (anyone with its link, the default) or `public` (anyone, and listed on its owner's profile). `id` is a random UUID generated when the deck is created, so deck ids can't be guessed from one another. It is also how anyone reaches the deck's read-only page: see [Shared decks](#shared-decks). The routes in this section still only serve the owner's own decks.
+`card_count` and `pending_count` only count the deck itself (its `main` board, see [Boards](#boards)): the sideboard and the cards being considered are left out. `pending_count` is the number of copies in the deck's pending list (see [Pending cards](#pending-cards-deckidpending)), not counted in `card_count`. `commander_scryfall_id` is read-only: the Scryfall id of the commander card, so a client can show its art without another call. `background_scryfall_id` is the art the user picked for the deck (`null` when none was chosen). `visibility` says who may see the deck: `private` (only its owner), `unlisted` (anyone with its link, the default) or `public` (anyone, and listed on its owner's profile). `id` is a random UUID generated when the deck is created, so deck ids can't be guessed from one another. It is also how anyone reaches the deck's read-only page: see [Shared decks](#shared-decks). The routes in this section still only serve the owner's own decks.
 
 **Errors:** `400` if `page` or `limit` is not a valid integer, `limit` is outside `1..100`, or `sort` is not one of the allowed values.
 
@@ -766,6 +766,18 @@ That user's **public** decks (`visibility` = `public`), with the same pagination
 
 ## Deck ↔ Card relationship
 
+### Boards
+
+Every card of a deck, owned or pending, sits on one of three boards, given in its `board` field:
+
+| `board` | Meaning |
+|---|---|
+| `main` | The deck itself. The default everywhere. |
+| `sideboard` | The deck's sideboard. |
+| `considering` | Cards being considered for the deck (Moxfield's maybeboard). |
+
+Only `main` counts in the deck's `card_count` and `pending_count`, its [statistics](#get-deckidstats), its deck size and singleton checks, and [comparisons](#get-deckidcompareother_id). Card legality is checked on all three boards. The commander always stays on `main`: moving it elsewhere is refused with `409`.
+
 ### `GET /deck/:id/cards`
 
 List every card currently in a deck.
@@ -793,13 +805,14 @@ GET /deck/6f0d3c5e-8a51-4c0b-9b1e-2d7c4a3f9e10/cards?sort=mana_value
     "foil": true,
     "storage_id": 2,
     "mana_value": 1,
+    "board": "main",
     "added": "2026-01-15 10:30:00",
     "updated": "2026-01-15 10:30:00"
   }
 ]
 ```
 
-Returns an empty array `[]` if the deck has no cards.
+Every board is returned; each card tells its own `board`. Returns an empty array `[]` if the deck has no cards.
 
 **Errors:** `400` invalid id, or `sort` is not one of the allowed values · `404` deck not found
 
@@ -807,15 +820,21 @@ Returns an empty array `[]` if the deck has no cards.
 
 ### `PUT /deck/:id/cards/:card_id`
 
-Add a card to a deck. **Idempotent** — calling this again with the same `id`/`card_id` succeeds silently if the card is already in the deck.
+Add a card to a deck, or move it to another board. **Idempotent** — calling this again with the same `id`/`card_id` and board succeeds silently.
 
-**No request body.**
+**Body (optional)**
+```json
+{ "board": "sideboard" }
+```
+
+`board` is `main` (the default, also without a body), `sideboard` or `considering` (see [Boards](#boards)). A card already in the deck is moved to that board.
 
 **Response `204 No Content`**
 
 **Errors**
-- `400` — invalid `id` or `card_id` (not an integer)
+- `400` — invalid `id` or `card_id` (not an integer), or unknown `board`
 - `404` — deck not found (`"deck not found"`) or card not found (`"card not found"`)
+- `409` — the card is the deck's commander and `board` isn't `main`
 - `500` — unexpected server/database error
 
 ---
@@ -835,13 +854,15 @@ Remove a card from a deck. **Idempotent** — always returns success, whether or
 Cards wanted in a deck but not in the collection yet (typically picked on Scryfall from the deck page). They are stored per deck until they're added to the collection all at once.
 
 - `GET /deck/:id/pending` — the list, sorted by name. Each item also tells what the collection already holds, outside this deck: `owned_copies` counts the cards of the same name (any printing, ` / ` and ` // ` alike, including copies in other decks), and `owned_same_printing` those of this exact printing. A client can tell a card missing from the collection (`0`) from one owned in another printing. Both are `0` in the responses of the routes below.
-- `POST /deck/:id/pending` — add one. Body: `name`, `scryfall_id`, `set_code`, `collector_number` (required), `foil`, `quantity` (1–100, default 1), `mana_value`, `colors`, `card_type`, `color_identity` (same rules as `POST /cards`). Returns `201` with the item. If the deck already has a pending card of the same printing and finish (other than its pending commander), its quantity is raised instead and that item is returned.
-- `PATCH /deck/:id/pending/:pending_id` — change how many copies it stands for. Body: `{ "quantity": 12 }` (1–1000). Returns the item.
+- `POST /deck/:id/pending` — add one. Body: `name`, `scryfall_id`, `set_code`, `collector_number` (required), `foil`, `quantity` (1–100, default 1), `mana_value`, `colors`, `card_type`, `color_identity` (same rules as `POST /cards`), `board` (`main` by default, see [Boards](#boards)). Returns `201` with the item. If the deck already has a pending card of the same printing, finish and board (other than its pending commander), its quantity is raised instead and that item is returned.
+- `PATCH /deck/:id/pending/:pending_id` — change how many copies it stands for, its board, or both. Body: `{ "quantity": 12 }` (1–1000) and/or `{ "board": "considering" }`. Returns the item. Moved onto a board that already has a pending card of the same printing and finish, the two are merged and the remaining item is returned. The pending commander can't leave `main` (`409`).
 - `DELETE /deck/:id/pending/:pending_id` — remove one. `204`, or `404` if it doesn't exist.
-- `POST /deck/:id/pending/commit` — create every pending card in the collection (one card per copy, in `storage_id` if given), put each in the deck, and clear the list. Body optional: `{ "storage_id": 4 }`, plus `"pending_id": 12` to only add that one pending card (all its copies), and `"quantity": 5` with it to only add that many copies (the pending card keeps the rest). Returns `{ "cards_created": 7 }`. Items are handled one by one: on a failure, those already handled stay done and the rest stay pending.
+- `POST /deck/:id/pending/commit` — create every pending card in the collection (one card per copy, in `storage_id` if given), put each in the deck on the board it was pending on, and clear the list. Pending cards on the `considering` board are left out, unless given as `pending_id`. Body optional: `{ "storage_id": 4 }`, plus `"pending_id": 12` to only add that one pending card (all its copies), and `"quantity": 5` with it to only add that many copies (the pending card keeps the rest). Returns `{ "cards_created": 7 }`. Items are handled one by one: on a failure, those already handled stay done and the rest stay pending.
 - `POST /deck/:id/import` — add a list of cards to this deck, as `multipart/form-data` with the list in a `file` field and an optional `commander_from_first_line` (default `false`). It never creates cards: owned copies go in the deck, missing ones become pending cards. Details, list format and response in [`POST /deck/:id/import`](#post-deckidimport) under Bulk Import.
 
-**Errors:** `400` invalid id or body, unknown `storage_id` · `404` deck or pending card not found
+Each item has a `board` field, like the deck's own cards.
+
+**Errors:** `400` invalid id or body, unknown `storage_id` · `404` deck or pending card not found · `409` moving the pending commander off `main`
 
 ### Card tags (`/deck/:id/tags`)
 
@@ -862,8 +883,8 @@ Tagging changes the deck's `updated` date. Shared decks and the deck comparison 
 
 How the owner last displayed the deck's cards, so the deck page opens the same way next time. It's the owner's own setting: shared decks don't use it. Changing it doesn't change the deck's `updated` date.
 
-- `GET /deck/:id/view` — `{ "grouping": "type", "sort": "mana_value" }`. Those are also the values before anything is saved.
-- `PUT /deck/:id/view` — save them. Body: `grouping` (`type`, `color`, `mana`, `storage`, `tag`, or `null` for no grouping) and `sort` (required, same values as the `sort` of `GET /deck/:id/cards`). Returns the saved settings.
+- `GET /deck/:id/view` — `{ "grouping": "type", "sort": "mana_value", "collapsed_boards": ["considering"] }`. Those are also the values before anything is saved.
+- `PUT /deck/:id/view` — save them. Body: `grouping` (`type`, `color`, `mana`, `storage`, `tag`, or `null` for no grouping), `sort` (required, same values as the `sort` of `GET /deck/:id/cards`) and `collapsed_boards`, the [boards](#boards) folded on the deck page (`sideboard`, `considering`, or neither; `["considering"]` when left out). Returns the saved settings.
 
 **Errors:** `400` invalid id, missing `sort`, unknown `grouping` or `sort` · `404` deck not found
 
@@ -890,7 +911,7 @@ For the `commander` format specifically, two deck-construction rules Scryfall's 
 - **Singleton** — at most one copy of each card by name, except basic lands.
 - **Color identity** — every card's color identity must be contained in the commander's (the deck's `commander_id`, or its `commander_pending_id` when the commander isn't in the collection yet).
 
-The deck size is checked too, counting every copy (the commander and pending cards included): exactly 100 cards for `commander`, `brawl`, `duel`, `paupercommander`, `predh` and `gladiator`, exactly 60 for `oathbreaker` and `standardbrawl`, at least 60 for the other constructed formats (`standard`, `pioneer`, `modern`, `legacy`, `vintage`, `pauper`, `premodern`, `explorer`, `historic`, `timeless`, `alchemy`, `oldschool`, `penny`, `future`). Other formats get no size check. A wrong size is reported first, as an issue with an empty `card_name` and a reason like `deck size: 87 cards, commander requires exactly 100`.
+Every board is checked card by card (see [Boards](#boards)), and each issue about a card tells its `board`, but the singleton rule and the deck size only look at `main`. The deck size is checked counting every copy of `main` (the commander and pending cards included): exactly 100 cards for `commander`, `brawl`, `duel`, `paupercommander`, `predh` and `gladiator`, exactly 60 for `oathbreaker` and `standardbrawl`, at least 60 for the other constructed formats (`standard`, `pioneer`, `modern`, `legacy`, `vintage`, `pauper`, `premodern`, `explorer`, `historic`, `timeless`, `alchemy`, `oldschool`, `penny`, `future`). Other formats get no size check. A wrong size is reported first, as an issue with an empty `card_name` and a reason like `deck size: 87 cards, commander requires exactly 100`.
 
 Pending cards (see `GET /deck/:id/pending-cards`) are checked like the deck's own cards, one entry per copy, so a pending copy counts toward the singleton rule too. An issue about a pending card has no `card_id`.
 
@@ -977,7 +998,7 @@ The three `/shared/decks` routes share a per-client-IP limit, separate from the 
 }
 ```
 
-The owner's copies and the deck's pending cards are merged into one list, one entry per printing and finish with its `quantity`, sorted by name. Nothing tells them apart, and storages, proxies and card ids are left out. The commander is always its own entry with `commander: true`. `tags` are the owner's [card tags](#card-tags-deckidtags), shared by every printing of the card. `card_count` counts every card, pending ones included. `owner` has the shape of [`GET /users/:id`](#get-usersid).
+The owner's copies and the deck's pending cards are merged into one list, one entry per printing, finish and [board](#boards) with its `quantity`, sorted by name. Each entry has its `board` (`main`, `sideboard` or `considering`). Nothing tells owned and pending cards apart, and storages, proxies and card ids are left out. The commander is always its own entry with `commander: true`. `tags` are the owner's [card tags](#card-tags-deckidtags), shared by every printing of the card. `card_count` counts every card of `main`, pending ones included. `owner` has the shape of [`GET /users/:id`](#get-usersid).
 
 **Errors:** `404` unknown, private or malformed id · `429` rate limit exceeded
 
@@ -997,7 +1018,7 @@ Same statistics as [`GET /deck/:id/stats`](#get-deckidstats).
 
 Compare two decks card by card. **Requires authentication** (it is not rate-limited like the routes above). Each deck can be one of yours, whatever its visibility, or someone else's `public` or `unlisted` deck; the same deck can be given twice.
 
-Cards are matched **by name only**: printings and finishes are ignored, and a split or double-faced card matches whether it's written with ` / ` or ` // `. Owned copies and pending cards both count.
+Cards are matched **by name only**: printings and finishes are ignored, and a split or double-faced card matches whether it's written with ` / ` or ` // `. Owned copies and pending cards both count, on the `main` [board](#boards) only.
 
 **Response `200 OK`**
 ```json
@@ -1108,11 +1129,13 @@ Add a card list to the collection: one card is created per copy, in the storage 
 Add a decklist to an **existing** deck — the front end creates the deck first (`POST /deck`), then calls this route. **It never creates cards in the collection**: each line is resolved against Scryfall, then:
 
 - copies of that exact printing already in the collection are put in the deck (`cards_linked`). Copies that are in no deck yet and of the same finish (foil or not) are used first, but a copy already in another deck can be used too, since a card can belong to several decks. Copies already in this deck are never used twice, and each copy is used at most once per import;
-- the copies the collection lacks are added to the deck's [pending cards](#pending-cards-deckidpending) (`cards_pending`), to add to the collection later with `POST /deck/:id/pending/commit`. A pending card of the same printing and finish already in the deck has its quantity raised instead.
+- the copies the collection lacks are added to the deck's [pending cards](#pending-cards-deckidpending) (`cards_pending`), to add to the collection later with `POST /deck/:id/pending/commit`. A pending card of the same printing, finish and board already in the deck has its quantity raised instead.
+
+Each card goes on the [board](#boards) of the section it's listed under: `main` by default, `sideboard` under a `Sideboard` header, `considering` under `Maybeboard` or `Considering` (see the list format below).
 
 `cards_created` and `decks_created` are always `0` for this route.
 
-When `commander_from_first_line` is `true`, the first card line is treated as the deck's commander, but only if the deck has none yet. An owned commander becomes the deck's `commander_id`; one the collection lacks becomes its pending commander (`commander_pending_id`). A commander that can't be resolved on Scryfall is skipped (counted in `cards_skipped`, noted in `warnings`) and the rest of the list is still imported.
+When `commander_from_first_line` is `true`, the first card line of `main` is treated as the deck's commander, but only if the deck has none yet. An owned commander becomes the deck's `commander_id`; one the collection lacks becomes its pending commander (`commander_pending_id`). A commander that can't be resolved on Scryfall is skipped (counted in `cards_skipped`, noted in `warnings`) and the rest of the list is still imported.
 
 **Form fields**
 
@@ -1125,7 +1148,7 @@ When `commander_from_first_line` is `true`, the first card line is treated as th
 
 **Expected line format:** `<quantity> <name> (<set code>) <collector number>[ *F*]`, e.g. `1 Sol Ring (SLD) 1011 *F*` — Moxfield's plain-text export (deck page → **More → Export → Plain Text**). `*E*`, etched, counts as foil, and collector numbers can contain dashes, like The List's `IMA-48`. Cards with two names (e.g. double-faced cards) keep both, separated by ` / `.
 
-A plain list works too, one `<quantity> <name>` per line (`4 Lightning Bolt`, `1x Sol Ring`, `1 Fire // Ice`), and both formats can be mixed. A line without a printing is resolved by name on Scryfall: any printing of that card in the collection can go in the deck, and the copies the collection lacks are added as pending cards in the printing Scryfall returns by default. A split or double-faced card can be written with its full name (` / ` or ` // `) or its front face only. Section headers (`Commander`, `Companion`, `Deck`, `Mainboard`, `Sideboard`, `Maybeboard`, as in MTG Arena's format) are skipped, so every format from [`GET /deck/:id/export`](#get-deckidexport) can be imported back.
+A plain list works too, one `<quantity> <name>` per line (`4 Lightning Bolt`, `1x Sol Ring`, `1 Fire // Ice`), and both formats can be mixed. A line without a printing is resolved by name on Scryfall: any printing of that card in the collection can go in the deck, and the copies the collection lacks are added as pending cards in the printing Scryfall returns by default. A split or double-faced card can be written with its full name (` / ` or ` // `) or its front face only. Section headers, with or without a trailing `:` and in any case, are not cards: they choose the [board](#boards) of the lines below them. `Commander`, `Companion`, `Deck` and `Mainboard` mean `main`, `Sideboard` means `sideboard`, `Maybeboard` and `Considering` mean `considering`. Lines before any header go on `main`. Every format from [`GET /deck/:id/export`](#get-deckidexport) can be imported back. `POST /import/list` reads the same format, ignoring the sections.
 
 ---
 
@@ -1162,6 +1185,8 @@ Exports **one deck** — not the whole collection — as plain text (`Content-Ty
 | `moxfield` (default) | One line per printing, `1 Sol Ring (SLD) 1011 *F*`, the format Moxfield's deck import reads. | `Deck_moxfield.txt` |
 | `plain` | One line per card name, every printing added up, `4 Lightning Bolt`, the commander first. | `Deck_list.txt` |
 | `arena` | MTG Arena's format: a `Commander` section when the deck has one, then a `Deck` section, one line per card name. Split cards are written with ` // `. | `Deck_arena.txt` |
+
+The sideboard follows the deck in a section of its own in every format: `SIDEBOARD:` in `moxfield`, `Sideboard` in `plain` and `arena`. The cards being considered come last, under `MAYBEBOARD:` in `moxfield` and `Maybeboard` in `plain`; `arena` leaves them out. Each section is written only when it has cards, after a blank line.
 
 If the deck has a commander, it comes **first** in every format — in `moxfield`, that printing's line with its full quantity in the deck, not just the one physical card marked as commander — so importing the file back (which treats the first line as the commander when asked) reconstructs the same commander. Everything else is sorted alphabetically. Pending cards are included in every format, a pending commander first like an owned one. All three formats can be imported back with `POST /deck/:id/import`.
 

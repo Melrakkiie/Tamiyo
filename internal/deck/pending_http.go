@@ -26,6 +26,7 @@ type pendingCardResponse struct {
 	Colors          *string `json:"colors"`
 	CardType        *string `json:"card_type"`
 	ColorIdentity   *string `json:"color_identity"`
+	Board           string  `json:"board"`
 	Added           string  `json:"added"`
 
 	OwnedCopies       int `json:"owned_copies"`
@@ -46,6 +47,7 @@ func toPendingResponse(p PendingCard) pendingCardResponse {
 		Colors:          p.Colors,
 		CardType:        p.CardType,
 		ColorIdentity:   p.ColorIdentity,
+		Board:           p.Board,
 		Added:           p.Added.Format("2006-01-02 15:04:05"),
 
 		OwnedCopies:       p.OwnedCopies,
@@ -64,6 +66,7 @@ type addPendingCardRequest struct {
 	Colors          *string `json:"colors"`
 	CardType        *string `json:"card_type"`
 	ColorIdentity   *string `json:"color_identity"`
+	Board           string  `json:"board" binding:"omitempty,oneof=main sideboard considering"`
 }
 
 var errInvalidPendingColors = errors.New("colors and color_identity must only contain the letters W, U, B, R and G")
@@ -108,6 +111,7 @@ func (r addPendingCardRequest) toDomain() (PendingCard, error) {
 		Colors:          colors,
 		CardType:        r.CardType,
 		ColorIdentity:   identity,
+		Board:           r.Board,
 	}, nil
 }
 
@@ -195,7 +199,8 @@ func (h *Handler) removePendingCard(ctx *gin.Context) {
 }
 
 type updatePendingCardRequest struct {
-	Quantity int `json:"quantity" binding:"required,gte=1,lte=1000"`
+	Quantity *int    `json:"quantity" binding:"omitempty,gte=1,lte=1000"`
+	Board    *string `json:"board" binding:"omitempty,oneof=main sideboard considering"`
 }
 
 func (h *Handler) updatePendingCard(ctx *gin.Context) {
@@ -220,12 +225,17 @@ func (h *Handler) updatePendingCard(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if req.Quantity == nil && req.Board == nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "quantity or board is required"})
+		return
+	}
 
-	updated, err := h.service.SetPendingQuantity(ctx.Request.Context(), userID, deckID, pendingID, req.Quantity)
+	updated, err := h.service.UpdatePendingCard(ctx.Request.Context(), userID, deckID, pendingID, req.Quantity, req.Board)
 	if err != nil {
 		apierr.Respond(ctx, err,
 			apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: ErrPendingCardNotFound, Status: http.StatusNotFound, Message: "pending card not found"},
+			apierr.Mapping{Err: ErrCommanderBoard, Status: http.StatusConflict, Message: "the commander stays in the main deck"},
 		)
 		return
 	}

@@ -151,7 +151,7 @@ Four authenticated routes import a collection export, a card list or a decklist 
 - `POST /import/manabox` — a [ManaBox](https://manabox.app/) collection CSV export. Carries its own storage/binder and Scryfall ID, so nothing else is needed; pass an optional `storage_id` to put every card in that storage instead.
 - `POST /import/moxfield/collection` — a [Moxfield](https://www.moxfield.com/) "Export Collection" CSV. Has no storage concept, so every imported card is assigned to an existing `storage_id` you pass in; has no Scryfall ID either, so each row is resolved by set + collector number against the [Scryfall API](https://scryfall.com/docs/api/cards/collection).
 - `POST /import/list` — a plain card list (`4 Lightning Bolt`, or `1 Sol Ring (SLD) 1011 *F*` for an exact printing), one card created per copy, in the optional `storage_id`.
-- `POST /deck/:id/import` — a decklist added to an existing deck: a Moxfield plain-text export (deck page → **More → Export → Plain Text**), a plain `4 Lightning Bolt` list matched by name, or any format `GET /deck/:id/export` produces. It never creates cards: owned copies of each printing go in the deck, and missing ones are added as pending cards. With `commander_from_first_line=true`, the first line becomes the commander if the deck has none.
+- `POST /deck/:id/import` — a decklist added to an existing deck: a Moxfield plain-text export (deck page → **More → Export → Plain Text**), a plain `4 Lightning Bolt` list matched by name, or any format `GET /deck/:id/export` produces. It never creates cards: owned copies of each printing go in the deck, and missing ones are added as pending cards. `Sideboard` and `Maybeboard` / `Considering` headers send the lines below them to that board. With `commander_from_first_line=true`, the first line of the deck itself becomes the commander if the deck has none.
 
 All four are `multipart/form-data` requests with the file in a field named `file`, e.g.:
 
@@ -170,7 +170,7 @@ Routes export back out in the same formats the import routes above read — see 
 
 - `GET /export/manabox` — the collection as a ManaBox-compatible CSV, grouped by storage (a card with no storage lands in a synthetic "Unsorted" binder).
 - `GET /export/moxfield/collection` — the collection as a Moxfield-compatible "Export Collection" CSV; Moxfield's format has no storage concept, so this groups the entire collection together regardless of storage.
-- `GET /deck/:id/export?format=moxfield|plain|arena` — **one deck** (not the whole collection) as text: a Moxfield deck export, a plain `4 Lightning Bolt` list, or MTG Arena's `Commander` / `Deck` sections. The commander comes first, so re-importing reconstructs it; pending cards are included.
+- `GET /deck/:id/export?format=moxfield|plain|arena` — **one deck** (not the whole collection) as text: a Moxfield deck export, a plain `4 Lightning Bolt` list, or MTG Arena's `Commander` / `Deck` sections. The commander comes first, so re-importing reconstructs it; pending cards are included, and the sideboard and considered cards follow in their own sections (Arena leaves the considered cards out).
 
 The two collection routes export everything, or a single storage with `?storage_id=4`, and return a raw CSV download, not JSON; the deck route returns a raw `.txt` download:
 
@@ -197,6 +197,10 @@ See [`doc/API.md`](./doc/API.md#deck-insights) for the exact response shapes and
 curl localhost:8080/deck/<deck-id>/legality -H "Authorization: Bearer <token>"
 curl localhost:8080/deck/<deck-id>/stats -H "Authorization: Bearer <token>"
 ```
+
+### Sideboard and considering
+
+Each card of a deck, owned or pending, sits on a board: `main` (the deck itself), `sideboard`, or `considering` (cards being weighed for the deck). `PUT /deck/:id/cards/:card_id` and `PATCH /deck/:id/pending/:pending_id` take a `board` to move a card. Only `main` counts in the deck's card count, its statistics, deck size and comparisons; legality checks every board. Exports write the sideboard and considered cards in their own sections, and imports read them back. See [`doc/API.md`](./doc/API.md#boards).
 
 ### Card tags
 

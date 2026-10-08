@@ -256,3 +256,19 @@ func TestCompareDecksHandler_Errors(t *testing.T) {
 		})
 	}
 }
+
+func TestCompareDecks_OnlyComparesTheMainBoards(t *testing.T) {
+	store := compareStore()
+	mine := store.decks[myDeckID]
+	mine.cards = append(mine.cards, deck.DeckCard{ID: 6, Name: "Lightning Bolt", ScryfallID: "bolt", Board: deck.BoardSideboard})
+	mine.pending = append(mine.pending, deck.PendingCard{ID: 10, Name: "Opt", ScryfallID: "opt", Quantity: 1, Board: deck.BoardConsidering})
+	store.decks[myDeckID] = mine
+	svc := NewService(store, compareUsers(), &fakeInsights{})
+
+	comparison, err := svc.CompareDecks(context.Background(), viewerID, myDeckID, theirDeck)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Lightning Bolt"}, names(comparison.OnlyInOther))
+	assert.Equal(t, []string{"Atraxa, Praetors' Voice", "Counterspell"}, names(comparison.OnlyInDeck))
+	assert.Equal(t, 7, comparison.Deck.CardCount)
+}

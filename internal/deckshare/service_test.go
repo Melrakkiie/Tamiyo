@@ -242,3 +242,29 @@ func TestService_GetSharedDeckStats_PropagatesInsightErrors(t *testing.T) {
 
 	assert.ErrorIs(t, err, boom)
 }
+
+func TestService_GetSharedDeck_KeepsEachBoardApart(t *testing.T) {
+	decks := &fakeDecks{
+		ownerID: ownerID,
+		deck:    deck.Deck{ID: "00000000-0000-0000-0000-000000000009"},
+		cards: []deck.DeckCard{
+			{ID: 1, Name: "Duress", ScryfallID: "d", Board: deck.BoardMain},
+			{ID: 2, Name: "Duress", ScryfallID: "d", Board: deck.BoardSideboard},
+		},
+		pending: []deck.PendingCard{
+			{ID: 5, Name: "Duress", ScryfallID: "d", Quantity: 2, Board: deck.BoardSideboard},
+			{ID: 6, Name: "Duress", ScryfallID: "d", Quantity: 1, Board: deck.BoardConsidering},
+		},
+	}
+	service := newService(decks, &fakeInsights{})
+
+	shared, err := service.GetSharedDeck(context.Background(), deckID)
+
+	require.NoError(t, err)
+	quantities := map[string]int{}
+	for _, c := range shared.Cards {
+		quantities[c.Board] += c.Quantity
+	}
+	assert.Len(t, shared.Cards, 3)
+	assert.Equal(t, map[string]int{deck.BoardMain: 1, deck.BoardSideboard: 3, deck.BoardConsidering: 1}, quantities)
+}

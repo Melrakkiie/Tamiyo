@@ -637,7 +637,7 @@ func TestPostgresRepository_LinkCardToDeck_CreatesLink(t *testing.T) {
 	seedDecks(t, db, userID)
 	seedCardsWithoutStorage(t, db, userID)
 
-	err := repo.LinkCardToDeck(context.Background(), userID, "00000000-0000-0000-0000-000000000001", 1)
+	err := repo.LinkCardToDeck(context.Background(), userID, "00000000-0000-0000-0000-000000000001", 1, BoardMain)
 
 	require.NoError(t, err)
 
@@ -654,10 +654,10 @@ func TestPostgresRepository_LinkCardToDeck_IsIdempotent(t *testing.T) {
 	seedDecks(t, db, userID)
 	seedCardsWithoutStorage(t, db, userID)
 
-	err1 := repo.LinkCardToDeck(context.Background(), userID, "00000000-0000-0000-0000-000000000001", 1)
+	err1 := repo.LinkCardToDeck(context.Background(), userID, "00000000-0000-0000-0000-000000000001", 1, BoardMain)
 	require.NoError(t, err1)
 
-	err2 := repo.LinkCardToDeck(context.Background(), userID, "00000000-0000-0000-0000-000000000001", 1)
+	err2 := repo.LinkCardToDeck(context.Background(), userID, "00000000-0000-0000-0000-000000000001", 1, BoardMain)
 	require.NoError(t, err2)
 
 	cards, err := repo.FindCardsByDeckID(context.Background(), userID, "00000000-0000-0000-0000-000000000001", "updated", true)
@@ -671,7 +671,7 @@ func TestPostgresRepository_LinkCardToDeck_ReturnsErrCardNotFoundOnInvalidCardID
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, userID)
 
-	err := repo.LinkCardToDeck(context.Background(), userID, "00000000-0000-0000-0000-000000000001", 9999)
+	err := repo.LinkCardToDeck(context.Background(), userID, "00000000-0000-0000-0000-000000000001", 9999, BoardMain)
 
 	assert.ErrorIs(t, err, ErrCardNotFound)
 }
@@ -684,7 +684,7 @@ func TestPostgresRepository_LinkCardToDeck_ReturnsErrCardNotFoundWhenCardBelongs
 	seedDecks(t, db, userA)
 	seedCardsWithoutStorage(t, db, userB)
 
-	err := repo.LinkCardToDeck(context.Background(), userA, "00000000-0000-0000-0000-000000000001", 1)
+	err := repo.LinkCardToDeck(context.Background(), userA, "00000000-0000-0000-0000-000000000001", 1, BoardMain)
 
 	assert.ErrorIs(t, err, ErrCardNotFound)
 }
@@ -696,7 +696,7 @@ func TestPostgresRepository_LinkCardToDeck_DoesNotAffectOtherDecks(t *testing.T)
 	seedDecks(t, db, userID)
 	seedCardsWithoutStorage(t, db, userID)
 
-	err := repo.LinkCardToDeck(context.Background(), userID, "00000000-0000-0000-0000-000000000001", 1)
+	err := repo.LinkCardToDeck(context.Background(), userID, "00000000-0000-0000-0000-000000000001", 1, BoardMain)
 	require.NoError(t, err)
 
 	cardsInDeck2, err := repo.FindCardsByDeckID(context.Background(), userID, "00000000-0000-0000-0000-000000000002", "updated", true)
@@ -763,7 +763,7 @@ func TestPostgresRepository_CardLinks_RefreshUpdatedTimestamp(t *testing.T) {
 	require.NoError(t, err)
 
 	time.Sleep(10 * time.Millisecond)
-	require.NoError(t, repo.LinkCardToDeck(context.Background(), userID, "00000000-0000-0000-0000-000000000001", 1))
+	require.NoError(t, repo.LinkCardToDeck(context.Background(), userID, "00000000-0000-0000-0000-000000000001", 1, BoardMain))
 
 	afterLink, err := repo.FindByID(context.Background(), userID, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
@@ -1177,19 +1177,130 @@ func TestPostgresRepository_View(t *testing.T) {
 	assert.False(t, found)
 
 	grouping := "tag"
-	require.NoError(t, repo.SaveView(ctx, userID, d.ID, View{Grouping: &grouping, Sort: "-name"}))
-	require.NoError(t, repo.SaveView(ctx, userID, d.ID, View{Sort: "name"}))
+	require.NoError(t, repo.SaveView(ctx, userID, d.ID, View{Grouping: &grouping, Sort: "-name", CollapsedBoards: []string{"considering"}}))
+	require.NoError(t, repo.SaveView(ctx, userID, d.ID, View{Sort: "name", CollapsedBoards: []string{"sideboard", "considering"}}))
 	v, found, err := repo.FindView(ctx, userID, d.ID)
 	require.NoError(t, err)
 	assert.True(t, found)
-	assert.Equal(t, View{Sort: "name"}, v)
+	assert.Equal(t, View{Sort: "name", CollapsedBoards: []string{"sideboard", "considering"}}, v)
+
+	require.NoError(t, repo.SaveView(ctx, userID, d.ID, View{Sort: "name", CollapsedBoards: []string{}}))
+	v, _, err = repo.FindView(ctx, userID, d.ID)
+	require.NoError(t, err)
+	assert.Empty(t, v.CollapsedBoards)
 
 	after, err := repo.FindByID(ctx, userID, d.ID)
 	require.NoError(t, err)
 	assert.Equal(t, before.Updated, after.Updated)
 
-	assert.ErrorIs(t, repo.SaveView(ctx, otherID, d.ID, View{Sort: "name"}), ErrNotFound)
+	assert.ErrorIs(t, repo.SaveView(ctx, otherID, d.ID, View{Sort: "name", CollapsedBoards: []string{}}), ErrNotFound)
 	_, found, err = repo.FindView(ctx, otherID, d.ID)
 	require.NoError(t, err)
 	assert.False(t, found)
+}
+
+func TestPostgresRepository_Boards(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userID)
+	seedCardsWithoutStorage(t, db, userID)
+	ctx := context.Background()
+	deckID := "00000000-0000-0000-0000-000000000001"
+
+	require.NoError(t, repo.LinkCardToDeck(ctx, userID, deckID, 1, BoardMain))
+	require.NoError(t, repo.LinkCardToDeck(ctx, userID, deckID, 2, BoardSideboard))
+	require.NoError(t, repo.LinkCardToDeck(ctx, userID, deckID, 3, BoardMain))
+	require.NoError(t, repo.LinkCardToDeck(ctx, userID, deckID, 3, BoardConsidering))
+
+	main, err := repo.CreatePendingCard(ctx, userID, PendingCard{DeckID: deckID, Name: "Sol Ring", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "c21", CollectorNumber: "263", Quantity: 2})
+	require.NoError(t, err)
+	assert.Equal(t, BoardMain, main.Board)
+	side, err := repo.CreatePendingCard(ctx, userID, PendingCard{DeckID: deckID, Name: "Duress", ScryfallID: "8d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "m19", CollectorNumber: "94", Quantity: 4, Board: BoardSideboard})
+	require.NoError(t, err)
+	assert.Equal(t, BoardSideboard, side.Board)
+
+	found, err := repo.FindByID(ctx, userID, deckID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, found.CardCount)
+	assert.Equal(t, 2, found.PendingCount)
+	_, shared, err := repo.FindShared(ctx, deckID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, shared.CardCount)
+	all, _, err := repo.FindAll(ctx, userID, Filter{Page: 1, Limit: 25, SortField: "name"})
+	require.NoError(t, err)
+	for _, d := range all {
+		if d.ID == deckID {
+			assert.Equal(t, 1, d.CardCount)
+			assert.Equal(t, 2, d.PendingCount)
+		}
+	}
+
+	cards, err := repo.FindCardsByDeckID(ctx, userID, deckID, "name", false)
+	require.NoError(t, err)
+	boards := map[int]string{}
+	for _, c := range cards {
+		boards[c.ID] = c.Board
+	}
+	assert.Equal(t, map[int]string{1: BoardMain, 2: BoardSideboard, 3: BoardConsidering}, boards)
+
+	moved, err := repo.UpdatePendingBoard(ctx, userID, deckID, side.ID, BoardConsidering)
+	require.NoError(t, err)
+	assert.Equal(t, BoardConsidering, moved.Board)
+	_, err = repo.UpdatePendingBoard(ctx, userID, deckID, 9999, BoardMain)
+	assert.ErrorIs(t, err, ErrPendingCardNotFound)
+
+	_, err = db.Exec(`UPDATE tamiyo.card_deck SET board = 'graveyard' WHERE card_id = 1`)
+	assert.Error(t, err)
+}
+
+func TestPostgresRepository_MovingACardToAnotherBoardRefreshesTheDeck(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userID)
+	seedCardsWithoutStorage(t, db, userID)
+	ctx := context.Background()
+	deckID := "00000000-0000-0000-0000-000000000001"
+	require.NoError(t, repo.LinkCardToDeck(ctx, userID, deckID, 1, BoardMain))
+	_, err := db.Exec(`UPDATE tamiyo.deck SET updated = now() - interval '1 day' WHERE id = $1`, deckID)
+	require.NoError(t, err)
+	before, err := repo.FindByID(ctx, userID, deckID)
+	require.NoError(t, err)
+
+	require.NoError(t, repo.LinkCardToDeck(ctx, userID, deckID, 1, BoardSideboard))
+
+	after, err := repo.FindByID(ctx, userID, deckID)
+	require.NoError(t, err)
+	assert.True(t, after.Updated.After(before.Updated))
+}
+
+func TestPostgresRepository_DeletingACardKeepsItsBoardAsPending(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userID)
+	seedCardsWithoutStorage(t, db, userID)
+	ctx := context.Background()
+	deckID := "00000000-0000-0000-0000-000000000001"
+	require.NoError(t, repo.LinkCardToDeck(ctx, userID, deckID, 1, BoardSideboard))
+	var scryfallID, setCode, collectorNumber string
+	require.NoError(t, db.QueryRow(`SELECT scryfall_id, set_code, collector_number FROM tamiyo.cards WHERE id = 1`).Scan(&scryfallID, &setCode, &collectorNumber))
+	main, err := repo.CreatePendingCard(ctx, userID, PendingCard{DeckID: deckID, Name: "Black Lotus", ScryfallID: scryfallID, SetCode: setCode, CollectorNumber: collectorNumber, Quantity: 1})
+	require.NoError(t, err)
+
+	_, err = db.Exec(`DELETE FROM tamiyo.cards WHERE id = 1`)
+	require.NoError(t, err)
+
+	pending, err := repo.FindPendingCards(ctx, userID, deckID)
+	require.NoError(t, err)
+	require.Len(t, pending, 2)
+	byBoard := map[string]PendingCard{}
+	for _, p := range pending {
+		byBoard[p.Board] = p
+	}
+	assert.Equal(t, main.ID, byBoard[BoardMain].ID)
+	assert.Equal(t, 1, byBoard[BoardMain].Quantity)
+	assert.Equal(t, 1, byBoard[BoardSideboard].Quantity)
+	assert.Equal(t, "Black Lotus", byBoard[BoardSideboard].Name)
 }

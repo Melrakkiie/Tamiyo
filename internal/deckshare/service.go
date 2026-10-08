@@ -48,6 +48,7 @@ type Card struct {
 	CardType        *string
 	ColorIdentity   *string
 	Commander       bool
+	Board           string
 	Tags            []string
 }
 
@@ -148,6 +149,7 @@ type cardKey struct {
 	scryfallID string
 	foil       bool
 	commander  bool
+	board      string
 }
 
 func mergeCards(d deck.Deck, owned []deck.DeckCard, pending []deck.PendingCard) []Card {
@@ -165,7 +167,7 @@ func mergeCards(d deck.Deck, owned []deck.DeckCard, pending []deck.PendingCard) 
 
 	for _, c := range owned {
 		commander := d.CommanderID != nil && *d.CommanderID == c.ID
-		add(cardKey{c.ScryfallID, c.Foil, commander}, Card{
+		add(cardKey{c.ScryfallID, c.Foil, commander, c.Board}, Card{
 			Name:            c.Name,
 			ScryfallID:      c.ScryfallID,
 			SetCode:         c.SetCode,
@@ -177,6 +179,7 @@ func mergeCards(d deck.Deck, owned []deck.DeckCard, pending []deck.PendingCard) 
 			CardType:        c.CardType,
 			ColorIdentity:   c.ColorIdentity,
 			Commander:       commander,
+			Board:           c.Board,
 		})
 	}
 
@@ -187,11 +190,11 @@ func mergeCards(d deck.Deck, owned []deck.DeckCard, pending []deck.PendingCard) 
 		}
 		commander := d.CommanderPendingID != nil && *d.CommanderPendingID == p.ID
 		if commander {
-			add(cardKey{p.ScryfallID, p.Foil, true}, pendingCard(p, 1, true))
+			add(cardKey{p.ScryfallID, p.Foil, true, p.Board}, pendingCard(p, 1, true))
 			quantity--
 		}
 		if quantity > 0 {
-			add(cardKey{p.ScryfallID, p.Foil, false}, pendingCard(p, quantity, false))
+			add(cardKey{p.ScryfallID, p.Foil, false, p.Board}, pendingCard(p, quantity, false))
 		}
 	}
 
@@ -221,5 +224,6 @@ func pendingCard(p deck.PendingCard, quantity int, commander bool) Card {
 		CardType:        p.CardType,
 		ColorIdentity:   p.ColorIdentity,
 		Commander:       commander,
+		Board:           p.Board,
 	}
 }

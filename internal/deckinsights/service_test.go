@@ -624,3 +624,56 @@ func TestGetDeckLegality_FormatsWithoutASizeRuleAreNotChecked(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, report.Legal)
 }
+
+func TestGetDeckLegality_SideboardAndConsideringStayOutOfTheDeckSizeAndSingleton(t *testing.T) {
+	decks, fetcher := deckOf("commander", 100)
+	decks.cardsByDeck["00000000-0000-0000-0000-000000000001"] = append(decks.cardsByDeck["00000000-0000-0000-0000-000000000001"],
+		deck.DeckCard{ID: 500, Name: "Sol Ring", ScryfallID: "ring", Board: deck.BoardSideboard},
+		deck.DeckCard{ID: 501, Name: "Sol Ring", ScryfallID: "ring", Board: deck.BoardConsidering},
+	)
+	decks.pendingByDeck = map[string][]deck.PendingCard{"00000000-0000-0000-0000-000000000001": {{ID: 1, Name: "Sol Ring", ScryfallID: "ring", Quantity: 2, Board: deck.BoardConsidering}}}
+	fetcher.cards["ring"] = scryfall.Card{ID: "ring", Name: "Sol Ring", TypeLine: "Artifact", Legalities: map[string]string{"commander": "legal"}}
+
+	report, err := NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
+
+	require.NoError(t, err)
+	assert.True(t, report.Legal, report.Issues)
+}
+
+func TestGetDeckLegality_ChecksTheSideboardAndConsideringCards(t *testing.T) {
+	decks, fetcher := deckOf("commander", 100)
+	decks.cardsByDeck["00000000-0000-0000-0000-000000000001"] = append(decks.cardsByDeck["00000000-0000-0000-0000-000000000001"],
+		deck.DeckCard{ID: 500, Name: "Channel", ScryfallID: "channel", Board: deck.BoardSideboard},
+	)
+	decks.pendingByDeck = map[string][]deck.PendingCard{"00000000-0000-0000-0000-000000000001": {{ID: 1, Name: "Channel", ScryfallID: "channel", Quantity: 1, Board: deck.BoardConsidering}}}
+	fetcher.cards["channel"] = scryfall.Card{ID: "channel", Name: "Channel", TypeLine: "Sorcery", Legalities: map[string]string{"commander": "banned"}}
+
+	report, err := NewService(decks, fetcher).GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
+
+	require.NoError(t, err)
+	assert.False(t, report.Legal)
+	require.Len(t, report.Issues, 2)
+	assert.Equal(t, deck.BoardSideboard, report.Issues[0].Board)
+	assert.Equal(t, deck.BoardConsidering, report.Issues[1].Board)
+}
+
+func TestGetDeckStats_OnlyCountsTheMainBoard(t *testing.T) {
+	decks := &fakeDeckService{
+		decks: map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Name: "Pile", Format: "modern"}},
+		cardsByDeck: map[string][]deck.DeckCard{"00000000-0000-0000-0000-000000000001": {
+			{ID: 10, Name: "Mountain", ScryfallID: "mtn", Board: deck.BoardMain},
+			{ID: 11, Name: "Mountain", ScryfallID: "mtn", Board: deck.BoardSideboard},
+		}},
+		pendingByDeck: map[string][]deck.PendingCard{
+			"00000000-0000-0000-0000-000000000001": {{ID: 5, Name: "Mountain", ScryfallID: "mtn", Quantity: 3, Board: deck.BoardConsidering}},
+		},
+	}
+	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
+		"mtn": {ID: "mtn", TypeLine: "Basic Land — Mountain", CMC: 0},
+	}}
+
+	stats, err := NewService(decks, fetcher).GetDeckStats(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, stats.CardCount)
+}

@@ -118,11 +118,17 @@ func (s *Service) loadVisibleDeck(ctx context.Context, userID string, deckID str
 		}
 	}
 
-	owner, cards, err := s.loadContent(ctx, ownerID, d)
+	owner, all, err := s.loadContent(ctx, ownerID, d)
 	if err != nil {
 		return ComparedDeck{}, nil, err
 	}
 
+	cards := make([]Card, 0, len(all))
+	for _, c := range all {
+		if deck.InMainBoard(c.Board) {
+			cards = append(cards, c)
+		}
+	}
 	total := 0
 	for _, c := range cards {
 		total += c.Quantity

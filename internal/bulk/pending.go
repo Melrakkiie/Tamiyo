@@ -36,6 +36,8 @@ func (s *Service) CommitPendingCards(ctx context.Context, userID string, deckID 
 		if len(pending) == 0 {
 			return summary, deck.ErrPendingCardNotFound
 		}
+	} else {
+		pending = withoutConsidering(pending)
 	}
 
 	if storageID != nil {
@@ -69,7 +71,7 @@ func (s *Service) CommitPendingCards(ctx context.Context, userID string, deckID 
 				return summary, fmt.Errorf("creating %q: %w", p.Name, err)
 			}
 			summary.CardsCreated++
-			if err := s.decks.PutCardInDeck(ctx, userID, deckID, created.ID); err != nil {
+			if err := s.decks.PutCardInDeck(ctx, userID, deckID, created.ID, p.Board); err != nil {
 				return summary, fmt.Errorf("adding %q to the deck: %w", p.Name, err)
 			}
 			if i == 0 {
@@ -90,6 +92,16 @@ func (s *Service) CommitPendingCards(ctx context.Context, userID string, deckID 
 	}
 
 	return summary, nil
+}
+
+func withoutConsidering(pending []deck.PendingCard) []deck.PendingCard {
+	kept := make([]deck.PendingCard, 0, len(pending))
+	for _, p := range pending {
+		if p.Board != deck.BoardConsidering {
+			kept = append(kept, p)
+		}
+	}
+	return kept
 }
 
 func onlyPendingCard(pending []deck.PendingCard, id int) []deck.PendingCard {

@@ -9,13 +9,23 @@ import (
 )
 
 type viewResponse struct {
-	Grouping *string `json:"grouping"`
-	Sort     string  `json:"sort"`
+	Grouping        *string  `json:"grouping"`
+	Sort            string   `json:"sort"`
+	CollapsedBoards []string `json:"collapsed_boards"`
+}
+
+func toViewResponse(v View) viewResponse {
+	boards := v.CollapsedBoards
+	if boards == nil {
+		boards = []string{}
+	}
+	return viewResponse{Grouping: v.Grouping, Sort: v.Sort, CollapsedBoards: boards}
 }
 
 type setViewRequest struct {
-	Grouping *string `json:"grouping"`
-	Sort     string  `json:"sort" binding:"required"`
+	Grouping        *string  `json:"grouping"`
+	Sort            string   `json:"sort" binding:"required"`
+	CollapsedBoards []string `json:"collapsed_boards"`
 }
 
 func (h *Handler) registerViewRoutes(router gin.IRoutes) {
@@ -28,6 +38,7 @@ func respondViewError(ctx *gin.Context, err error) {
 		apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 		apierr.Mapping{Err: ErrInvalidViewGrouping, Status: http.StatusBadRequest},
 		apierr.Mapping{Err: ErrInvalidViewSort, Status: http.StatusBadRequest},
+		apierr.Mapping{Err: ErrInvalidViewBoards, Status: http.StatusBadRequest},
 	)
 }
 
@@ -41,7 +52,7 @@ func (h *Handler) getView(ctx *gin.Context) {
 		respondViewError(ctx, err)
 		return
 	}
-	ctx.JSON(http.StatusOK, viewResponse(v))
+	ctx.JSON(http.StatusOK, toViewResponse(v))
 }
 
 func (h *Handler) setView(ctx *gin.Context) {
@@ -59,5 +70,5 @@ func (h *Handler) setView(ctx *gin.Context) {
 		respondViewError(ctx, err)
 		return
 	}
-	ctx.JSON(http.StatusOK, viewResponse(v))
+	ctx.JSON(http.StatusOK, toViewResponse(v))
 }

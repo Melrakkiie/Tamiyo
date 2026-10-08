@@ -46,9 +46,22 @@ type DeckCard struct {
 	Colors          *string
 	CardType        *string
 	ColorIdentity   *string
+	Board           string
 	Added           time.Time
 	Updated         time.Time
 }
+
+const (
+	BoardMain        = "main"
+	BoardSideboard   = "sideboard"
+	BoardConsidering = "considering"
+)
+
+func InMainBoard(board string) bool {
+	return board != BoardSideboard && board != BoardConsidering
+}
+
+var ErrCommanderBoard = errors.New("the commander stays in the main deck")
 
 type Filter struct {
 	Format     string
@@ -77,7 +90,7 @@ type Repository interface {
 	FindShared(ctx context.Context, id string) (string, Deck, error)
 
 	FindCardsByDeckID(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]DeckCard, error)
-	LinkCardToDeck(ctx context.Context, userID string, deckID string, cardID int) error
+	LinkCardToDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error
 	UnlinkCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error
 
 	PendingRepository

@@ -169,3 +169,22 @@ func TestGetSharedDeckStats_ScryfallDownReturnsBadGateway(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadGateway, w.Code)
 }
+
+func TestGetSharedDeck_CountsOnlyTheMainBoard(t *testing.T) {
+	service := &fakeSharedService{shared: SharedDeck{
+		Deck: deck.Deck{ID: deckID, Name: "Otters", Added: time.Now(), Updated: time.Now()},
+		Cards: []Card{
+			{Name: "Island", ScryfallID: "i", Quantity: 3, Board: deck.BoardMain},
+			{Name: "Duress", ScryfallID: "d", Quantity: 2, Board: deck.BoardSideboard},
+			{Name: "Opt", ScryfallID: "o", Quantity: 1, Board: deck.BoardConsidering},
+		},
+	}}
+
+	w := get(setupRouter(service), "/shared/decks/"+deckID)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+	assert.Equal(t, float64(3), got["deck"].(map[string]any)["card_count"])
+	assert.Equal(t, "sideboard", got["cards"].([]any)[1].(map[string]any)["board"])
+}

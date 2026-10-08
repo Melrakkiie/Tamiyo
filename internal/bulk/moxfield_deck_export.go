@@ -21,8 +21,20 @@ const (
 
 type deckExportEntry struct {
 	key       moxfieldGroupKey
+	board     string
 	quantity  int
 	commander bool
+}
+
+type boardKey struct {
+	card  moxfieldGroupKey
+	board string
+}
+
+type deckExportBoards struct {
+	main        []deckExportEntry
+	sideboard   []deckExportEntry
+	considering []deckExportEntry
 }
 
 func (s *Service) ExportDeck(ctx context.Context, userID string, deckID string, format string, w io.Writer) error {
@@ -38,35 +50,35 @@ func (s *Service) ExportDeck(ctx context.Context, userID string, deckID string, 
 		return err
 	}
 
-	entries, err := s.deckExportEntries(ctx, userID, d)
+	boards, err := s.deckExportEntries(ctx, userID, d)
 	if err != nil {
 		return err
 	}
 
 	switch format {
 	case DeckExportPlain:
-		return writePlainDeck(w, entries)
+		return writePlainDeck(w, boards)
 	case DeckExportArena:
-		return writeArenaDeck(w, entries)
+		return writeArenaDeck(w, boards)
 	default:
-		return writeMoxfieldDeck(w, entries)
+		return writeMoxfieldDeck(w, boards)
 	}
 }
 
-func (s *Service) deckExportEntries(ctx context.Context, userID string, d deck.Deck) ([]deckExportEntry, error) {
+func (s *Service) deckExportEntries(ctx context.Context, userID string, d deck.Deck) (deckExportBoards, error) {
 	cards, err := s.decks.GetDeckCards(ctx, userID, d.ID, "updated", true)
 	if err != nil {
-		return nil, fmt.Errorf("loading deck cards: %w", err)
+		return deckExportBoards{}, fmt.Errorf("loading deck cards: %w", err)
 	}
 	pending, err := s.decks.GetPendingCards(ctx, userID, d.ID)
 	if err != nil {
-		return nil, fmt.Errorf("loading pending cards: %w", err)
+		return deckExportBoards{}, fmt.Errorf("loading pending cards: %w", err)
 	}
 
-	var commanderKey *moxfieldGroupKey
-	quantities := make(map[moxfieldGroupKey]int)
-	var order []moxfieldGroupKey
-	add := func(key moxfieldGroupKey, quantity int, commander bool) {
+	var commanderKey *boardKey
+	quantities := make(map[boardKey]int)
+	var order []boardKey
+	add := func(key boardKey, quantity int, commander bool) {
 		if commander {
 			commanderKey = &key
 		}
@@ -76,18 +88,19 @@ func (s *Service) deckExportEntries(ctx context.Context, userID string, d deck.D
 		quantities[key] += quantity
 	}
 	for _, c := range cards {
-		key := moxfieldGroupKey{Name: c.Name, SetCode: c.SetCode, CollectorNumber: c.CollectorNumber, Foil: c.Foil}
+		key := boardKey{moxfieldGroupKey{Name: c.Name, SetCode: c.SetCode, CollectorNumber: c.CollectorNumber, Foil: c.Foil}, c.Board}
 		add(key, 1, d.CommanderID != nil && *d.CommanderID == c.ID)
 	}
 	for _, p := range pending {
-		key := moxfieldGroupKey{Name: p.Name, SetCode: p.SetCode, CollectorNumber: p.CollectorNumber, Foil: p.Foil}
+		key := boardKey{moxfieldGroupKey{Name: p.Name, SetCode: p.SetCode, CollectorNumber: p.CollectorNumber, Foil: p.Foil}, p.Board}
 		add(key, p.Quantity, d.CommanderPendingID != nil && *d.CommanderPendingID == p.ID)
 	}
 
 	entries := make([]deckExportEntry, 0, len(order))
 	for _, key := range order {
 		entries = append(entries, deckExportEntry{
-			key:       key,
+			key:       key.card,
+			board:     key.board,
 			quantity:  quantities[key],
 			commander: commanderKey != nil && key == *commanderKey,
 		})
@@ -108,20 +121,58 @@ func (s *Service) deckExportEntries(ctx context.Context, userID string, d deck.D
 		}
 		return !a.key.Foil && b.key.Foil
 	})
-	return entries, nil
+
+	var boards deckExportBoards
+	for _, e := range entries {
+		switch e.board {
+		case deck.BoardSideboard:
+			boards.sideboard = append(boards.sideboard, e)
+		case deck.BoardConsidering:
+			boards.considering = append(boards.considering, e)
+		default:
+			boards.main = append(boards.main, e)
+		}
+	}
+	return boards, nil
 }
 
-func writeMoxfieldDeck(w io.Writer, entries []deckExportEntry) error {
+func writeSection(w io.Writer, header string, lines []string) error {
+	if len(lines) == 0 {
+		return nil
+	}
+	if _, err := fmt.Fprintf(w, "\n%s\n", header); err != nil {
+		return fmt.Errorf("writing section: %w", err)
+	}
+	for _, line := range lines {
+		if _, err := fmt.Fprintln(w, line); err != nil {
+			return fmt.Errorf("writing line: %w", err)
+		}
+	}
+	return nil
+}
+
+func moxfieldLines(entries []deckExportEntry) []string {
+	lines := make([]string, 0, len(entries))
 	for _, e := range entries {
 		foil := ""
 		if e.key.Foil {
 			foil = " *F*"
 		}
-		if _, err := fmt.Fprintf(w, "%d %s (%s) %s%s\n", e.quantity, e.key.Name, e.key.SetCode, e.key.CollectorNumber, foil); err != nil {
+		lines = append(lines, fmt.Sprintf("%d %s (%s) %s%s", e.quantity, e.key.Name, e.key.SetCode, e.key.CollectorNumber, foil))
+	}
+	return lines
+}
+
+func writeMoxfieldDeck(w io.Writer, boards deckExportBoards) error {
+	for _, line := range moxfieldLines(boards.main) {
+		if _, err := fmt.Fprintln(w, line); err != nil {
 			return fmt.Errorf("writing line: %w", err)
 		}
 	}
-	return nil
+	if err := writeSection(w, "SIDEBOARD:", moxfieldLines(boards.sideboard)); err != nil {
+		return err
+	}
+	return writeSection(w, "MAYBEBOARD:", moxfieldLines(boards.considering))
 }
 
 type nameCount struct {
@@ -148,13 +199,29 @@ func countByName(entries []deckExportEntry, name func(string) string) []nameCoun
 	return counts
 }
 
-func writePlainDeck(w io.Writer, entries []deckExportEntry) error {
-	for _, c := range countByName(entries, func(name string) string { return name }) {
-		if _, err := fmt.Fprintf(w, "%d %s\n", c.quantity, c.name); err != nil {
+func plainLines(entries []deckExportEntry, name func(string) string) []string {
+	counts := countByName(entries, name)
+	lines := make([]string, 0, len(counts))
+	for _, c := range counts {
+		lines = append(lines, fmt.Sprintf("%d %s", c.quantity, c.name))
+	}
+	return lines
+}
+
+func samePlainName(name string) string {
+	return name
+}
+
+func writePlainDeck(w io.Writer, boards deckExportBoards) error {
+	for _, line := range plainLines(boards.main, samePlainName) {
+		if _, err := fmt.Fprintln(w, line); err != nil {
 			return fmt.Errorf("writing line: %w", err)
 		}
 	}
-	return nil
+	if err := writeSection(w, "Sideboard", plainLines(boards.sideboard, samePlainName)); err != nil {
+		return err
+	}
+	return writeSection(w, "Maybeboard", plainLines(boards.considering, samePlainName))
 }
 
 func arenaName(name string) string {
@@ -164,8 +231,8 @@ func arenaName(name string) string {
 	return strings.ReplaceAll(name, " / ", " // ")
 }
 
-func writeArenaDeck(w io.Writer, entries []deckExportEntry) error {
-	counts := countByName(entries, arenaName)
+func writeArenaDeck(w io.Writer, boards deckExportBoards) error {
+	counts := countByName(boards.main, arenaName)
 	var commanders, others []nameCount
 	for _, c := range counts {
 		if c.commander {
@@ -190,5 +257,5 @@ func writeArenaDeck(w io.Writer, entries []deckExportEntry) error {
 	if _, err := io.WriteString(w, b.String()); err != nil {
 		return fmt.Errorf("writing deck: %w", err)
 	}
-	return nil
+	return writeSection(w, "Sideboard", plainLines(boards.sideboard, arenaName))
 }

@@ -70,7 +70,7 @@ func checkLegality(d deck.Deck, cards []deck.DeckCard, scryfallByID map[string]s
 		sc, ok := scryfallByID[c.ScryfallID]
 		if !ok {
 			report.Issues = append(report.Issues, LegalityIssue{
-				CardID: c.ID, CardName: c.Name,
+				CardID: c.ID, CardName: c.Name, Board: c.Board,
 				Reason: "could not verify legality: not found on scryfall",
 			})
 			report.Legal = false
@@ -88,13 +88,13 @@ func checkLegality(d deck.Deck, cards []deck.DeckCard, scryfallByID map[string]s
 		case "legal":
 			// nothing to report
 		case "not_legal":
-			report.Issues = append(report.Issues, LegalityIssue{CardID: c.ID, CardName: c.Name, Reason: fmt.Sprintf("not legal in %s", d.Format)})
+			report.Issues = append(report.Issues, LegalityIssue{CardID: c.ID, CardName: c.Name, Board: c.Board, Reason: fmt.Sprintf("not legal in %s", d.Format)})
 			report.Legal = false
 		case "restricted":
-			report.Issues = append(report.Issues, LegalityIssue{CardID: c.ID, CardName: c.Name, Reason: fmt.Sprintf("restricted in %s", d.Format)})
+			report.Issues = append(report.Issues, LegalityIssue{CardID: c.ID, CardName: c.Name, Board: c.Board, Reason: fmt.Sprintf("restricted in %s", d.Format)})
 			report.Legal = false
 		case "banned":
-			report.Issues = append(report.Issues, LegalityIssue{CardID: c.ID, CardName: c.Name, Reason: fmt.Sprintf("banned in %s", d.Format)})
+			report.Issues = append(report.Issues, LegalityIssue{CardID: c.ID, CardName: c.Name, Board: c.Board, Reason: fmt.Sprintf("banned in %s", d.Format)})
 			report.Legal = false
 		}
 	}
@@ -103,12 +103,13 @@ func checkLegality(d deck.Deck, cards []deck.DeckCard, scryfallByID map[string]s
 		return LegalityReport{}, ErrUnknownFormat
 	}
 
+	main := mainBoard(cards)
 	if format == commanderFormat {
-		checkSingleton(&report, cards, scryfallByID)
+		checkSingleton(&report, main, scryfallByID)
 		checkColorIdentity(&report, d, cards, scryfallByID)
 	}
 
-	checkDeckSize(&report, format, len(cards))
+	checkDeckSize(&report, format, len(main))
 
 	return report, nil
 }
@@ -166,7 +167,7 @@ func checkColorIdentity(report *LegalityReport, d deck.Deck, cards []deck.DeckCa
 		for _, color := range sc.ColorIdentity {
 			if !allowed[color] {
 				report.Issues = append(report.Issues, LegalityIssue{
-					CardID: c.ID, CardName: c.Name,
+					CardID: c.ID, CardName: c.Name, Board: c.Board,
 					Reason: fmt.Sprintf(
 						"outside commander's color identity (card: %s, commander: %s)",
 						strings.Join(sc.ColorIdentity, ""), strings.Join(commanderScryfall.ColorIdentity, ""),
@@ -177,6 +178,16 @@ func checkColorIdentity(report *LegalityReport, d deck.Deck, cards []deck.DeckCa
 			}
 		}
 	}
+}
+
+func mainBoard(cards []deck.DeckCard) []deck.DeckCard {
+	main := make([]deck.DeckCard, 0, len(cards))
+	for _, c := range cards {
+		if deck.InMainBoard(c.Board) {
+			main = append(main, c)
+		}
+	}
+	return main
 }
 
 func isBasicLand(typeLine string) bool {

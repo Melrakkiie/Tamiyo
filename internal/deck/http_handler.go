@@ -2,7 +2,9 @@ package deck
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -134,6 +136,7 @@ type deckCardResponse struct {
 	Colors          *string `json:"colors"`
 	CardType        *string `json:"card_type"`
 	ColorIdentity   *string `json:"color_identity"`
+	Board           string  `json:"board"`
 	Added           string  `json:"added"`
 	Updated         string  `json:"updated"`
 }
@@ -152,6 +155,7 @@ func toDeckCardResponse(dc DeckCard) deckCardResponse {
 		Colors:          dc.Colors,
 		CardType:        dc.CardType,
 		ColorIdentity:   dc.ColorIdentity,
+		Board:           dc.Board,
 		Added:           dc.Added.Format("2006-01-02 15:04:05"),
 		Updated:         dc.Updated.Format("2006-01-02 15:04:05"),
 	}
@@ -165,13 +169,13 @@ type deckService interface {
 	DeleteDeck(ctx context.Context, userID string, id string) error
 
 	GetDeckCards(ctx context.Context, userID string, deckID string, sortField string, sortDesc bool) ([]DeckCard, error)
-	PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int) error
+	PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error
 	RemoveCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error
 
 	GetPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error)
 	AddPendingCard(ctx context.Context, userID string, deckID string, p PendingCard) (PendingCard, error)
 	RemovePendingCard(ctx context.Context, userID string, deckID string, id int) error
-	SetPendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (PendingCard, error)
+	UpdatePendingCard(ctx context.Context, userID string, deckID string, id int, quantity *int, board *string) (PendingCard, error)
 
 	GetCardTags(ctx context.Context, userID string, deckID string) (DeckTags, error)
 	SetCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) (TaggedCard, error)
@@ -455,6 +459,10 @@ func (h *Handler) getDeckCards(ctx *gin.Context) {
 	ctx.IndentedJSON(http.StatusOK, response)
 }
 
+type putCardInDeckRequest struct {
+	Board string `json:"board" binding:"omitempty,oneof=main sideboard considering"`
+}
+
 func (h *Handler) putCardInDeck(ctx *gin.Context) {
 	userID, ok := auth.UserIDFromContext(ctx)
 	if !ok {
@@ -474,10 +482,20 @@ func (h *Handler) putCardInDeck(ctx *gin.Context) {
 		return
 	}
 
-	if err := h.service.PutCardInDeck(ctx.Request.Context(), userID, deckID, cardID); err != nil {
+	var req putCardInDeckRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Board == "" {
+		req.Board = BoardMain
+	}
+
+	if err := h.service.PutCardInDeck(ctx.Request.Context(), userID, deckID, cardID, req.Board); err != nil {
 		apierr.Respond(ctx, err,
 			apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: ErrCardNotFound, Status: http.StatusNotFound, Message: "card not found"},
+			apierr.Mapping{Err: ErrCommanderBoard, Status: http.StatusConflict, Message: "the commander stays in the main deck"},
 		)
 		return
 	}

@@ -147,6 +147,7 @@ type fakeDeckService struct {
 	pendingCommanderID int
 	cardCommanderID    int
 	pendingQuantities  map[int]int
+	linkedBoards       map[int]string
 }
 
 func (f *fakeDeckService) SetPendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (deck.PendingCard, error) {
@@ -231,13 +232,17 @@ func (f *fakeDeckService) CreateDeck(ctx context.Context, userID string, d deck.
 	return d, nil
 }
 
-func (f *fakeDeckService) PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int) error {
+func (f *fakeDeckService) PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error {
 	if f.linkErr != nil {
 		return f.linkErr
 	}
 	if f.linkedCards == nil {
 		f.linkedCards = make(map[string][]int)
 	}
+	if f.linkedBoards == nil {
+		f.linkedBoards = make(map[int]string)
+	}
+	f.linkedBoards[cardID] = board
 	f.linkedCards[deckID] = append(f.linkedCards[deckID], cardID)
 	return nil
 }
@@ -1085,4 +1090,64 @@ func TestCommitPendingCards_OffersEachItemAsCommanderOnce(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, cards.created, 2)
 	assert.Equal(t, map[int]int{3: cards.created[0].ID}, decks.promoted)
+}
+
+func TestCommitPendingCards_CommitAllSkipsConsideringCardsAndKeepsTheBoard(t *testing.T) {
+	cards := &fakeCardService{}
+	decks := &fakeDeckService{pending: []deck.PendingCard{
+		{ID: 1, Name: "Duress", Quantity: 1, Board: deck.BoardSideboard},
+		{ID: 2, Name: "Opt", Quantity: 1, Board: deck.BoardConsidering},
+	}}
+	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+
+	summary, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, nil, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, summary.CardsCreated)
+	require.Len(t, cards.created, 1)
+	assert.Equal(t, "Duress", cards.created[0].Name)
+	assert.Equal(t, []int{1}, decks.removedPending)
+	linked := decks.linkedCards["00000000-0000-0000-0000-000000000009"]
+	require.Len(t, linked, 1)
+	assert.Equal(t, deck.BoardSideboard, decks.linkedBoards[linked[0]])
+}
+
+func TestCommitPendingCards_CanCommitASingleConsideringCard(t *testing.T) {
+	cards := &fakeCardService{}
+	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 2, Name: "Opt", Quantity: 1, Board: deck.BoardConsidering}}}
+	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	pendingID := 2
+
+	summary, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, &pendingID, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, summary.CardsCreated)
+	linked := decks.linkedCards["00000000-0000-0000-0000-000000000009"]
+	require.Len(t, linked, 1)
+	assert.Equal(t, deck.BoardConsidering, decks.linkedBoards[linked[0]])
+}
+
+func TestImportIntoDeck_PutsEachSectionInItsBoard(t *testing.T) {
+	cards := &fakeCardService{allCards: []card.Card{{ID: 6, Name: "Sol Ring", ScryfallID: solRingID}}}
+	decks := &fakeDeckService{}
+
+	summary := importDeck(t, cards, decks, "Sideboard\n1 Sol Ring (SLD) 1011\n\nMaybeboard:\n1 Atraxa, Praetors' Voice (CMR) 1\n", true)
+
+	assert.Equal(t, 1, summary.CardsLinked)
+	assert.Equal(t, 1, summary.CardsPending)
+	assert.Equal(t, deck.BoardSideboard, decks.linkedBoards[6])
+	require.Len(t, decks.addedPending, 1)
+	assert.Equal(t, deck.BoardConsidering, decks.addedPending[0].Board)
+	assert.Zero(t, decks.cardCommanderID)
+	assert.Zero(t, decks.pendingCommanderID)
+}
+
+func TestImportIntoDeck_TakesTheCommanderFromTheMainBoard(t *testing.T) {
+	cards := &fakeCardService{allCards: []card.Card{{ID: 5, Name: "Atraxa, Praetors' Voice", ScryfallID: atraxaID}}}
+	decks := &fakeDeckService{}
+
+	importDeck(t, cards, decks, "Sideboard\n1 Sol Ring (SLD) 1011\nDeck\n1 Atraxa, Praetors' Voice (CMR) 1\n", true)
+
+	assert.Equal(t, 5, decks.cardCommanderID)
+	assert.Equal(t, deck.BoardMain, decks.linkedBoards[5])
 }

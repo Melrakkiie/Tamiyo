@@ -48,6 +48,8 @@ type fakeService struct {
 	removePendingErr error
 
 	lastPendingQuantity int
+	lastPendingBoard    string
+	lastPutBoard        string
 
 	deckTags     DeckTags
 	tagErr       error
@@ -121,13 +123,21 @@ func (f *fakeService) RemovePendingCard(ctx context.Context, userID string, deck
 	return f.removePendingErr
 }
 
-func (f *fakeService) SetPendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (PendingCard, error) {
+func (f *fakeService) UpdatePendingCard(ctx context.Context, userID string, deckID string, id int, quantity *int, board *string) (PendingCard, error) {
 	f.lastUserID = userID
 	if f.pendingErr != nil {
 		return PendingCard{}, f.pendingErr
 	}
-	f.lastPendingQuantity = quantity
-	return PendingCard{ID: id, DeckID: deckID, Name: "Island", Quantity: quantity}, nil
+	updated := PendingCard{ID: id, DeckID: deckID, Name: "Island", Quantity: 1, Board: BoardMain}
+	if quantity != nil {
+		f.lastPendingQuantity = *quantity
+		updated.Quantity = *quantity
+	}
+	if board != nil {
+		f.lastPendingBoard = *board
+		updated.Board = *board
+	}
+	return updated, nil
 }
 
 func (f *fakeService) GetAllDecks(ctx context.Context, userID string, filter Filter) ([]Deck, int, error) {
@@ -179,8 +189,9 @@ func (f *fakeService) GetDeckCards(ctx context.Context, userID string, id string
 	return f.getDeckCards, nil
 }
 
-func (f *fakeService) PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int) error {
+func (f *fakeService) PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error {
 	f.lastUserID = userID
+	f.lastPutBoard = board
 	return f.putCardErr
 }
 
@@ -1168,4 +1179,91 @@ func TestHandler_UpdatePendingCard_ReturnsNotFound(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestHandler_UpdatePendingCard_MovesToAnotherBoard(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPatch, "/deck/00000000-0000-0000-0000-000000000002/pending/4", bytes.NewBufferString(`{"board": "sideboard"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, BoardSideboard, service.lastPendingBoard)
+	var response pendingCardResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	assert.Equal(t, BoardSideboard, response.Board)
+}
+
+func TestHandler_UpdatePendingCard_RejectsInvalidBodies(t *testing.T) {
+	for _, body := range []string{`{}`, `{"board": "graveyard"}`} {
+		router := setupRouter(&fakeService{})
+
+		req := httptest.NewRequest(http.MethodPatch, "/deck/00000000-0000-0000-0000-000000000002/pending/4", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code, body)
+	}
+}
+
+func TestHandler_UpdatePendingCard_RefusesToMoveTheCommander(t *testing.T) {
+	router := setupRouter(&fakeService{pendingErr: ErrCommanderBoard})
+
+	req := httptest.NewRequest(http.MethodPatch, "/deck/00000000-0000-0000-0000-000000000002/pending/4", bytes.NewBufferString(`{"board": "considering"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusConflict, w.Code)
+}
+
+func TestHandler_PutCardInDeck_DefaultsToTheMainBoard(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPut, "/deck/00000000-0000-0000-0000-000000000001/cards/4", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNoContent, w.Code)
+	assert.Equal(t, BoardMain, service.lastPutBoard)
+}
+
+func TestHandler_PutCardInDeck_TakesABoard(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPut, "/deck/00000000-0000-0000-0000-000000000001/cards/4", bytes.NewBufferString(`{"board": "considering"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNoContent, w.Code)
+	assert.Equal(t, BoardConsidering, service.lastPutBoard)
+}
+
+func TestHandler_PutCardInDeck_RejectsAnUnknownBoard(t *testing.T) {
+	router := setupRouter(&fakeService{})
+
+	req := httptest.NewRequest(http.MethodPut, "/deck/00000000-0000-0000-0000-000000000001/cards/4", bytes.NewBufferString(`{"board": "graveyard"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_PutCardInDeck_RefusesToMoveTheCommander(t *testing.T) {
+	router := setupRouter(&fakeService{putCardErr: ErrCommanderBoard})
+
+	req := httptest.NewRequest(http.MethodPut, "/deck/00000000-0000-0000-0000-000000000001/cards/4", bytes.NewBufferString(`{"board": "sideboard"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusConflict, w.Code)
 }

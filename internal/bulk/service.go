@@ -52,7 +52,7 @@ type deckService interface {
 	GetAllDecks(ctx context.Context, userID string, filter deck.Filter) ([]deck.Deck, int, error)
 	GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error)
 	CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error)
-	PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int) error
+	PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error
 	GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error)
 	GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error)
 	RemovePendingCard(ctx context.Context, userID string, deckID string, id int) error
@@ -169,7 +169,7 @@ func (s *Service) ImportManaBox(ctx context.Context, userID string, targetStorag
 			summary.CardsCreated++
 
 			if deckID != nil {
-				if err := s.decks.PutCardInDeck(ctx, userID, *deckID, created.ID); err != nil {
+				if err := s.decks.PutCardInDeck(ctx, userID, *deckID, created.ID, deck.BoardMain); err != nil {
 					summary.Warnings = append(summary.Warnings, fmt.Sprintf("line %d: could not link %q to deck: %v", row.LineNo, row.CardName, err))
 				}
 			}

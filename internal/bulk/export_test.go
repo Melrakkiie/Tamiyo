@@ -393,3 +393,55 @@ func splitCSVLines(s string) []string {
 	}
 	return strings.Split(s, "\n")
 }
+
+func boardedDeck() *fakeDeckService {
+	decks := mixedDeck()
+	decks.cardsByDeck["00000000-0000-0000-0000-000000000001"] = append(decks.cardsByDeck["00000000-0000-0000-0000-000000000001"],
+		deck.DeckCard{ID: 104, Name: "Duress", SetCode: "M19", CollectorNumber: "94", Board: deck.BoardSideboard},
+		deck.DeckCard{ID: 105, Name: "Island", SetCode: "MOM", CollectorNumber: "278", Board: deck.BoardSideboard},
+	)
+	decks.pending = append(decks.pending,
+		deck.PendingCard{ID: 8, Name: "Duress", SetCode: "M19", CollectorNumber: "94", Quantity: 1, Board: deck.BoardSideboard},
+		deck.PendingCard{ID: 9, Name: "Fire / Ice", SetCode: "MH2", CollectorNumber: "290", Quantity: 1, Board: deck.BoardConsidering},
+	)
+	return decks
+}
+
+func TestExportDeck_MoxfieldWritesSideboardAndMaybeboardSections(t *testing.T) {
+	out := exportDeckWith(t, boardedDeck(), DeckExportMoxfield)
+
+	assert.Equal(t, "1 Maeve, Insidious Singer (GN3) 2 *F*\n"+
+		"1 Fire / Ice (MH2) 290\n"+
+		"31 Island (MOM) 278\n"+
+		"1 Island (ONE) 263\n"+
+		"\nSIDEBOARD:\n"+
+		"2 Duress (M19) 94\n"+
+		"1 Island (MOM) 278\n"+
+		"\nMAYBEBOARD:\n"+
+		"1 Fire / Ice (MH2) 290\n", out)
+}
+
+func TestExportDeck_PlainListWritesSideboardAndMaybeboardSections(t *testing.T) {
+	out := exportDeckWith(t, boardedDeck(), DeckExportPlain)
+
+	assert.Equal(t, "1 Maeve, Insidious Singer\n1 Fire / Ice\n32 Island\n\nSideboard\n2 Duress\n1 Island\n\nMaybeboard\n1 Fire / Ice\n", out)
+}
+
+func TestExportDeck_ArenaWritesTheSideboardButNotTheMaybeboard(t *testing.T) {
+	out := exportDeckWith(t, boardedDeck(), DeckExportArena)
+
+	assert.Equal(t, "Commander\n1 Maeve, Insidious Singer\n\nDeck\n1 Fire // Ice\n32 Island\n\nSideboard\n2 Duress\n1 Island\n", out)
+}
+
+func TestExportDeck_RoundTripsThroughTheImportParser(t *testing.T) {
+	out := exportDeckWith(t, boardedDeck(), DeckExportMoxfield)
+
+	lines, err := parseMoxfieldDeckList(strings.NewReader(out))
+
+	require.NoError(t, err)
+	counts := map[string]int{}
+	for _, line := range lines {
+		counts[line.Board] += line.Quantity
+	}
+	assert.Equal(t, map[string]int{deck.BoardMain: 34, deck.BoardSideboard: 3, deck.BoardConsidering: 1}, counts)
+}

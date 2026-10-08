@@ -48,6 +48,7 @@ type cardResponse struct {
 	CardType        *string  `json:"card_type"`
 	ColorIdentity   *string  `json:"color_identity"`
 	Commander       bool     `json:"commander"`
+	Board           string   `json:"board"`
 	Tags            []string `json:"tags"`
 }
 
@@ -61,7 +62,9 @@ func toResponse(shared SharedDeck) sharedDeckResponse {
 	cards := make([]cardResponse, 0, len(shared.Cards))
 	total := 0
 	for _, c := range shared.Cards {
-		total += c.Quantity
+		if deck.InMainBoard(c.Board) {
+			total += c.Quantity
+		}
 		response := cardResponse(c)
 		response.Tags = nonNilTags(response.Tags)
 		cards = append(cards, response)

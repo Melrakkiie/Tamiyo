@@ -163,8 +163,12 @@ func (s *Service) placeDeckLines(ctx context.Context, userID string, lines []mox
 
 	var summary Summary
 	placements := make([]deckLinePlacement, 0, len(lines))
-	for i, line := range lines {
-		commander := commanderFromFirstLine && i == 0
+	commanderPending := commanderFromFirstLine
+	for _, line := range lines {
+		commander := commanderPending && deck.InMainBoard(line.Board)
+		if commander {
+			commanderPending = false
+		}
 		resolvedCard, ok := resolved[deckLineKey(line)]
 		if !ok {
 			summary.CardsSkipped += line.Quantity
@@ -196,7 +200,7 @@ func (s *Service) fillDeck(ctx context.Context, userID string, deckID string, pl
 	for _, p := range placements {
 		linked := 0
 		for _, cardID := range p.ownedIDs {
-			if err := s.decks.PutCardInDeck(ctx, userID, deckID, cardID); err != nil {
+			if err := s.decks.PutCardInDeck(ctx, userID, deckID, cardID, p.line.Board); err != nil {
 				summary.Warnings = append(summary.Warnings, fmt.Sprintf("line %d: could not put %q in the deck: %v", p.line.LineNo, p.line.CardName, err))
 				continue
 			}
@@ -225,6 +229,7 @@ func (s *Service) fillDeck(ctx context.Context, userID string, deckID string, pl
 			Colors:          colors,
 			CardType:        cardType,
 			ColorIdentity:   identity,
+			Board:           p.line.Board,
 		})
 		if err != nil {
 			summary.CardsSkipped += p.missing

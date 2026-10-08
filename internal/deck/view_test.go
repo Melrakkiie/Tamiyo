@@ -20,7 +20,7 @@ func TestGetView_DefaultsToTypeGroupingAndManaValueSort(t *testing.T) {
 	v, err := svc.GetView(context.Background(), testUserID, viewDeckID)
 
 	require.NoError(t, err)
-	assert.Equal(t, View{Grouping: strPtr("type"), Sort: "mana_value"}, v)
+	assert.Equal(t, View{Grouping: strPtr("type"), Sort: "mana_value", CollapsedBoards: []string{"considering"}}, v)
 }
 
 func TestGetView_ReturnsTheSavedView(t *testing.T) {
@@ -45,16 +45,27 @@ func TestSetView_SavesAValidView(t *testing.T) {
 	repo := &fakeRepository{findByIDDeck: Deck{ID: viewDeckID}}
 	svc := NewService(repo)
 
-	v, err := svc.SetView(context.Background(), testUserID, viewDeckID, View{Grouping: strPtr("tag"), Sort: "-name"})
+	v, err := svc.SetView(context.Background(), testUserID, viewDeckID, View{Grouping: strPtr("tag"), Sort: "-name", CollapsedBoards: []string{}})
 
 	require.NoError(t, err)
-	assert.Equal(t, View{Grouping: strPtr("tag"), Sort: "-name"}, v)
+	assert.Equal(t, View{Grouping: strPtr("tag"), Sort: "-name", CollapsedBoards: []string{}}, v)
 	require.NotNil(t, repo.savedView)
 	assert.Equal(t, v, *repo.savedView)
 
 	_, err = svc.SetView(context.Background(), testUserID, viewDeckID, View{Sort: "name"})
 	require.NoError(t, err)
 	assert.Nil(t, repo.savedView.Grouping)
+	assert.Equal(t, []string{"considering"}, repo.savedView.CollapsedBoards)
+}
+
+func TestSetView_NormalizesTheCollapsedBoards(t *testing.T) {
+	repo := &fakeRepository{findByIDDeck: Deck{ID: viewDeckID}}
+	svc := NewService(repo)
+
+	v, err := svc.SetView(context.Background(), testUserID, viewDeckID, View{Sort: "name", CollapsedBoards: []string{"considering", "sideboard", "considering"}})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"sideboard", "considering"}, v.CollapsedBoards)
 }
 
 func TestSetView_RejectsInvalidValues(t *testing.T) {
@@ -65,17 +76,19 @@ func TestSetView_RejectsInvalidValues(t *testing.T) {
 	assert.ErrorIs(t, err, ErrInvalidViewGrouping)
 	_, err = svc.SetView(context.Background(), testUserID, viewDeckID, View{Sort: "color"})
 	assert.ErrorIs(t, err, ErrInvalidViewSort)
+	_, err = svc.SetView(context.Background(), testUserID, viewDeckID, View{Sort: "name", CollapsedBoards: []string{"main"}})
+	assert.ErrorIs(t, err, ErrInvalidViewBoards)
 	assert.Nil(t, repo.savedView)
 }
 
 func TestHandler_GetView(t *testing.T) {
-	router := setupRouter(&fakeService{view: View{Grouping: strPtr("type"), Sort: "mana_value"}})
+	router := setupRouter(&fakeService{view: View{Grouping: strPtr("type"), Sort: "mana_value", CollapsedBoards: []string{"considering"}}})
 
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/deck/"+viewDeckID+"/view", nil))
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.JSONEq(t, `{"grouping":"type","sort":"mana_value"}`, w.Body.String())
+	assert.JSONEq(t, `{"grouping":"type","sort":"mana_value","collapsed_boards":["considering"]}`, w.Body.String())
 }
 
 func TestHandler_SetView(t *testing.T) {
@@ -83,11 +96,11 @@ func TestHandler_SetView(t *testing.T) {
 	router := setupRouter(service)
 
 	w := httptest.NewRecorder()
-	router.ServeHTTP(w, jsonRequest(http.MethodPut, "/deck/"+viewDeckID+"/view", `{"grouping":null,"sort":"-added"}`))
+	router.ServeHTTP(w, jsonRequest(http.MethodPut, "/deck/"+viewDeckID+"/view", `{"grouping":null,"sort":"-added","collapsed_boards":["sideboard"]}`))
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.JSONEq(t, `{"grouping":null,"sort":"-added"}`, w.Body.String())
-	assert.Equal(t, View{Sort: "-added"}, service.lastView)
+	assert.JSONEq(t, `{"grouping":null,"sort":"-added","collapsed_boards":["sideboard"]}`, w.Body.String())
+	assert.Equal(t, View{Sort: "-added", CollapsedBoards: []string{"sideboard"}}, service.lastView)
 }
 
 func TestHandler_ViewErrors(t *testing.T) {
@@ -101,6 +114,7 @@ func TestHandler_ViewErrors(t *testing.T) {
 		"missing sort":     {http.MethodPut, `{"grouping":"type"}`, nil, http.StatusBadRequest},
 		"invalid grouping": {http.MethodPut, `{"grouping":"x","sort":"name"}`, ErrInvalidViewGrouping, http.StatusBadRequest},
 		"invalid sort":     {http.MethodPut, `{"sort":"x"}`, ErrInvalidViewSort, http.StatusBadRequest},
+		"invalid boards":   {http.MethodPut, `{"sort":"name","collapsed_boards":["main"]}`, ErrInvalidViewBoards, http.StatusBadRequest},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
