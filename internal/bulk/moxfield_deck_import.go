@@ -13,12 +13,21 @@ import (
 
 type ownedCopies struct {
 	byPrinting map[string][]card.Card
+	byName     map[string][]card.Card
 	inDeck     map[int]bool
 	used       map[int]bool
 }
 
-func (o *ownedCopies) take(scryfallID string, foil bool, quantity int) []int {
-	candidates := append([]card.Card(nil), o.byPrinting[strings.ToLower(scryfallID)]...)
+func (o *ownedCopies) takePrinting(scryfallID string, foil bool, quantity int) []int {
+	return o.take(o.byPrinting[strings.ToLower(scryfallID)], foil, quantity)
+}
+
+func (o *ownedCopies) takeName(name string, foil bool, quantity int) []int {
+	return o.take(o.byName[cardNameKey(name)], foil, quantity)
+}
+
+func (o *ownedCopies) take(copies []card.Card, foil bool, quantity int) []int {
+	candidates := append([]card.Card(nil), copies...)
 	sort.SliceStable(candidates, func(i, j int) bool {
 		a, b := candidates[i], candidates[j]
 		if o.inDeck[a.ID] != o.inDeck[b.ID] {
@@ -48,10 +57,20 @@ func (s *Service) loadOwnedCopies(ctx context.Context, userID string) (*ownedCop
 	if err != nil {
 		return nil, fmt.Errorf("loading the collection: %w", err)
 	}
-	owned := &ownedCopies{byPrinting: make(map[string][]card.Card), inDeck: make(map[int]bool), used: make(map[int]bool)}
+	owned := &ownedCopies{
+		byPrinting: make(map[string][]card.Card),
+		byName:     make(map[string][]card.Card),
+		inDeck:     make(map[int]bool),
+		used:       make(map[int]bool),
+	}
 	for _, c := range cards {
 		key := strings.ToLower(c.ScryfallID)
 		owned.byPrinting[key] = append(owned.byPrinting[key], c)
+		full, front := cardNameKey(c.Name), cardNameKey(frontFaceName(c.Name))
+		owned.byName[full] = append(owned.byName[full], c)
+		if front != full {
+			owned.byName[front] = append(owned.byName[front], c)
+		}
 	}
 
 	const limit = 100
@@ -75,6 +94,27 @@ func (s *Service) loadOwnedCopies(ctx context.Context, userID string) (*ownedCop
 	}
 }
 
+func scryfallName(name string) string {
+	if strings.Contains(name, "//") {
+		return name
+	}
+	return strings.ReplaceAll(name, " / ", " // ")
+}
+
+func deckLineKey(line moxfieldDeckLine) string {
+	if line.SetCode == "" {
+		return resolveKeyByName(line.CardName)
+	}
+	return resolveKey(line.SetCode, line.CollectorNumber)
+}
+
+func describeDeckLine(line moxfieldDeckLine) string {
+	if line.SetCode == "" {
+		return fmt.Sprintf("%q", line.CardName)
+	}
+	return fmt.Sprintf("%q (%s #%s)", line.CardName, line.SetCode, line.CollectorNumber)
+}
+
 type deckLinePlacement struct {
 	line      moxfieldDeckLine
 	resolved  ResolvedCard
@@ -91,7 +131,11 @@ func (s *Service) ImportMoxfieldDeck(ctx context.Context, userID string, req Mox
 
 	identifiers := make([]CardIdentifier, len(lines))
 	for i, line := range lines {
-		identifiers[i] = CardIdentifier{SetCode: line.SetCode, CollectorNumber: line.CollectorNumber}
+		if line.SetCode == "" {
+			identifiers[i] = CardIdentifier{Name: scryfallName(line.CardName)}
+		} else {
+			identifiers[i] = CardIdentifier{SetCode: line.SetCode, CollectorNumber: line.CollectorNumber}
+		}
 	}
 	resolved, err := s.scryfall.Resolve(ctx, dedupeIdentifiers(identifiers))
 	if err != nil {
@@ -107,19 +151,22 @@ func (s *Service) ImportMoxfieldDeck(ctx context.Context, userID string, req Mox
 	placements := make([]deckLinePlacement, 0, len(lines))
 	for i, line := range lines {
 		commander := req.CommanderFromFirstLine && i == 0
-		resolvedCard, ok := resolved[resolveKey(line.SetCode, line.CollectorNumber)]
+		resolvedCard, ok := resolved[deckLineKey(line)]
 		if !ok {
 			summary.CardsSkipped += line.Quantity
 			label := ""
 			if commander {
 				label = "commander "
 			}
-			summary.Warnings = append(summary.Warnings, fmt.Sprintf(
-				"line %d: %s%q (%s #%s) not found on scryfall", line.LineNo, label, line.CardName, line.SetCode, line.CollectorNumber,
-			))
+			summary.Warnings = append(summary.Warnings, fmt.Sprintf("line %d: %s%s not found on scryfall", line.LineNo, label, describeDeckLine(line)))
 			continue
 		}
-		ownedIDs := owned.take(resolvedCard.ScryfallID, line.Foil, line.Quantity)
+		var ownedIDs []int
+		if line.SetCode == "" {
+			ownedIDs = owned.takeName(line.CardName, line.Foil, line.Quantity)
+		} else {
+			ownedIDs = owned.takePrinting(resolvedCard.ScryfallID, line.Foil, line.Quantity)
+		}
 		placements = append(placements, deckLinePlacement{
 			line:      line,
 			resolved:  resolvedCard,
@@ -157,11 +204,15 @@ func (s *Service) ImportMoxfieldDeck(ctx context.Context, userID string, req Mox
 		}
 
 		colors, cardType, identity := p.resolved.details()
+		name, setCode, collectorNumber := p.line.CardName, p.line.SetCode, p.line.CollectorNumber
+		if setCode == "" {
+			name, setCode, collectorNumber = p.resolved.Name, p.resolved.SetCode, p.resolved.CollectorNumber
+		}
 		pending, err := s.decks.AddPendingCard(ctx, userID, createdDeck.ID, deck.PendingCard{
-			Name:            p.line.CardName,
+			Name:            name,
 			ScryfallID:      p.resolved.ScryfallID,
-			SetCode:         p.line.SetCode,
-			CollectorNumber: p.line.CollectorNumber,
+			SetCode:         setCode,
+			CollectorNumber: collectorNumber,
 			Foil:            p.line.Foil,
 			Quantity:        p.missing,
 			ManaValue:       p.resolved.ManaValue,

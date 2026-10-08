@@ -145,7 +145,7 @@ Three authenticated routes import a collection or decklist export produced by a 
 
 - `POST /import/manabox` — a [ManaBox](https://manabox.app/) collection CSV export. Carries its own storage/binder and Scryfall ID, so nothing else is needed.
 - `POST /import/moxfield/collection` — a [Moxfield](https://www.moxfield.com/) "Export Collection" CSV. Has no storage concept, so every imported card is assigned to an existing `storage_id` you pass in; has no Scryfall ID either, so each row is resolved by set + collector number against the [Scryfall API](https://scryfall.com/docs/api/cards/collection).
-- `POST /import/moxfield/deck` — a Moxfield deck's plain-text export (deck page → **More → Export → Plain Text**). The format has no section headers, so by convention the first line is treated as the commander unless `commander_from_first_line=false` is passed. It never creates cards: owned copies of each printing go in the deck, and missing ones are added as pending cards.
+- `POST /import/moxfield/deck` — a Moxfield deck's plain-text export (deck page → **More → Export → Plain Text**). The format has no section headers, so by convention the first line is treated as the commander unless `commander_from_first_line=false` is passed. It never creates cards: owned copies of each printing go in the deck, and missing ones are added as pending cards. A plain `4 Lightning Bolt` list works too, matched by name.
 
 All three are `multipart/form-data` requests with the file in a field named `file`, e.g.:
 

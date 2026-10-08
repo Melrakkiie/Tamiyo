@@ -58,6 +58,27 @@ func TestClient_FetchBySetAndCollectorNumber(t *testing.T) {
 	assert.Equal(t, "11111111-1111-1111-1111-111111111111", cards[0].ID)
 }
 
+func TestClient_FetchByName(t *testing.T) {
+	withFakeScryfall(t, func(w http.ResponseWriter, r *http.Request) {
+		var raw map[string][]map[string]string
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&raw))
+		require.Len(t, raw["identifiers"], 1)
+		assert.Equal(t, map[string]string{"name": "Lightning Bolt"}, raw["identifiers"][0])
+
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(collectionResponse{
+			Data: []wireCard{{ID: "11111111-1111-1111-1111-111111111111", Name: "Lightning Bolt", Set: "2xm", CollectorNumber: "129"}},
+		})
+	})
+
+	client := NewClient()
+	cards, err := client.Fetch(context.Background(), []Identifier{{Name: "Lightning Bolt"}})
+
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	assert.Equal(t, "2xm", cards[0].Set)
+}
+
 func TestClient_FetchByID(t *testing.T) {
 	withFakeScryfall(t, func(w http.ResponseWriter, r *http.Request) {
 		var body collectionRequest

@@ -229,10 +229,7 @@ func (f *fakeResolver) Resolve(ctx context.Context, identifiers []CardIdentifier
 	}
 	out := make(map[string]ResolvedCard)
 	for _, id := range identifiers {
-		key := resolveKey(id.SetCode, id.CollectorNumber)
-		if id.ScryfallID != "" {
-			key = resolveKeyByID(id.ScryfallID)
-		}
+		key := identifierKey(id)
 		if v, ok := f.resolved[key]; ok {
 			out[key] = v
 		}
@@ -615,6 +612,73 @@ func TestImportMoxfieldDeck_UnresolvedLinesAreSkippedButTheDeckIsStillCreated(t 
 	assert.Nil(t, decks.created[0].CommanderID)
 	assert.Zero(t, decks.pendingCommanderID)
 	assert.NotEmpty(t, summary.Warnings)
+}
+
+func plainListResolver() *fakeResolver {
+	return &fakeResolver{resolved: map[string]ResolvedCard{
+		resolveKeyByName("Sol Ring"):    {ScryfallID: solRingID, Name: "Sol Ring", SetCode: "cmm", CollectorNumber: "464", ManaValue: 1, CardType: "Artifact"},
+		resolveKeyByName("Fire // Ice"): {ScryfallID: "44444444-0000-0000-0000-000000000000", Name: "Fire // Ice", SetCode: "mh2", CollectorNumber: "290", ManaValue: 4},
+	}}
+}
+
+func importPlainList(t *testing.T, cards *fakeCardService, decks *fakeDeckService, decklist string) (Summary, *fakeResolver) {
+	t.Helper()
+	resolver := plainListResolver()
+	svc := NewService(cards, &fakeStorageService{}, decks, resolver)
+	summary, err := svc.ImportMoxfieldDeck(context.Background(), testUserID, MoxfieldDeckImportRequest{
+		Name: "Plain", Format: "modern",
+	}, strings.NewReader(decklist))
+	require.NoError(t, err)
+	return summary, resolver
+}
+
+func TestImportMoxfieldDeck_PlainListUsesAnyOwnedPrinting(t *testing.T) {
+	cards := &fakeCardService{allCards: []card.Card{
+		{ID: 6, Name: "Sol Ring", ScryfallID: "33333333-0000-0000-0000-000000000000"},
+		{ID: 7, Name: "Sol Ring", ScryfallID: solRingID},
+	}}
+	decks := &fakeDeckService{}
+
+	summary, _ := importPlainList(t, cards, decks, "3 Sol Ring\n")
+
+	assert.Equal(t, 2, summary.CardsLinked)
+	assert.Equal(t, 1, summary.CardsPending)
+	assert.ElementsMatch(t, []int{6, 7}, decks.linkedCards[decks.created[0].ID])
+}
+
+func TestImportMoxfieldDeck_PlainListAddsTheScryfallPrintingAsPending(t *testing.T) {
+	decks := &fakeDeckService{}
+
+	summary, _ := importPlainList(t, &fakeCardService{}, decks, "1 Sol Ring\n")
+
+	assert.Equal(t, 1, summary.CardsPending)
+	require.Len(t, decks.addedPending, 1)
+	pending := decks.addedPending[0]
+	assert.Equal(t, "Sol Ring", pending.Name)
+	assert.Equal(t, solRingID, pending.ScryfallID)
+	assert.Equal(t, "cmm", pending.SetCode)
+	assert.Equal(t, "464", pending.CollectorNumber)
+	assert.Equal(t, 1.0, pending.ManaValue)
+}
+
+func TestImportMoxfieldDeck_PlainListMatchesSplitCardsWithEitherSeparator(t *testing.T) {
+	cards := &fakeCardService{allCards: []card.Card{{ID: 8, Name: "Fire // Ice", ScryfallID: "55555555-0000-0000-0000-000000000000"}}}
+	decks := &fakeDeckService{}
+
+	summary, _ := importPlainList(t, cards, decks, "2 Fire / Ice\n")
+
+	assert.Equal(t, 1, summary.CardsLinked)
+	assert.Equal(t, 1, summary.CardsPending)
+	assert.Equal(t, "Fire // Ice", decks.addedPending[0].Name)
+}
+
+func TestImportMoxfieldDeck_PlainListWarnsAboutUnknownNames(t *testing.T) {
+	summary, _ := importPlainList(t, &fakeCardService{}, &fakeDeckService{}, "1 Not A Real Card\n1 Sol Ring\n")
+
+	assert.Equal(t, 1, summary.CardsSkipped)
+	assert.Equal(t, 1, summary.CardsPending)
+	require.Len(t, summary.Warnings, 1)
+	assert.Contains(t, summary.Warnings[0], "Not A Real Card")
 }
 
 func TestImportMoxfieldDeck_ReturnsErrorWhenScryfallResolveFails(t *testing.T) {

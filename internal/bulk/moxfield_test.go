@@ -86,6 +86,58 @@ func TestParseMoxfieldDeckList_ParsesLines(t *testing.T) {
 	assert.True(t, lines[3].Foil)
 }
 
+func TestParseMoxfieldDeckList_ParsesTheListAndEtchedCards(t *testing.T) {
+	deck := "1 Cryptic Command (PLST) IMA-48\n" +
+		"1 Heartstone (PLST) H09-26\n" +
+		"1 Sol Ring (CMM) 464 *E*\n" +
+		"1 Lórien Revealed (HOC) 179\n"
+
+	lines, err := parseMoxfieldDeckList(strings.NewReader(deck))
+
+	require.NoError(t, err)
+	require.Len(t, lines, 4)
+	assert.Equal(t, "PLST", lines[0].SetCode)
+	assert.Equal(t, "IMA-48", lines[0].CollectorNumber)
+	assert.False(t, lines[0].Foil)
+	assert.Equal(t, "H09-26", lines[1].CollectorNumber)
+	assert.Equal(t, "464", lines[2].CollectorNumber)
+	assert.True(t, lines[2].Foil)
+	assert.Equal(t, "Lórien Revealed", lines[3].CardName)
+}
+
+func TestParseMoxfieldDeckList_ParsesAWholeExport(t *testing.T) {
+	lines, err := parseMoxfieldDeckList(strings.NewReader(maeveDecklist))
+
+	require.NoError(t, err)
+	require.Len(t, lines, 67)
+	total := 0
+	for _, line := range lines {
+		total += line.Quantity
+	}
+	assert.Equal(t, 100, total)
+	assert.Equal(t, "Maeve, Insidious Singer", lines[0].CardName)
+	assert.True(t, lines[0].Foil)
+}
+
+func TestParseMoxfieldDeckList_ParsesAPlainList(t *testing.T) {
+	deck := "4 Lightning Bolt\n" +
+		"1x Sol Ring\n" +
+		"1 Fire // Ice\n" +
+		"2 Island *F*\n" +
+		"1 Counterspell (DMR) 45\n"
+
+	lines, err := parseMoxfieldDeckList(strings.NewReader(deck))
+
+	require.NoError(t, err)
+	require.Len(t, lines, 5)
+	assert.Equal(t, moxfieldDeckLine{LineNo: 1, Quantity: 4, CardName: "Lightning Bolt"}, lines[0])
+	assert.Equal(t, moxfieldDeckLine{LineNo: 2, Quantity: 1, CardName: "Sol Ring"}, lines[1])
+	assert.Equal(t, "Fire // Ice", lines[2].CardName)
+	assert.Equal(t, moxfieldDeckLine{LineNo: 4, Quantity: 2, CardName: "Island", Foil: true}, lines[3])
+	assert.Equal(t, "DMR", lines[4].SetCode)
+	assert.Equal(t, "45", lines[4].CollectorNumber)
+}
+
 func TestParseMoxfieldDeckList_RejectsUnrecognizedLine(t *testing.T) {
 	_, err := parseMoxfieldDeckList(strings.NewReader("not a valid decklist line\n"))
 

@@ -1649,7 +1649,10 @@ paths:
                   format: binary
                   description: >
                     The deck's plain-text export. Each line looks like
-                    "1 Sol Ring (SLD) 1011 *F*".
+                    "1 Sol Ring (SLD) 1011 *F*", or just "1 Sol Ring": a
+                    line without a printing is resolved by name, may use
+                    any owned printing, and missing copies are added as
+                    pending in Scryfall's default printing.
                 name:
                   type: string
                   description: The new deck's name — the file itself doesn't carry one.

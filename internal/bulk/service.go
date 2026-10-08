@@ -299,14 +299,21 @@ func (s *Service) getOrCreateDeck(ctx context.Context, userID string, cache map[
 	return d.ID, true, nil
 }
 
+func identifierKey(id CardIdentifier) string {
+	if id.ScryfallID != "" {
+		return resolveKeyByID(id.ScryfallID)
+	}
+	if id.SetCode == "" && id.Name != "" {
+		return resolveKeyByName(id.Name)
+	}
+	return resolveKey(id.SetCode, id.CollectorNumber)
+}
+
 func dedupeIdentifiers(identifiers []CardIdentifier) []CardIdentifier {
 	seen := make(map[string]struct{}, len(identifiers))
 	out := make([]CardIdentifier, 0, len(identifiers))
 	for _, id := range identifiers {
-		key := resolveKey(id.SetCode, id.CollectorNumber)
-		if id.ScryfallID != "" {
-			key = resolveKeyByID(id.ScryfallID)
-		}
+		key := identifierKey(id)
 		if _, ok := seen[key]; ok {
 			continue
 		}

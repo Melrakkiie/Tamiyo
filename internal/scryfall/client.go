@@ -23,11 +23,15 @@ type Identifier struct {
 	ID              string
 	Set             string
 	CollectorNumber string
+	Name            string
 }
 
 func (id Identifier) toWire() identifier {
 	if id.ID != "" {
 		return identifier{ID: id.ID}
+	}
+	if id.Name != "" {
+		return identifier{Name: id.Name}
 	}
 	return identifier{Set: strings.ToLower(id.Set), CollectorNumber: id.CollectorNumber}
 }
@@ -49,6 +53,7 @@ type identifier struct {
 	ID              string `json:"id,omitempty"`
 	Set             string `json:"set,omitempty"`
 	CollectorNumber string `json:"collector_number,omitempty"`
+	Name            string `json:"name,omitempty"`
 }
 
 type collectionRequest struct {

@@ -75,7 +75,9 @@ type moxfieldDeckLine struct {
 	Foil            bool
 }
 
-var moxfieldDeckLineRE = regexp.MustCompile(`^(\d+)\s+(.+?)\s+\(([A-Za-z0-9]+)\)\s+([A-Za-z0-9★]+)(\s+\*F\*)?$`)
+var moxfieldDeckLineRE = regexp.MustCompile(`^(\d+)x?\s+(.+?)\s+\(([A-Za-z0-9]+)\)\s+(\S+?)(\s+\*[FE]\*)?$`)
+
+var plainDeckLineRE = regexp.MustCompile(`^(\d+)x?\s+(\S.*?)(\s+\*[FE]\*)?$`)
 
 func parseMoxfieldDeckList(r io.Reader) ([]moxfieldDeckLine, error) {
 	scanner := bufio.NewScanner(r)
@@ -91,7 +93,11 @@ func parseMoxfieldDeckList(r io.Reader) ([]moxfieldDeckLine, error) {
 
 		matches := moxfieldDeckLineRE.FindStringSubmatch(text)
 		if matches == nil {
-			return nil, fmt.Errorf("%w: line %d: unrecognized format %q", ErrInvalidFile, lineNo, text)
+			plain := plainDeckLineRE.FindStringSubmatch(text)
+			if plain == nil {
+				return nil, fmt.Errorf("%w: line %d: unrecognized format %q", ErrInvalidFile, lineNo, text)
+			}
+			matches = []string{plain[0], plain[1], plain[2], "", "", plain[3]}
 		}
 
 		quantity, err := strconv.Atoi(matches[1])

@@ -1034,7 +1034,9 @@ The plain-text format has no section headers (no `Commander`/`Sideboard` markers
 | `format` | Yes | The new deck's format (e.g. `commander`, `modern`) — also not in the file. |
 | `commander_from_first_line` | No | `true` or `false`. Defaults to `true`. |
 
-**Expected line format:** `<quantity> <name> (<set code>) <collector number>[ *F*]`, e.g. `1 Sol Ring (SLD) 1011 *F*`. Cards with two names (e.g. double-faced cards) keep both, separated by ` / `.
+**Expected line format:** `<quantity> <name> (<set code>) <collector number>[ *F*]`, e.g. `1 Sol Ring (SLD) 1011 *F*` (`*E*`, etched, counts as foil, and collector numbers can contain dashes, like The List's `IMA-48`). Cards with two names (e.g. double-faced cards) keep both, separated by ` / `.
+
+A plain list works too, one `<quantity> <name>` per line (`4 Lightning Bolt`, `1x Sol Ring`, `1 Fire // Ice`), and both formats can be mixed. A line without a printing is resolved by name on Scryfall: any printing of that card in the collection can go in the deck, and the copies the collection lacks are added as pending cards in the printing Scryfall returns by default. A split or double-faced card can be written with its full name (` / ` or ` // `) or its front face only.
 
 ---
 

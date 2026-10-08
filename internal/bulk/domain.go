@@ -28,14 +28,18 @@ type CardIdentifier struct {
 	ScryfallID      string
 	SetCode         string
 	CollectorNumber string
+	Name            string
 }
 
 type ResolvedCard struct {
-	ScryfallID    string
-	ManaValue     float64
-	Colors        string
-	CardType      string
-	ColorIdentity string
+	ScryfallID      string
+	Name            string
+	SetCode         string
+	CollectorNumber string
+	ManaValue       float64
+	Colors          string
+	CardType        string
+	ColorIdentity   string
 }
 
 func (rc ResolvedCard) details() (*string, *string, *string) {
@@ -56,6 +60,20 @@ type ScryfallResolver interface {
 
 func resolveKey(setCode, collectorNumber string) string {
 	return "sc:" + strings.ToLower(setCode) + "#" + collectorNumber
+}
+
+func resolveKeyByName(name string) string {
+	return "name:" + cardNameKey(name)
+}
+
+func cardNameKey(name string) string {
+	key := strings.ToLower(strings.ReplaceAll(name, "//", "/"))
+	return strings.Join(strings.Fields(key), " ")
+}
+
+func frontFaceName(name string) string {
+	front, _, _ := strings.Cut(strings.ReplaceAll(name, "//", "/"), "/")
+	return strings.TrimSpace(front)
 }
 
 func resolveKeyByID(scryfallID string) string {
