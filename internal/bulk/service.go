@@ -53,13 +53,6 @@ func NewService(cards cardService, storages storageService, decks deckService, s
 	return &Service{cards: cards, storages: storages, decks: decks, scryfall: scryfall}
 }
 
-type MoxfieldDeckImportRequest struct {
-	Name   string
-	Format string
-
-	CommanderFromFirstLine bool
-}
-
 func (s *Service) ImportManaBox(ctx context.Context, userID string, r io.Reader) (Summary, error) {
 	rows, err := parseManaBoxCSV(r)
 	if err != nil {

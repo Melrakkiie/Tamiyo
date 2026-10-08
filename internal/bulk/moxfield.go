@@ -77,6 +77,15 @@ type moxfieldDeckLine struct {
 
 var moxfieldDeckLineRE = regexp.MustCompile(`^(\d+)x?\s+(.+?)\s+\(([A-Za-z0-9]+)\)\s+(\S+?)(\s+\*[FE]\*)?$`)
 
+var deckSectionHeaders = map[string]bool{
+	"commander":  true,
+	"companion":  true,
+	"deck":       true,
+	"mainboard":  true,
+	"sideboard":  true,
+	"maybeboard": true,
+}
+
 var plainDeckLineRE = regexp.MustCompile(`^(\d+)x?\s+(\S.*?)(\s+\*[FE]\*)?$`)
 
 func parseMoxfieldDeckList(r io.Reader) ([]moxfieldDeckLine, error) {
@@ -87,7 +96,7 @@ func parseMoxfieldDeckList(r io.Reader) ([]moxfieldDeckLine, error) {
 	for scanner.Scan() {
 		lineNo++
 		text := strings.TrimSpace(scanner.Text())
-		if text == "" {
+		if text == "" || deckSectionHeaders[strings.ToLower(strings.TrimSuffix(text, ":"))] {
 			continue
 		}
 

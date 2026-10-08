@@ -1389,13 +1389,19 @@ paths:
       tags: [deck-cards]
       summary: Add a list of cards to an existing deck
       description: >
-        Same list format and rules as POST /import/moxfield/deck (a Moxfield
-        plain-text export or a plain "4 Lightning Bolt" list), but adds to
-        this deck instead of creating one. Never creates cards: owned
-        copies go in the deck (cards_linked), copies already in this deck
-        are never used twice, and missing copies become pending cards
-        (cards_pending). With commander_from_first_line, the first line
-        becomes the commander only if the deck has none yet.
+        Adds a decklist to this deck, without ever creating cards in the
+        collection. Accepts a Moxfield plain-text export ("1 Sol Ring (SLD)
+        1011 *F*", resolved by set and collector number against Scryfall),
+        a plain "4 Lightning Bolt" list (resolved by name, any owned
+        printing can be used, missing copies are added in Scryfall's
+        default printing), or a mix of both; section headers such as
+        Commander or Deck are skipped. Owned copies go in the deck
+        (cards_linked), copies in no deck and of the same finish first,
+        each copy used once and copies already in this deck never used
+        twice; missing copies become pending cards (cards_pending). With
+        commander_from_first_line, the first card line becomes the
+        commander only if the deck has none yet: an owned one becomes
+        commander_id, a missing one the pending commander.
       requestBody:
         required: true
         content:
@@ -1720,75 +1726,6 @@ paths:
         "502":
           $ref: "#/components/responses/BadGateway"
 
-  /import/moxfield/deck:
-    post:
-      tags: [bulk-import]
-      summary: Bulk import a Moxfield deck export
-      description: >
-        Imports a Moxfield deck's plain-text export (deck page -> More ->
-        Export -> Plain Text) as one new deck, without ever creating cards
-        in the collection. Each line is resolved by (set, collector number)
-        against Scryfall. Copies of that exact printing already in the
-        collection are put in the deck (cards_linked), copies in no deck
-        and of the same finish first, each copy used once; copies the
-        collection lacks are added to the deck's pending cards
-        (cards_pending). The plain-text format has no section headers, so
-        by convention the first line is treated as the commander unless
-        commander_from_first_line is set to false. An owned commander
-        becomes commander_id, a missing one the pending commander; an
-        unresolvable commander is skipped (counted in cards_skipped) and
-        the deck is still created without one.
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required: [file, name, format]
-              properties:
-                file:
-                  type: string
-                  format: binary
-                  description: >
-                    The deck's plain-text export. Each line looks like
-                    "1 Sol Ring (SLD) 1011 *F*", or just "1 Sol Ring": a
-                    line without a printing is resolved by name, may use
-                    any owned printing, and missing copies are added as
-                    pending in Scryfall's default printing.
-                name:
-                  type: string
-                  description: The new deck's name — the file itself doesn't carry one.
-                format:
-                  type: string
-                  description: The new deck's format (e.g. commander, modern).
-                commander_from_first_line:
-                  type: boolean
-                  default: true
-                  description: Treat the first card line as the deck's commander.
-      responses:
-        "200":
-          description: >
-            Import finished (possibly with some rows skipped — see
-            ImportSummary.warnings).
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ImportSummary"
-        "400":
-          description: >
-            Missing file/name/format, the file couldn't be parsed, or
-            commander_from_first_line is invalid.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "500":
-          $ref: "#/components/responses/InternalError"
-        "502":
-          $ref: "#/components/responses/BadGateway"
-
   /export/manabox:
     get:
       tags: [bulk-export]
@@ -1852,36 +1789,48 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /export/moxfield/deck/{id}:
+  /deck/{id}/export:
     parameters:
       - $ref: "#/components/parameters/DeckID"
     get:
       tags: [bulk-export]
-      summary: Export one deck as a Moxfield deck plain-text export
+      summary: Export one deck as text, in a chosen format
       description: >
-        Exports one deck (not the whole collection) as a Moxfield deck
-        plain-text export, matching the format POST /import/moxfield/deck
-        reads: one line per distinct printing. If the deck has a
-        commander, that printing's line (with its full quantity in the
-        deck) is written first, so re-importing the file reconstructs the
-        same commander via the usual "first line" convention. A deck with
-        no commander has no special first line — every line is sorted
-        alphabetically.
+        Exports the deck's cards, pending ones included, as plain text.
+        moxfield: one line per printing, "1 Sol Ring (SLD) 1011 *F*", the
+        commander's line first with its full quantity, the rest sorted
+        alphabetically, so importing the file back reconstructs the same
+        commander. plain: one line per card name, "4 Lightning Bolt",
+        the commander first. arena: MTG Arena's format, a "Commander"
+        section (when the deck has one) then a "Deck" section, one line per
+        card name, split cards written with " // ".
+      parameters:
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [moxfield, plain, arena]
+            default: moxfield
       responses:
         "200":
-          description: The deck's plain-text export, served as a download.
+          description: The deck as text, served as a download (Deck_moxfield.txt, Deck_list.txt or Deck_arena.txt).
           headers:
             Content-Disposition:
               schema:
                 type: string
-                example: attachment; filename="Moxfield_Deck_export.txt"
+                example: attachment; filename="Deck_list.txt"
           content:
             text/plain:
               schema:
                 type: string
                 format: binary
         "400":
-          $ref: "#/components/responses/InvalidID"
+          description: id is not a UUID, or format is unknown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -2801,10 +2750,10 @@ components:
           type: integer
         cards_linked:
           type: integer
-          description: Deck import only — copies from the collection put in the new deck.
+          description: Deck import only — copies from the collection put in the deck.
         cards_pending:
           type: integer
-          description: Deck import only — copies added to the new deck's pending cards.
+          description: Deck import only — copies added to the deck's pending cards.
         cards_skipped:
           type: integer
         storages_created:

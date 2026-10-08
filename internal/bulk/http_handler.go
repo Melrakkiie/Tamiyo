@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -18,12 +19,11 @@ import (
 type importService interface {
 	ImportManaBox(ctx context.Context, userID string, r io.Reader) (Summary, error)
 	ImportMoxfieldCollection(ctx context.Context, userID string, storageID int, r io.Reader) (Summary, error)
-	ImportMoxfieldDeck(ctx context.Context, userID string, req MoxfieldDeckImportRequest, r io.Reader) (Summary, error)
 	ImportIntoDeck(ctx context.Context, userID string, deckID string, commanderFromFirstLine bool, r io.Reader) (Summary, error)
 
 	ExportManaBox(ctx context.Context, userID string, w io.Writer) error
 	ExportMoxfieldCollection(ctx context.Context, userID string, w io.Writer) error
-	ExportMoxfieldDeck(ctx context.Context, userID string, deckID string, w io.Writer) error
+	ExportDeck(ctx context.Context, userID string, deckID string, format string, w io.Writer) error
 
 	RefreshCardDetails(ctx context.Context, userID string, afterID int) (DetailsRefreshSummary, error)
 	CommitPendingCards(ctx context.Context, userID string, deckID string, storageID, pendingID, quantity *int) (PendingCommitSummary, error)
@@ -40,15 +40,14 @@ func NewHandler(service importService) *Handler {
 func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.POST("/import/manabox", h.importManaBox)
 	router.POST("/import/moxfield/collection", h.importMoxfieldCollection)
-	router.POST("/import/moxfield/deck", h.importMoxfieldDeck)
 
 	router.GET("/export/manabox", h.exportManaBox)
 	router.GET("/export/moxfield/collection", h.exportMoxfieldCollection)
-	router.GET("/export/moxfield/deck/:id", h.exportMoxfieldDeck)
 
 	router.POST("/cards/refresh-details", h.refreshCardDetails)
 	router.POST("/deck/:id/pending/commit", h.commitPendingCards)
 	router.POST("/deck/:id/import", h.importIntoDeck)
+	router.GET("/deck/:id/export", h.exportDeck)
 }
 
 func (h *Handler) refreshCardDetails(ctx *gin.Context) {
@@ -120,53 +119,6 @@ func (h *Handler) importMoxfieldCollection(ctx *gin.Context) {
 	}()
 
 	summary, err := h.service.ImportMoxfieldCollection(ctx.Request.Context(), userID, storageID, file)
-	h.respondImport(ctx, summary, err)
-}
-
-func (h *Handler) importMoxfieldDeck(ctx *gin.Context) {
-	userID, ok := auth.UserIDFromContext(ctx)
-	if !ok {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
-		return
-	}
-
-	name := ctx.PostForm("name")
-	if name == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
-		return
-	}
-
-	format := ctx.PostForm("format")
-	if format == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "format is required"})
-		return
-	}
-
-	req := MoxfieldDeckImportRequest{
-		Name:                   name,
-		Format:                 format,
-		CommanderFromFirstLine: true,
-	}
-
-	if raw := ctx.PostForm("commander_from_first_line"); raw != "" {
-		parsed, err := strconv.ParseBool(raw)
-		if err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "commander_from_first_line must be a boolean"})
-			return
-		}
-		req.CommanderFromFirstLine = parsed
-	}
-
-	file, err := openUploadedFile(ctx, "file")
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	defer func() {
-		_ = file.Close()
-	}()
-
-	summary, err := h.service.ImportMoxfieldDeck(ctx.Request.Context(), userID, req, file)
 	h.respondImport(ctx, summary, err)
 }
 
@@ -249,7 +201,13 @@ func (h *Handler) exportMoxfieldCollection(ctx *gin.Context) {
 	ctx.Data(http.StatusOK, "text/csv; charset=utf-8", buf.Bytes())
 }
 
-func (h *Handler) exportMoxfieldDeck(ctx *gin.Context) {
+var deckExportFilenames = map[string]string{
+	DeckExportMoxfield: "Deck_moxfield.txt",
+	DeckExportPlain:    "Deck_list.txt",
+	DeckExportArena:    "Deck_arena.txt",
+}
+
+func (h *Handler) exportDeck(ctx *gin.Context) {
 	userID, ok := auth.UserIDFromContext(ctx)
 	if !ok {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
@@ -262,13 +220,23 @@ func (h *Handler) exportMoxfieldDeck(ctx *gin.Context) {
 		return
 	}
 
-	var buf bytes.Buffer
-	if err := h.service.ExportMoxfieldDeck(ctx.Request.Context(), userID, deckID, &buf); err != nil {
-		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"})
+	format := ctx.DefaultQuery("format", DeckExportMoxfield)
+	filename, known := deckExportFilenames[format]
+	if !known {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": ErrUnknownExportFormat.Error()})
 		return
 	}
 
-	ctx.Header("Content-Disposition", `attachment; filename="Moxfield_Deck_export.txt"`)
+	var buf bytes.Buffer
+	if err := h.service.ExportDeck(ctx.Request.Context(), userID, deckID, format, &buf); err != nil {
+		apierr.Respond(ctx, err,
+			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
+			apierr.Mapping{Err: ErrUnknownExportFormat, Status: http.StatusBadRequest},
+		)
+		return
+	}
+
+	ctx.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	ctx.Data(http.StatusOK, "text/plain; charset=utf-8", buf.Bytes())
 }
 

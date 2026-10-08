@@ -138,6 +138,17 @@ func TestParseMoxfieldDeckList_ParsesAPlainList(t *testing.T) {
 	assert.Equal(t, "45", lines[4].CollectorNumber)
 }
 
+func TestParseMoxfieldDeckList_SkipsSectionHeaders(t *testing.T) {
+	deck := "Commander\n1 Maeve, Insidious Singer\n\nDeck\n32 Island\nSideboard:\n"
+
+	lines, err := parseMoxfieldDeckList(strings.NewReader(deck))
+
+	require.NoError(t, err)
+	require.Len(t, lines, 2)
+	assert.Equal(t, "Maeve, Insidious Singer", lines[0].CardName)
+	assert.Equal(t, 32, lines[1].Quantity)
+}
+
 func TestParseMoxfieldDeckList_RejectsUnrecognizedLine(t *testing.T) {
 	_, err := parseMoxfieldDeckList(strings.NewReader("not a valid decklist line\n"))
 

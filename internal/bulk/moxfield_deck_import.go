@@ -229,27 +229,6 @@ func (s *Service) fillDeck(ctx context.Context, userID string, deckID string, pl
 	}
 }
 
-func (s *Service) ImportMoxfieldDeck(ctx context.Context, userID string, req MoxfieldDeckImportRequest, r io.Reader) (Summary, error) {
-	lines, err := parseMoxfieldDeckList(r)
-	if err != nil {
-		return Summary{}, err
-	}
-
-	placements, summary, err := s.placeDeckLines(ctx, userID, lines, req.CommanderFromFirstLine, "")
-	if err != nil {
-		return Summary{}, err
-	}
-
-	createdDeck, err := s.decks.CreateDeck(ctx, userID, deck.Deck{Name: req.Name, Format: req.Format})
-	if err != nil {
-		return summary, fmt.Errorf("creating deck %q: %w", req.Name, err)
-	}
-	summary.DecksCreated++
-
-	s.fillDeck(ctx, userID, createdDeck.ID, placements, &summary)
-	return summary, nil
-}
-
 func (s *Service) ImportIntoDeck(ctx context.Context, userID string, deckID string, commanderFromFirstLine bool, r io.Reader) (Summary, error) {
 	d, err := s.decks.GetDeck(ctx, userID, deckID)
 	if err != nil {

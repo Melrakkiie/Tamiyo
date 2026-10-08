@@ -23,13 +23,13 @@ type fakeImportService struct {
 
 	lastUserID            string
 	lastMoxfieldStorageID int
-	lastDeckRequest       MoxfieldDeckImportRequest
 	lastFileContent       string
 
-	exportContent  string
-	exportErr      error
-	lastExportUser string
-	lastExportDeck string
+	exportContent    string
+	exportErr        error
+	lastExportUser   string
+	lastExportDeck   string
+	lastExportFormat string
 
 	refreshSummary DetailsRefreshSummary
 	lastAfterID    int
@@ -63,13 +63,6 @@ func (f *fakeImportService) ImportManaBox(ctx context.Context, userID string, r 
 func (f *fakeImportService) ImportMoxfieldCollection(ctx context.Context, userID string, storageID int, r io.Reader) (Summary, error) {
 	f.lastUserID = userID
 	f.lastMoxfieldStorageID = storageID
-	f.readFile(r)
-	return f.summary, f.err
-}
-
-func (f *fakeImportService) ImportMoxfieldDeck(ctx context.Context, userID string, req MoxfieldDeckImportRequest, r io.Reader) (Summary, error) {
-	f.lastUserID = userID
-	f.lastDeckRequest = req
 	f.readFile(r)
 	return f.summary, f.err
 }
@@ -112,9 +105,10 @@ func (f *fakeImportService) ImportIntoDeck(ctx context.Context, userID string, d
 	return f.summary, f.err
 }
 
-func (f *fakeImportService) ExportMoxfieldDeck(ctx context.Context, userID string, deckID string, w io.Writer) error {
+func (f *fakeImportService) ExportDeck(ctx context.Context, userID string, deckID string, format string, w io.Writer) error {
 	f.lastExportUser = userID
 	f.lastExportDeck = deckID
+	f.lastExportFormat = format
 	if f.exportErr != nil {
 		return f.exportErr
 	}
@@ -245,68 +239,16 @@ func TestImportMoxfieldCollection_ScryfallFailureReturnsBadGateway(t *testing.T)
 	assert.Equal(t, http.StatusBadGateway, w.Code)
 }
 
-func TestImportMoxfieldDeck_RequiresNameAndFormat(t *testing.T) {
+func TestImportMoxfieldDeck_OldRouteIsGone(t *testing.T) {
 	router := setupRouter(&fakeImportService{})
 
-	req := multipartRequest(t, "/import/moxfield/deck", "deck content", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
-
-func TestImportMoxfieldDeck_DefaultsCommanderFromFirstLineToTrue(t *testing.T) {
-	service := &fakeImportService{}
-	router := setupRouter(service)
-
-	req := multipartRequest(t, "/import/moxfield/deck", "deck content", map[string]string{
-		"name": "My Deck", "format": "commander",
-	})
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "My Deck", service.lastDeckRequest.Name)
-	assert.Equal(t, "commander", service.lastDeckRequest.Format)
-	assert.True(t, service.lastDeckRequest.CommanderFromFirstLine)
-}
-
-func TestImportMoxfieldDeck_CanDisableCommanderFromFirstLine(t *testing.T) {
-	service := &fakeImportService{}
-	router := setupRouter(service)
-
-	req := multipartRequest(t, "/import/moxfield/deck", "deck content", map[string]string{
-		"name": "Pile", "format": "modern", "commander_from_first_line": "false",
-	})
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusOK, w.Code)
-	assert.False(t, service.lastDeckRequest.CommanderFromFirstLine)
-}
-
-func TestImportMoxfieldDeck_RejectsInvalidBoolean(t *testing.T) {
-	router := setupRouter(&fakeImportService{})
-
-	req := multipartRequest(t, "/import/moxfield/deck", "deck content", map[string]string{
-		"name": "Pile", "format": "modern", "commander_from_first_line": "not-a-bool",
-	})
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
-
-func TestImportMoxfieldDeck_RequiresFile(t *testing.T) {
-	router := setupRouter(&fakeImportService{})
-
-	req := multipartRequest(t, "/import/moxfield/deck", "", map[string]string{
+	req := multipartRequest(t, "/import/moxfield/deck", "1 Sol Ring", map[string]string{
 		"name": "Pile", "format": "modern",
 	})
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
 func TestRespondImport_UnknownErrorReturnsInternalServerError(t *testing.T) {
@@ -374,50 +316,34 @@ func TestExportMoxfieldCollection_ServiceErrorReturnsInternalServerError(t *test
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
-func TestExportMoxfieldDeck_ReturnsPlainTextWithAttachmentHeaders(t *testing.T) {
-	service := &fakeImportService{exportContent: "1 Sol Ring (SLD) 1011\n"}
-	router := setupRouter(service)
-
-	req := httptest.NewRequest(http.MethodGet, "/export/moxfield/deck/00000000-0000-0000-0000-000000000042", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, `attachment; filename="Moxfield_Deck_export.txt"`, w.Header().Get("Content-Disposition"))
-	assert.Equal(t, "text/plain; charset=utf-8", w.Header().Get("Content-Type"))
-	assert.Equal(t, "1 Sol Ring (SLD) 1011\n", w.Body.String())
-	assert.Equal(t, "00000000-0000-0000-0000-000000000042", service.lastExportDeck)
-	assert.Equal(t, testUserID, service.lastExportUser)
-}
-
-func TestExportMoxfieldDeck_InvalidIDReturnsBadRequest(t *testing.T) {
+func TestExportDeck_InvalidIDReturnsBadRequest(t *testing.T) {
 	router := setupRouter(&fakeImportService{})
 
-	req := httptest.NewRequest(http.MethodGet, "/export/moxfield/deck/not-a-number", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/not-a-uuid/export", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestExportMoxfieldDeck_UnknownDeckReturnsNotFound(t *testing.T) {
-	router := setupRouter(&fakeImportService{exportErr: ErrDeckNotFound})
+func TestExportDeck_ServiceErrorReturnsInternalServerError(t *testing.T) {
+	router := setupRouter(&fakeImportService{exportErr: assertAnError{}})
 
-	req := httptest.NewRequest(http.MethodGet, "/export/moxfield/deck/00000000-0000-0000-0000-000000000999", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/export", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
-func TestExportMoxfieldDeck_ServiceErrorReturnsInternalServerError(t *testing.T) {
-	router := setupRouter(&fakeImportService{exportErr: assertAnError{}})
+func TestExportDeck_OldMoxfieldRouteIsGone(t *testing.T) {
+	router := setupRouter(&fakeImportService{})
 
 	req := httptest.NewRequest(http.MethodGet, "/export/moxfield/deck/00000000-0000-0000-0000-000000000001", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
 func TestHandler_RefreshCardDetails_ReturnsSummary(t *testing.T) {
@@ -633,4 +559,46 @@ func TestHandler_CommitPendingCards_RejectsAQuantityWithoutAPendingCard(t *testi
 		assert.Equal(t, http.StatusBadRequest, w.Code, body)
 		assert.False(t, service.commitCalled)
 	}
+}
+
+func TestExportDeck_ServesTheChosenFormat(t *testing.T) {
+	service := &fakeImportService{exportContent: "1 Sol Ring\n"}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000042/export?format=plain", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "1 Sol Ring\n", w.Body.String())
+	assert.Equal(t, "plain", service.lastExportFormat)
+	assert.Equal(t, "00000000-0000-0000-0000-000000000042", service.lastExportDeck)
+	assert.Contains(t, w.Header().Get("Content-Disposition"), "Deck_list.txt")
+	assert.Equal(t, "text/plain; charset=utf-8", w.Header().Get("Content-Type"))
+}
+
+func TestExportDeck_DefaultsToMoxfield(t *testing.T) {
+	service := &fakeImportService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000042/export", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "moxfield", service.lastExportFormat)
+}
+
+func TestExportDeck_RejectsAnUnknownFormatOrDeck(t *testing.T) {
+	router := setupRouter(&fakeImportService{})
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000042/export?format=mtgo", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	router = setupRouter(&fakeImportService{exportErr: ErrDeckNotFound})
+	req = httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000042/export?format=arena", nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }

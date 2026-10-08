@@ -468,7 +468,7 @@ func TestImportMoxfieldCollection_ScryfallFailureReturnsErrScryfallUnavailable(t
 	assert.ErrorIs(t, err, ErrScryfallUnavailable)
 }
 
-// --- ImportMoxfieldDeck ---------------------------------------------------
+// --- ImportIntoDeck --------------------------------------------------------
 
 const (
 	atraxaID  = "11111111-0000-0000-0000-000000000000"
@@ -482,28 +482,39 @@ func deckImportResolver() *fakeResolver {
 	}}
 }
 
+const targetDeckID = "00000000-0000-0000-0000-000000000077"
+
+func withTargetDeck(decks *fakeDeckService) *fakeDeckService {
+	for _, d := range decks.decks {
+		if d.ID == targetDeckID {
+			return decks
+		}
+	}
+	decks.decks = append(decks.decks, deck.Deck{ID: targetDeckID, Name: "Target"})
+	return decks
+}
+
 func importDeck(t *testing.T, cards *fakeCardService, decks *fakeDeckService, decklist string, commanderFromFirstLine bool) Summary {
 	t.Helper()
-	svc := NewService(cards, &fakeStorageService{}, decks, deckImportResolver())
-	summary, err := svc.ImportMoxfieldDeck(context.Background(), testUserID, MoxfieldDeckImportRequest{
-		Name: "My Deck", Format: "commander", CommanderFromFirstLine: commanderFromFirstLine,
-	}, strings.NewReader(decklist))
+	svc := NewService(cards, &fakeStorageService{}, withTargetDeck(decks), deckImportResolver())
+	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, commanderFromFirstLine, strings.NewReader(decklist))
 	require.NoError(t, err)
 	return summary
 }
 
-func TestImportMoxfieldDeck_NeverCreatesCards(t *testing.T) {
+func TestImportIntoDeck_NeverCreatesCardsOrDecks(t *testing.T) {
 	cards := &fakeCardService{}
 	decks := &fakeDeckService{}
 
 	summary := importDeck(t, cards, decks, "1 Atraxa, Praetors' Voice (CMR) 1\n2 Sol Ring (SLD) 1011\n", true)
 
 	assert.Empty(t, cards.created)
+	assert.Empty(t, decks.created)
 	assert.Equal(t, 0, summary.CardsCreated)
-	assert.Equal(t, 1, summary.DecksCreated)
+	assert.Equal(t, 0, summary.DecksCreated)
 }
 
-func TestImportMoxfieldDeck_PutsOwnedCopiesInTheDeck(t *testing.T) {
+func TestImportIntoDeck_PutsOwnedCopiesInTheDeck(t *testing.T) {
 	cards := &fakeCardService{allCards: []card.Card{
 		{ID: 5, Name: "Atraxa, Praetors' Voice", ScryfallID: atraxaID},
 		{ID: 6, Name: "Sol Ring", ScryfallID: solRingID},
@@ -516,11 +527,11 @@ func TestImportMoxfieldDeck_PutsOwnedCopiesInTheDeck(t *testing.T) {
 	assert.Equal(t, 3, summary.CardsLinked)
 	assert.Equal(t, 0, summary.CardsPending)
 	assert.Equal(t, 5, decks.cardCommanderID)
-	assert.ElementsMatch(t, []int{5, 6, 7}, decks.linkedCards[decks.created[0].ID])
+	assert.ElementsMatch(t, []int{5, 6, 7}, decks.linkedCards[targetDeckID])
 	assert.Empty(t, decks.addedPending)
 }
 
-func TestImportMoxfieldDeck_AddsMissingCopiesAsPending(t *testing.T) {
+func TestImportIntoDeck_AddsMissingCopiesAsPending(t *testing.T) {
 	cards := &fakeCardService{allCards: []card.Card{{ID: 6, Name: "Sol Ring", ScryfallID: solRingID}}}
 	decks := &fakeDeckService{}
 
@@ -528,10 +539,10 @@ func TestImportMoxfieldDeck_AddsMissingCopiesAsPending(t *testing.T) {
 
 	assert.Equal(t, 1, summary.CardsLinked)
 	assert.Equal(t, 2, summary.CardsPending)
-	assert.Equal(t, []int{6}, decks.linkedCards[decks.created[0].ID])
+	assert.Equal(t, []int{6}, decks.linkedCards[targetDeckID])
 	require.Len(t, decks.addedPending, 1)
 	pending := decks.addedPending[0]
-	assert.Equal(t, decks.created[0].ID, pending.DeckID)
+	assert.Equal(t, targetDeckID, pending.DeckID)
 	assert.Equal(t, "Sol Ring", pending.Name)
 	assert.Equal(t, solRingID, pending.ScryfallID)
 	assert.Equal(t, "SLD", pending.SetCode)
@@ -542,7 +553,7 @@ func TestImportMoxfieldDeck_AddsMissingCopiesAsPending(t *testing.T) {
 	assert.Equal(t, "Artifact", *pending.CardType)
 }
 
-func TestImportMoxfieldDeck_OnlyUsesTheExactPrinting(t *testing.T) {
+func TestImportIntoDeck_OnlyUsesTheExactPrinting(t *testing.T) {
 	cards := &fakeCardService{allCards: []card.Card{{ID: 6, Name: "Sol Ring", ScryfallID: "33333333-0000-0000-0000-000000000000"}}}
 	decks := &fakeDeckService{}
 
@@ -550,10 +561,10 @@ func TestImportMoxfieldDeck_OnlyUsesTheExactPrinting(t *testing.T) {
 
 	assert.Equal(t, 0, summary.CardsLinked)
 	assert.Equal(t, 1, summary.CardsPending)
-	assert.Empty(t, decks.linkedCards[decks.created[0].ID])
+	assert.Empty(t, decks.linkedCards[targetDeckID])
 }
 
-func TestImportMoxfieldDeck_PrefersCopiesInNoDeckThenTheSameFinish(t *testing.T) {
+func TestImportIntoDeck_PrefersCopiesInNoDeckThenTheSameFinish(t *testing.T) {
 	cards := &fakeCardService{allCards: []card.Card{
 		{ID: 1, Name: "Sol Ring", ScryfallID: solRingID, Foil: false},
 		{ID: 2, Name: "Sol Ring", ScryfallID: solRingID, Foil: true},
@@ -566,10 +577,10 @@ func TestImportMoxfieldDeck_PrefersCopiesInNoDeckThenTheSameFinish(t *testing.T)
 
 	importDeck(t, cards, decks, "2 Sol Ring (SLD) 1011 *F*\n", false)
 
-	assert.Equal(t, []int{3, 1}, decks.linkedCards[decks.created[0].ID])
+	assert.Equal(t, []int{3, 1}, decks.linkedCards[targetDeckID])
 }
 
-func TestImportMoxfieldDeck_ReusesACopyAlreadyInAnotherDeck(t *testing.T) {
+func TestImportIntoDeck_ReusesACopyAlreadyInAnotherDeck(t *testing.T) {
 	cards := &fakeCardService{allCards: []card.Card{{ID: 2, Name: "Sol Ring", ScryfallID: solRingID}}}
 	decks := &fakeDeckService{
 		decks:       []deck.Deck{{ID: "00000000-0000-0000-0000-000000000099", Name: "Other"}},
@@ -579,10 +590,10 @@ func TestImportMoxfieldDeck_ReusesACopyAlreadyInAnotherDeck(t *testing.T) {
 	summary := importDeck(t, cards, decks, "1 Sol Ring (SLD) 1011\n", false)
 
 	assert.Equal(t, 1, summary.CardsLinked)
-	assert.Equal(t, []int{2}, decks.linkedCards[decks.created[0].ID])
+	assert.Equal(t, []int{2}, decks.linkedCards[targetDeckID])
 }
 
-func TestImportMoxfieldDeck_UsesEachOwnedCopyOnce(t *testing.T) {
+func TestImportIntoDeck_UsesEachOwnedCopyOnce(t *testing.T) {
 	cards := &fakeCardService{allCards: []card.Card{{ID: 6, Name: "Sol Ring", ScryfallID: solRingID}}}
 	decks := &fakeDeckService{}
 
@@ -592,20 +603,20 @@ func TestImportMoxfieldDeck_UsesEachOwnedCopyOnce(t *testing.T) {
 	assert.Equal(t, 1, summary.CardsPending)
 }
 
-func TestImportMoxfieldDeck_MakesAPendingCommanderWhenItIsNotOwned(t *testing.T) {
+func TestImportIntoDeck_MakesAPendingCommanderWhenItIsNotOwned(t *testing.T) {
 	cards := &fakeCardService{}
 	decks := &fakeDeckService{}
 
 	summary := importDeck(t, cards, decks, "1 Atraxa, Praetors' Voice (CMR) 1\n1 Sol Ring (SLD) 1011\n", true)
 
 	assert.Equal(t, 2, summary.CardsPending)
-	assert.Nil(t, decks.created[0].CommanderID)
+	assert.Zero(t, decks.cardCommanderID)
 	require.Len(t, decks.addedPending, 2)
 	assert.Equal(t, "Atraxa, Praetors' Voice", decks.addedPending[0].Name)
 	assert.Equal(t, decks.addedPending[0].ID, decks.pendingCommanderID)
 }
 
-func TestImportMoxfieldDeck_WithoutCommanderFlag(t *testing.T) {
+func TestImportIntoDeck_WithoutCommanderFlag(t *testing.T) {
 	cards := &fakeCardService{allCards: []card.Card{{ID: 5, Name: "Atraxa, Praetors' Voice", ScryfallID: atraxaID}}}
 	decks := &fakeDeckService{}
 
@@ -615,7 +626,7 @@ func TestImportMoxfieldDeck_WithoutCommanderFlag(t *testing.T) {
 	assert.Zero(t, decks.pendingCommanderID)
 }
 
-func TestImportMoxfieldDeck_UnresolvedLinesAreSkippedButTheDeckIsStillCreated(t *testing.T) {
+func TestImportIntoDeck_UnresolvedLinesAreSkippedButTheRestIsImported(t *testing.T) {
 	cards := &fakeCardService{}
 	decks := &fakeDeckService{}
 
@@ -623,7 +634,7 @@ func TestImportMoxfieldDeck_UnresolvedLinesAreSkippedButTheDeckIsStillCreated(t 
 
 	assert.Equal(t, 1, summary.CardsSkipped)
 	assert.Equal(t, 1, summary.CardsPending)
-	assert.Nil(t, decks.created[0].CommanderID)
+	assert.Zero(t, decks.cardCommanderID)
 	assert.Zero(t, decks.pendingCommanderID)
 	assert.NotEmpty(t, summary.Warnings)
 }
@@ -638,15 +649,13 @@ func plainListResolver() *fakeResolver {
 func importPlainList(t *testing.T, cards *fakeCardService, decks *fakeDeckService, decklist string) (Summary, *fakeResolver) {
 	t.Helper()
 	resolver := plainListResolver()
-	svc := NewService(cards, &fakeStorageService{}, decks, resolver)
-	summary, err := svc.ImportMoxfieldDeck(context.Background(), testUserID, MoxfieldDeckImportRequest{
-		Name: "Plain", Format: "modern",
-	}, strings.NewReader(decklist))
+	svc := NewService(cards, &fakeStorageService{}, withTargetDeck(decks), resolver)
+	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, false, strings.NewReader(decklist))
 	require.NoError(t, err)
 	return summary, resolver
 }
 
-func TestImportMoxfieldDeck_PlainListUsesAnyOwnedPrinting(t *testing.T) {
+func TestImportIntoDeck_PlainListUsesAnyOwnedPrinting(t *testing.T) {
 	cards := &fakeCardService{allCards: []card.Card{
 		{ID: 6, Name: "Sol Ring", ScryfallID: "33333333-0000-0000-0000-000000000000"},
 		{ID: 7, Name: "Sol Ring", ScryfallID: solRingID},
@@ -657,10 +666,10 @@ func TestImportMoxfieldDeck_PlainListUsesAnyOwnedPrinting(t *testing.T) {
 
 	assert.Equal(t, 2, summary.CardsLinked)
 	assert.Equal(t, 1, summary.CardsPending)
-	assert.ElementsMatch(t, []int{6, 7}, decks.linkedCards[decks.created[0].ID])
+	assert.ElementsMatch(t, []int{6, 7}, decks.linkedCards[targetDeckID])
 }
 
-func TestImportMoxfieldDeck_PlainListAddsTheScryfallPrintingAsPending(t *testing.T) {
+func TestImportIntoDeck_PlainListAddsTheScryfallPrintingAsPending(t *testing.T) {
 	decks := &fakeDeckService{}
 
 	summary, _ := importPlainList(t, &fakeCardService{}, decks, "1 Sol Ring\n")
@@ -675,7 +684,7 @@ func TestImportMoxfieldDeck_PlainListAddsTheScryfallPrintingAsPending(t *testing
 	assert.Equal(t, 1.0, pending.ManaValue)
 }
 
-func TestImportMoxfieldDeck_PlainListMatchesSplitCardsWithEitherSeparator(t *testing.T) {
+func TestImportIntoDeck_PlainListMatchesSplitCardsWithEitherSeparator(t *testing.T) {
 	cards := &fakeCardService{allCards: []card.Card{{ID: 8, Name: "Fire // Ice", ScryfallID: "55555555-0000-0000-0000-000000000000"}}}
 	decks := &fakeDeckService{}
 
@@ -686,7 +695,7 @@ func TestImportMoxfieldDeck_PlainListMatchesSplitCardsWithEitherSeparator(t *tes
 	assert.Equal(t, "Fire // Ice", decks.addedPending[0].Name)
 }
 
-func TestImportMoxfieldDeck_PlainListWarnsAboutUnknownNames(t *testing.T) {
+func TestImportIntoDeck_PlainListWarnsAboutUnknownNames(t *testing.T) {
 	summary, _ := importPlainList(t, &fakeCardService{}, &fakeDeckService{}, "1 Not A Real Card\n1 Sol Ring\n")
 
 	assert.Equal(t, 1, summary.CardsSkipped)
@@ -694,8 +703,6 @@ func TestImportMoxfieldDeck_PlainListWarnsAboutUnknownNames(t *testing.T) {
 	require.Len(t, summary.Warnings, 1)
 	assert.Contains(t, summary.Warnings[0], "Not A Real Card")
 }
-
-const targetDeckID = "00000000-0000-0000-0000-000000000077"
 
 func importIntoDeck(t *testing.T, cards *fakeCardService, decks *fakeDeckService, decklist string, commanderFromFirstLine bool) Summary {
 	t.Helper()
@@ -758,38 +765,24 @@ func TestImportIntoDeck_ReturnsDeckNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, ErrDeckNotFound)
 }
 
-func TestImportMoxfieldDeck_ReturnsErrorWhenScryfallResolveFails(t *testing.T) {
+func TestImportIntoDeck_ReturnsErrorWhenScryfallResolveFails(t *testing.T) {
 	resolver := &fakeResolver{err: errors.New("scryfall is down")}
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, resolver)
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, withTargetDeck(&fakeDeckService{}), resolver)
 
-	_, err := svc.ImportMoxfieldDeck(context.Background(), testUserID, MoxfieldDeckImportRequest{
-		Name: "Modern Pile", Format: "modern",
-	}, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
+	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, false, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
 
 	assert.ErrorIs(t, err, ErrScryfallUnavailable)
 }
 
-func TestImportMoxfieldDeck_ReturnsErrorWhenTheCollectionCannotBeLoaded(t *testing.T) {
-	svc := NewService(&fakeCardService{getAllErr: errors.New("db is down")}, &fakeStorageService{}, &fakeDeckService{}, deckImportResolver())
+func TestImportIntoDeck_ReturnsErrorWhenTheCollectionCannotBeLoaded(t *testing.T) {
+	svc := NewService(&fakeCardService{getAllErr: errors.New("db is down")}, &fakeStorageService{}, withTargetDeck(&fakeDeckService{}), deckImportResolver())
 
-	_, err := svc.ImportMoxfieldDeck(context.Background(), testUserID, MoxfieldDeckImportRequest{
-		Name: "Modern Pile", Format: "modern",
-	}, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
+	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, false, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
 
 	require.Error(t, err)
 }
 
-func TestImportMoxfieldDeck_ReturnsErrorWhenDeckCreationFails(t *testing.T) {
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{createDeckErr: errors.New("db is down")}, deckImportResolver())
-
-	_, err := svc.ImportMoxfieldDeck(context.Background(), testUserID, MoxfieldDeckImportRequest{
-		Name: "Modern Pile", Format: "modern",
-	}, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
-
-	require.Error(t, err)
-}
-
-func TestImportMoxfieldDeck_WarnsWhenPuttingACopyInTheDeckFails(t *testing.T) {
+func TestImportIntoDeck_WarnsWhenPuttingACopyInTheDeckFails(t *testing.T) {
 	cards := &fakeCardService{allCards: []card.Card{{ID: 6, Name: "Sol Ring", ScryfallID: solRingID}}}
 	decks := &fakeDeckService{linkErr: errors.New("link failed")}
 
@@ -799,7 +792,7 @@ func TestImportMoxfieldDeck_WarnsWhenPuttingACopyInTheDeckFails(t *testing.T) {
 	assert.NotEmpty(t, summary.Warnings)
 }
 
-func TestImportMoxfieldDeck_WarnsWhenAddingAPendingCardFails(t *testing.T) {
+func TestImportIntoDeck_WarnsWhenAddingAPendingCardFails(t *testing.T) {
 	decks := &fakeDeckService{addPendingErr: errors.New("insert failed")}
 
 	summary := importDeck(t, &fakeCardService{}, decks, "1 Sol Ring (SLD) 1011\n", false)

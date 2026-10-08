@@ -826,7 +826,7 @@ Cards wanted in a deck but not in the collection yet (typically picked on Scryfa
 - `PATCH /deck/:id/pending/:pending_id` — change how many copies it stands for. Body: `{ "quantity": 12 }` (1–1000). Returns the item.
 - `DELETE /deck/:id/pending/:pending_id` — remove one. `204`, or `404` if it doesn't exist.
 - `POST /deck/:id/pending/commit` — create every pending card in the collection (one card per copy, in `storage_id` if given), put each in the deck, and clear the list. Body optional: `{ "storage_id": 4 }`, plus `"pending_id": 12` to only add that one pending card (all its copies), and `"quantity": 5` with it to only add that many copies (the pending card keeps the rest). Returns `{ "cards_created": 7 }`. Items are handled one by one: on a failure, those already handled stay done and the rest stay pending.
-- `POST /deck/:id/import` — add a list of cards to this deck, as `multipart/form-data` with the list in a `file` field and an optional `commander_from_first_line` (default `false`). Same list format and rules as [`POST /import/moxfield/deck`](#post-importmoxfielddeck): it never creates cards, owned copies go in the deck (copies already in this deck are never used twice), missing ones become pending cards. The first line only becomes the commander if the deck has none. Returns the same summary as the bulk imports (`cards_linked`, `cards_pending`, `cards_skipped`, `warnings`).
+- `POST /deck/:id/import` — add a list of cards to this deck, as `multipart/form-data` with the list in a `file` field and an optional `commander_from_first_line` (default `false`). It never creates cards: owned copies go in the deck, missing ones become pending cards. Details, list format and response in [`POST /deck/:id/import`](#post-deckidimport) under Bulk Import.
 
 **Errors:** `400` invalid id or body, unknown `storage_id` · `404` deck or pending card not found
 
@@ -959,7 +959,7 @@ Same statistics as [`GET /deck/:id/stats`](#get-deckidstats).
 
 ## Bulk Import
 
-Three routes create cards (and, where the source supports it, storages/decks) in bulk from a collection or decklist export produced by a third-party tool, instead of one `POST /cards` call per card. All three are `multipart/form-data` requests (not JSON) with the file itself in a field named `file`.
+Three routes import a collection or decklist export produced by a third-party tool in bulk, instead of one `POST /cards` call per card. The two collection imports create cards (and, for ManaBox, storages/decks); the deck import fills an existing deck with cards already in the collection and never creates any. All three are `multipart/form-data` requests (not JSON) with the file itself in a field named `file`.
 
 A bulk import never fails outright just because some rows couldn't be resolved: a request that parses successfully always returns `200 OK` with a summary of what happened, including a `warnings` list for any row that was skipped (card not found on Scryfall, a duplicate, a transient error). The import only fails as a whole (non-`200`) when the file itself can't be parsed, a referenced `storage_id` doesn't exist, or Scryfall couldn't be reached at all.
 
@@ -1016,29 +1016,29 @@ Import a Moxfield "Export Collection" CSV. Moxfield's own export has no storage/
 
 ---
 
-### `POST /import/moxfield/deck`
+### `POST /deck/:id/import`
 
-Import a Moxfield deck's plain-text export (deck page → **More → Export → Plain Text**) as one new deck. **It never creates cards in the collection**: like the collection route, each line is resolved by (set, collector number) against Scryfall, then:
+Add a decklist to an **existing** deck — the front end creates the deck first (`POST /deck`), then calls this route. **It never creates cards in the collection**: each line is resolved against Scryfall, then:
 
-- copies of that exact printing already in the collection are put in the deck (`cards_linked`). Copies that are in no deck yet and of the same finish (foil or not) are used first, but a copy already in another deck can be used too, since a card can belong to several decks. Each copy is used at most once per import;
-- the copies the collection lacks are added to the deck's [pending cards](#pending-cards-deckidpending) (`cards_pending`), to add to the collection later with `POST /deck/:id/pending/commit`.
+- copies of that exact printing already in the collection are put in the deck (`cards_linked`). Copies that are in no deck yet and of the same finish (foil or not) are used first, but a copy already in another deck can be used too, since a card can belong to several decks. Copies already in this deck are never used twice, and each copy is used at most once per import;
+- the copies the collection lacks are added to the deck's [pending cards](#pending-cards-deckidpending) (`cards_pending`), to add to the collection later with `POST /deck/:id/pending/commit`. A pending card of the same printing and finish already in the deck has its quantity raised instead.
 
-`cards_created` is always `0` for this route.
+`cards_created` and `decks_created` are always `0` for this route.
 
-The plain-text format has no section headers (no `Commander`/`Sideboard` markers) — by convention, the first line of the file is treated as the deck's commander unless `commander_from_first_line` is set to `false`. An owned commander becomes the deck's `commander_id`; one the collection lacks becomes its pending commander (`commander_pending_id`). A commander that can't be resolved on Scryfall is skipped (counted in `cards_skipped`, noted in `warnings`) and the deck is still created without one.
+When `commander_from_first_line` is `true`, the first card line is treated as the deck's commander, but only if the deck has none yet. An owned commander becomes the deck's `commander_id`; one the collection lacks becomes its pending commander (`commander_pending_id`). A commander that can't be resolved on Scryfall is skipped (counted in `cards_skipped`, noted in `warnings`) and the rest of the list is still imported.
 
 **Form fields**
 
 | Field | Required | Notes |
 |---|---|---|
-| `file` | Yes | The deck's plain-text export. |
-| `name` | Yes | The new deck's name — the file itself doesn't carry one. |
-| `format` | Yes | The new deck's format (e.g. `commander`, `modern`) — also not in the file. |
-| `commander_from_first_line` | No | `true` or `false`. Defaults to `true`. |
+| `file` | Yes | The decklist, as plain text. |
+| `commander_from_first_line` | No | `true` or `false`. Defaults to `false`. |
 
-**Expected line format:** `<quantity> <name> (<set code>) <collector number>[ *F*]`, e.g. `1 Sol Ring (SLD) 1011 *F*` (`*E*`, etched, counts as foil, and collector numbers can contain dashes, like The List's `IMA-48`). Cards with two names (e.g. double-faced cards) keep both, separated by ` / `.
+**Errors** (besides the common ones): `400` invalid deck id · `404` deck not found.
 
-A plain list works too, one `<quantity> <name>` per line (`4 Lightning Bolt`, `1x Sol Ring`, `1 Fire // Ice`), and both formats can be mixed. A line without a printing is resolved by name on Scryfall: any printing of that card in the collection can go in the deck, and the copies the collection lacks are added as pending cards in the printing Scryfall returns by default. A split or double-faced card can be written with its full name (` / ` or ` // `) or its front face only.
+**Expected line format:** `<quantity> <name> (<set code>) <collector number>[ *F*]`, e.g. `1 Sol Ring (SLD) 1011 *F*` — Moxfield's plain-text export (deck page → **More → Export → Plain Text**). `*E*`, etched, counts as foil, and collector numbers can contain dashes, like The List's `IMA-48`. Cards with two names (e.g. double-faced cards) keep both, separated by ` / `.
+
+A plain list works too, one `<quantity> <name>` per line (`4 Lightning Bolt`, `1x Sol Ring`, `1 Fire // Ice`), and both formats can be mixed. A line without a printing is resolved by name on Scryfall: any printing of that card in the collection can go in the deck, and the copies the collection lacks are added as pending cards in the printing Scryfall returns by default. A split or double-faced card can be written with its full name (` / ` or ` // `) or its front face only. Section headers (`Commander`, `Companion`, `Deck`, `Mainboard`, `Sideboard`, `Maybeboard`, as in MTG Arena's format) are skipped, so every format from [`GET /deck/:id/export`](#get-deckidexport) can be imported back.
 
 ---
 
@@ -1064,17 +1064,19 @@ Cards are grouped by storage, since storage (`Binder Name`/`Binder Type`) is Man
 
 Exports the account's entire collection as a Moxfield-compatible "Export Collection" CSV, matching the columns `POST /import/moxfield/collection` reads: `Count, Name, Edition, Foil, Collector Number`. Moxfield's own format has no storage concept at all, so unlike the ManaBox export, cards are grouped across every storage (and unsorted cards) with no distinction — the only way to see a card's storage is via `GET /cards`, not this export.
 
-### `GET /export/moxfield/deck/:id`
+### `GET /deck/:id/export`
 
-Exports **one deck** — not the whole collection — as a Moxfield deck plain-text export, matching the format `POST /import/moxfield/deck` reads: one line per distinct printing, `<quantity> <name> (<set code>) <collector number>[ *F*]`. Unlike the two collection-wide routes above, the response is plain text (`Content-Type: text/plain; charset=utf-8`), served as a download (`Moxfield_Deck_export.txt`).
+Exports **one deck** — not the whole collection — as plain text (`Content-Type: text/plain; charset=utf-8`), served as a download, in the format chosen with the `format` query parameter:
 
-If the deck has a commander (`commander_id` on the deck), that printing's line is written **first** — with its full quantity in the deck, not just the one physical card that happens to be marked as commander — so re-importing the file via `POST /import/moxfield/deck` (which defaults to treating the first line as the commander) reconstructs the same commander. A deck with no commander has no special first line at all; every line is sorted alphabetically.
+| `format` | Content | Download name |
+|---|---|---|
+| `moxfield` (default) | One line per printing, `1 Sol Ring (SLD) 1011 *F*`, the format Moxfield's deck import reads. | `Deck_moxfield.txt` |
+| `plain` | One line per card name, every printing added up, `4 Lightning Bolt`, the commander first. | `Deck_list.txt` |
+| `arena` | MTG Arena's format: a `Commander` section when the deck has one, then a `Deck` section, one line per card name. Split cards are written with ` // `. | `Deck_arena.txt` |
 
-**Errors**
-- `400` — `:id` is not a UUID
-- `401` — unauthenticated
-- `404` — no deck with that id exists for this account
-- `500` — unexpected failure reading the deck
+If the deck has a commander, it comes **first** in every format — in `moxfield`, that printing's line with its full quantity in the deck, not just the one physical card marked as commander — so importing the file back (which treats the first line as the commander when asked) reconstructs the same commander. Everything else is sorted alphabetically. Pending cards are included in every format, a pending commander first like an owned one. All three formats can be imported back with `POST /deck/:id/import`.
+
+**Errors:** `400` `:id` is not a UUID or `format` is unknown · `401` unauthenticated · `404` deck not found
 
 ---
 
