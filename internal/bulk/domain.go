@@ -16,6 +16,8 @@ var ErrScryfallUnavailable = errors.New("could not resolve cards against scryfal
 
 type Summary struct {
 	CardsCreated    int      `json:"cards_created"`
+	CardsLinked     int      `json:"cards_linked"`
+	CardsPending    int      `json:"cards_pending"`
 	CardsSkipped    int      `json:"cards_skipped"`
 	StoragesCreated int      `json:"storages_created"`
 	DecksCreated    int      `json:"decks_created"`

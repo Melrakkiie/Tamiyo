@@ -1624,14 +1624,18 @@ paths:
       summary: Bulk import a Moxfield deck export
       description: >
         Imports a Moxfield deck's plain-text export (deck page -> More ->
-        Export -> Plain Text). Creates one new deck and one card per
-        physical copy listed, linked to it. Each line is resolved by (set,
-        collector number) against Scryfall, same as the collection route.
-        The plain-text format has no section headers, so by convention the
-        first line is treated as the commander unless
-        commander_from_first_line is set to false; an unresolvable
-        commander is skipped (counted in cards_skipped) and the deck is
-        still created without one.
+        Export -> Plain Text) as one new deck, without ever creating cards
+        in the collection. Each line is resolved by (set, collector number)
+        against Scryfall. Copies of that exact printing already in the
+        collection are put in the deck (cards_linked), copies in no deck
+        and of the same finish first, each copy used once; copies the
+        collection lacks are added to the deck's pending cards
+        (cards_pending). The plain-text format has no section headers, so
+        by convention the first line is treated as the commander unless
+        commander_from_first_line is set to false. An owned commander
+        becomes commander_id, a missing one the pending commander; an
+        unresolvable commander is skipped (counted in cards_skipped) and
+        the deck is still created without one.
       requestBody:
         required: true
         content:
@@ -1656,12 +1660,6 @@ paths:
                   type: boolean
                   default: true
                   description: Treat the first card line as the deck's commander.
-                storage_id:
-                  type: integer
-                  minimum: 1
-                  description: >
-                    Must reference an existing storage for this account if
-                    provided. Left unset, imported cards have no storage.
       responses:
         "200":
           description: >
@@ -1673,9 +1671,8 @@ paths:
                 $ref: "#/components/schemas/ImportSummary"
         "400":
           description: >
-            Missing file/name/format, the file couldn't be parsed,
-            commander_from_first_line or storage_id is invalid, or
-            storage_id does not reference an existing storage.
+            Missing file/name/format, the file couldn't be parsed, or
+            commander_from_first_line is invalid.
           content:
             application/json:
               schema:
@@ -2697,6 +2694,12 @@ components:
       properties:
         cards_created:
           type: integer
+        cards_linked:
+          type: integer
+          description: Deck import only — copies from the collection put in the new deck.
+        cards_pending:
+          type: integer
+          description: Deck import only — copies added to the new deck's pending cards.
         cards_skipped:
           type: integer
         storages_created:

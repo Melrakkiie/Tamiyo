@@ -155,15 +155,6 @@ func (h *Handler) importMoxfieldDeck(ctx *gin.Context) {
 		req.CommanderFromFirstLine = parsed
 	}
 
-	if raw := ctx.PostForm("storage_id"); raw != "" {
-		storageID, err := strconv.Atoi(raw)
-		if err != nil || storageID < 1 {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "storage_id must be a positive integer"})
-			return
-		}
-		req.StorageID = &storageID
-	}
-
 	file, err := openUploadedFile(ctx, "file")
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

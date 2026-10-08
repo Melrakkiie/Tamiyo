@@ -256,7 +256,6 @@ func TestImportMoxfieldDeck_DefaultsCommanderFromFirstLineToTrue(t *testing.T) {
 	assert.Equal(t, "My Deck", service.lastDeckRequest.Name)
 	assert.Equal(t, "commander", service.lastDeckRequest.Format)
 	assert.True(t, service.lastDeckRequest.CommanderFromFirstLine)
-	assert.Nil(t, service.lastDeckRequest.StorageID)
 }
 
 func TestImportMoxfieldDeck_CanDisableCommanderFromFirstLine(t *testing.T) {
@@ -264,15 +263,13 @@ func TestImportMoxfieldDeck_CanDisableCommanderFromFirstLine(t *testing.T) {
 	router := setupRouter(service)
 
 	req := multipartRequest(t, "/import/moxfield/deck", "deck content", map[string]string{
-		"name": "Pile", "format": "modern", "commander_from_first_line": "false", "storage_id": "5",
+		"name": "Pile", "format": "modern", "commander_from_first_line": "false",
 	})
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.False(t, service.lastDeckRequest.CommanderFromFirstLine)
-	require.NotNil(t, service.lastDeckRequest.StorageID)
-	assert.Equal(t, 5, *service.lastDeckRequest.StorageID)
 }
 
 func TestImportMoxfieldDeck_RejectsInvalidBoolean(t *testing.T) {
@@ -280,18 +277,6 @@ func TestImportMoxfieldDeck_RejectsInvalidBoolean(t *testing.T) {
 
 	req := multipartRequest(t, "/import/moxfield/deck", "deck content", map[string]string{
 		"name": "Pile", "format": "modern", "commander_from_first_line": "not-a-bool",
-	})
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
-
-func TestImportMoxfieldDeck_RejectsNonPositiveStorageID(t *testing.T) {
-	router := setupRouter(&fakeImportService{})
-
-	req := multipartRequest(t, "/import/moxfield/deck", "deck content", map[string]string{
-		"name": "Pile", "format": "modern", "storage_id": "0",
 	})
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)

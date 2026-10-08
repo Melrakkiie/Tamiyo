@@ -965,6 +965,8 @@ A bulk import never fails outright just because some rows couldn't be resolved: 
 ```json
 {
   "cards_created": 182,
+  "cards_linked": 0,
+  "cards_pending": 0,
   "cards_skipped": 3,
   "storages_created": 1,
   "decks_created": 0,
@@ -973,7 +975,7 @@ A bulk import never fails outright just because some rows couldn't be resolved: 
   ]
 }
 ```
-`warnings` is omitted entirely when empty.
+`warnings` is omitted entirely when empty. `cards_linked` and `cards_pending` are only ever non-zero for the deck import.
 
 **Errors common to all three**
 - `400` — no `file` field, or the file couldn't be parsed (wrong columns, malformed line) — message explains what's wrong
@@ -1014,9 +1016,14 @@ Import a Moxfield "Export Collection" CSV. Moxfield's own export has no storage/
 
 ### `POST /import/moxfield/deck`
 
-Import a Moxfield deck's plain-text export (deck page → **More → Export → Plain Text**). Creates one new deck and one card per physical copy listed, linked to it. Like the collection route, each line is resolved by (set, collector number) against Scryfall.
+Import a Moxfield deck's plain-text export (deck page → **More → Export → Plain Text**) as one new deck. **It never creates cards in the collection**: like the collection route, each line is resolved by (set, collector number) against Scryfall, then:
 
-The plain-text format has no section headers (no `Commander`/`Sideboard` markers) — by convention, the first line of the file is treated as the deck's commander unless `commander_from_first_line` is set to `false`. A commander that can't be resolved on Scryfall is skipped (counted in `cards_skipped`, noted in `warnings`) and the deck is still created without one.
+- copies of that exact printing already in the collection are put in the deck (`cards_linked`). Copies that are in no deck yet and of the same finish (foil or not) are used first, but a copy already in another deck can be used too, since a card can belong to several decks. Each copy is used at most once per import;
+- the copies the collection lacks are added to the deck's [pending cards](#pending-cards-deckidpending) (`cards_pending`), to add to the collection later with `POST /deck/:id/pending/commit`.
+
+`cards_created` is always `0` for this route.
+
+The plain-text format has no section headers (no `Commander`/`Sideboard` markers) — by convention, the first line of the file is treated as the deck's commander unless `commander_from_first_line` is set to `false`. An owned commander becomes the deck's `commander_id`; one the collection lacks becomes its pending commander (`commander_pending_id`). A commander that can't be resolved on Scryfall is skipped (counted in `cards_skipped`, noted in `warnings`) and the deck is still created without one.
 
 **Form fields**
 
@@ -1026,7 +1033,6 @@ The plain-text format has no section headers (no `Commander`/`Sideboard` markers
 | `name` | Yes | The new deck's name — the file itself doesn't carry one. |
 | `format` | Yes | The new deck's format (e.g. `commander`, `modern`) — also not in the file. |
 | `commander_from_first_line` | No | `true` or `false`. Defaults to `true`. |
-| `storage_id` | No | Must reference an existing storage for this account if provided. Left unset, imported cards have no storage (`storage_id: null`) — reasonable for a decklist, which isn't tied to a physical location the way a binder is. |
 
 **Expected line format:** `<quantity> <name> (<set code>) <collector number>[ *F*]`, e.g. `1 Sol Ring (SLD) 1011 *F*`. Cards with two names (e.g. double-faced cards) keep both, separated by ` / `.
 

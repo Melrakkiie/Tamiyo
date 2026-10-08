@@ -607,3 +607,25 @@ func TestService_GetSharedDeck_PropagatesNotFound(t *testing.T) {
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
+
+func TestService_SetPendingCommander_ReplacesTheCommander(t *testing.T) {
+	commanderID := 4
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", CommanderID: &commanderID}}
+	service := NewService(repo)
+
+	err := service.SetPendingCommander(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 7)
+
+	require.NoError(t, err)
+	assert.Nil(t, repo.updatedDeck.CommanderID)
+	require.NotNil(t, repo.updatedDeck.CommanderPendingID)
+	assert.Equal(t, 7, *repo.updatedDeck.CommanderPendingID)
+}
+
+func TestService_SetPendingCommander_ReturnsNotFoundForAnUnknownDeck(t *testing.T) {
+	repo := &fakeRepository{findByIDErr: ErrNotFound}
+	service := NewService(repo)
+
+	err := service.SetPendingCommander(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 7)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}

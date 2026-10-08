@@ -70,6 +70,17 @@ func (s *Service) PromotePendingCommander(ctx context.Context, userID string, de
 	return err
 }
 
+func (s *Service) SetPendingCommander(ctx context.Context, userID string, deckID string, pendingID int) error {
+	d, err := s.repo.FindByID(ctx, userID, deckID)
+	if err != nil {
+		return err
+	}
+	d.CommanderID = nil
+	d.CommanderPendingID = &pendingID
+	_, err = s.repo.Update(ctx, userID, d)
+	return err
+}
+
 func (s *Service) DeleteDeck(ctx context.Context, userID string, id string) error {
 	return s.repo.Delete(ctx, userID, id)
 }

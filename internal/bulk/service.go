@@ -36,6 +36,8 @@ type deckService interface {
 	GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error)
 	RemovePendingCard(ctx context.Context, userID string, deckID string, id int) error
 	PromotePendingCommander(ctx context.Context, userID string, deckID string, pendingID, cardID int) error
+	AddPendingCard(ctx context.Context, userID string, deckID string, p deck.PendingCard) (deck.PendingCard, error)
+	SetPendingCommander(ctx context.Context, userID string, deckID string, pendingID int) error
 }
 
 type Service struct {
@@ -52,8 +54,6 @@ func NewService(cards cardService, storages storageService, decks deckService, s
 type MoxfieldDeckImportRequest struct {
 	Name   string
 	Format string
-
-	StorageID *int
 
 	CommanderFromFirstLine bool
 }
@@ -203,114 +203,6 @@ func (s *Service) ImportMoxfieldCollection(ctx context.Context, userID string, s
 				continue
 			}
 			summary.CardsCreated++
-		}
-	}
-
-	return summary, nil
-}
-
-func (s *Service) ImportMoxfieldDeck(ctx context.Context, userID string, req MoxfieldDeckImportRequest, r io.Reader) (Summary, error) {
-	lines, err := parseMoxfieldDeckList(r)
-	if err != nil {
-		return Summary{}, err
-	}
-
-	if req.StorageID != nil {
-		if _, err := s.storages.GetStorage(ctx, userID, *req.StorageID); err != nil {
-			if errors.Is(err, storage.ErrNotFound) {
-				return Summary{}, ErrTargetStorageNotFound
-			}
-			return Summary{}, err
-		}
-	}
-
-	identifiers := make([]CardIdentifier, len(lines))
-	for i, line := range lines {
-		identifiers[i] = CardIdentifier{SetCode: line.SetCode, CollectorNumber: line.CollectorNumber}
-	}
-	resolved, err := s.scryfall.Resolve(ctx, dedupeIdentifiers(identifiers))
-	if err != nil {
-		return Summary{}, fmt.Errorf("%w: %v", ErrScryfallUnavailable, err)
-	}
-
-	var summary Summary
-	var commanderID *int
-
-	createLineCopies := func(line moxfieldDeckLine, resolvedCard ResolvedCard) []int {
-		ids := make([]int, 0, line.Quantity)
-		colors, cardType, identity := resolvedCard.details()
-		for i := 0; i < line.Quantity; i++ {
-			created, err := s.cards.CreateCard(ctx, userID, card.Card{
-				Name:            line.CardName,
-				ScryfallID:      resolvedCard.ScryfallID,
-				SetCode:         line.SetCode,
-				CollectorNumber: line.CollectorNumber,
-				Foil:            line.Foil,
-				StorageID:       req.StorageID,
-				ManaValue:       resolvedCard.ManaValue,
-				Colors:          colors,
-				CardType:        cardType,
-				ColorIdentity:   identity,
-			})
-			if err != nil {
-				summary.CardsSkipped++
-				summary.Warnings = append(summary.Warnings, fmt.Sprintf("line %d: could not create %q: %v", line.LineNo, line.CardName, err))
-				continue
-			}
-			summary.CardsCreated++
-			ids = append(ids, created.ID)
-		}
-		return ids
-	}
-
-	startAt := 0
-	if req.CommanderFromFirstLine && len(lines) > 0 {
-		first := lines[0]
-		resolvedCard, ok := resolved[resolveKey(first.SetCode, first.CollectorNumber)]
-		if !ok {
-			summary.CardsSkipped += first.Quantity
-			summary.Warnings = append(summary.Warnings, fmt.Sprintf(
-				"line %d: commander %q (%s #%s) not found on scryfall", first.LineNo, first.CardName, first.SetCode, first.CollectorNumber,
-			))
-		} else {
-			ids := createLineCopies(first, resolvedCard)
-			if len(ids) > 0 {
-				commanderID = &ids[0]
-			}
-		}
-		startAt = 1
-	}
-
-	createdDeck, err := s.decks.CreateDeck(ctx, userID, deck.Deck{
-		Name:        req.Name,
-		Format:      req.Format,
-		CommanderID: commanderID,
-	})
-	if err != nil {
-		return summary, fmt.Errorf("creating deck %q: %w", req.Name, err)
-	}
-	summary.DecksCreated++
-
-	if commanderID != nil {
-		if err := s.decks.PutCardInDeck(ctx, userID, createdDeck.ID, *commanderID); err != nil {
-			summary.Warnings = append(summary.Warnings, fmt.Sprintf("could not link commander to deck: %v", err))
-		}
-	}
-
-	for _, line := range lines[startAt:] {
-		resolvedCard, ok := resolved[resolveKey(line.SetCode, line.CollectorNumber)]
-		if !ok {
-			summary.CardsSkipped += line.Quantity
-			summary.Warnings = append(summary.Warnings, fmt.Sprintf(
-				"line %d: %q (%s #%s) not found on scryfall", line.LineNo, line.CardName, line.SetCode, line.CollectorNumber,
-			))
-			continue
-		}
-
-		for _, cardID := range createLineCopies(line, resolvedCard) {
-			if err := s.decks.PutCardInDeck(ctx, userID, createdDeck.ID, cardID); err != nil {
-				summary.Warnings = append(summary.Warnings, fmt.Sprintf("line %d: could not link %q to deck: %v", line.LineNo, line.CardName, err))
-			}
 		}
 	}
 
