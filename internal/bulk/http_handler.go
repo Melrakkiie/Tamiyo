@@ -26,7 +26,7 @@ type importService interface {
 	ExportMoxfieldDeck(ctx context.Context, userID string, deckID string, w io.Writer) error
 
 	RefreshCardDetails(ctx context.Context, userID string, afterID int) (DetailsRefreshSummary, error)
-	CommitPendingCards(ctx context.Context, userID string, deckID string, storageID, pendingID *int) (PendingCommitSummary, error)
+	CommitPendingCards(ctx context.Context, userID string, deckID string, storageID, pendingID, quantity *int) (PendingCommitSummary, error)
 }
 
 type Handler struct {

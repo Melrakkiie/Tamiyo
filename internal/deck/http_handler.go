@@ -171,6 +171,7 @@ type deckService interface {
 	GetPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error)
 	AddPendingCard(ctx context.Context, userID string, deckID string, p PendingCard) (PendingCard, error)
 	RemovePendingCard(ctx context.Context, userID string, deckID string, id int) error
+	SetPendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (PendingCard, error)
 }
 
 type Handler struct {
@@ -195,6 +196,7 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 
 	router.GET("/deck/:id/pending", h.getPendingCards)
 	router.POST("/deck/:id/pending", h.addPendingCard)
+	router.PATCH("/deck/:id/pending/:pending_id", h.updatePendingCard)
 	router.DELETE("/deck/:id/pending/:pending_id", h.removePendingCard)
 }
 

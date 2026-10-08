@@ -38,12 +38,14 @@ type fakeImportService struct {
 	lastDeckID    string
 
 	lastIntoDeckCommander bool
+	lastQuantity          *int
 	lastStorageID         *int
 	lastPendingID         *int
 	commitCalled          bool
 }
 
-func (f *fakeImportService) CommitPendingCards(ctx context.Context, userID string, deckID string, storageID, pendingID *int) (PendingCommitSummary, error) {
+func (f *fakeImportService) CommitPendingCards(ctx context.Context, userID string, deckID string, storageID, pendingID, quantity *int) (PendingCommitSummary, error) {
+	f.lastQuantity = quantity
 	f.lastUserID = userID
 	f.lastDeckID = deckID
 	f.lastStorageID = storageID
@@ -601,5 +603,34 @@ func TestImportIntoDeck_MapsErrors(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, status, w.Code, err.Error())
+	}
+}
+
+func TestHandler_CommitPendingCards_PassesTheQuantity(t *testing.T) {
+	service := &fakeImportService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPost, "/deck/00000000-0000-0000-0000-000000000009/pending/commit", bytes.NewBufferString(`{"pending_id": 3, "quantity": 5}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, service.lastQuantity)
+	assert.Equal(t, 5, *service.lastQuantity)
+}
+
+func TestHandler_CommitPendingCards_RejectsAQuantityWithoutAPendingCard(t *testing.T) {
+	for _, body := range []string{`{"quantity": 5}`, `{"pending_id": 3, "quantity": 0}`} {
+		service := &fakeImportService{}
+		router := setupRouter(service)
+
+		req := httptest.NewRequest(http.MethodPost, "/deck/00000000-0000-0000-0000-000000000009/pending/commit", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code, body)
+		assert.False(t, service.commitCalled)
 	}
 }

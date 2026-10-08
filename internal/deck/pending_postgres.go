@@ -2,6 +2,8 @@ package deck
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"time"
 )
 
@@ -88,6 +90,18 @@ func (r *PostgresRepository) CreatePendingCard(ctx context.Context, userID strin
 		return PendingCard{}, err
 	}
 	return created.toDomain(), nil
+}
+
+func (r *PostgresRepository) UpdatePendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (PendingCard, error) {
+	var row pendingRow
+	query := `UPDATE tamiyo.deck_pending_cards SET quantity = $1 WHERE id = $2 AND deck_id = $3 AND user_id = $4 RETURNING ` + pendingColumns
+	if err := r.db.GetContext(ctx, &row, query, quantity, id, deckID, userID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return PendingCard{}, ErrPendingCardNotFound
+		}
+		return PendingCard{}, err
+	}
+	return row.toDomain(), nil
 }
 
 func (r *PostgresRepository) DeletePendingCard(ctx context.Context, userID string, deckID string, id int) error {

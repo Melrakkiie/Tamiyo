@@ -1034,3 +1034,28 @@ func TestPostgresRepository_FindShared_HidesPrivateAndUnknownDecks(t *testing.T)
 	_, _, err = repo.FindShared(context.Background(), "00000000-0000-0000-0000-000000000000")
 	assert.ErrorIs(t, err, ErrNotFound)
 }
+
+func TestPostgresRepository_UpdatePendingQuantity(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	otherID := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	d, err := repo.Create(context.Background(), userID, Deck{Name: "Islands", Format: "commander"})
+	require.NoError(t, err)
+	created, err := repo.CreatePendingCard(context.Background(), userID, PendingCard{
+		DeckID: d.ID, Name: "Island", ScryfallID: "11111111-1111-1111-1111-111111111111", SetCode: "mom", CollectorNumber: "278", Quantity: 34,
+	})
+	require.NoError(t, err)
+
+	updated, err := repo.UpdatePendingQuantity(context.Background(), userID, d.ID, created.ID, 24)
+	require.NoError(t, err)
+	assert.Equal(t, 24, updated.Quantity)
+	assert.Equal(t, "Island", updated.Name)
+
+	_, err = repo.UpdatePendingQuantity(context.Background(), otherID, d.ID, created.ID, 1)
+	assert.ErrorIs(t, err, ErrPendingCardNotFound)
+
+	found, err := repo.FindByID(context.Background(), userID, d.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 24, found.PendingCount)
+}

@@ -187,3 +187,41 @@ func (h *Handler) removePendingCard(ctx *gin.Context) {
 	}
 	ctx.Status(http.StatusNoContent)
 }
+
+type updatePendingCardRequest struct {
+	Quantity int `json:"quantity" binding:"required,gte=1,lte=1000"`
+}
+
+func (h *Handler) updatePendingCard(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+	deckID, valid := ParseID(ctx.Param("id"))
+	if !valid {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	pendingID, err := strconv.Atoi(ctx.Param("pending_id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid pending_id"})
+		return
+	}
+
+	var req updatePendingCardRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	updated, err := h.service.SetPendingQuantity(ctx.Request.Context(), userID, deckID, pendingID, req.Quantity)
+	if err != nil {
+		apierr.Respond(ctx, err,
+			apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
+			apierr.Mapping{Err: ErrPendingCardNotFound, Status: http.StatusNotFound, Message: "pending card not found"},
+		)
+		return
+	}
+	ctx.JSON(http.StatusOK, toPendingResponse(updated))
+}

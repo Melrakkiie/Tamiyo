@@ -46,6 +46,8 @@ type fakeService struct {
 	pendingErr       error
 	addedPending     PendingCard
 	removePendingErr error
+
+	lastPendingQuantity int
 }
 
 func (f *fakeService) GetPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error) {
@@ -67,6 +69,15 @@ func (f *fakeService) AddPendingCard(ctx context.Context, userID string, deckID 
 func (f *fakeService) RemovePendingCard(ctx context.Context, userID string, deckID string, id int) error {
 	f.lastUserID = userID
 	return f.removePendingErr
+}
+
+func (f *fakeService) SetPendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (PendingCard, error) {
+	f.lastUserID = userID
+	if f.pendingErr != nil {
+		return PendingCard{}, f.pendingErr
+	}
+	f.lastPendingQuantity = quantity
+	return PendingCard{ID: id, DeckID: deckID, Name: "Island", Quantity: quantity}, nil
 }
 
 func (f *fakeService) GetAllDecks(ctx context.Context, userID string, filter Filter) ([]Deck, int, error) {
@@ -1065,4 +1076,42 @@ func TestHandler_GetDeck_RejectsANumericID(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_UpdatePendingCard_SetsTheQuantity(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPatch, "/deck/00000000-0000-0000-0000-000000000002/pending/4", bytes.NewBufferString(`{"quantity": 12}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, 12, service.lastPendingQuantity)
+	var response pendingCardResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	assert.Equal(t, 12, response.Quantity)
+}
+
+func TestHandler_UpdatePendingCard_RejectsAZeroQuantity(t *testing.T) {
+	router := setupRouter(&fakeService{})
+
+	req := httptest.NewRequest(http.MethodPatch, "/deck/00000000-0000-0000-0000-000000000002/pending/4", bytes.NewBufferString(`{"quantity": 0}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_UpdatePendingCard_ReturnsNotFound(t *testing.T) {
+	router := setupRouter(&fakeService{pendingErr: ErrPendingCardNotFound})
+
+	req := httptest.NewRequest(http.MethodPatch, "/deck/00000000-0000-0000-0000-000000000002/pending/4", bytes.NewBufferString(`{"quantity": 3}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }

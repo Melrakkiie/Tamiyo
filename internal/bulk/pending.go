@@ -20,7 +20,7 @@ type PendingCommitSummary struct {
 	CardsCreated int `json:"cards_created"`
 }
 
-func (s *Service) CommitPendingCards(ctx context.Context, userID string, deckID string, storageID, pendingID *int) (PendingCommitSummary, error) {
+func (s *Service) CommitPendingCards(ctx context.Context, userID string, deckID string, storageID, pendingID, quantity *int) (PendingCommitSummary, error) {
 	var summary PendingCommitSummary
 
 	pending, err := s.decks.GetPendingCards(ctx, userID, deckID)
@@ -48,7 +48,11 @@ func (s *Service) CommitPendingCards(ctx context.Context, userID string, deckID 
 	}
 
 	for _, p := range pending {
-		for i := 0; i < p.Quantity; i++ {
+		count := p.Quantity
+		if quantity != nil && *quantity < count {
+			count = *quantity
+		}
+		for i := 0; i < count; i++ {
 			created, err := s.cards.CreateCard(ctx, userID, card.Card{
 				Name:            p.Name,
 				ScryfallID:      p.ScryfallID,
@@ -74,6 +78,12 @@ func (s *Service) CommitPendingCards(ctx context.Context, userID string, deckID 
 				}
 			}
 		}
+		if count < p.Quantity {
+			if _, err := s.decks.SetPendingQuantity(ctx, userID, deckID, p.ID, p.Quantity-count); err != nil {
+				return summary, fmt.Errorf("updating %q in the pending list: %w", p.Name, err)
+			}
+			continue
+		}
 		if err := s.decks.RemovePendingCard(ctx, userID, deckID, p.ID); err != nil {
 			return summary, fmt.Errorf("clearing %q from the pending list: %w", p.Name, err)
 		}
@@ -94,6 +104,7 @@ func onlyPendingCard(pending []deck.PendingCard, id int) []deck.PendingCard {
 type commitPendingRequest struct {
 	StorageID *int `json:"storage_id"`
 	PendingID *int `json:"pending_id"`
+	Quantity  *int `json:"quantity"`
 }
 
 func (h *Handler) commitPendingCards(ctx *gin.Context) {
@@ -122,9 +133,13 @@ func (h *Handler) commitPendingCards(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "pending_id must be a positive integer"})
 			return
 		}
+		if req.Quantity != nil && (req.PendingID == nil || *req.Quantity <= 0) {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "quantity must be a positive integer and needs a pending_id"})
+			return
+		}
 	}
 
-	summary, err := h.service.CommitPendingCards(ctx.Request.Context(), userID, deckID, req.StorageID, req.PendingID)
+	summary, err := h.service.CommitPendingCards(ctx.Request.Context(), userID, deckID, req.StorageID, req.PendingID, req.Quantity)
 	if err != nil {
 		apierr.Respond(ctx, err,
 			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},

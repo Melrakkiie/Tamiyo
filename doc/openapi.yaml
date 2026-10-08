@@ -1232,6 +1232,10 @@ paths:
     post:
       tags: [deck-cards]
       summary: Add a card to the deck's pending list
+      description: >
+        When the deck already has a pending card of the same printing and
+        finish (other than its pending commander), its quantity is raised
+        instead, and that item is returned.
       requestBody:
         required: true
         content:
@@ -1269,6 +1273,42 @@ paths:
         schema:
           type: integer
         description: Pending card ID
+    patch:
+      tags: [deck-cards]
+      summary: Change how many copies a pending card stands for
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantity]
+              properties:
+                quantity:
+                  type: integer
+                  minimum: 1
+                  maximum: 1000
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PendingCard"
+        "400":
+          description: Invalid id, pending_id or quantity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck or pending card not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
     delete:
       tags: [deck-cards]
       summary: Remove a card from the deck's pending list
@@ -1312,6 +1352,12 @@ paths:
                   type: integer
                   minimum: 1
                   description: Only add this pending card (all its copies) instead of the whole list.
+                quantity:
+                  type: integer
+                  minimum: 1
+                  description: >
+                    With pending_id, only add this many copies; the pending
+                    card keeps the rest. More than it holds adds them all.
       responses:
         "200":
           description: OK

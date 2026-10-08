@@ -45,6 +45,8 @@ type fakeRepository struct {
 	createdPending   PendingCard
 	deletePendingErr error
 	lastPendingID    int
+
+	lastPendingQuantity int
 }
 
 func (f *fakeRepository) FindPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error) {
@@ -63,6 +65,13 @@ func (f *fakeRepository) DeletePendingCard(ctx context.Context, userID string, d
 	f.lastUserID = userID
 	f.lastPendingID = id
 	return f.deletePendingErr
+}
+
+func (f *fakeRepository) UpdatePendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (PendingCard, error) {
+	f.lastUserID = userID
+	f.lastPendingID = id
+	f.lastPendingQuantity = quantity
+	return PendingCard{ID: id, DeckID: deckID, Quantity: quantity}, nil
 }
 
 func (f *fakeRepository) FindAll(ctx context.Context, userID string, filter Filter) ([]Deck, int, error) {
@@ -641,4 +650,59 @@ func TestService_SetCardCommander_ReplacesAPendingCommander(t *testing.T) {
 	assert.Nil(t, repo.updatedDeck.CommanderPendingID)
 	require.NotNil(t, repo.updatedDeck.CommanderID)
 	assert.Equal(t, 12, *repo.updatedDeck.CommanderID)
+}
+
+func TestService_AddPendingCard_MergesWithTheSamePrintingAndFinish(t *testing.T) {
+	repo := &fakeRepository{
+		findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000003"},
+		pending: []PendingCard{
+			{ID: 4, ScryfallID: "AAAA", Foil: true, Quantity: 2},
+			{ID: 5, ScryfallID: "aaaa", Foil: false, Quantity: 3},
+		},
+	}
+	service := NewService(repo)
+
+	merged, err := service.AddPendingCard(context.Background(), testUserID, "00000000-0000-0000-0000-000000000003", PendingCard{ScryfallID: "aaaa", Quantity: 4})
+
+	require.NoError(t, err)
+	assert.Equal(t, 5, merged.ID)
+	assert.Equal(t, 7, repo.lastPendingQuantity)
+	assert.Empty(t, repo.createdPending.Name)
+}
+
+func TestService_AddPendingCard_DoesNotMergeIntoThePendingCommander(t *testing.T) {
+	commander := 5
+	repo := &fakeRepository{
+		findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000003", CommanderPendingID: &commander},
+		pending:      []PendingCard{{ID: 5, ScryfallID: "aaaa", Quantity: 1}},
+	}
+	service := NewService(repo)
+
+	created, err := service.AddPendingCard(context.Background(), testUserID, "00000000-0000-0000-0000-000000000003", PendingCard{Name: "Atraxa", ScryfallID: "aaaa", Quantity: 1})
+
+	require.NoError(t, err)
+	assert.Equal(t, 7, created.ID)
+	assert.Equal(t, "Atraxa", repo.createdPending.Name)
+	assert.Zero(t, repo.lastPendingQuantity)
+}
+
+func TestService_SetPendingQuantity_RequiresTheDeck(t *testing.T) {
+	repo := &fakeRepository{findByIDErr: ErrNotFound}
+	service := NewService(repo)
+
+	_, err := service.SetPendingQuantity(context.Background(), testUserID, "00000000-0000-0000-0000-000000000003", 4, 2)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+	assert.Zero(t, repo.lastPendingQuantity)
+}
+
+func TestService_SetPendingQuantity_UpdatesTheItem(t *testing.T) {
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000003"}}
+	service := NewService(repo)
+
+	updated, err := service.SetPendingQuantity(context.Background(), testUserID, "00000000-0000-0000-0000-000000000003", 4, 2)
+
+	require.NoError(t, err)
+	assert.Equal(t, 4, repo.lastPendingID)
+	assert.Equal(t, 2, updated.Quantity)
 }
