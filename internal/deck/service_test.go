@@ -629,3 +629,16 @@ func TestService_SetPendingCommander_ReturnsNotFoundForAnUnknownDeck(t *testing.
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
+
+func TestService_SetCardCommander_ReplacesAPendingCommander(t *testing.T) {
+	pendingID := 3
+	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", CommanderPendingID: &pendingID}}
+	service := NewService(repo)
+
+	err := service.SetCardCommander(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 12)
+
+	require.NoError(t, err)
+	assert.Nil(t, repo.updatedDeck.CommanderPendingID)
+	require.NotNil(t, repo.updatedDeck.CommanderID)
+	assert.Equal(t, 12, *repo.updatedDeck.CommanderID)
+}

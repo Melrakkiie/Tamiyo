@@ -36,9 +36,11 @@ type fakeImportService struct {
 
 	commitSummary PendingCommitSummary
 	lastDeckID    string
-	lastStorageID *int
-	lastPendingID *int
-	commitCalled  bool
+
+	lastIntoDeckCommander bool
+	lastStorageID         *int
+	lastPendingID         *int
+	commitCalled          bool
 }
 
 func (f *fakeImportService) CommitPendingCards(ctx context.Context, userID string, deckID string, storageID, pendingID *int) (PendingCommitSummary, error) {
@@ -97,6 +99,15 @@ func (f *fakeImportService) ExportMoxfieldCollection(ctx context.Context, userID
 	}
 	_, err := w.Write([]byte(f.exportContent))
 	return err
+}
+
+func (f *fakeImportService) ImportIntoDeck(ctx context.Context, userID string, deckID string, commanderFromFirstLine bool, r io.Reader) (Summary, error) {
+	f.lastUserID = userID
+	f.lastDeckID = deckID
+	f.lastIntoDeckCommander = commanderFromFirstLine
+	content, _ := io.ReadAll(r)
+	f.lastFileContent = string(content)
+	return f.summary, f.err
 }
 
 func (f *fakeImportService) ExportMoxfieldDeck(ctx context.Context, userID string, deckID string, w io.Writer) error {
@@ -536,4 +547,59 @@ func TestHandler_CommitPendingCards_ReturnsNotFoundForAnUnknownPendingCard(t *te
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestImportIntoDeck_PassesTheDeckAndTheFile(t *testing.T) {
+	service := &fakeImportService{summary: Summary{CardsLinked: 2}}
+	router := setupRouter(service)
+
+	req := multipartRequest(t, "/deck/00000000-0000-0000-0000-000000000077/import", "2 Sol Ring", map[string]string{
+		"commander_from_first_line": "true",
+	})
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "00000000-0000-0000-0000-000000000077", service.lastDeckID)
+	assert.True(t, service.lastIntoDeckCommander)
+	assert.Equal(t, "2 Sol Ring", service.lastFileContent)
+	assert.Contains(t, w.Body.String(), `"cards_linked": 2`)
+}
+
+func TestImportIntoDeck_DefaultsCommanderFromFirstLineToFalse(t *testing.T) {
+	service := &fakeImportService{}
+	router := setupRouter(service)
+
+	req := multipartRequest(t, "/deck/00000000-0000-0000-0000-000000000077/import", "2 Sol Ring", map[string]string{})
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.False(t, service.lastIntoDeckCommander)
+}
+
+func TestImportIntoDeck_RejectsAnInvalidDeckID(t *testing.T) {
+	router := setupRouter(&fakeImportService{})
+
+	req := multipartRequest(t, "/deck/42/import", "2 Sol Ring", map[string]string{})
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestImportIntoDeck_MapsErrors(t *testing.T) {
+	for err, status := range map[error]int{
+		ErrDeckNotFound:        http.StatusNotFound,
+		ErrInvalidFile:         http.StatusBadRequest,
+		ErrScryfallUnavailable: http.StatusBadGateway,
+	} {
+		router := setupRouter(&fakeImportService{err: err})
+
+		req := multipartRequest(t, "/deck/00000000-0000-0000-0000-000000000077/import", "2 Sol Ring", map[string]string{})
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, status, w.Code, err.Error())
+	}
 }

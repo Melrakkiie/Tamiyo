@@ -825,6 +825,7 @@ Cards wanted in a deck but not in the collection yet (typically picked on Scryfa
 - `POST /deck/:id/pending` — add one. Body: `name`, `scryfall_id`, `set_code`, `collector_number` (required), `foil`, `quantity` (1–100, default 1), `mana_value`, `colors`, `card_type`, `color_identity` (same rules as `POST /cards`). Returns `201` with the item.
 - `DELETE /deck/:id/pending/:pending_id` — remove one. `204`, or `404` if it doesn't exist.
 - `POST /deck/:id/pending/commit` — create every pending card in the collection (one card per copy, in `storage_id` if given), put each in the deck, and clear the list. Body optional: `{ "storage_id": 4 }`, plus `"pending_id": 12` to only add that one pending card (all its copies). Returns `{ "cards_created": 7 }`. Items are handled one by one: on a failure, those already handled stay done and the rest stay pending.
+- `POST /deck/:id/import` — add a list of cards to this deck, as `multipart/form-data` with the list in a `file` field and an optional `commander_from_first_line` (default `false`). Same list format and rules as [`POST /import/moxfield/deck`](#post-importmoxfielddeck): it never creates cards, owned copies go in the deck (copies already in this deck are never used twice), missing ones become pending cards. The first line only becomes the commander if the deck has none. Returns the same summary as the bulk imports (`cards_linked`, `cards_pending`, `cards_skipped`, `warnings`).
 
 **Errors:** `400` invalid id or body, unknown `storage_id` · `404` deck or pending card not found
 

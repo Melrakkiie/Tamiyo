@@ -70,6 +70,17 @@ func (s *Service) PromotePendingCommander(ctx context.Context, userID string, de
 	return err
 }
 
+func (s *Service) SetCardCommander(ctx context.Context, userID string, deckID string, cardID int) error {
+	d, err := s.repo.FindByID(ctx, userID, deckID)
+	if err != nil {
+		return err
+	}
+	d.CommanderID = &cardID
+	d.CommanderPendingID = nil
+	_, err = s.repo.Update(ctx, userID, d)
+	return err
+}
+
 func (s *Service) SetPendingCommander(ctx context.Context, userID string, deckID string, pendingID int) error {
 	d, err := s.repo.FindByID(ctx, userID, deckID)
 	if err != nil {

@@ -1336,6 +1336,62 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /deck/{id}/import:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    post:
+      tags: [deck-cards]
+      summary: Add a list of cards to an existing deck
+      description: >
+        Same list format and rules as POST /import/moxfield/deck (a Moxfield
+        plain-text export or a plain "4 Lightning Bolt" list), but adds to
+        this deck instead of creating one. Never creates cards: owned
+        copies go in the deck (cards_linked), copies already in this deck
+        are never used twice, and missing copies become pending cards
+        (cards_pending). With commander_from_first_line, the first line
+        becomes the commander only if the deck has none yet.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The list, one card per line.
+                commander_from_first_line:
+                  type: boolean
+                  default: false
+                  description: Treat the first line as the commander when the deck has none.
+      responses:
+        "200":
+          description: Cards added (possibly with some lines skipped — see ImportSummary.warnings).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportSummary"
+        "400":
+          description: id is not a UUID, the file is missing or can't be parsed, or commander_from_first_line is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found, or not owned by the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
   /deck/{id}/legality:
     parameters:
       - $ref: "#/components/parameters/DeckID"

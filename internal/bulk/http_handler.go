@@ -19,6 +19,7 @@ type importService interface {
 	ImportManaBox(ctx context.Context, userID string, r io.Reader) (Summary, error)
 	ImportMoxfieldCollection(ctx context.Context, userID string, storageID int, r io.Reader) (Summary, error)
 	ImportMoxfieldDeck(ctx context.Context, userID string, req MoxfieldDeckImportRequest, r io.Reader) (Summary, error)
+	ImportIntoDeck(ctx context.Context, userID string, deckID string, commanderFromFirstLine bool, r io.Reader) (Summary, error)
 
 	ExportManaBox(ctx context.Context, userID string, w io.Writer) error
 	ExportMoxfieldCollection(ctx context.Context, userID string, w io.Writer) error
@@ -47,6 +48,7 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 
 	router.POST("/cards/refresh-details", h.refreshCardDetails)
 	router.POST("/deck/:id/pending/commit", h.commitPendingCards)
+	router.POST("/deck/:id/import", h.importIntoDeck)
 }
 
 func (h *Handler) refreshCardDetails(ctx *gin.Context) {
@@ -166,6 +168,51 @@ func (h *Handler) importMoxfieldDeck(ctx *gin.Context) {
 
 	summary, err := h.service.ImportMoxfieldDeck(ctx.Request.Context(), userID, req, file)
 	h.respondImport(ctx, summary, err)
+}
+
+func (h *Handler) importIntoDeck(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
+	deckID, valid := deck.ParseID(ctx.Param("id"))
+	if !valid {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	commanderFromFirstLine := false
+	if raw := ctx.PostForm("commander_from_first_line"); raw != "" {
+		parsed, err := strconv.ParseBool(raw)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "commander_from_first_line must be a boolean"})
+			return
+		}
+		commanderFromFirstLine = parsed
+	}
+
+	file, err := openUploadedFile(ctx, "file")
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	summary, err := h.service.ImportIntoDeck(ctx.Request.Context(), userID, deckID, commanderFromFirstLine, file)
+	if err != nil {
+		apierr.Respond(ctx, err,
+			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
+			apierr.Mapping{Err: ErrInvalidFile, Status: http.StatusBadRequest},
+			apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway},
+		)
+		return
+	}
+
+	ctx.IndentedJSON(http.StatusOK, summary)
 }
 
 func (h *Handler) exportManaBox(ctx *gin.Context) {

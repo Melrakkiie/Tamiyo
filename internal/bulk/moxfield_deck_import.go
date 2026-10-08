@@ -2,6 +2,7 @@ package bulk
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -52,7 +53,7 @@ func (o *ownedCopies) take(copies []card.Card, foil bool, quantity int) []int {
 	return ids
 }
 
-func (s *Service) loadOwnedCopies(ctx context.Context, userID string) (*ownedCopies, error) {
+func (s *Service) loadOwnedCopies(ctx context.Context, userID string, targetDeckID string) (*ownedCopies, error) {
 	cards, err := s.loadAllCards(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("loading the collection: %w", err)
@@ -86,6 +87,9 @@ func (s *Service) loadOwnedCopies(ctx context.Context, userID string) (*ownedCop
 			}
 			for _, c := range deckCards {
 				owned.inDeck[c.ID] = true
+				if d.ID == targetDeckID {
+					owned.used[c.ID] = true
+				}
 			}
 		}
 		if len(decks) == 0 || page*limit >= total {
@@ -123,12 +127,7 @@ type deckLinePlacement struct {
 	commander bool
 }
 
-func (s *Service) ImportMoxfieldDeck(ctx context.Context, userID string, req MoxfieldDeckImportRequest, r io.Reader) (Summary, error) {
-	lines, err := parseMoxfieldDeckList(r)
-	if err != nil {
-		return Summary{}, err
-	}
-
+func (s *Service) placeDeckLines(ctx context.Context, userID string, lines []moxfieldDeckLine, commanderFromFirstLine bool, targetDeckID string) ([]deckLinePlacement, Summary, error) {
 	identifiers := make([]CardIdentifier, len(lines))
 	for i, line := range lines {
 		if line.SetCode == "" {
@@ -139,18 +138,18 @@ func (s *Service) ImportMoxfieldDeck(ctx context.Context, userID string, req Mox
 	}
 	resolved, err := s.scryfall.Resolve(ctx, dedupeIdentifiers(identifiers))
 	if err != nil {
-		return Summary{}, fmt.Errorf("%w: %v", ErrScryfallUnavailable, err)
+		return nil, Summary{}, fmt.Errorf("%w: %v", ErrScryfallUnavailable, err)
 	}
 
-	owned, err := s.loadOwnedCopies(ctx, userID)
+	owned, err := s.loadOwnedCopies(ctx, userID, targetDeckID)
 	if err != nil {
-		return Summary{}, err
+		return nil, Summary{}, err
 	}
 
 	var summary Summary
 	placements := make([]deckLinePlacement, 0, len(lines))
 	for i, line := range lines {
-		commander := req.CommanderFromFirstLine && i == 0
+		commander := commanderFromFirstLine && i == 0
 		resolvedCard, ok := resolved[deckLineKey(line)]
 		if !ok {
 			summary.CardsSkipped += line.Quantity
@@ -175,28 +174,23 @@ func (s *Service) ImportMoxfieldDeck(ctx context.Context, userID string, req Mox
 			commander: commander,
 		})
 	}
+	return placements, summary, nil
+}
 
-	var commanderID *int
-	if len(placements) > 0 && placements[0].commander && len(placements[0].ownedIDs) > 0 {
-		commanderID = &placements[0].ownedIDs[0]
-	}
-
-	createdDeck, err := s.decks.CreateDeck(ctx, userID, deck.Deck{
-		Name:        req.Name,
-		Format:      req.Format,
-		CommanderID: commanderID,
-	})
-	if err != nil {
-		return summary, fmt.Errorf("creating deck %q: %w", req.Name, err)
-	}
-	summary.DecksCreated++
-
+func (s *Service) fillDeck(ctx context.Context, userID string, deckID string, placements []deckLinePlacement, summary *Summary) {
 	for _, p := range placements {
+		linked := 0
 		for _, cardID := range p.ownedIDs {
-			if err := s.decks.PutCardInDeck(ctx, userID, createdDeck.ID, cardID); err != nil {
+			if err := s.decks.PutCardInDeck(ctx, userID, deckID, cardID); err != nil {
 				summary.Warnings = append(summary.Warnings, fmt.Sprintf("line %d: could not put %q in the deck: %v", p.line.LineNo, p.line.CardName, err))
 				continue
 			}
+			if linked == 0 && p.commander {
+				if err := s.decks.SetCardCommander(ctx, userID, deckID, cardID); err != nil {
+					summary.Warnings = append(summary.Warnings, fmt.Sprintf("could not make %q the commander: %v", p.line.CardName, err))
+				}
+			}
+			linked++
 			summary.CardsLinked++
 		}
 		if p.missing == 0 {
@@ -208,7 +202,7 @@ func (s *Service) ImportMoxfieldDeck(ctx context.Context, userID string, req Mox
 		if setCode == "" {
 			name, setCode, collectorNumber = p.resolved.Name, p.resolved.SetCode, p.resolved.CollectorNumber
 		}
-		pending, err := s.decks.AddPendingCard(ctx, userID, createdDeck.ID, deck.PendingCard{
+		pending, err := s.decks.AddPendingCard(ctx, userID, deckID, deck.PendingCard{
 			Name:            name,
 			ScryfallID:      p.resolved.ScryfallID,
 			SetCode:         setCode,
@@ -227,12 +221,55 @@ func (s *Service) ImportMoxfieldDeck(ctx context.Context, userID string, req Mox
 		}
 		summary.CardsPending += p.missing
 
-		if p.commander && len(p.ownedIDs) == 0 {
-			if err := s.decks.SetPendingCommander(ctx, userID, createdDeck.ID, pending.ID); err != nil {
+		if p.commander && linked == 0 {
+			if err := s.decks.SetPendingCommander(ctx, userID, deckID, pending.ID); err != nil {
 				summary.Warnings = append(summary.Warnings, fmt.Sprintf("could not make %q the commander: %v", p.line.CardName, err))
 			}
 		}
 	}
+}
 
+func (s *Service) ImportMoxfieldDeck(ctx context.Context, userID string, req MoxfieldDeckImportRequest, r io.Reader) (Summary, error) {
+	lines, err := parseMoxfieldDeckList(r)
+	if err != nil {
+		return Summary{}, err
+	}
+
+	placements, summary, err := s.placeDeckLines(ctx, userID, lines, req.CommanderFromFirstLine, "")
+	if err != nil {
+		return Summary{}, err
+	}
+
+	createdDeck, err := s.decks.CreateDeck(ctx, userID, deck.Deck{Name: req.Name, Format: req.Format})
+	if err != nil {
+		return summary, fmt.Errorf("creating deck %q: %w", req.Name, err)
+	}
+	summary.DecksCreated++
+
+	s.fillDeck(ctx, userID, createdDeck.ID, placements, &summary)
+	return summary, nil
+}
+
+func (s *Service) ImportIntoDeck(ctx context.Context, userID string, deckID string, commanderFromFirstLine bool, r io.Reader) (Summary, error) {
+	d, err := s.decks.GetDeck(ctx, userID, deckID)
+	if err != nil {
+		if errors.Is(err, deck.ErrNotFound) {
+			return Summary{}, ErrDeckNotFound
+		}
+		return Summary{}, err
+	}
+
+	lines, err := parseMoxfieldDeckList(r)
+	if err != nil {
+		return Summary{}, err
+	}
+
+	hasCommander := d.CommanderID != nil || d.CommanderPendingID != nil
+	placements, summary, err := s.placeDeckLines(ctx, userID, lines, commanderFromFirstLine && !hasCommander, d.ID)
+	if err != nil {
+		return Summary{}, err
+	}
+
+	s.fillDeck(ctx, userID, d.ID, placements, &summary)
 	return summary, nil
 }

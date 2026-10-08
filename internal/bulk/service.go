@@ -38,6 +38,7 @@ type deckService interface {
 	PromotePendingCommander(ctx context.Context, userID string, deckID string, pendingID, cardID int) error
 	AddPendingCard(ctx context.Context, userID string, deckID string, p deck.PendingCard) (deck.PendingCard, error)
 	SetPendingCommander(ctx context.Context, userID string, deckID string, pendingID int) error
+	SetCardCommander(ctx context.Context, userID string, deckID string, cardID int) error
 }
 
 type Service struct {
