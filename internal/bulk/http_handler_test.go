@@ -51,13 +51,27 @@ type fakeImportService struct {
 
 	duplicateResult DuplicateSummary
 	lastSharedTags  bool
-	lastCollect     CollectRequest
+
+	lastExportOptions DeckExportOptions
+	lastCollect       CollectRequest
 }
 
-func (f *fakeImportService) ExportSharedDeck(ctx context.Context, deckID string, format string, withTags bool, w io.Writer) error {
+func (f *fakeImportService) ExportCardmarketDeck(ctx context.Context, userID string, deckID string, opts DeckExportOptions, w io.Writer) error {
+	f.lastExportUser = userID
 	f.lastExportDeck = deckID
-	f.lastExportFormat = format
-	f.lastSharedTags = withTags
+	f.lastExportOptions = opts
+	if f.exportErr != nil {
+		return f.exportErr
+	}
+	_, err := io.WriteString(w, f.exportContent)
+	return err
+}
+
+func (f *fakeImportService) ExportSharedDeck(ctx context.Context, deckID string, opts DeckExportOptions, w io.Writer) error {
+	f.lastExportDeck = deckID
+	f.lastExportFormat = opts.Format
+	f.lastSharedTags = opts.WithTags
+	f.lastExportOptions = opts
 	if f.exportErr != nil {
 		return f.exportErr
 	}

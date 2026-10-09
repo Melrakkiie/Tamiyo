@@ -452,12 +452,12 @@ func TestExportSharedDeck_ExportsAsTheOwner(t *testing.T) {
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	var plain bytes.Buffer
-	require.NoError(t, svc.ExportSharedDeck(context.Background(), "00000000-0000-0000-0000-000000000001", DeckExportPlain, false, &plain))
+	require.NoError(t, svc.ExportSharedDeck(context.Background(), "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: DeckExportPlain, WithTags: false}, &plain))
 	assert.Contains(t, plain.String(), "1 Tamiyo, Inquisitive Student")
 	assert.Contains(t, plain.String(), "5 Island")
 
 	var tamiyo bytes.Buffer
-	require.NoError(t, svc.ExportSharedDeck(context.Background(), "00000000-0000-0000-0000-000000000001", DeckExportTamiyo, true, &tamiyo))
+	require.NoError(t, svc.ExportSharedDeck(context.Background(), "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: DeckExportTamiyo, WithTags: true}, &tamiyo))
 	assert.Contains(t, tamiyo.String(), `"Ramp"`)
 }
 
@@ -465,6 +465,6 @@ func TestExportSharedDeck_Errors(t *testing.T) {
 	decks := tamiyoDeckFixture()
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
-	assert.ErrorIs(t, svc.ExportSharedDeck(context.Background(), "00000000-0000-0000-0000-000000000001", DeckExportPlain, false, &bytes.Buffer{}), ErrDeckNotFound)
-	assert.ErrorIs(t, svc.ExportSharedDeck(context.Background(), "00000000-0000-0000-0000-000000000001", "csv", false, &bytes.Buffer{}), ErrUnknownExportFormat)
+	assert.ErrorIs(t, svc.ExportSharedDeck(context.Background(), "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: DeckExportPlain, WithTags: false}, &bytes.Buffer{}), ErrDeckNotFound)
+	assert.ErrorIs(t, svc.ExportSharedDeck(context.Background(), "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: "csv", WithTags: false}, &bytes.Buffer{}), ErrUnknownExportFormat)
 }

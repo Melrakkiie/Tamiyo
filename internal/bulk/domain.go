@@ -58,6 +58,7 @@ type DetailsRefreshSummary struct {
 
 type ScryfallResolver interface {
 	Resolve(ctx context.Context, identifiers []CardIdentifier) (map[string]ResolvedCard, error)
+	SetNames(ctx context.Context) (map[string]string, error)
 }
 
 func resolveKey(setCode, collectorNumber string) string {

@@ -1122,9 +1122,9 @@ Same statistics as [`GET /deck/:id/stats`](#get-deckidstats).
 
 ### `GET /shared/decks/:id/export`
 
-The deck exported as [`GET /deck/:id/export`](#get-deckidexport) does, with the same `format` and `tags` parameters, response and download names.
+The deck exported as [`GET /deck/:id/export`](#get-deckidexport) does, with the same `format`, `tags`, `boards`, `pending` and `printings` parameters, response and download names.
 
-**Errors:** `400` unknown `format`, or `tags` isn't a boolean · `404` as above · `429` rate limit exceeded
+**Errors:** `400` unknown `format`, `tags`, `pending` or `printings` isn't a boolean, or `boards` lists an unknown board · `404` as above · `429` rate limit exceeded · `502` Scryfall unreachable, with `format=cardmarket&printings=true` only
 
 ### `GET /shared/decks/:id/compare/:other_id`
 
@@ -1362,14 +1362,21 @@ Exports **one deck** — not the whole collection — as plain text (`Content-Ty
 | `plain` | One line per card name, every printing added up, `4 Lightning Bolt`, the commander first. | `Deck_list.txt` |
 | `arena` | MTG Arena's format: a `Commander` section when the deck has one, then a `Deck` section, one line per card name. Split cards are written with ` // `. | `Deck_arena.txt` |
 | `tamiyo` | A [Tamiyo file](#tamiyo-format) of kind `deck`, served as `application/json`. Add `tags=true` to include the deck's tags. | `Deck_tamiyo.json` |
+| `cardmarket` | A list to paste in a [Cardmarket wants list](https://help.cardmarket.com/en/how-to-add-a-mtg-decklist-to-wants), see below. | `Deck_cardmarket.txt` |
 
-`tags` (`true` or `false`, default `false`) only applies to `tamiyo`. The rest of this section is about the three text formats.
+`tags` (`true` or `false`, default `false`) only applies to `tamiyo`. The next three paragraphs are about `moxfield`, `plain` and `arena`.
 
 The sideboard follows the deck in a section of its own in every format: `SIDEBOARD:` in `moxfield`, `Sideboard` in `plain` and `arena`. The cards being considered come last, under `MAYBEBOARD:` in `moxfield` and `Maybeboard` in `plain`; `arena` leaves them out. Each section is written only when it has cards, after a blank line.
 
 If the deck has a commander, it comes **first** in every format — in `moxfield`, that printing's line with its full quantity in the deck, not just the one physical card marked as commander — so importing the file back (which treats the first line as the commander when asked) reconstructs the same commander. Everything else is sorted alphabetically. Pending cards are included in every format, a pending commander first like an owned one. All three formats can be imported back with `POST /deck/:id/import`.
 
-**Errors:** `400` `:id` is not a UUID, `format` is unknown or `tags` isn't a boolean · `401` unauthenticated · `404` deck not found
+`cardmarket` lists the cards of the chosen [boards](#boards), owned and pending, one line per card name, `4 Dark Ritual`, sorted by name, with no sections and split cards written with ` // ` (copies of a card on several boards are added up). Three more parameters only apply to it:
+
+- `boards`, a comma-separated list of `main`, `sideboard` and `considering` (default `main,sideboard`).
+- `pending=true` (default `false`) only lists the pending cards, the ones still missing from the collection.
+- `printings=true` (default `false`) adds the expansion's name, `2 Dark Confidant (Modern Masters)`, one line per card and expansion. Expansion names are [Scryfall](https://scryfall.com/sets)'s, fetched once a day, and Cardmarket may name some expansions differently: it skips the lines it can't match. A card whose set Scryfall doesn't know is written without one. Finishes and Cardmarket's versions (`V.1`) aren't written.
+
+**Errors:** `400` `:id` is not a UUID, `format` is unknown, `tags`, `pending` or `printings` isn't a boolean, or `boards` lists an unknown board · `401` unauthenticated · `404` deck not found · `502` Scryfall unreachable, with `format=cardmarket&printings=true` only
 
 ---
 

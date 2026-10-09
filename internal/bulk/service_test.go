@@ -306,6 +306,14 @@ func (f *fakeDeckService) PutCardInDeck(ctx context.Context, userID string, deck
 type fakeResolver struct {
 	resolved map[string]ResolvedCard
 	err      error
+	setNames map[string]string
+}
+
+func (f *fakeResolver) SetNames(ctx context.Context) (map[string]string, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.setNames, nil
 }
 
 func (f *fakeResolver) Resolve(ctx context.Context, identifiers []CardIdentifier) (map[string]ResolvedCard, error) {

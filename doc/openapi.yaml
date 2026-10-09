@@ -2168,7 +2168,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [moxfield, plain, arena, tamiyo]
+            enum: [moxfield, plain, arena, tamiyo, cardmarket]
             default: moxfield
         - name: tags
           in: query
@@ -2177,9 +2177,35 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: boards
+          in: query
+          required: false
+          description: >
+            With format=cardmarket, the boards to list, comma-separated
+            (main, sideboard, considering).
+          schema:
+            type: string
+            default: main,sideboard
+            example: main,sideboard,considering
+        - name: pending
+          in: query
+          required: false
+          description: With format=cardmarket, only list the pending cards.
+          schema:
+            type: boolean
+            default: false
+        - name: printings
+          in: query
+          required: false
+          description: >
+            With format=cardmarket, add each card's expansion name (Scryfall's),
+            one line per card and expansion.
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
-          description: The deck as text, served as a download (Deck_moxfield.txt, Deck_list.txt, Deck_arena.txt, or Deck_tamiyo.json as application/json).
+          description: The deck as text, served as a download (Deck_moxfield.txt, Deck_list.txt, Deck_arena.txt, Deck_cardmarket.txt, or Deck_tamiyo.json as application/json).
           headers:
             Content-Disposition:
               schema:
@@ -2194,7 +2220,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/TamiyoFile"
         "400":
-          description: format is unknown, or tags isn't a boolean
+          description: format is unknown, tags, pending or printings isn't a boolean, or boards lists an unknown board
           content:
             application/json:
               schema:
@@ -2210,6 +2236,8 @@ paths:
           $ref: "#/components/responses/SharedTooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
 
   /shared/decks/{id}/compare/{other_id}:
     parameters:
@@ -2722,7 +2750,12 @@ paths:
       description: >
         Exports the deck's cards, pending ones included, as plain text, or
         as a Tamiyo deck file with format=tamiyo (with the deck's tags when
-        tags=true).
+        tags=true). cardmarket: a list for a Cardmarket wants list, the cards
+        of the boards listed in boards, main and sideboard by default (only
+        the pending ones with pending=true), one
+        line per card name, "4 Dark Ritual", or per card and expansion with
+        printings=true, "2 Dark Confidant (Modern Masters)", expansion names
+        being Scryfall's.
         moxfield: one line per printing, "1 Sol Ring (SLD) 1011 *F*", the
         commander's line first with its full quantity, the rest sorted
         alphabetically, so importing the file back reconstructs the same
@@ -2740,7 +2773,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [moxfield, plain, arena, tamiyo]
+            enum: [moxfield, plain, arena, tamiyo, cardmarket]
             default: moxfield
         - name: tags
           in: query
@@ -2749,9 +2782,35 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: boards
+          in: query
+          required: false
+          description: >
+            With format=cardmarket, the boards to list, comma-separated
+            (main, sideboard, considering).
+          schema:
+            type: string
+            default: main,sideboard
+            example: main,sideboard,considering
+        - name: pending
+          in: query
+          required: false
+          description: With format=cardmarket, only list the pending cards.
+          schema:
+            type: boolean
+            default: false
+        - name: printings
+          in: query
+          required: false
+          description: >
+            With format=cardmarket, add each card's expansion name (Scryfall's),
+            one line per card and expansion.
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
-          description: The deck as text, served as a download (Deck_moxfield.txt, Deck_list.txt, Deck_arena.txt, or Deck_tamiyo.json as application/json).
+          description: The deck as text, served as a download (Deck_moxfield.txt, Deck_list.txt, Deck_arena.txt, Deck_cardmarket.txt, or Deck_tamiyo.json as application/json).
           headers:
             Content-Disposition:
               schema:
@@ -2766,7 +2825,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/TamiyoFile"
         "400":
-          description: id is not a UUID, format is unknown, or tags isn't a boolean
+          description: id is not a UUID, format is unknown, tags, pending or printings isn't a boolean, or boards lists an unknown board
           content:
             application/json:
               schema:
@@ -2781,6 +2840,8 @@ paths:
                 $ref: "#/components/schemas/Error"
         "500":
           $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
 
 components:
   securitySchemes:

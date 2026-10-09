@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,6 +16,18 @@ type fakeScryfallFetcher struct {
 	cards       []scryfall.Card
 	err         error
 	lastRequest []scryfall.Identifier
+
+	setNames     map[string]string
+	setNamesErr  error
+	setNameCalls int
+}
+
+func (f *fakeScryfallFetcher) SetNames(ctx context.Context) (map[string]string, error) {
+	f.setNameCalls++
+	if f.setNamesErr != nil {
+		return nil, f.setNamesErr
+	}
+	return f.setNames, nil
 }
 
 func (f *fakeScryfallFetcher) Fetch(ctx context.Context, identifiers []scryfall.Identifier) ([]scryfall.Card, error) {
@@ -101,4 +114,31 @@ func TestNewScryfallClient_ReturnsUsableClient(t *testing.T) {
 
 	require.NotNil(t, client)
 	require.NotNil(t, client.client)
+}
+
+func TestScryfallClient_SetNamesAreCachedForADay(t *testing.T) {
+	fetcher := &fakeScryfallFetcher{setNames: map[string]string{"mma": "Modern Masters"}}
+	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	client := &ScryfallClient{client: fetcher, now: func() time.Time { return now }}
+
+	names, err := client.SetNames(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "Modern Masters", names["mma"])
+	_, _ = client.SetNames(context.Background())
+	assert.Equal(t, 1, fetcher.setNameCalls)
+
+	now = now.Add(25 * time.Hour)
+	fetcher.setNamesErr = errors.New("down")
+	names, err = client.SetNames(context.Background())
+	require.NoError(t, err, "an outdated list beats no list")
+	assert.Equal(t, "Modern Masters", names["mma"])
+	assert.Equal(t, 2, fetcher.setNameCalls)
+}
+
+func TestScryfallClient_SetNamesFailWithoutACachedList(t *testing.T) {
+	client := &ScryfallClient{client: &fakeScryfallFetcher{setNamesErr: errors.New("down")}, now: time.Now}
+
+	_, err := client.SetNames(context.Background())
+
+	assert.Error(t, err)
 }

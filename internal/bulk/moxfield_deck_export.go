@@ -11,7 +11,7 @@ import (
 	"Melrakkiie/Tamiyo/internal/deck"
 )
 
-var ErrUnknownExportFormat = errors.New("format must be one of: moxfield, plain, arena, tamiyo")
+var ErrUnknownExportFormat = errors.New("format must be one of: moxfield, plain, arena, tamiyo, cardmarket")
 
 const (
 	DeckExportMoxfield = "moxfield"
@@ -66,8 +66,8 @@ func (s *Service) ExportDeck(ctx context.Context, userID string, deckID string, 
 	}
 }
 
-func (s *Service) ExportSharedDeck(ctx context.Context, deckID string, format string, withTags bool, w io.Writer) error {
-	if _, known := deckExportFilenames[format]; !known {
+func (s *Service) ExportSharedDeck(ctx context.Context, deckID string, opts DeckExportOptions, w io.Writer) error {
+	if _, known := deckExportFilenames[opts.Format]; !known {
 		return ErrUnknownExportFormat
 	}
 	ownerID, d, err := s.decks.GetSharedDeck(ctx, deckID)
@@ -77,10 +77,7 @@ func (s *Service) ExportSharedDeck(ctx context.Context, deckID string, format st
 		}
 		return err
 	}
-	if format == DeckExportTamiyo {
-		return s.ExportTamiyoDeck(ctx, ownerID, d.ID, withTags, w)
-	}
-	return s.ExportDeck(ctx, ownerID, d.ID, format, w)
+	return s.exportDeckAs(ctx, ownerID, d.ID, opts, w)
 }
 
 func (s *Service) deckExportEntries(ctx context.Context, userID string, d deck.Deck) (deckExportBoards, error) {

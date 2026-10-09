@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -28,7 +29,8 @@ type importService interface {
 	ExportDeck(ctx context.Context, userID string, deckID string, format string, w io.Writer) error
 	ExportTamiyoCollection(ctx context.Context, userID string, storageID *int, w io.Writer) error
 	ExportTamiyoDeck(ctx context.Context, userID string, deckID string, withTags bool, w io.Writer) error
-	ExportSharedDeck(ctx context.Context, deckID string, format string, withTags bool, w io.Writer) error
+	ExportCardmarketDeck(ctx context.Context, userID string, deckID string, opts DeckExportOptions, w io.Writer) error
+	ExportSharedDeck(ctx context.Context, deckID string, opts DeckExportOptions, w io.Writer) error
 
 	RefreshCardDetails(ctx context.Context, userID string, afterID int) (DetailsRefreshSummary, error)
 	CommitPendingCards(ctx context.Context, userID string, deckID string, storageID, pendingID, quantity *int) (PendingCommitSummary, error)
@@ -312,10 +314,11 @@ func (h *Handler) exportTamiyoCollection(ctx *gin.Context) {
 }
 
 var deckExportFilenames = map[string]string{
-	DeckExportMoxfield: "Deck_moxfield.txt",
-	DeckExportPlain:    "Deck_list.txt",
-	DeckExportArena:    "Deck_arena.txt",
-	DeckExportTamiyo:   "Deck_tamiyo.json",
+	DeckExportMoxfield:   "Deck_moxfield.txt",
+	DeckExportPlain:      "Deck_list.txt",
+	DeckExportArena:      "Deck_arena.txt",
+	DeckExportTamiyo:     "Deck_tamiyo.json",
+	DeckExportCardmarket: "Deck_cardmarket.txt",
 }
 
 func (h *Handler) exportDeck(ctx *gin.Context) {
@@ -324,21 +327,38 @@ func (h *Handler) exportDeck(ctx *gin.Context) {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
 		return
 	}
-	h.respondDeckExport(ctx, http.StatusBadRequest, func(deckID string, format string, withTags bool, w io.Writer) error {
-		if format == DeckExportTamiyo {
-			return h.service.ExportTamiyoDeck(ctx.Request.Context(), userID, deckID, withTags, w)
+	h.respondDeckExport(ctx, http.StatusBadRequest, func(deckID string, opts DeckExportOptions, w io.Writer) error {
+		switch opts.Format {
+		case DeckExportTamiyo:
+			return h.service.ExportTamiyoDeck(ctx.Request.Context(), userID, deckID, opts.WithTags, w)
+		case DeckExportCardmarket:
+			return h.service.ExportCardmarketDeck(ctx.Request.Context(), userID, deckID, opts, w)
+		default:
+			return h.service.ExportDeck(ctx.Request.Context(), userID, deckID, opts.Format, w)
 		}
-		return h.service.ExportDeck(ctx.Request.Context(), userID, deckID, format, w)
 	})
 }
 
 func (h *Handler) exportSharedDeck(ctx *gin.Context) {
-	h.respondDeckExport(ctx, http.StatusNotFound, func(deckID string, format string, withTags bool, w io.Writer) error {
-		return h.service.ExportSharedDeck(ctx.Request.Context(), deckID, format, withTags, w)
+	h.respondDeckExport(ctx, http.StatusNotFound, func(deckID string, opts DeckExportOptions, w io.Writer) error {
+		return h.service.ExportSharedDeck(ctx.Request.Context(), deckID, opts, w)
 	})
 }
 
-func (h *Handler) respondDeckExport(ctx *gin.Context, invalidIDStatus int, export func(deckID string, format string, withTags bool, w io.Writer) error) {
+func queryBool(ctx *gin.Context, name string) (bool, bool) {
+	raw := ctx.Query(name)
+	if raw == "" {
+		return false, true
+	}
+	parsed, err := strconv.ParseBool(raw)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": name + " must be a boolean"})
+		return false, false
+	}
+	return parsed, true
+}
+
+func (h *Handler) respondDeckExport(ctx *gin.Context, invalidIDStatus int, export func(deckID string, opts DeckExportOptions, w io.Writer) error) {
 	deckID, valid := deck.ParseID(ctx.Param("id"))
 	if !valid {
 		message := "invalid id"
@@ -356,21 +376,27 @@ func (h *Handler) respondDeckExport(ctx *gin.Context, invalidIDStatus int, expor
 		return
 	}
 
-	withTags := false
-	if raw := ctx.Query("tags"); raw != "" {
-		parsed, err := strconv.ParseBool(raw)
-		if err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "tags must be a boolean"})
-			return
-		}
-		withTags = parsed
+	opts := DeckExportOptions{Format: format}
+	if opts.WithTags, valid = queryBool(ctx, "tags"); !valid {
+		return
+	}
+	if opts.OnlyPending, valid = queryBool(ctx, "pending"); !valid {
+		return
+	}
+	if opts.Printings, valid = queryBool(ctx, "printings"); !valid {
+		return
+	}
+	if raw := ctx.Query("boards"); raw != "" {
+		opts.Boards = strings.Split(raw, ",")
 	}
 
 	var buf bytes.Buffer
-	if err := export(deckID, format, withTags, &buf); err != nil {
+	if err := export(deckID, opts, &buf); err != nil {
 		apierr.Respond(ctx, err,
 			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: ErrUnknownExportFormat, Status: http.StatusBadRequest},
+			apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway},
+			apierr.Mapping{Err: ErrNoBoards, Status: http.StatusBadRequest},
 		)
 		return
 	}

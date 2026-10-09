@@ -2,20 +2,48 @@ package bulk
 
 import (
 	"context"
+	"sync"
+	"time"
 
 	"Melrakkiie/Tamiyo/internal/scryfall"
 )
 
+const setNamesTTL = 24 * time.Hour
+
 type scryfallFetcher interface {
 	Fetch(ctx context.Context, identifiers []scryfall.Identifier) ([]scryfall.Card, error)
+	SetNames(ctx context.Context) (map[string]string, error)
 }
 
 type ScryfallClient struct {
 	client scryfallFetcher
+	now    func() time.Time
+
+	mu            sync.Mutex
+	setNames      map[string]string
+	setNamesUntil time.Time
 }
 
 func NewScryfallClient() *ScryfallClient {
-	return &ScryfallClient{client: scryfall.NewClient()}
+	return &ScryfallClient{client: scryfall.NewClient(), now: time.Now}
+}
+
+func (c *ScryfallClient) SetNames(ctx context.Context) (map[string]string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.setNames != nil && c.now().Before(c.setNamesUntil) {
+		return c.setNames, nil
+	}
+	names, err := c.client.SetNames(ctx)
+	if err != nil {
+		if c.setNames != nil {
+			return c.setNames, nil
+		}
+		return nil, err
+	}
+	c.setNames = names
+	c.setNamesUntil = c.now().Add(setNamesTTL)
+	return names, nil
 }
 
 func (c *ScryfallClient) Resolve(ctx context.Context, identifiers []CardIdentifier) (map[string]ResolvedCard, error) {
