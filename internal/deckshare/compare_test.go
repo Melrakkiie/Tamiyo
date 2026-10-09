@@ -213,6 +213,35 @@ func TestCompareDecks_SomeoneElsesPrivateDeckIsNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
+func TestCompareDecks_WithoutAViewerOnlySeesSharedDecks(t *testing.T) {
+	svc := NewService(compareStore(), compareUsers(), &fakeInsights{})
+
+	comparison, err := svc.CompareDecks(context.Background(), "", theirDeck, theirDeck)
+	require.NoError(t, err)
+	assert.False(t, comparison.Deck.Mine)
+	assert.False(t, comparison.Other.Mine)
+	assert.Len(t, comparison.Common, 4)
+
+	_, err = svc.CompareDecks(context.Background(), "", theirDeck, myDeckID)
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestCompareSharedDecksHandler_NeedsNoViewer(t *testing.T) {
+	service := &fakeSharedService{compared: Comparison{
+		Deck:  ComparedDeck{Deck: deck.Deck{ID: theirDeck, Name: "Theirs"}},
+		Other: ComparedDeck{Deck: deck.Deck{ID: theirDeck, Name: "Theirs"}},
+	}}
+	router := setupRouter(service)
+
+	w := get(router, "/shared/decks/"+theirDeck+"/compare/"+theirDeck)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "", service.lastUserID)
+	assert.Equal(t, theirDeck, service.lastOtherID)
+	assert.Equal(t, http.StatusNotFound, get(router, "/shared/decks/nope/compare/"+theirDeck).Code)
+	assert.Equal(t, http.StatusNotFound, get(setupRouter(&fakeSharedService{err: ErrNotFound}), "/shared/decks/"+theirDeck+"/compare/"+privateID).Code)
+}
+
 func TestCompareDecks_PropagatesUnexpectedErrors(t *testing.T) {
 	store := compareStore()
 	store.getErr = errors.New("db is down")

@@ -157,6 +157,7 @@ func main() {
 	passwordResetHandler.RegisterRoutes(api, ratelimit.Middleware(authLimiter))
 	emailChangeHandler.RegisterRoutes(api, ratelimit.Middleware(authLimiter))
 	shareHandler.RegisterRoutes(api.Group("", ratelimit.Middleware(shareLimiter)))
+	importHandler.RegisterPublicRoutes(api.Group("", ratelimit.Middleware(shareLimiter)))
 
 	protected := api.Group("")
 	protected.Use(auth.RequireAuth(cfg.JWTSecret))

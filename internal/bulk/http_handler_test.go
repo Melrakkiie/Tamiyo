@@ -50,7 +50,19 @@ type fakeImportService struct {
 	commitCalled          bool
 
 	duplicateResult DuplicateSummary
+	lastSharedTags  bool
 	lastCollect     CollectRequest
+}
+
+func (f *fakeImportService) ExportSharedDeck(ctx context.Context, deckID string, format string, withTags bool, w io.Writer) error {
+	f.lastExportDeck = deckID
+	f.lastExportFormat = format
+	f.lastSharedTags = withTags
+	if f.exportErr != nil {
+		return f.exportErr
+	}
+	_, err := io.WriteString(w, f.exportContent)
+	return err
 }
 
 func (f *fakeImportService) DuplicateDeck(ctx context.Context, userID string, deckID string) (DuplicateSummary, error) {
@@ -886,4 +898,37 @@ func TestExportDeck_RejectsAnInvalidTagsFlag(t *testing.T) {
 	setupRouter(&fakeImportService{}).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/export?format=tamiyo&tags=maybe", nil))
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_ExportSharedDeck_NeedsNoAccount(t *testing.T) {
+	service := &fakeImportService{exportContent: "1 Sol Ring\n"}
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	NewHandler(service).RegisterPublicRoutes(router)
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/shared/decks/00000000-0000-0000-0000-000000000001/export?format=tamiyo&tags=true", nil))
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "1 Sol Ring\n", w.Body.String())
+	assert.Equal(t, "application/json; charset=utf-8", w.Header().Get("Content-Type"))
+	assert.Contains(t, w.Header().Get("Content-Disposition"), "Deck_tamiyo.json")
+	assert.Equal(t, "00000000-0000-0000-0000-000000000001", service.lastExportDeck)
+	assert.True(t, service.lastSharedTags)
+
+	cases := map[string]int{
+		"/shared/decks/nope/export": http.StatusNotFound,
+		"/shared/decks/00000000-0000-0000-0000-000000000001/export?format=x": http.StatusBadRequest,
+	}
+	for path, want := range cases {
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		assert.Equal(t, want, w.Code, path)
+	}
+
+	missing := gin.New()
+	NewHandler(&fakeImportService{exportErr: ErrDeckNotFound}).RegisterPublicRoutes(missing)
+	w = httptest.NewRecorder()
+	missing.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/shared/decks/00000000-0000-0000-0000-000000000001/export", nil))
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }

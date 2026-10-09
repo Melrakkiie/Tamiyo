@@ -110,11 +110,22 @@ func (h *Handler) compareDecks(ctx *gin.Context) {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
 		return
 	}
+	h.respondComparison(ctx, userID, http.StatusBadRequest)
+}
 
+func (h *Handler) compareSharedDecks(ctx *gin.Context) {
+	h.respondComparison(ctx, "", http.StatusNotFound)
+}
+
+func (h *Handler) respondComparison(ctx *gin.Context, userID string, invalidIDStatus int) {
 	deckID, validDeck := deck.ParseID(ctx.Param("id"))
 	otherID, validOther := deck.ParseID(ctx.Param("other_id"))
 	if !validDeck || !validOther {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		message := "invalid id"
+		if invalidIDStatus == http.StatusNotFound {
+			message = "deck not found"
+		}
+		ctx.JSON(invalidIDStatus, gin.H{"error": message})
 		return
 	}
 

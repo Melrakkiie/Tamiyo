@@ -107,6 +107,9 @@ func (s *Service) CompareDecks(ctx context.Context, userID string, deckID string
 }
 
 func (s *Service) resolveVisible(ctx context.Context, userID string, deckID string) (string, deck.Deck, error) {
+	if userID == "" {
+		return s.resolve(ctx, deckID)
+	}
 	d, err := s.decks.GetDeck(ctx, userID, deckID)
 	if err == nil {
 		return userID, d, nil

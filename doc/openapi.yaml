@@ -2152,6 +2152,101 @@ paths:
         "502":
           $ref: "#/components/responses/BadGateway"
 
+  /shared/decks/{id}/export:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    get:
+      tags: [shared-decks]
+      summary: Export a shared deck
+      description: >
+        Same export as GET /deck/{id}/export, for a public or unlisted deck.
+        Works without authentication.
+      security: []
+      parameters:
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [moxfield, plain, arena, tamiyo]
+            default: moxfield
+        - name: tags
+          in: query
+          required: false
+          description: With format=tamiyo, include the deck's tags.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: The deck as text, served as a download (Deck_moxfield.txt, Deck_list.txt, Deck_arena.txt, or Deck_tamiyo.json as application/json).
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="Deck_list.txt"
+          content:
+            text/plain:
+              schema:
+                type: string
+                format: binary
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TamiyoFile"
+        "400":
+          description: format is unknown, or tags isn't a boolean
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: >
+            No deck has this id, the id isn't a UUID, or the deck is private.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/SharedTooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /shared/decks/{id}/compare/{other_id}:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+      - name: other_id
+        in: path
+        required: true
+        description: The deck to compare with.
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [shared-decks]
+      summary: Compare two shared decks by card name
+      description: >
+        Same comparison as GET /deck/{id}/compare/{other_id}, for two public
+        or unlisted decks. Works without authentication; mine is always
+        false.
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeckComparison"
+        "404":
+          description: A deck doesn't exist, an id isn't a UUID, or a deck is private.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/SharedTooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /auth/me/preferences:
     get:
       tags: [auth]

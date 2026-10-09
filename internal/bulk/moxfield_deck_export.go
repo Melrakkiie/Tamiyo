@@ -66,6 +66,23 @@ func (s *Service) ExportDeck(ctx context.Context, userID string, deckID string, 
 	}
 }
 
+func (s *Service) ExportSharedDeck(ctx context.Context, deckID string, format string, withTags bool, w io.Writer) error {
+	if _, known := deckExportFilenames[format]; !known {
+		return ErrUnknownExportFormat
+	}
+	ownerID, d, err := s.decks.GetSharedDeck(ctx, deckID)
+	if err != nil {
+		if errors.Is(err, deck.ErrNotFound) {
+			return ErrDeckNotFound
+		}
+		return err
+	}
+	if format == DeckExportTamiyo {
+		return s.ExportTamiyoDeck(ctx, ownerID, d.ID, withTags, w)
+	}
+	return s.ExportDeck(ctx, ownerID, d.ID, format, w)
+}
+
 func (s *Service) deckExportEntries(ctx context.Context, userID string, d deck.Deck) (deckExportBoards, error) {
 	cards, err := s.decks.GetDeckCards(ctx, userID, d.ID, "updated", true)
 	if err != nil {

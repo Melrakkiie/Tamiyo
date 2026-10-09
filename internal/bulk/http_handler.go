@@ -28,6 +28,7 @@ type importService interface {
 	ExportDeck(ctx context.Context, userID string, deckID string, format string, w io.Writer) error
 	ExportTamiyoCollection(ctx context.Context, userID string, storageID *int, w io.Writer) error
 	ExportTamiyoDeck(ctx context.Context, userID string, deckID string, withTags bool, w io.Writer) error
+	ExportSharedDeck(ctx context.Context, deckID string, format string, withTags bool, w io.Writer) error
 
 	RefreshCardDetails(ctx context.Context, userID string, afterID int) (DetailsRefreshSummary, error)
 	CommitPendingCards(ctx context.Context, userID string, deckID string, storageID, pendingID, quantity *int) (PendingCommitSummary, error)
@@ -59,6 +60,10 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.GET("/deck/:id/export", h.exportDeck)
 	router.POST("/deck/:id/duplicate", h.duplicateDeck)
 	router.POST("/deck/:id/collect", h.collectDeck)
+}
+
+func (h *Handler) RegisterPublicRoutes(router gin.IRoutes) {
+	router.GET("/shared/decks/:id/export", h.exportSharedDeck)
 }
 
 func (h *Handler) refreshCardDetails(ctx *gin.Context) {
@@ -319,10 +324,28 @@ func (h *Handler) exportDeck(ctx *gin.Context) {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
 		return
 	}
+	h.respondDeckExport(ctx, http.StatusBadRequest, func(deckID string, format string, withTags bool, w io.Writer) error {
+		if format == DeckExportTamiyo {
+			return h.service.ExportTamiyoDeck(ctx.Request.Context(), userID, deckID, withTags, w)
+		}
+		return h.service.ExportDeck(ctx.Request.Context(), userID, deckID, format, w)
+	})
+}
 
+func (h *Handler) exportSharedDeck(ctx *gin.Context) {
+	h.respondDeckExport(ctx, http.StatusNotFound, func(deckID string, format string, withTags bool, w io.Writer) error {
+		return h.service.ExportSharedDeck(ctx.Request.Context(), deckID, format, withTags, w)
+	})
+}
+
+func (h *Handler) respondDeckExport(ctx *gin.Context, invalidIDStatus int, export func(deckID string, format string, withTags bool, w io.Writer) error) {
 	deckID, valid := deck.ParseID(ctx.Param("id"))
 	if !valid {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		message := "invalid id"
+		if invalidIDStatus == http.StatusNotFound {
+			message = "deck not found"
+		}
+		ctx.JSON(invalidIDStatus, gin.H{"error": message})
 		return
 	}
 
@@ -344,15 +367,7 @@ func (h *Handler) exportDeck(ctx *gin.Context) {
 	}
 
 	var buf bytes.Buffer
-	var err error
-	contentType := "text/plain; charset=utf-8"
-	if format == DeckExportTamiyo {
-		contentType = "application/json; charset=utf-8"
-		err = h.service.ExportTamiyoDeck(ctx.Request.Context(), userID, deckID, withTags, &buf)
-	} else {
-		err = h.service.ExportDeck(ctx.Request.Context(), userID, deckID, format, &buf)
-	}
-	if err != nil {
+	if err := export(deckID, format, withTags, &buf); err != nil {
 		apierr.Respond(ctx, err,
 			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: ErrUnknownExportFormat, Status: http.StatusBadRequest},
@@ -360,6 +375,10 @@ func (h *Handler) exportDeck(ctx *gin.Context) {
 		return
 	}
 
+	contentType := "text/plain; charset=utf-8"
+	if format == DeckExportTamiyo {
+		contentType = "application/json; charset=utf-8"
+	}
 	ctx.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	ctx.Data(http.StatusOK, contentType, buf.Bytes())
 }

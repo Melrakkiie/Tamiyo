@@ -109,6 +109,7 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.GET("/shared/decks/:id", h.getSharedDeck)
 	router.GET("/shared/decks/:id/legality", h.getSharedDeckLegality)
 	router.GET("/shared/decks/:id/stats", h.getSharedDeckStats)
+	router.GET("/shared/decks/:id/compare/:other_id", h.compareSharedDecks)
 }
 
 func parseDeckID(ctx *gin.Context) (string, bool) {

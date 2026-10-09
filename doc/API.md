@@ -1014,9 +1014,9 @@ A multicolor card counts once per color it has in `color_breakdown`; a dual-type
 
 ## Shared decks
 
-Read-only access to public decks, and to a deck by its id. **No authentication required** for the four `/shared/decks` routes ([comparing two decks](#get-deckidcompareother_id) needs a signed-in user). Deck ids are random UUIDs, so an unlisted deck can only be found by someone who was given its id or link. Only `public` and `unlisted` decks resolve: a private deck, an unknown id or anything that isn't a UUID all answer `404`, so the response never tells whether a private deck exists.
+Read-only access to public decks, and to a deck by its id. **No authentication required** for the six `/shared/decks` routes. Deck ids are random UUIDs, so an unlisted deck can only be found by someone who was given its id or link. Only `public` and `unlisted` decks resolve: a private deck, an unknown id or anything that isn't a UUID all answer `404`, so the response never tells whether a private deck exists.
 
-The four `/shared/decks` routes share a per-client-IP limit, separate from the auth one: 60 requests per 60-second window by default (`SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns `429` with a `Retry-After` header, as described in [Rate limiting](#rate-limiting).
+The six `/shared/decks` routes share a per-client-IP limit, separate from the auth one: 60 requests per 60-second window by default (`SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns `429` with a `Retry-After` header, as described in [Rate limiting](#rate-limiting).
 
 ### `GET /shared/decks`
 
@@ -1119,6 +1119,18 @@ Same report as [`GET /deck/:id/legality`](#get-deckidlegality), without `card_id
 Same statistics as [`GET /deck/:id/stats`](#get-deckidstats).
 
 **Errors:** `400` the deck's format isn't one Scryfall recognizes · `404` as above · `429` rate limit exceeded · `502` Scryfall unreachable
+
+### `GET /shared/decks/:id/export`
+
+The deck exported as [`GET /deck/:id/export`](#get-deckidexport) does, with the same `format` and `tags` parameters, response and download names.
+
+**Errors:** `400` unknown `format`, or `tags` isn't a boolean · `404` as above · `429` rate limit exceeded
+
+### `GET /shared/decks/:id/compare/:other_id`
+
+Compares two `public` or `unlisted` decks, as [`GET /deck/:id/compare/:other_id`](#get-deckidcompareother_id) does, for anyone. `mine` is always `false`.
+
+**Errors:** `404` either deck is unknown, malformed or private · `429` rate limit exceeded
 
 ### `GET /deck/:id/compare/:other_id`
 
