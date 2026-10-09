@@ -1719,7 +1719,8 @@ paths:
         otherwise. With commander_from_first_line, the first card line of
         the main board becomes the commander only if the deck has none
         yet: an owned one becomes commander_id, a missing one the pending
-        commander. A file starting with "{" is read as a Tamiyo deck file
+        commander. Moxfield tags at the end of a line ("#ramp #food
+        generator") are added to that card's tags. A file starting with "{" is read as a Tamiyo deck file
         (see TamiyoFile): cards go on their boards, its commander becomes
         the deck's when it has none, and its tags are added to the deck's.
       requestBody:

@@ -86,6 +86,29 @@ func TestParseMoxfieldDeckList_ParsesLines(t *testing.T) {
 	assert.True(t, lines[3].Foil)
 }
 
+func TestParseMoxfieldDeckList_ReadsMoxfieldTags(t *testing.T) {
+	list := "1 Academy Manufactor (BLC) 264 #acceleration #advantage #food generator\n" +
+		"1 Sol Ring (SLD) 1011 *F* #!Ramp #ramp\n" +
+		"2 Lightning Bolt #removal\n" +
+		"1 Island (NEO) 294\n"
+
+	lines, err := parseMoxfieldDeckList(strings.NewReader(list))
+
+	require.NoError(t, err)
+	require.Len(t, lines, 4)
+	assert.Equal(t, "Academy Manufactor", lines[0].CardName)
+	assert.Equal(t, "BLC", lines[0].SetCode)
+	assert.Equal(t, "264", lines[0].CollectorNumber)
+	assert.Equal(t, []string{"acceleration", "advantage", "food generator"}, lines[0].Tags)
+	assert.True(t, lines[1].Foil)
+	assert.Equal(t, "1011", lines[1].CollectorNumber)
+	assert.Equal(t, []string{"Ramp"}, lines[1].Tags)
+	assert.Equal(t, "Lightning Bolt", lines[2].CardName)
+	assert.Equal(t, 2, lines[2].Quantity)
+	assert.Equal(t, []string{"removal"}, lines[2].Tags)
+	assert.Nil(t, lines[3].Tags)
+}
+
 func TestParseMoxfieldDeckList_ParsesTheListAndEtchedCards(t *testing.T) {
 	deck := "1 Cryptic Command (PLST) IMA-48\n" +
 		"1 Heartstone (PLST) H09-26\n" +

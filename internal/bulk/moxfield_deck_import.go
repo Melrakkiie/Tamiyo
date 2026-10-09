@@ -247,6 +247,29 @@ func (s *Service) fillDeck(ctx context.Context, userID string, deckID string, pl
 	}
 }
 
+func lineTags(lines []moxfieldDeckLine) []tamiyoCardTags {
+	var tags []tamiyoCardTags
+	index := make(map[string]int)
+	for _, line := range lines {
+		if len(line.Tags) == 0 {
+			continue
+		}
+		key := deck.CardNameKey(line.CardName)
+		i, seen := index[key]
+		if !seen {
+			i = len(tags)
+			index[key] = i
+			tags = append(tags, tamiyoCardTags{Name: line.CardName})
+		}
+		for _, tag := range line.Tags {
+			if !containsFold(tags[i].Tags, tag) {
+				tags[i].Tags = append(tags[i].Tags, tag)
+			}
+		}
+	}
+	return tags
+}
+
 func (s *Service) ImportIntoDeck(ctx context.Context, userID string, deckID string, commanderFromFirstLine bool, r io.Reader) (Summary, error) {
 	d, err := s.decks.GetDeck(ctx, userID, deckID)
 	if err != nil {
@@ -276,8 +299,11 @@ func (s *Service) ImportIntoDeck(ctx context.Context, userID string, deckID stri
 		}
 		lines, commanderFromFirstLine = tamiyoDeckLines(file)
 		tags = file.Tags
-	} else if lines, err = parseMoxfieldDeckList(bytes.NewReader(data)); err != nil {
-		return Summary{}, err
+	} else {
+		if lines, err = parseMoxfieldDeckList(bytes.NewReader(data)); err != nil {
+			return Summary{}, err
+		}
+		tags = lineTags(lines)
 	}
 
 	hasCommander := d.CommanderID != nil || d.CommanderPendingID != nil

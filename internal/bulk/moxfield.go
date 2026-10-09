@@ -76,6 +76,22 @@ type moxfieldDeckLine struct {
 	CollectorNumber string
 	Foil            bool
 	Board           string
+	Tags            []string
+}
+
+func splitLineTags(text string) (string, []string) {
+	start := strings.Index(text, " #")
+	if start < 0 {
+		return text, nil
+	}
+	var tags []string
+	for _, raw := range strings.Split(text[start+2:], "#") {
+		tag := strings.Join(strings.Fields(strings.TrimPrefix(strings.TrimSpace(raw), "!")), " ")
+		if tag != "" && !containsFold(tags, tag) {
+			tags = append(tags, tag)
+		}
+	}
+	return strings.TrimSpace(text[:start]), tags
 }
 
 var moxfieldDeckLineRE = regexp.MustCompile(`^(\d+)x?\s+(.+?)\s+\(([A-Za-z0-9]+)\)\s+(\S+?)(\s+\*[FE]\*)?$`)
@@ -109,6 +125,7 @@ func parseMoxfieldDeckList(r io.Reader) ([]moxfieldDeckLine, error) {
 			continue
 		}
 
+		text, tags := splitLineTags(text)
 		matches := moxfieldDeckLineRE.FindStringSubmatch(text)
 		if matches == nil {
 			plain := plainDeckLineRE.FindStringSubmatch(text)
@@ -131,6 +148,7 @@ func parseMoxfieldDeckList(r io.Reader) ([]moxfieldDeckLine, error) {
 			CollectorNumber: matches[4],
 			Foil:            matches[5] != "",
 			Board:           board,
+			Tags:            tags,
 		})
 	}
 	if err := scanner.Err(); err != nil {

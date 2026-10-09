@@ -672,6 +672,15 @@ func TestImportIntoDeck_AddsMissingCopiesAsPending(t *testing.T) {
 	assert.Equal(t, "Artifact", *pending.CardType)
 }
 
+func TestImportIntoDeck_AddsMoxfieldTags(t *testing.T) {
+	cards := &fakeCardService{allCards: []card.Card{{ID: 6, Name: "Sol Ring", ScryfallID: solRingID}}}
+	decks := &fakeDeckService{tags: deck.DeckTags{Cards: []deck.TaggedCard{{Name: "Sol Ring", Tags: []string{"Mana"}}}}}
+
+	importDeck(t, cards, decks, "1 Sol Ring (SLD) 1011 #ramp #mana\nSideboard\n2 Sol Ring (SLD) 1011 #artifact\n1 Atraxa, Praetors' Voice (CMR) 1\n", false)
+
+	assert.Equal(t, map[string][]string{"Sol Ring": {"Mana", "ramp", "artifact"}}, decks.setTags)
+}
+
 func TestImportIntoDeck_OnlyUsesTheExactPrinting(t *testing.T) {
 	cards := &fakeCardService{allCards: []card.Card{{ID: 6, Name: "Sol Ring", ScryfallID: "33333333-0000-0000-0000-000000000000"}}}
 	decks := &fakeDeckService{}
