@@ -1103,11 +1103,11 @@ Cards are matched **by name only**: printings and finishes are ignored, and a sp
 
 ## Bulk Import
 
-Four routes import cards in bulk, instead of one `POST /cards` call per card: a collection export from a third-party tool, a plain card list, or a decklist. The collection and list imports create cards (and, for ManaBox, storages/decks); the deck import fills an existing deck with cards already in the collection and never creates any. All four are `multipart/form-data` requests (not JSON) with the file itself in a field named `file`.
+Five routes import cards in bulk, instead of one `POST /cards` call per card: a collection export from a third-party tool, a plain card list, a [Tamiyo file](#tamiyo-format), or a decklist. The collection, list and Tamiyo imports create cards (and, for ManaBox and Tamiyo, storages; for ManaBox, decks); the deck import fills an existing deck with cards already in the collection and never creates any. All five are `multipart/form-data` requests (not JSON) with the file itself in a field named `file`.
 
 A bulk import never fails outright just because some rows couldn't be resolved: a request that parses successfully always returns `200 OK` with a summary of what happened, including a `warnings` list for any row that was skipped (card not found on Scryfall, a duplicate, a transient error). The import only fails as a whole (non-`200`) when the file itself can't be parsed, a referenced `storage_id` doesn't exist, or Scryfall couldn't be reached at all.
 
-**Response shape (all four routes)**
+**Response shape (all five routes)**
 ```json
 {
   "cards_created": 182,
@@ -1123,7 +1123,7 @@ A bulk import never fails outright just because some rows couldn't be resolved: 
 ```
 `warnings` is omitted entirely when empty. `cards_linked` and `cards_pending` are only ever non-zero for the deck import.
 
-**Errors common to all four**
+**Errors common to all five**
 - `400` — no `file` field, or the file couldn't be parsed (wrong columns, malformed line) — message explains what's wrong
 - `400` — a `storage_id` field doesn't reference an existing storage for this account
 - `502` — Scryfall (used to resolve Moxfield rows — see below) couldn't be reached or returned an unexpected response after retrying; a rate-limited (`429`) response from Scryfall is retried automatically (honoring its `Retry-After` header when present) before this is returned
@@ -1174,6 +1174,21 @@ Add a card list to the collection: one card is created per copy, in the storage 
 
 ---
 
+### `POST /import/tamiyo`
+
+Import a [Tamiyo file](#tamiyo-format) of kind `collection` or `storage` into the collection. One card is created per copy, with its printing, finish and proxy status. Without `storage_id`, each card goes in the storage named in the file: an existing storage with exactly that name, or a new one of the file's type (`binder` when the file doesn't say). With `storage_id`, every card goes in that storage and the file's storages are ignored. Each printing is looked up on Scryfall by its id, to store its details; one Scryfall doesn't know is skipped (counted in `cards_skipped`, noted in `warnings`).
+
+**Form fields**
+
+| Field | Required | Notes |
+|---|---|---|
+| `file` | Yes | The Tamiyo file. |
+| `storage_id` | No | An existing storage for this account. Unknown storage → `400`. |
+
+**Errors** (besides the common ones): `400` the file is a Tamiyo `deck` file (it is imported with [`POST /deck/:id/import`](#post-deckidimport)).
+
+---
+
 ### `POST /deck/:id/import`
 
 Add a decklist to an **existing** deck — the front end creates the deck first (`POST /deck`), then calls this route. **It never creates cards in the collection**: each line is resolved against Scryfall, then:
@@ -1191,10 +1206,12 @@ When `commander_from_first_line` is `true`, the first card line of `main` is tre
 
 | Field | Required | Notes |
 |---|---|---|
-| `file` | Yes | The decklist, as plain text. |
-| `commander_from_first_line` | No | `true` or `false`. Defaults to `false`. |
+| `file` | Yes | The decklist, as plain text, or a [Tamiyo](#tamiyo-format) `deck` file. |
+| `commander_from_first_line` | No | `true` or `false`. Defaults to `false`. Ignored for a Tamiyo file. |
 
-**Errors** (besides the common ones): `400` invalid deck id · `404` deck not found.
+A file starting with `{` is read as a [Tamiyo](#tamiyo-format) `deck` file: its cards go on their own boards, with their exact printing and finish, owned copies and missing ones handled as above. Its commander becomes the deck's commander if the deck has none yet. Its tags, when it has any, are added to the deck's [tags](#card-tags-deckidtags) (a card keeps the tags it already had); a tag that can't be set, for a card that couldn't be added, is noted in `warnings`. The file's `deck` name and format are not applied: the deck keeps its own.
+
+**Errors** (besides the common ones): `400` invalid deck id, or a Tamiyo file of kind `collection` or `storage` · `404` deck not found.
 
 **Expected line format:** `<quantity> <name> (<set code>) <collector number>[ *F*]`, e.g. `1 Sol Ring (SLD) 1011 *F*` — Moxfield's plain-text export (deck page → **More → Export → Plain Text**). `*E*`, etched, counts as foil, and collector numbers can contain dashes, like The List's `IMA-48`. Cards with two names (e.g. double-faced cards) keep both, separated by ` / `.
 
@@ -1204,7 +1221,7 @@ A plain list works too, one `<quantity> <name>` per line (`4 Lightning Bolt`, `1
 
 ## Bulk Export
 
-Two routes export your collection as a CSV file in the same format the matching [Bulk Import](#bulk-import) route reads — so round-tripping a collection out and back in is a no-op. Both are plain `GET` requests (no body): the response is the CSV file itself, not JSON, served with `Content-Type: text/csv; charset=utf-8` and a `Content-Disposition: attachment; filename="..."` header so a browser or HTTP client downloads it directly.
+Three routes export your collection: two as a CSV file in the same format the matching [Bulk Import](#bulk-import) route reads — so round-tripping a collection out and back in is a no-op. Both are plain `GET` requests (no body): the response is the CSV file itself, not JSON, served with `Content-Type: text/csv; charset=utf-8` and a `Content-Disposition: attachment; filename="..."` header so a browser or HTTP client downloads it directly.
 
 Both export the whole collection by default. With the optional `storage_id` query parameter (`GET /export/manabox?storage_id=4`), only the cards in that storage are exported; there's no filtering by deck (see [`GET /deck/:id/export`](#get-deckidexport) for that). Every physical copy of the same printing (same name, set, collector number and foil status) is collapsed into a single CSV row with a quantity/count column, the reverse of how importing that same row expands it back into that many individual cards.
 
@@ -1216,6 +1233,30 @@ Both export the whole collection by default. With the optional `storage_id` quer
 
 ---
 
+### Tamiyo format
+
+Tamiyo's own file format: a JSON document that keeps everything the other formats lose (storages and their type, proxies, the exact printing, a deck's boards, commander and tags), so a collection, a storage or a deck can be exported and imported back, into the same account or another one. Every file starts with the format version and what it holds:
+
+```json
+{
+  "tamiyo": 1,
+  "kind": "collection",
+  "exported_at": "2026-10-09T09:30:00Z",
+  "storages": [{ "name": "Classeur bleu", "type": "binder" }],
+  "cards": [
+    { "name": "Sol Ring", "scryfall_id": "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", "set_code": "sld", "collector_number": "1011",
+      "foil": false, "proxy": false, "quantity": 2, "storage": "Classeur bleu" },
+    { "name": "Duress", "scryfall_id": "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f", "set_code": "m19", "collector_number": "94",
+      "foil": false, "proxy": false, "quantity": 1, "storage": null }
+  ]
+}
+```
+
+- `kind` is `collection` (the whole collection), `storage` (one storage) or `deck`.
+- In a `collection` or `storage` file, each card entry is one printing, finish, proxy status and storage with its `quantity`. `storage` names one of the `storages`, or is `null` for a card in no storage.
+- A `deck` file has a `deck` object (`name`, `format`) instead of `storages`. Its card entries carry a `board` (`main`, `sideboard` or `considering`) instead of `storage` and `proxy`, and the commander's entry has `"commander": true`. Owned and pending cards are merged. It has a `tags` list (`[{ "name": "Sol Ring", "tags": ["Ramp"] }]`) when it was exported with its tags.
+- `quantity` is between 1 and 1000. A file whose `tamiyo` version is newer than the API's is refused.
+
 ### `GET /export/manabox`
 
 Exports the account's collection (or one storage) as a ManaBox-compatible CSV (`ManaBox_Collection_export.csv`), matching the columns `POST /import/manabox` reads: `Binder Name, Binder Type, Name, Set code, Scryfall ID, Collector number, Foil, Quantity`.
@@ -1226,6 +1267,10 @@ Cards are grouped by storage, since storage (`Binder Name`/`Binder Type`) is Man
 
 Exports the account's collection (or one storage) as a Moxfield-compatible "Export Collection" CSV, matching the columns `POST /import/moxfield/collection` reads: `Count, Name, Edition, Foil, Collector Number`. Moxfield's own format has no storage concept at all, so unlike the ManaBox export, cards are grouped across every storage (and unsorted cards) with no distinction — the only way to see a card's storage is via `GET /cards`, not this export.
 
+### `GET /export/tamiyo`
+
+Exports the account's collection, or one storage with `storage_id`, as a [Tamiyo file](#tamiyo-format) (`Tamiyo_Collection.json`, `Content-Type: application/json; charset=utf-8`): of kind `collection`, or `storage` with `storage_id`. Only the storages holding exported cards are listed (and the exported storage itself, even empty). `POST /import/tamiyo` reads it back.
+
 ### `GET /deck/:id/export`
 
 Exports **one deck** — not the whole collection — as plain text (`Content-Type: text/plain; charset=utf-8`), served as a download, in the format chosen with the `format` query parameter:
@@ -1235,12 +1280,15 @@ Exports **one deck** — not the whole collection — as plain text (`Content-Ty
 | `moxfield` (default) | One line per printing, `1 Sol Ring (SLD) 1011 *F*`, the format Moxfield's deck import reads. | `Deck_moxfield.txt` |
 | `plain` | One line per card name, every printing added up, `4 Lightning Bolt`, the commander first. | `Deck_list.txt` |
 | `arena` | MTG Arena's format: a `Commander` section when the deck has one, then a `Deck` section, one line per card name. Split cards are written with ` // `. | `Deck_arena.txt` |
+| `tamiyo` | A [Tamiyo file](#tamiyo-format) of kind `deck`, served as `application/json`. Add `tags=true` to include the deck's tags. | `Deck_tamiyo.json` |
+
+`tags` (`true` or `false`, default `false`) only applies to `tamiyo`. The rest of this section is about the three text formats.
 
 The sideboard follows the deck in a section of its own in every format: `SIDEBOARD:` in `moxfield`, `Sideboard` in `plain` and `arena`. The cards being considered come last, under `MAYBEBOARD:` in `moxfield` and `Maybeboard` in `plain`; `arena` leaves them out. Each section is written only when it has cards, after a blank line.
 
 If the deck has a commander, it comes **first** in every format — in `moxfield`, that printing's line with its full quantity in the deck, not just the one physical card marked as commander — so importing the file back (which treats the first line as the commander when asked) reconstructs the same commander. Everything else is sorted alphabetically. Pending cards are included in every format, a pending commander first like an owned one. All three formats can be imported back with `POST /deck/:id/import`.
 
-**Errors:** `400` `:id` is not a UUID or `format` is unknown · `401` unauthenticated · `404` deck not found
+**Errors:** `400` `:id` is not a UUID, `format` is unknown or `tags` isn't a boolean · `401` unauthenticated · `404` deck not found
 
 ---
 

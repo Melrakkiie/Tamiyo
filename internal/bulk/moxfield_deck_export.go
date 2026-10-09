@@ -11,12 +11,13 @@ import (
 	"Melrakkiie/Tamiyo/internal/deck"
 )
 
-var ErrUnknownExportFormat = errors.New("format must be one of: moxfield, plain, arena")
+var ErrUnknownExportFormat = errors.New("format must be one of: moxfield, plain, arena, tamiyo")
 
 const (
 	DeckExportMoxfield = "moxfield"
 	DeckExportPlain    = "plain"
 	DeckExportArena    = "arena"
+	DeckExportTamiyo   = "tamiyo"
 )
 
 type deckExportEntry struct {

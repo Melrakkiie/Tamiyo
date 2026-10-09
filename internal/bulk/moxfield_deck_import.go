@@ -1,6 +1,7 @@
 package bulk
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -255,8 +256,27 @@ func (s *Service) ImportIntoDeck(ctx context.Context, userID string, deckID stri
 		return Summary{}, err
 	}
 
-	lines, err := parseMoxfieldDeckList(r)
+	data, err := readImport(r)
 	if err != nil {
+		return Summary{}, err
+	}
+
+	var lines []moxfieldDeckLine
+	var tags []tamiyoCardTags
+	if looksLikeJSON(data) {
+		file, err := parseTamiyoFile(data)
+		if err != nil {
+			return Summary{}, err
+		}
+		if file.Kind != TamiyoKindDeck {
+			return Summary{}, ErrTamiyoCollectionFile
+		}
+		if len(file.deckCards) == 0 {
+			return Summary{}, invalidTamiyo("the deck has no cards")
+		}
+		lines, commanderFromFirstLine = tamiyoDeckLines(file)
+		tags = file.Tags
+	} else if lines, err = parseMoxfieldDeckList(bytes.NewReader(data)); err != nil {
 		return Summary{}, err
 	}
 
@@ -267,5 +287,8 @@ func (s *Service) ImportIntoDeck(ctx context.Context, userID string, deckID stri
 	}
 
 	s.fillDeck(ctx, userID, d.ID, placements, &summary)
+	if err := s.applyTamiyoTags(ctx, userID, d.ID, tags, &summary); err != nil {
+		return summary, err
+	}
 	return summary, nil
 }

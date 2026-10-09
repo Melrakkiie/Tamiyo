@@ -1719,7 +1719,9 @@ paths:
         otherwise. With commander_from_first_line, the first card line of
         the main board becomes the commander only if the deck has none
         yet: an owned one becomes commander_id, a missing one the pending
-        commander.
+        commander. A file starting with "{" is read as a Tamiyo deck file
+        (see TamiyoFile): cards go on their boards, its commander becomes
+        the deck's when it has none, and its tags are added to the deck's.
       requestBody:
         required: true
         content:
@@ -1731,7 +1733,7 @@ paths:
                 file:
                   type: string
                   format: binary
-                  description: The list, one card per line.
+                  description: The list, one card per line, or a Tamiyo deck file.
                 commander_from_first_line:
                   type: boolean
                   default: false
@@ -2298,6 +2300,96 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /import/tamiyo:
+    post:
+      tags: [bulk-import]
+      summary: Bulk import a Tamiyo collection or storage file
+      description: >
+        Creates one card per copy from a Tamiyo file of kind collection or
+        storage, keeping each printing, finish and proxy status. Without
+        storage_id, cards go in the storage named in the file (an existing
+        storage with that exact name, or a new one of the file's type);
+        with storage_id, they all go in that storage. Printings Scryfall
+        doesn't know are skipped and reported in ImportSummary.warnings.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The Tamiyo file (JSON, see TamiyoFile).
+                storage_id:
+                  type: integer
+                  minimum: 1
+                  description: An existing storage for this account.
+      responses:
+        "200":
+          description: >
+            Import finished (possibly with some cards skipped — see
+            ImportSummary.warnings).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportSummary"
+        "400":
+          description: >
+            No file field, the file isn't a valid Tamiyo collection or
+            storage file (a deck file is refused), or storage_id is invalid
+            or does not reference an existing storage.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
+  /export/tamiyo:
+    get:
+      tags: [bulk-export]
+      summary: Export the collection or one storage as a Tamiyo file
+      description: >
+        Exports the account's collection (kind collection), or only one
+        storage with storage_id (kind storage), as a Tamiyo file that
+        POST /import/tamiyo reads back.
+      parameters:
+        - name: storage_id
+          in: query
+          required: false
+          description: Only export the cards in this storage.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: The Tamiyo file, served as a download (Tamiyo_Collection.json).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TamiyoFile"
+        "400":
+          description: storage_id is not a positive integer.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: storage_id does not reference an existing storage.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /export/moxfield/collection:
     get:
       tags: [bulk-export]
@@ -2355,7 +2447,9 @@ paths:
       tags: [bulk-export]
       summary: Export one deck as text, in a chosen format
       description: >
-        Exports the deck's cards, pending ones included, as plain text.
+        Exports the deck's cards, pending ones included, as plain text, or
+        as a Tamiyo deck file with format=tamiyo (with the deck's tags when
+        tags=true).
         moxfield: one line per printing, "1 Sol Ring (SLD) 1011 *F*", the
         commander's line first with its full quantity, the rest sorted
         alphabetically, so importing the file back reconstructs the same
@@ -2373,11 +2467,18 @@ paths:
           required: false
           schema:
             type: string
-            enum: [moxfield, plain, arena]
+            enum: [moxfield, plain, arena, tamiyo]
             default: moxfield
+        - name: tags
+          in: query
+          required: false
+          description: With format=tamiyo, include the deck's tags.
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
-          description: The deck as text, served as a download (Deck_moxfield.txt, Deck_list.txt or Deck_arena.txt).
+          description: The deck as text, served as a download (Deck_moxfield.txt, Deck_list.txt, Deck_arena.txt, or Deck_tamiyo.json as application/json).
           headers:
             Content-Disposition:
               schema:
@@ -2388,8 +2489,11 @@ paths:
               schema:
                 type: string
                 format: binary
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TamiyoFile"
         "400":
-          description: id is not a UUID, or format is unknown
+          description: id is not a UUID, format is unknown, or tags isn't a boolean
           content:
             application/json:
               schema:
@@ -2545,6 +2649,80 @@ components:
             $ref: "#/components/schemas/Error"
 
   schemas:
+    TamiyoFile:
+      type: object
+      description: >
+        Tamiyo's own versioned file format, for a collection, a storage or
+        a deck. Collection and storage files list storages and cards with
+        their storage and proxy status; deck files have a deck object,
+        cards with their board and commander flag, and optionally tags.
+      properties:
+        tamiyo:
+          type: integer
+          description: Format version, currently 1.
+        kind:
+          type: string
+          enum: [collection, storage, deck]
+        exported_at:
+          type: string
+          format: date-time
+        deck:
+          type: object
+          properties:
+            name:
+              type: string
+            format:
+              type: string
+        storages:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              type:
+                type: string
+            required: [name, type]
+        cards:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              scryfall_id:
+                type: string
+                format: uuid
+              set_code:
+                type: string
+              collector_number:
+                type: string
+              foil:
+                type: boolean
+              proxy:
+                type: boolean
+                description: Collection and storage files only.
+              quantity:
+                type: integer
+                minimum: 1
+                maximum: 1000
+              storage:
+                type: string
+                nullable: true
+                description: Collection and storage files only; the name of one of the storages, null for no storage.
+              board:
+                $ref: "#/components/schemas/DeckBoard"
+              commander:
+                type: boolean
+                description: Deck files only.
+            required: [name, scryfall_id, quantity]
+        tags:
+          type: array
+          description: Deck files exported with their tags only.
+          items:
+            $ref: "#/components/schemas/TaggedCard"
+      required: [tamiyo, kind, cards]
+
     DeckBoard:
       type: string
       enum: [main, sideboard, considering]

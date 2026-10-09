@@ -127,6 +127,10 @@ func (f *fakeStorageService) CreateStorage(ctx context.Context, userID string, s
 }
 
 type fakeDeckService struct {
+	tags       deck.DeckTags
+	setTags    map[string][]string
+	setTagsErr error
+
 	decks       []deck.Deck
 	nextID      int
 	created     []deck.Deck
@@ -156,6 +160,21 @@ func (f *fakeDeckService) SetPendingQuantity(ctx context.Context, userID string,
 	}
 	f.pendingQuantities[id] = quantity
 	return deck.PendingCard{ID: id, DeckID: deckID, Quantity: quantity}, nil
+}
+
+func (f *fakeDeckService) GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error) {
+	return f.tags, nil
+}
+
+func (f *fakeDeckService) SetCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) (deck.TaggedCard, error) {
+	if f.setTagsErr != nil {
+		return deck.TaggedCard{}, f.setTagsErr
+	}
+	if f.setTags == nil {
+		f.setTags = map[string][]string{}
+	}
+	f.setTags[cardName] = tags
+	return deck.TaggedCard{Name: cardName, Tags: tags}, nil
 }
 
 func (f *fakeDeckService) SetCardCommander(ctx context.Context, userID string, deckID string, cardID int) error {

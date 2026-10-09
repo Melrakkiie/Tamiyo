@@ -61,6 +61,8 @@ type deckService interface {
 	SetPendingCommander(ctx context.Context, userID string, deckID string, pendingID int) error
 	SetCardCommander(ctx context.Context, userID string, deckID string, cardID int) error
 	SetPendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (deck.PendingCard, error)
+	GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error)
+	SetCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) (deck.TaggedCard, error)
 }
 
 type Service struct {

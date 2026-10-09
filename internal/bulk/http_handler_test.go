@@ -41,6 +41,9 @@ type fakeImportService struct {
 	lastDeckID    string
 
 	lastIntoDeckCommander bool
+	lastTamiyoStorageID   *int
+	lastExportTags        bool
+	tamiyoImportCalled    bool
 	lastQuantity          *int
 	lastStorageID         *int
 	lastPendingID         *int
@@ -116,6 +119,36 @@ func (f *fakeImportService) ImportIntoDeck(ctx context.Context, userID string, d
 	content, _ := io.ReadAll(r)
 	f.lastFileContent = string(content)
 	return f.summary, f.err
+}
+
+func (f *fakeImportService) ImportTamiyoCollection(ctx context.Context, userID string, storageID *int, r io.Reader) (Summary, error) {
+	f.lastUserID = userID
+	f.lastTamiyoStorageID = storageID
+	f.tamiyoImportCalled = true
+	f.readFile(r)
+	return f.summary, f.err
+}
+
+func (f *fakeImportService) ExportTamiyoCollection(ctx context.Context, userID string, storageID *int, w io.Writer) error {
+	f.lastExportUser = userID
+	f.lastExportStorageID = storageID
+	if f.exportErr != nil {
+		return f.exportErr
+	}
+	_, err := w.Write([]byte(f.exportContent))
+	return err
+}
+
+func (f *fakeImportService) ExportTamiyoDeck(ctx context.Context, userID string, deckID string, withTags bool, w io.Writer) error {
+	f.lastExportUser = userID
+	f.lastExportDeck = deckID
+	f.lastExportFormat = DeckExportTamiyo
+	f.lastExportTags = withTags
+	if f.exportErr != nil {
+		return f.exportErr
+	}
+	_, err := w.Write([]byte(f.exportContent))
+	return err
 }
 
 func (f *fakeImportService) ExportDeck(ctx context.Context, userID string, deckID string, format string, w io.Writer) error {
@@ -749,4 +782,92 @@ func TestExportDeck_RejectsAnUnknownFormatOrDeck(t *testing.T) {
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestImportTamiyo_PassesTheFileAndStorage(t *testing.T) {
+	service := &fakeImportService{summary: Summary{CardsCreated: 2}}
+	router := setupRouter(service)
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, multipartRequest(t, "/import/tamiyo", `{"tamiyo": 1}`, map[string]string{"storage_id": "3"}))
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, `{"tamiyo": 1}`, service.lastFileContent)
+	require.NotNil(t, service.lastTamiyoStorageID)
+	assert.Equal(t, 3, *service.lastTamiyoStorageID)
+	assert.Contains(t, w.Body.String(), `"cards_created": 2`)
+}
+
+func TestImportTamiyo_RejectsBadRequests(t *testing.T) {
+	cases := map[string]struct {
+		service *fakeImportService
+		content string
+		fields  map[string]string
+	}{
+		"invalid storage_id": {&fakeImportService{}, "{}", map[string]string{"storage_id": "x"}},
+		"missing file":       {&fakeImportService{}, "", nil},
+		"invalid file":       {&fakeImportService{err: ErrInvalidFile}, "nope", nil},
+		"deck file":          {&fakeImportService{err: ErrTamiyoDeckFile}, "{}", nil},
+		"unknown storage":    {&fakeImportService{err: ErrTargetStorageNotFound}, "{}", map[string]string{"storage_id": "9"}},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			setupRouter(tc.service).ServeHTTP(w, multipartRequest(t, "/import/tamiyo", tc.content, tc.fields))
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+		})
+	}
+}
+
+func TestImportIntoDeck_RefusesATamiyoCollectionFileWithBadRequest(t *testing.T) {
+	service := &fakeImportService{err: ErrTamiyoCollectionFile}
+
+	w := httptest.NewRecorder()
+	setupRouter(service).ServeHTTP(w, multipartRequest(t, "/deck/00000000-0000-0000-0000-000000000001/import", "{}", nil))
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "collection or a storage")
+}
+
+func TestExportTamiyoCollection_ReturnsJSONWithAttachmentHeaders(t *testing.T) {
+	service := &fakeImportService{exportContent: `{"tamiyo": 1}`}
+
+	w := httptest.NewRecorder()
+	setupRouter(service).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/export/tamiyo?storage_id=4", nil))
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "application/json; charset=utf-8", w.Header().Get("Content-Type"))
+	assert.Equal(t, `attachment; filename="Tamiyo_Collection.json"`, w.Header().Get("Content-Disposition"))
+	assert.Equal(t, `{"tamiyo": 1}`, w.Body.String())
+	require.NotNil(t, service.lastExportStorageID)
+	assert.Equal(t, 4, *service.lastExportStorageID)
+}
+
+func TestExportTamiyoCollection_UnknownStorageReturnsNotFound(t *testing.T) {
+	w := httptest.NewRecorder()
+	setupRouter(&fakeImportService{exportErr: ErrTargetStorageNotFound}).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/export/tamiyo?storage_id=4", nil))
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestExportDeck_TamiyoFormatWithOrWithoutTags(t *testing.T) {
+	for query, wantTags := range map[string]bool{"": false, "&tags=true": true, "&tags=false": false} {
+		service := &fakeImportService{exportContent: `{"tamiyo": 1}`}
+
+		w := httptest.NewRecorder()
+		setupRouter(service).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/export?format=tamiyo"+query, nil))
+
+		require.Equal(t, http.StatusOK, w.Code, query)
+		assert.Equal(t, "application/json; charset=utf-8", w.Header().Get("Content-Type"))
+		assert.Equal(t, `attachment; filename="Deck_tamiyo.json"`, w.Header().Get("Content-Disposition"))
+		assert.Equal(t, DeckExportTamiyo, service.lastExportFormat)
+		assert.Equal(t, wantTags, service.lastExportTags, query)
+	}
+}
+
+func TestExportDeck_RejectsAnInvalidTagsFlag(t *testing.T) {
+	w := httptest.NewRecorder()
+	setupRouter(&fakeImportService{}).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/export?format=tamiyo&tags=maybe", nil))
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
