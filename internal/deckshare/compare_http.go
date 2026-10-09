@@ -68,6 +68,40 @@ func toComparedCardsResponse(cards []ComparedCard) []comparedCardResponse {
 
 func (h *Handler) RegisterProtectedRoutes(router gin.IRoutes) {
 	router.GET("/deck/:id/compare/:other_id", h.compareDecks)
+	router.GET("/deck/:id/ownership", h.collectionOwnership)
+}
+
+type ownedCardResponse struct {
+	Name  string `json:"name"`
+	Owned int    `json:"owned"`
+}
+
+type ownershipResponse struct {
+	Cards []ownedCardResponse `json:"cards"`
+}
+
+func (h *Handler) collectionOwnership(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+	deckID, ok := parseDeckID(ctx)
+	if !ok {
+		return
+	}
+
+	owned, err := h.service.CollectionOwnership(ctx.Request.Context(), userID, deckID)
+	if err != nil {
+		h.respondError(ctx, err)
+		return
+	}
+
+	response := ownershipResponse{Cards: make([]ownedCardResponse, 0, len(owned))}
+	for _, c := range owned {
+		response.Cards = append(response.Cards, ownedCardResponse(c))
+	}
+	ctx.JSON(http.StatusOK, response)
 }
 
 func (h *Handler) compareDecks(ctx *gin.Context) {

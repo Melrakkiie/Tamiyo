@@ -204,6 +204,24 @@ Set or clear the account's profile: its display name, a purely cosmetic name the
 
 ---
 
+### `GET /auth/me/preferences` · `PATCH /auth/me/preferences`
+
+The account's display preferences, saved so they follow the user from one device to another. **Requires `Authorization: Bearer <token>`.**
+
+```json
+{ "show_collection_in_decks": true }
+```
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `show_collection_in_decks` | bool | `true` | Whether deck pages show what the collection holds: in the user's own decks, which cards are pending, where each copy is stored; in other people's decks, which cards the user owns (see [`GET /deck/:id/ownership`](#get-deckidownership)). |
+
+`GET` returns them (the defaults until something is saved); `PATCH` changes the fields present in the body and returns them all.
+
+**Errors:** `400` no known field in the body, or a field of the wrong type · `401` missing/invalid token
+
+---
+
 ### `POST /auth/email`
 
 Ask to change the authenticated account's email. **Requires `Authorization: Bearer <token>`.** The email doesn't change yet: a single-use confirmation token is emailed to the **current** address, so that only the account's owner can approve the change even with a stolen session or password, valid for a day by default (`EMAIL_CHANGE_TOKEN_TTL_MINUTES`), as a link when `EMAIL_CHANGE_URL_TEMPLATE` is set. The account keeps signing in with its current email until the token is sent to `POST /auth/confirm-email`.
@@ -1098,6 +1116,19 @@ Cards are matched **by name only**: printings and finishes are ignored, and a sp
 - Every list is sorted by name and always present, possibly empty. `scryfall_id`, `mana_value`, `colors`, `card_type` and `color_identity` come from one of the matching printings, preferring `:id`'s. `commander` / `other_commander` tell whether the card is that deck's commander, and `tags` / `other_tags` are its [tags](#card-tags-deckidtags) in each deck. `mine` tells whether the deck belongs to the caller.
 
 **Errors:** `400` an id isn't a UUID · `401` unauthenticated · `404` a deck doesn't exist, or is someone else's private deck
+
+### `GET /deck/:id/ownership`
+
+How many copies of each card of a deck the **signed-in user** has in their collection. **Requires authentication.** The deck can be one of theirs or someone else's `public` or `unlisted` deck. Every card of the deck is listed once, every board included, and matched **by name only**, whatever the printing or finish (` / ` and ` // ` alike); every copy of the collection counts, including copies in other decks.
+
+**Response `200 OK`**
+```json
+{ "cards": [{ "name": "Island", "owned": 0 }, { "name": "Sol Ring", "owned": 3 }] }
+```
+
+Sorted by name.
+
+**Errors:** `401` unauthenticated · `404` unknown, malformed, or someone else's private deck
 
 ---
 

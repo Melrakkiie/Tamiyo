@@ -41,6 +41,10 @@ func (f *fakeDecks) GetSharedDeck(ctx context.Context, deckID string) (string, d
 	return f.ownerID, f.deck, nil
 }
 
+func (f *fakeDecks) CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error) {
+	return map[string]int{}, nil
+}
+
 func (f *fakeDecks) BrowsePublicDecks(ctx context.Context, filter deck.PublicFilter) ([]deck.PublicDeck, int, error) {
 	f.lastPublicFilter = filter
 	return f.publicDecks, len(f.publicDecks), nil

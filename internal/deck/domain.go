@@ -95,6 +95,7 @@ type Repository interface {
 
 	PendingRepository
 	PublicRepository
+	CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error)
 	TagRepository
 	ViewRepository
 }

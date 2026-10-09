@@ -2041,6 +2041,73 @@ paths:
         "502":
           $ref: "#/components/responses/BadGateway"
 
+  /auth/me/preferences:
+    get:
+      tags: [auth]
+      summary: The account's display preferences
+      description: The defaults until something is saved.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Preferences"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    patch:
+      tags: [auth]
+      summary: Change the account's display preferences
+      description: Only the fields present in the body change.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Preferences"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Preferences"
+        "400":
+          description: No known field, or a field of the wrong type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /deck/{id}/ownership:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    get:
+      tags: [shared-decks]
+      summary: How many copies of each card of a deck the caller owns
+      description: >
+        The deck can be one of the caller's or someone else's public or
+        unlisted deck. Every card of the deck is listed once, every board
+        included, matched by name only (any printing or finish, " / " and
+        " // " alike), counting every copy of the caller's collection.
+      responses:
+        "200":
+          description: OK, sorted by name
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeckOwnership"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Unknown or malformed id, or someone else's private deck
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /deck/{id}/compare/{other_id}:
     parameters:
       - $ref: "#/components/parameters/DeckID"
@@ -2649,6 +2716,34 @@ components:
             $ref: "#/components/schemas/Error"
 
   schemas:
+    Preferences:
+      type: object
+      properties:
+        show_collection_in_decks:
+          type: boolean
+          default: true
+          description: >
+            Whether deck pages show what the collection holds: pending cards
+            and storages in the user's own decks, owned cards in other
+            people's decks.
+      required: [show_collection_in_decks]
+
+    DeckOwnership:
+      type: object
+      properties:
+        cards:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              owned:
+                type: integer
+                minimum: 0
+            required: [name, owned]
+      required: [cards]
+
     TamiyoFile:
       type: object
       description: >

@@ -1424,3 +1424,23 @@ func TestPostgresRepository_FindPublic(t *testing.T) {
 	assert.Empty(t, beyond)
 	assert.Equal(t, 2, total)
 }
+
+func TestPostgresRepository_CountCopiesByName(t *testing.T) {
+	db := getTestDB(t)
+	alice := seedUser(t, db, "alice@example.com")
+	bob := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	seedPublicCard(t, db, alice, "Sol Ring", "")
+	seedPublicCard(t, db, alice, "Sol Ring", "")
+	seedPublicCard(t, db, alice, "Fire // Ice", "UR")
+	seedPublicCard(t, db, bob, "Island", "")
+
+	counts, err := repo.CountCopiesByName(context.Background(), alice, []string{CardNameKey("Sol Ring"), CardNameKey("Fire / Ice"), CardNameKey("Island")})
+
+	require.NoError(t, err)
+	assert.Equal(t, map[string]int{"sol ring": 2, "fire / ice": 1}, counts)
+
+	empty, err := repo.CountCopiesByName(context.Background(), alice, nil)
+	require.NoError(t, err)
+	assert.Empty(t, empty)
+}

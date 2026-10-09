@@ -30,6 +30,7 @@ import (
 	"Melrakkiie/Tamiyo/internal/httplog"
 	"Melrakkiie/Tamiyo/internal/mail"
 	"Melrakkiie/Tamiyo/internal/passwordreset"
+	"Melrakkiie/Tamiyo/internal/preference"
 	"Melrakkiie/Tamiyo/internal/printing"
 	"Melrakkiie/Tamiyo/internal/ratelimit"
 	"Melrakkiie/Tamiyo/internal/scryfall"
@@ -127,6 +128,8 @@ func main() {
 	shareService := deckshare.NewService(deckService, userService, insightsService)
 	shareHandler := deckshare.NewHandler(shareService)
 
+	preferenceHandler := preference.NewHandler(preference.NewService(preference.NewPostgresRepository(db)))
+
 	healthHandler := health.NewHandler(db)
 
 	refresherCtx, stopRefresher := context.WithCancel(context.Background())
@@ -165,6 +168,7 @@ func main() {
 	shareHandler.RegisterProtectedRoutes(protected)
 	userHandler.RegisterProtectedRoutes(protected)
 	emailChangeHandler.RegisterProtectedRoutes(protected)
+	preferenceHandler.RegisterRoutes(protected)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.AppPort,

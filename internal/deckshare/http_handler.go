@@ -17,6 +17,7 @@ type sharedDeckService interface {
 	GetSharedDeckStats(ctx context.Context, deckID string) (deckinsights.DeckStats, error)
 	CompareDecks(ctx context.Context, userID string, deckID string, otherID string) (Comparison, error)
 	BrowsePublicDecks(ctx context.Context, filter deck.PublicFilter) ([]deck.PublicDeck, int, error)
+	CollectionOwnership(ctx context.Context, viewerID string, deckID string) ([]OwnedCard, error)
 }
 
 type deckResponse struct {

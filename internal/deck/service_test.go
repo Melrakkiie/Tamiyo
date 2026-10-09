@@ -52,6 +52,7 @@ type fakeRepository struct {
 
 	publicDecks      []PublicDeck
 	lastPublicFilter PublicFilter
+	ownedByName      map[string]int
 
 	cardTags     []CardTag
 	replacedName string
@@ -889,4 +890,26 @@ func TestService_BrowsePublicDecks_PassesTheFilter(t *testing.T) {
 	assert.Equal(t, 1, total)
 	assert.Equal(t, "Otters", decks[0].Name)
 	assert.Equal(t, "ott", repo.lastPublicFilter.Name)
+}
+
+func (f *fakeRepository) CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error) {
+	f.lastUserID = userID
+	counts := map[string]int{}
+	for _, key := range nameKeys {
+		if n, ok := f.ownedByName[key]; ok {
+			counts[key] = n
+		}
+	}
+	return counts, nil
+}
+
+func TestService_CountCopiesByName_AsksTheRepository(t *testing.T) {
+	repo := &fakeRepository{ownedByName: map[string]int{"sol ring": 2}}
+	service := NewService(repo)
+
+	counts, err := service.CountCopiesByName(context.Background(), testUserID, []string{"sol ring", "island"})
+
+	require.NoError(t, err)
+	assert.Equal(t, map[string]int{"sol ring": 2}, counts)
+	assert.Equal(t, testUserID, repo.lastUserID)
 }

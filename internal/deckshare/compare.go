@@ -106,16 +106,21 @@ func (s *Service) CompareDecks(ctx context.Context, userID string, deckID string
 	return comparison, nil
 }
 
-func (s *Service) loadVisibleDeck(ctx context.Context, userID string, deckID string) (ComparedDeck, []Card, error) {
-	ownerID := userID
+func (s *Service) resolveVisible(ctx context.Context, userID string, deckID string) (string, deck.Deck, error) {
 	d, err := s.decks.GetDeck(ctx, userID, deckID)
+	if err == nil {
+		return userID, d, nil
+	}
+	if !errors.Is(err, deck.ErrNotFound) {
+		return "", deck.Deck{}, err
+	}
+	return s.resolve(ctx, deckID)
+}
+
+func (s *Service) loadVisibleDeck(ctx context.Context, userID string, deckID string) (ComparedDeck, []Card, error) {
+	ownerID, d, err := s.resolveVisible(ctx, userID, deckID)
 	if err != nil {
-		if !errors.Is(err, deck.ErrNotFound) {
-			return ComparedDeck{}, nil, err
-		}
-		if ownerID, d, err = s.resolve(ctx, deckID); err != nil {
-			return ComparedDeck{}, nil, err
-		}
+		return ComparedDeck{}, nil, err
 	}
 
 	owner, all, err := s.loadContent(ctx, ownerID, d)

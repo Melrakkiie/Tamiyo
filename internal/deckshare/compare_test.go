@@ -35,6 +35,10 @@ type fakeDeckStore struct {
 	decks   map[string]storedDeck
 	getErr  error
 	visited []string
+
+	owned       map[string]int
+	countedFor  string
+	countedKeys []string
 }
 
 func (f *fakeDeckStore) GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error) {
@@ -59,6 +63,18 @@ func (f *fakeDeckStore) GetSharedDeck(ctx context.Context, id string) (string, d
 func (f *fakeDeckStore) GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error) {
 	f.visited = append(f.visited, userID+":"+id)
 	return f.decks[id].cards, nil
+}
+
+func (f *fakeDeckStore) CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error) {
+	f.countedFor = userID
+	f.countedKeys = nameKeys
+	counts := map[string]int{}
+	for _, key := range nameKeys {
+		if n, ok := f.owned[key]; ok {
+			counts[key] = n
+		}
+	}
+	return counts, nil
 }
 
 func (f *fakeDeckStore) BrowsePublicDecks(ctx context.Context, filter deck.PublicFilter) ([]deck.PublicDeck, int, error) {
@@ -275,4 +291,33 @@ func TestCompareDecks_OnlyComparesTheMainBoards(t *testing.T) {
 	assert.Equal(t, []string{"Lightning Bolt"}, names(comparison.OnlyInOther))
 	assert.Equal(t, []string{"Atraxa, Praetors' Voice", "Counterspell"}, names(comparison.OnlyInDeck))
 	assert.Equal(t, 7, comparison.Deck.CardCount)
+}
+
+func TestCollectionOwnership_CountsTheViewersCopiesByName(t *testing.T) {
+	store := compareStore()
+	store.owned = map[string]int{"sol ring": 3, "fire / ice": 1}
+	svc := NewService(store, compareUsers(), &fakeInsights{})
+
+	owned, err := svc.CollectionOwnership(context.Background(), viewerID, theirDeck)
+
+	require.NoError(t, err)
+	assert.Equal(t, []OwnedCard{
+		{Name: "Fire / Ice", Owned: 1},
+		{Name: "Island", Owned: 0},
+		{Name: "Lightning Bolt", Owned: 0},
+		{Name: "Sol Ring", Owned: 3},
+	}, owned)
+	assert.Equal(t, viewerID, store.countedFor)
+	assert.ElementsMatch(t, []string{"sol ring", "island", "fire / ice", "lightning bolt"}, store.countedKeys)
+}
+
+func TestCollectionOwnership_WorksOnTheViewersOwnDeckButNotOnAPrivateOne(t *testing.T) {
+	svc := NewService(compareStore(), compareUsers(), &fakeInsights{})
+
+	owned, err := svc.CollectionOwnership(context.Background(), viewerID, myDeckID)
+	require.NoError(t, err)
+	assert.Len(t, owned, 5)
+
+	_, err = svc.CollectionOwnership(context.Background(), viewerID, privateID)
+	assert.ErrorIs(t, err, ErrNotFound)
 }

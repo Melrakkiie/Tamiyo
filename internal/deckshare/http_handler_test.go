@@ -30,6 +30,7 @@ type fakeSharedService struct {
 
 	public      []deck.PublicDeck
 	publicTotal int
+	owned       []OwnedCard
 	lastFilter  deck.PublicFilter
 }
 
@@ -38,6 +39,12 @@ func (f *fakeSharedService) CompareDecks(ctx context.Context, userID string, dec
 	f.lastDeckID = deckID
 	f.lastOtherID = otherID
 	return f.compared, f.err
+}
+
+func (f *fakeSharedService) CollectionOwnership(ctx context.Context, viewerID string, deckID string) ([]OwnedCard, error) {
+	f.lastUserID = viewerID
+	f.lastDeckID = deckID
+	return f.owned, f.err
 }
 
 func (f *fakeSharedService) BrowsePublicDecks(ctx context.Context, filter deck.PublicFilter) ([]deck.PublicDeck, int, error) {
@@ -265,4 +272,22 @@ func decodeData(t *testing.T, w *httptest.ResponseRecorder) any {
 	var got map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
 	return got["data"]
+}
+
+func TestCollectionOwnership_ReturnsTheViewersCounts(t *testing.T) {
+	service := &fakeSharedService{owned: []OwnedCard{{Name: "Sol Ring", Owned: 2}, {Name: "Island", Owned: 0}}}
+	router := setupProtectedRouter(service, "33333333-3333-3333-3333-333333333333")
+
+	w := get(router, "/deck/"+deckID+"/ownership")
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.JSONEq(t, `{"cards":[{"name":"Sol Ring","owned":2},{"name":"Island","owned":0}]}`, w.Body.String())
+	assert.Equal(t, "33333333-3333-3333-3333-333333333333", service.lastUserID)
+	assert.Equal(t, deckID, service.lastDeckID)
+}
+
+func TestCollectionOwnership_Errors(t *testing.T) {
+	assert.Equal(t, http.StatusUnauthorized, get(setupProtectedRouter(&fakeSharedService{}, ""), "/deck/"+deckID+"/ownership").Code)
+	assert.Equal(t, http.StatusNotFound, get(setupProtectedRouter(&fakeSharedService{err: ErrNotFound}, "33333333-3333-3333-3333-333333333333"), "/deck/"+deckID+"/ownership").Code)
+	assert.Equal(t, http.StatusNotFound, get(setupProtectedRouter(&fakeSharedService{}, "33333333-3333-3333-3333-333333333333"), "/deck/nope/ownership").Code)
 }
