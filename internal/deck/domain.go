@@ -94,6 +94,7 @@ type Repository interface {
 	UnlinkCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error
 
 	PendingRepository
+	PublicRepository
 	TagRepository
 	ViewRepository
 }

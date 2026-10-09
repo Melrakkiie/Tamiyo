@@ -28,6 +28,9 @@ type fakeDecks struct {
 	lastShareID string
 	lastUserID  string
 	lastDeckID  string
+
+	publicDecks      []deck.PublicDeck
+	lastPublicFilter deck.PublicFilter
 }
 
 func (f *fakeDecks) GetSharedDeck(ctx context.Context, deckID string) (string, deck.Deck, error) {
@@ -36,6 +39,11 @@ func (f *fakeDecks) GetSharedDeck(ctx context.Context, deckID string) (string, d
 		return "", deck.Deck{}, f.sharedErr
 	}
 	return f.ownerID, f.deck, nil
+}
+
+func (f *fakeDecks) BrowsePublicDecks(ctx context.Context, filter deck.PublicFilter) ([]deck.PublicDeck, int, error) {
+	f.lastPublicFilter = filter
+	return f.publicDecks, len(f.publicDecks), nil
 }
 
 func (f *fakeDecks) GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error) {
@@ -267,4 +275,16 @@ func TestService_GetSharedDeck_KeepsEachBoardApart(t *testing.T) {
 	}
 	assert.Len(t, shared.Cards, 3)
 	assert.Equal(t, map[string]int{deck.BoardMain: 1, deck.BoardSideboard: 3, deck.BoardConsidering: 1}, quantities)
+}
+
+func TestService_BrowsePublicDecks_PassesTheFilter(t *testing.T) {
+	decks := &fakeDecks{publicDecks: []deck.PublicDeck{{ID: deckID, Name: "Otters"}}}
+	service := newService(decks, &fakeInsights{})
+
+	found, total, err := service.BrowsePublicDecks(context.Background(), deck.PublicFilter{Format: "commander"})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, total)
+	assert.Equal(t, "Otters", found[0].Name)
+	assert.Equal(t, "commander", decks.lastPublicFilter.Format)
 }

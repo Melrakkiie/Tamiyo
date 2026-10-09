@@ -16,6 +16,7 @@ type sharedDeckService interface {
 	GetSharedDeckLegality(ctx context.Context, deckID string) (deckinsights.LegalityReport, error)
 	GetSharedDeckStats(ctx context.Context, deckID string) (deckinsights.DeckStats, error)
 	CompareDecks(ctx context.Context, userID string, deckID string, otherID string) (Comparison, error)
+	BrowsePublicDecks(ctx context.Context, filter deck.PublicFilter) ([]deck.PublicDeck, int, error)
 }
 
 type deckResponse struct {
@@ -103,6 +104,7 @@ func NewHandler(service sharedDeckService) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(router gin.IRoutes) {
+	router.GET("/shared/decks", h.browsePublicDecks)
 	router.GET("/shared/decks/:id", h.getSharedDeck)
 	router.GET("/shared/decks/:id/legality", h.getSharedDeckLegality)
 	router.GET("/shared/decks/:id/stats", h.getSharedDeckStats)

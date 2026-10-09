@@ -50,6 +50,9 @@ type fakeRepository struct {
 	lastPendingBoard    string
 	linkedBoard         string
 
+	publicDecks      []PublicDeck
+	lastPublicFilter PublicFilter
+
 	cardTags     []CardTag
 	replacedName string
 	replacedTags []string
@@ -869,4 +872,21 @@ func TestService_SetPendingQuantity_UpdatesTheItem(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 4, repo.lastPendingID)
 	assert.Equal(t, 2, updated.Quantity)
+}
+
+func (f *fakeRepository) FindPublic(ctx context.Context, filter PublicFilter) ([]PublicDeck, int, error) {
+	f.lastPublicFilter = filter
+	return f.publicDecks, len(f.publicDecks), nil
+}
+
+func TestService_BrowsePublicDecks_PassesTheFilter(t *testing.T) {
+	repo := &fakeRepository{publicDecks: []PublicDeck{{ID: "00000000-0000-0000-0000-000000000001", Name: "Otters"}}}
+	service := NewService(repo)
+
+	decks, total, err := service.BrowsePublicDecks(context.Background(), PublicFilter{Name: "ott", Page: 1, Limit: 24})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, total)
+	assert.Equal(t, "Otters", decks[0].Name)
+	assert.Equal(t, "ott", repo.lastPublicFilter.Name)
 }

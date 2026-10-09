@@ -1304,3 +1304,123 @@ func TestPostgresRepository_DeletingACardKeepsItsBoardAsPending(t *testing.T) {
 	assert.Equal(t, 1, byBoard[BoardSideboard].Quantity)
 	assert.Equal(t, "Black Lotus", byBoard[BoardSideboard].Name)
 }
+
+func seedPublicCard(t *testing.T, db *sqlx.DB, userID string, name string, identity string) int {
+	t.Helper()
+	var id int
+	require.NoError(t, db.Get(&id, `
+		INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, color_identity)
+		VALUES ($1, $2, gen_random_uuid(), 'tst', '1', false, $3)
+		RETURNING id
+	`, userID, name, identity))
+	return id
+}
+
+func publicNames(decks []PublicDeck) []string {
+	names := make([]string, 0, len(decks))
+	for _, d := range decks {
+		names = append(names, d.Name)
+	}
+	return names
+}
+
+func TestPostgresRepository_FindPublic(t *testing.T) {
+	db := getTestDB(t)
+	alice := seedUser(t, db, "alice@example.com")
+	bob := seedUser(t, db, "bob@example.com")
+	_, err := db.Exec(`UPDATE tamiyo.users SET display_name = 'Alice' WHERE id = $1`, alice)
+	require.NoError(t, err)
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+
+	otters, err := repo.Create(ctx, alice, Deck{Name: "Otters", Format: "commander", Visibility: VisibilityPublic})
+	require.NoError(t, err)
+	loot := seedPublicCard(t, db, alice, "Loot, the Pathfinder", "UG")
+	for _, id := range []int{loot, seedPublicCard(t, db, alice, "Sol Ring", ""), seedPublicCard(t, db, alice, "Island", "")} {
+		require.NoError(t, repo.LinkCardToDeck(ctx, alice, otters.ID, id, BoardMain))
+	}
+	require.NoError(t, repo.LinkCardToDeck(ctx, alice, otters.ID, seedPublicCard(t, db, alice, "Lightning Bolt", "R"), BoardSideboard))
+	otters.CommanderID = &loot
+	_, err = repo.Update(ctx, alice, otters)
+	require.NoError(t, err)
+
+	burn, err := repo.Create(ctx, bob, Deck{Name: "Burn", Format: "modern", Visibility: VisibilityPublic})
+	require.NoError(t, err)
+	require.NoError(t, repo.LinkCardToDeck(ctx, bob, burn.ID, seedPublicCard(t, db, bob, "Lightning Bolt", "R"), BoardMain))
+	_, err = repo.CreatePendingCard(ctx, bob, PendingCard{DeckID: burn.ID, Name: "Mountain", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "m21", CollectorNumber: "1", Quantity: 3})
+	require.NoError(t, err)
+	blue := "U"
+	_, err = repo.CreatePendingCard(ctx, bob, PendingCard{DeckID: burn.ID, Name: "Counterspell", ScryfallID: "8d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "mh2", CollectorNumber: "2", Quantity: 1, ColorIdentity: &blue, Board: BoardConsidering})
+	require.NoError(t, err)
+
+	_, err = repo.Create(ctx, alice, Deck{Name: "Hidden otters", Format: "commander", Visibility: VisibilityUnlisted})
+	require.NoError(t, err)
+	_, err = repo.Create(ctx, bob, Deck{Name: "Private burn", Format: "modern", Visibility: VisibilityPrivate})
+	require.NoError(t, err)
+
+	find := func(filter PublicFilter) ([]PublicDeck, int) {
+		t.Helper()
+		if filter.Page == 0 {
+			filter.Page = 1
+		}
+		if filter.Limit == 0 {
+			filter.Limit = 24
+		}
+		if filter.SortField == "" {
+			filter.SortField = "name"
+		}
+		decks, total, err := repo.FindPublic(ctx, filter)
+		require.NoError(t, err)
+		return decks, total
+	}
+
+	all, total := find(PublicFilter{})
+	assert.Equal(t, 2, total)
+	require.Equal(t, []string{"Burn", "Otters"}, publicNames(all))
+	assert.Equal(t, 4, all[0].CardCount)
+	assert.Equal(t, "R", all[0].ColorIdentity)
+	assert.Nil(t, all[0].CommanderName)
+	assert.Equal(t, 3, all[1].CardCount)
+	assert.Equal(t, "UG", all[1].ColorIdentity)
+	require.NotNil(t, all[1].CommanderName)
+	assert.Equal(t, "Loot, the Pathfinder", *all[1].CommanderName)
+	require.NotNil(t, all[1].OwnerDisplayName)
+	assert.Equal(t, "Alice", *all[1].OwnerDisplayName)
+	assert.Equal(t, alice, all[1].OwnerID)
+
+	two := 2
+	cases := map[string]struct {
+		filter PublicFilter
+		want   []string
+	}{
+		"name":              {PublicFilter{Name: "OTT"}, []string{"Otters"}},
+		"format":            {PublicFilter{Format: "Modern"}, []string{"Burn"}},
+		"commander":         {PublicFilter{Commander: "loot"}, []string{"Otters"}},
+		"card":              {PublicFilter{Card: "sol"}, []string{"Otters"}},
+		"pending card":      {PublicFilter{Card: "mountain"}, []string{"Burn"}},
+		"considering card":  {PublicFilter{Card: "counterspell"}, []string{}},
+		"sideboard card":    {PublicFilter{Card: "bolt"}, []string{"Burn"}},
+		"owner":             {PublicFilter{Owner: "ali"}, []string{"Otters"}},
+		"exact colors":      {PublicFilter{Colors: []string{"R"}, ColorMode: ColorModeExact}, []string{"Burn"}},
+		"at least a color":  {PublicFilter{Colors: []string{"U"}, ColorMode: ColorModeInclude}, []string{"Otters"}},
+		"at most colors":    {PublicFilter{Colors: []string{"U", "G", "R"}, ColorMode: ColorModeWithin}, []string{"Burn", "Otters"}},
+		"too few colors":    {PublicFilter{Colors: []string{"G"}, ColorMode: ColorModeWithin}, []string{}},
+		"color count":       {PublicFilter{ColorCount: &two}, []string{"Otters"}},
+		"colorless":         {PublicFilter{Colorless: true}, []string{}},
+		"combined, no hits": {PublicFilter{Format: "commander", Colors: []string{"R"}, ColorMode: ColorModeInclude}, []string{}},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			decks, total := find(tc.filter)
+			assert.Equal(t, tc.want, publicNames(decks))
+			assert.Equal(t, len(tc.want), total)
+		})
+	}
+
+	page, total := find(PublicFilter{Page: 2, Limit: 1, SortField: "card_count", SortDesc: true})
+	assert.Equal(t, 2, total)
+	assert.Equal(t, []string{"Otters"}, publicNames(page))
+	beyond, total := find(PublicFilter{Page: 5, Limit: 1})
+	assert.Empty(t, beyond)
+	assert.Equal(t, 2, total)
+}

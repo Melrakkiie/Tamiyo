@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,6 +27,10 @@ type fakeSharedService struct {
 	lastUserID  string
 	lastDeckID  string
 	lastOtherID string
+
+	public      []deck.PublicDeck
+	publicTotal int
+	lastFilter  deck.PublicFilter
 }
 
 func (f *fakeSharedService) CompareDecks(ctx context.Context, userID string, deckID string, otherID string) (Comparison, error) {
@@ -33,6 +38,11 @@ func (f *fakeSharedService) CompareDecks(ctx context.Context, userID string, dec
 	f.lastDeckID = deckID
 	f.lastOtherID = otherID
 	return f.compared, f.err
+}
+
+func (f *fakeSharedService) BrowsePublicDecks(ctx context.Context, filter deck.PublicFilter) ([]deck.PublicDeck, int, error) {
+	f.lastFilter = filter
+	return f.public, f.publicTotal, f.err
 }
 
 func (f *fakeSharedService) GetSharedDeck(ctx context.Context, deckID string) (SharedDeck, error) {
@@ -187,4 +197,72 @@ func TestGetSharedDeck_CountsOnlyTheMainBoard(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
 	assert.Equal(t, float64(3), got["deck"].(map[string]any)["card_count"])
 	assert.Equal(t, "sideboard", got["cards"].([]any)[1].(map[string]any)["board"])
+}
+
+func TestBrowsePublicDecks_ReturnsAPageWithoutAuthentication(t *testing.T) {
+	updated := time.Date(2026, 10, 9, 10, 0, 0, 0, time.UTC)
+	service := &fakeSharedService{
+		public: []deck.PublicDeck{{
+			ID: deckID, Name: "Otters", Format: "commander", ColorIdentity: "UG", CardCount: 100,
+			CommanderName: strPtr("Loot"), OwnerID: ownerID, OwnerDisplayName: strPtr("Alice"),
+			Added: updated, Updated: updated,
+		}},
+		publicTotal: 30,
+	}
+
+	w := get(setupRouter(service), "/shared/decks?page=2&limit=10")
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+	assert.Equal(t, float64(2), got["page"])
+	assert.Equal(t, float64(3), got["total_pages"])
+	first := got["data"].([]any)[0].(map[string]any)
+	assert.Equal(t, "Otters", first["name"])
+	assert.Equal(t, "UG", first["color_identity"])
+	assert.Equal(t, "Loot", first["commander_name"])
+	assert.Equal(t, "Alice", first["owner"].(map[string]any)["display_name"])
+	assert.Equal(t, deck.PublicFilter{SortField: "updated", SortDesc: true, ColorMode: deck.ColorModeExact, Page: 2, Limit: 10}, service.lastFilter)
+}
+
+func TestBrowsePublicDecks_ParsesTheFilters(t *testing.T) {
+	service := &fakeSharedService{}
+
+	w := get(setupRouter(service), "/shared/decks?q=%20otters%20&format=commander&commander=loot&card=sol%20ring&owner=ali&colors=gub&color_mode=within&color_count=2&sort=-card_count")
+
+	require.Equal(t, http.StatusOK, w.Code)
+	count := 2
+	assert.Equal(t, deck.PublicFilter{
+		Name: "otters", Format: "commander", Commander: "loot", Card: "sol ring", Owner: "ali",
+		Colors: []string{"G", "U", "B"}, ColorMode: deck.ColorModeWithin, ColorCount: &count,
+		SortField: "card_count", SortDesc: true, Page: 1, Limit: 24,
+	}, service.lastFilter)
+	assert.Equal(t, []any{}, decodeData(t, w))
+}
+
+func TestBrowsePublicDecks_Colorless(t *testing.T) {
+	service := &fakeSharedService{}
+
+	w := get(setupRouter(service), "/shared/decks?colors=c")
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, service.lastFilter.Colorless)
+	assert.Empty(t, service.lastFilter.Colors)
+}
+
+func TestBrowsePublicDecks_RejectsInvalidQueries(t *testing.T) {
+	for _, query := range []string{
+		"page=0", "limit=101", "limit=x", "colors=WX", "color_mode=some", "color_count=6",
+		"sort=owner", "q=" + strings.Repeat("a", 101),
+	} {
+		w := get(setupRouter(&fakeSharedService{}), "/shared/decks?"+query)
+		assert.Equal(t, http.StatusBadRequest, w.Code, query)
+	}
+}
+
+func decodeData(t *testing.T, w *httptest.ResponseRecorder) any {
+	t.Helper()
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+	return got["data"]
 }

@@ -19,6 +19,7 @@ type deckService interface {
 	GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error)
 	GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error)
 	GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error)
+	BrowsePublicDecks(ctx context.Context, filter deck.PublicFilter) ([]deck.PublicDeck, int, error)
 }
 
 type userService interface {
@@ -120,6 +121,10 @@ func (s *Service) loadContent(ctx context.Context, ownerID string, d deck.Deck) 
 	}
 
 	return Owner{ID: owner.ID, DisplayName: owner.DisplayName, AvatarScryfallID: owner.AvatarScryfallID}, cards, nil
+}
+
+func (s *Service) BrowsePublicDecks(ctx context.Context, filter deck.PublicFilter) ([]deck.PublicDeck, int, error) {
+	return s.decks.BrowsePublicDecks(ctx, filter)
 }
 
 func (s *Service) GetSharedDeckLegality(ctx context.Context, deckID string) (deckinsights.LegalityReport, error) {

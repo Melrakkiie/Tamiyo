@@ -61,6 +61,10 @@ func (f *fakeDeckStore) GetDeckCards(ctx context.Context, userID string, id stri
 	return f.decks[id].cards, nil
 }
 
+func (f *fakeDeckStore) BrowsePublicDecks(ctx context.Context, filter deck.PublicFilter) ([]deck.PublicDeck, int, error) {
+	return nil, 0, nil
+}
+
 func (f *fakeDeckStore) GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error) {
 	return f.decks[deckID].tags, nil
 }

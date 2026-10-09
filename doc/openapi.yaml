@@ -1842,6 +1842,101 @@ paths:
         "502":
           $ref: "#/components/responses/BadGateway"
 
+  /shared/decks:
+    get:
+      tags: [shared-decks]
+      summary: Browse public decks
+      description: >
+        Works without authentication. Lists every public deck, of every
+        user; unlisted and private decks are never listed. A deck's color
+        identity is its commander's, or the union of its main board's
+        cards' identities without one.
+      security: []
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+          description: Part of the deck's name, case-insensitive.
+        - name: format
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+        - name: commander
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+          description: Part of the commander's name.
+        - name: card
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+          description: Part of the name of a card on the main board, owned or pending.
+        - name: owner
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+          description: Part of the owner's display name.
+        - name: colors
+          in: query
+          schema:
+            type: string
+            pattern: "^([WUBRGwubrg]+|[Cc])$"
+          description: Color identity letters, or C for colorless decks.
+        - name: color_mode
+          in: query
+          schema:
+            type: string
+            enum: [exact, include, within]
+            default: exact
+        - name: color_count
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 5
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [updated, -updated, name, -name, added, -added, card_count, -card_count]
+            default: -updated
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 24
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedPublicDecks"
+        "400":
+          description: Invalid parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/SharedTooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /shared/decks/{id}:
     parameters:
       - $ref: "#/components/parameters/DeckID"
@@ -2621,6 +2716,58 @@ components:
           nullable: true
           description: Scryfall card whose art crop is the avatar, null until set.
       required: [id, email, display_name, avatar_scryfall_id]
+
+    PublicDeck:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        format:
+          type: string
+        background_scryfall_id:
+          type: string
+          format: uuid
+          nullable: true
+        commander_scryfall_id:
+          type: string
+          format: uuid
+          nullable: true
+        commander_name:
+          type: string
+          nullable: true
+        color_identity:
+          type: string
+          description: In WUBRG order, empty for a colorless deck.
+        card_count:
+          type: integer
+          description: Cards of the main board, pending ones included.
+        owner:
+          $ref: "#/components/schemas/Profile"
+        added:
+          type: string
+        updated:
+          type: string
+      required: [id, name, format, background_scryfall_id, commander_scryfall_id, commander_name, color_identity, card_count, owner, added, updated]
+
+    PaginatedPublicDecks:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicDeck"
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+      required: [data, page, limit, total, total_pages]
 
     Profile:
       type: object

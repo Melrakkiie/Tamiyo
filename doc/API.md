@@ -958,9 +958,59 @@ A multicolor card counts once per color it has in `color_breakdown`; a dual-type
 
 ## Shared decks
 
-Read-only access to a deck by its id. **No authentication required** for the three `/shared/decks` routes ([comparing two decks](#get-deckidcompareother_id) needs a signed-in user). Deck ids are random UUIDs, so an unlisted deck can only be found by someone who was given its id or link. Only `public` and `unlisted` decks resolve: a private deck, an unknown id or anything that isn't a UUID all answer `404`, so the response never tells whether a private deck exists.
+Read-only access to public decks, and to a deck by its id. **No authentication required** for the four `/shared/decks` routes ([comparing two decks](#get-deckidcompareother_id) needs a signed-in user). Deck ids are random UUIDs, so an unlisted deck can only be found by someone who was given its id or link. Only `public` and `unlisted` decks resolve: a private deck, an unknown id or anything that isn't a UUID all answer `404`, so the response never tells whether a private deck exists.
 
-The three `/shared/decks` routes share a per-client-IP limit, separate from the auth one: 60 requests per 60-second window by default (`SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns `429` with a `Retry-After` header, as described in [Rate limiting](#rate-limiting).
+The four `/shared/decks` routes share a per-client-IP limit, separate from the auth one: 60 requests per 60-second window by default (`SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns `429` with a `Retry-After` header, as described in [Rate limiting](#rate-limiting).
+
+### `GET /shared/decks`
+
+Browse every `public` deck, of every user. Unlisted and private decks are never listed.
+
+**Query parameters** (all optional)
+
+| Param | Description |
+|---|---|
+| `q` | Part of the deck's name, case-insensitive. |
+| `format` | The deck's format, case-insensitive (`commander`, `modern`…). |
+| `commander` | Part of the commander's name. |
+| `card` | Part of the name of a card on the deck's `main` [board](#boards), owned or pending. |
+| `owner` | Part of the owner's display name. |
+| `colors` | The deck's color identity: letters among `W`, `U`, `B`, `R`, `G` (`UG`), or `C` for colorless decks. |
+| `color_mode` | How `colors` is matched: `exact` (default), `include` (at least these colors) or `within` (at most these colors). Ignored with `colors=C`. |
+| `color_count` | Number of colors in the identity, `0` to `5`. |
+| `sort` | `updated`, `name`, `added` or `card_count`, `-` prefix for descending. Defaults to `-updated`. |
+| `page`, `limit` | Pagination: `limit` defaults to 24, at most 100. |
+
+A deck's color identity is its commander's, or, without a commander (or when the commander's is unknown), the union of the identities of the cards on its `main` board. Text filters can't exceed 100 characters.
+
+**Response `200 OK`**
+```json
+{
+  "data": [
+    {
+      "id": "6f0d3c5e-8a51-4c0b-9b1e-2d7c4a3f9e10",
+      "name": "Kess Commander",
+      "format": "commander",
+      "background_scryfall_id": null,
+      "commander_scryfall_id": "a0b4c5ad-14f7-4bcb-9a59-6c0ac4f1a5e0",
+      "commander_name": "Kess, Dissident Mage",
+      "color_identity": "UBR",
+      "card_count": 100,
+      "owner": { "id": "4b8a0a9e-2f1c-4c8e-9d3a-1e2f3a4b5c6d", "display_name": "Tamiyo", "avatar_scryfall_id": null },
+      "added": "2026-01-15 10:30:00",
+      "updated": "2026-01-15 10:30:00"
+    }
+  ],
+  "page": 1,
+  "limit": 24,
+  "total": 1,
+  "total_pages": 1
+}
+```
+
+`card_count` counts the `main` board, pending cards included, like [`GET /shared/decks/:id`](#get-shareddecksid). `color_identity` is in `WUBRG` order, empty for a colorless deck.
+
+**Errors:** `400` invalid parameter · `429` rate limit exceeded
 
 ### `GET /shared/decks/:id`
 
