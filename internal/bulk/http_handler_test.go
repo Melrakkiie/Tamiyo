@@ -48,6 +48,22 @@ type fakeImportService struct {
 	lastStorageID         *int
 	lastPendingID         *int
 	commitCalled          bool
+
+	duplicateResult DuplicateSummary
+	lastCollect     CollectRequest
+}
+
+func (f *fakeImportService) DuplicateDeck(ctx context.Context, userID string, deckID string) (DuplicateSummary, error) {
+	f.lastUserID = userID
+	f.lastDeckID = deckID
+	return f.duplicateResult, f.err
+}
+
+func (f *fakeImportService) CollectDeck(ctx context.Context, userID string, deckID string, req CollectRequest) (Summary, error) {
+	f.lastUserID = userID
+	f.lastDeckID = deckID
+	f.lastCollect = req
+	return f.summary, f.err
 }
 
 func (f *fakeImportService) CommitPendingCards(ctx context.Context, userID string, deckID string, storageID, pendingID, quantity *int) (PendingCommitSummary, error) {

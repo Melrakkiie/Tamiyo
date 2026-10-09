@@ -1764,6 +1764,117 @@ paths:
         "502":
           $ref: "#/components/responses/BadGateway"
 
+  /deck/{id}/duplicate:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    post:
+      tags: [deck-cards]
+      summary: Copy a deck into the authenticated user's decks
+      description: >
+        Copies one of the user's decks, or someone else's public or unlisted
+        deck, into a new private deck named "<name> (copie)", with the same
+        format and background. Its cards, boards, commander and tags are
+        added as POST /deck/{id}/import does with a Tamiyo deck file: owned
+        copies go in the copy, missing ones become pending cards. If adding
+        the cards fails, the copy is removed.
+      responses:
+        "201":
+          description: The copy was created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deck_id, summary]
+                properties:
+                  deck_id:
+                    type: string
+                    format: uuid
+                  summary:
+                    $ref: "#/components/schemas/ImportSummary"
+        "400":
+          description: id is not a UUID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found, or someone else's private deck
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
+  /deck/{id}/collect:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    post:
+      tags: [deck-cards]
+      summary: Add a deck's cards to the authenticated user's collection
+      description: >
+        Creates cards in the user's collection from the cards of the chosen
+        boards of a deck, owned and pending alike, in their exact printing
+        and finish, in storage_id when given. On one of the user's own
+        decks, mode "pending" adds the pending cards and puts them in the
+        deck, like POST /deck/{id}/pending/commit; "all" does the same and
+        also adds one more copy of every card already in the deck, which
+        stays out of any deck. On someone else's public or unlisted deck,
+        "all" adds every copy and "missing" only the copies the user lacks,
+        counted by card name whatever the printing, every copy of the
+        collection counting. Cards are handled one at a time: on a failure,
+        those already added stay added.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode, boards]
+              properties:
+                mode:
+                  type: string
+                  enum: [all, missing, pending]
+                boards:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: string
+                    enum: [main, sideboard, considering]
+                storage_id:
+                  type: integer
+                  minimum: 1
+                  nullable: true
+      responses:
+        "200":
+          description: Cards added; cards_linked counts those also put in the deck.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportSummary"
+        "400":
+          description: >
+            Invalid id or body, unknown mode or board, a mode not available
+            for this deck, or storage_id doesn't reference an existing storage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found, or someone else's private deck
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /deck/{id}/legality:
     parameters:
       - $ref: "#/components/parameters/DeckID"

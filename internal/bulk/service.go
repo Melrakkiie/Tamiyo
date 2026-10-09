@@ -51,7 +51,10 @@ type storageService interface {
 type deckService interface {
 	GetAllDecks(ctx context.Context, userID string, filter deck.Filter) ([]deck.Deck, int, error)
 	GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error)
+	GetSharedDeck(ctx context.Context, id string) (string, deck.Deck, error)
+	CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error)
 	CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error)
+	DeleteDeck(ctx context.Context, userID string, id string) error
 	PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error
 	GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error)
 	GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error)

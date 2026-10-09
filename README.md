@@ -165,6 +165,8 @@ curl -X POST localhost:8080/import/moxfield/collection \
 
 A bulk import never fails outright over a single bad row — it returns `200 OK` with a summary (`cards_created`, `cards_linked` and `cards_pending` for a deck, `cards_skipped`, `storages_created`, `decks_created`, and a `warnings` list for anything skipped).
 
+Two more routes work from an existing deck, yours or someone else's public or unlisted one: `POST /deck/:id/duplicate` copies it into a new private deck of yours (cards added as `POST /deck/:id/import` would), and `POST /deck/:id/collect` adds its cards to your collection — all of them, only its pending cards on your own deck, or only those you lack on someone else's. See [`doc/API.md`](./doc/API.md#post-deckidduplicate).
+
 ## Bulk Export
 
 Routes export back out in the same formats the import routes above read — see [`doc/API.md`](./doc/API.md#bulk-export) for details:

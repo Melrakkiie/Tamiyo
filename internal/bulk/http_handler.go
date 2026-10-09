@@ -31,6 +31,8 @@ type importService interface {
 
 	RefreshCardDetails(ctx context.Context, userID string, afterID int) (DetailsRefreshSummary, error)
 	CommitPendingCards(ctx context.Context, userID string, deckID string, storageID, pendingID, quantity *int) (PendingCommitSummary, error)
+	DuplicateDeck(ctx context.Context, userID string, deckID string) (DuplicateSummary, error)
+	CollectDeck(ctx context.Context, userID string, deckID string, req CollectRequest) (Summary, error)
 }
 
 type Handler struct {
@@ -55,6 +57,8 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.POST("/deck/:id/pending/commit", h.commitPendingCards)
 	router.POST("/deck/:id/import", h.importIntoDeck)
 	router.GET("/deck/:id/export", h.exportDeck)
+	router.POST("/deck/:id/duplicate", h.duplicateDeck)
+	router.POST("/deck/:id/collect", h.collectDeck)
 }
 
 func (h *Handler) refreshCardDetails(ctx *gin.Context) {

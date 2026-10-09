@@ -760,6 +760,44 @@ Delete a deck and all of its card associations (`card_deck` rows are removed via
 
 ---
 
+### `POST /deck/:id/duplicate`
+
+Copy a deck into your decks: one of yours, or someone else's `public` or `unlisted` deck. The copy is a new **private** deck named `<name> (copie)`, with the same `format` and `background_scryfall_id`. Its cards are added the way [`POST /deck/:id/import`](#post-deckidimport) adds a Tamiyo deck file, so the copy keeps boards, commander and tags: your owned copies of each printing go in it, missing ones become pending cards. No body.
+
+**Response `201 Created`**
+```json
+{ "deck_id": "9b2f…", "summary": { "cards_created": 0, "cards_linked": 12, "cards_pending": 88, "cards_skipped": 0, "storages_created": 0, "decks_created": 1 } }
+```
+
+If adding the cards fails (Scryfall unreachable, say), the copy is removed and the error returned.
+
+**Errors:** `400` invalid id · `404` unknown deck, or someone else's private deck · `502` Scryfall unavailable
+
+---
+
+### `POST /deck/:id/collect`
+
+Add the cards of a deck to your collection, one card per copy, in the exact printing and finish listed, in `storage_id` when given. Owned and [pending](#pending-cards-deckidpending) cards both count.
+
+```json
+{ "mode": "missing", "boards": ["main", "sideboard"], "storage_id": 4 }
+```
+
+| `mode` | Deck | Effect |
+|---|---|---|
+| `pending` | yours | Adds the pending cards of those boards and puts them in the deck, like `POST /deck/:id/pending/commit`. |
+| `all` | yours | The same, plus one more copy of every card already in the deck, kept out of any deck. |
+| `all` | someone else's `public` / `unlisted` | Every copy. |
+| `missing` | someone else's `public` / `unlisted` | Only the copies you lack, counted by name whatever the printing (as [`GET /deck/:id/ownership`](#get-deckidownership) does). |
+
+`boards` lists at least one of `main`, `sideboard`, `considering`.
+
+**Response `200 OK`** — the [import summary](#bulk-import): `cards_created`, and `cards_linked` for the pending cards also put in the deck. Cards are handled one by one: on a failure, those already added stay added, and a pending card that fails is reported in `warnings`.
+
+**Errors:** `400` invalid id or body, unknown `mode` or board, `pending` on someone else's deck or `missing` on yours, unknown `storage_id` · `404` unknown deck, or someone else's private deck
+
+---
+
 ## Profiles
 
 What any signed-in user can see of another user. **Requires `Authorization: Bearer <token>`.** A user's email is never exposed here; `id` is the one from `GET /auth/me`.

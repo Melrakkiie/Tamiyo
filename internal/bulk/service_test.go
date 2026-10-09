@@ -152,6 +152,34 @@ type fakeDeckService struct {
 	cardCommanderID    int
 	pendingQuantities  map[int]int
 	linkedBoards       map[int]string
+
+	owners      map[string]string
+	ownedCopies map[string]int
+	deleted     []string
+}
+
+func (f *fakeDeckService) DeleteDeck(ctx context.Context, userID string, id string) error {
+	f.deleted = append(f.deleted, id)
+	return nil
+}
+
+func (f *fakeDeckService) GetSharedDeck(ctx context.Context, id string) (string, deck.Deck, error) {
+	for _, d := range f.decks {
+		if d.ID == id && f.owners[id] != "" {
+			return f.owners[id], d, nil
+		}
+	}
+	return "", deck.Deck{}, deck.ErrNotFound
+}
+
+func (f *fakeDeckService) CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error) {
+	counts := make(map[string]int, len(nameKeys))
+	for _, key := range nameKeys {
+		if n := f.ownedCopies[key]; n > 0 {
+			counts[key] = n
+		}
+	}
+	return counts, nil
 }
 
 func (f *fakeDeckService) SetPendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (deck.PendingCard, error) {
@@ -218,12 +246,21 @@ func (f *fakeDeckService) RemovePendingCard(ctx context.Context, userID string, 
 }
 
 func (f *fakeDeckService) GetAllDecks(ctx context.Context, userID string, filter deck.Filter) ([]deck.Deck, int, error) {
-	return f.decks, len(f.decks), nil
+	mine := make([]deck.Deck, 0, len(f.decks))
+	for _, d := range f.decks {
+		if owner := f.owners[d.ID]; owner == "" || owner == userID {
+			mine = append(mine, d)
+		}
+	}
+	return mine, len(mine), nil
 }
 
 func (f *fakeDeckService) GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error) {
 	if f.getDeckErr != nil {
 		return deck.Deck{}, f.getDeckErr
+	}
+	if owner := f.owners[id]; owner != "" && owner != userID {
+		return deck.Deck{}, deck.ErrNotFound
 	}
 	for _, d := range f.decks {
 		if d.ID == id {
