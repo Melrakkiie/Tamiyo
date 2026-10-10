@@ -27,6 +27,8 @@ tags:
   - name: decks
   - name: users
     description: Public profiles and their public decks
+  - name: deck-folders
+    description: Folders to file your decks into, and favorite decks
   - name: deck-cards
     description: Deck ↔ card relationship
   - name: shared-decks
@@ -1041,6 +1043,224 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /users/{id}/deck-folders:
+    get:
+      tags: [users]
+      summary: The folders a profile shows
+      description: >
+        The user's folders holding at least one public deck, and the folders
+        above them, so the tree from the root can be rebuilt. Folders with only
+        private or unlisted decks never appear. Sorted by name.
+      parameters:
+        - $ref: "#/components/parameters/UserID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PublicDeckFolder"
+        "400":
+          description: id is not a UUID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /deck-folders:
+    get:
+      tags: [deck-folders]
+      summary: Your deck folders
+      description: Every folder, sorted by name (case-insensitive); parent_id rebuilds the tree.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DeckFolder"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [deck-folders]
+      summary: Create a folder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                  description: Trimmed.
+                parent_id:
+                  type: integer
+                  nullable: true
+                  description: The folder to create it in; null or absent at the root.
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeckFolder"
+        "400":
+          description: Invalid name, or parent_id isn't one of your folders
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /deck-folders/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    patch:
+      tags: [deck-folders]
+      summary: Rename, move or fold a folder
+      description: A folder can't go inside itself or one of its subfolders.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                parent_id:
+                  type: integer
+                  description: Move the folder inside this one.
+                clear_parent:
+                  type: boolean
+                  description: Move the folder to the root.
+                collapsed:
+                  type: boolean
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeckFolder"
+        "400":
+          description: Invalid id or name, parent_id isn't one of your folders, or would put the folder inside itself
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Folder not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: [deck-folders]
+      summary: Delete a folder
+      description: Its decks and subfolders move up to the folder's parent (the root for a top-level folder).
+      responses:
+        "204":
+          description: Deleted
+        "400":
+          $ref: "#/components/responses/InvalidID"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Folder not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /deck/{id}/folder:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    put:
+      tags: [deck-folders]
+      summary: File a deck into a folder
+      description: Leaves the deck's updated timestamp alone.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                folder_id:
+                  type: integer
+                  nullable: true
+                  description: null moves the deck back to the root.
+      responses:
+        "204":
+          description: Moved
+        "400":
+          description: Invalid id, or folder_id isn't one of your folders
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /deck/{id}/favorite:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    put:
+      tags: [deck-folders]
+      summary: Mark one of your decks as a favorite
+      description: Idempotent. Unrelated to likes; leaves the deck's updated timestamp alone.
+      responses:
+        "204":
+          description: Marked
+        "400":
+          $ref: "#/components/responses/InvalidID"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: [deck-folders]
+      summary: Unmark a favorite deck
+      description: Idempotent.
+      responses:
+        "204":
+          description: Unmarked
+        "400":
+          $ref: "#/components/responses/InvalidID"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /users/{id}/follow:
     parameters:
       - $ref: "#/components/parameters/UserID"
@@ -4207,11 +4427,52 @@ components:
         likes_count:
           type: integer
           description: How many users liked the deck.
+        folder_id:
+          type: integer
+          nullable: true
+          readOnly: true
+          description: The folder the deck is filed in, null at the root. Changed with PUT /deck/{id}/folder.
+        favorite:
+          type: boolean
+          readOnly: true
+          description: Whether the owner marked the deck as a favorite. Changed with PUT/DELETE /deck/{id}/favorite.
         added:
           type: string
         updated:
           type: string
       required: [id, name, format, visibility, card_count, added, updated]
+
+    DeckFolder:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        parent_id:
+          type: integer
+          nullable: true
+          description: The folder it sits in, null at the root.
+        collapsed:
+          type: boolean
+          description: Whether the client shows the folder folded.
+        added:
+          type: string
+        updated:
+          type: string
+      required: [id, name, parent_id, collapsed, added, updated]
+
+    PublicDeckFolder:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        parent_id:
+          type: integer
+          nullable: true
+      required: [id, name, parent_id]
 
     SharedDeckInfo:
       type: object

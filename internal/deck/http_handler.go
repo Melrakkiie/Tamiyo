@@ -36,6 +36,8 @@ type deckResponse struct {
 	CardCount            int     `json:"card_count"`
 	PendingCount         int     `json:"pending_count"`
 	LikesCount           int     `json:"likes_count"`
+	FolderID             *int    `json:"folder_id"`
+	Favorite             bool    `json:"favorite"`
 	Added                string  `json:"added"`
 	Updated              string  `json:"updated"`
 }
@@ -55,6 +57,8 @@ func toResponse(d Deck) deckResponse {
 		CardCount:            d.CardCount,
 		PendingCount:         d.PendingCount,
 		LikesCount:           d.LikesCount,
+		FolderID:             d.FolderID,
+		Favorite:             d.Favorite,
 		Added:                d.Added.Format("2006-01-02 15:04:05"),
 		Updated:              d.Updated.Format("2006-01-02 15:04:05"),
 	}
@@ -177,6 +181,8 @@ func toDeckCardResponse(dc DeckCard) deckCardResponse {
 }
 
 type deckService interface {
+	folderService
+
 	GetAllDecks(ctx context.Context, userID string, filter Filter) ([]Deck, int, error)
 	GetDeck(ctx context.Context, userID string, id string) (Deck, error)
 	CreateDeck(ctx context.Context, userID string, d Deck) (Deck, error)
@@ -228,6 +234,7 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 
 	h.registerTagRoutes(router)
 	h.registerViewRoutes(router)
+	h.registerFolderRoutes(router)
 }
 
 func (h *Handler) getDecks(ctx *gin.Context) {

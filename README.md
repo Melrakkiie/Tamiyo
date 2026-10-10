@@ -213,6 +213,10 @@ Each card of a deck, owned or pending, sits on a board: `main` (the deck itself)
 
 A deck's owner can tag its cards (`Ramp`, `Pioche`, `Removal`…) to organize deckbuilding. A tag belongs to a card name within a deck: every copy shares it, pending ones included, whatever the printing. A card can have several tags, and each deck has its own. `GET /deck/:id/tags` lists them, `PUT /deck/:id/tags/cards` sets a card's tags, `PATCH` / `DELETE /deck/:id/tags` rename or remove a tag on every card. Shared decks and deck comparisons include each card's tags. See [`doc/API.md`](./doc/API.md#card-tags-deckidtags).
 
+### Deck folders and favorites
+
+A user files their decks into folders, nested to any depth (`/deck-folders`, and `PUT /deck/:id/folder` to move a deck), and marks some decks as favorites (`PUT` / `DELETE /deck/:id/favorite`). Deleting a folder moves its decks and subfolders up to its parent. A profile lists the folders holding public decks with `GET /users/:id/deck-folders`. See [`doc/API.md`](./doc/API.md#deck-folders).
+
 ### Following
 
 A signed-in user can follow other users. `PUT` / `DELETE /users/:id/follow` follow and unfollow (both idempotent), `GET /users/:id/follow` gives that user's follower and following counts and whether you follow each other, and `GET /users/:id/followers` / `GET /users/:id/following` list their connections, most recent first. See [`doc/API.md`](./doc/API.md#following).

@@ -76,7 +76,12 @@ func (s *Service) DuplicateDeck(ctx context.Context, userID string, deckID strin
 		return DuplicateSummary{}, err
 	}
 
+	var folderID *int
+	if source.mine {
+		folderID = source.deck.FolderID
+	}
 	created, err := s.decks.CreateDeck(ctx, userID, deck.Deck{
+		FolderID:             folderID,
 		Name:                 source.deck.Name + copySuffix,
 		Format:               source.deck.Format,
 		Visibility:           deck.VisibilityPrivate,

@@ -15,6 +15,8 @@ import (
 )
 
 type fakeService struct {
+	folderService
+
 	decks       []Deck
 	getAllTotal int
 	getAllErr   error

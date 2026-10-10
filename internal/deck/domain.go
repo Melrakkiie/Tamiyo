@@ -26,6 +26,8 @@ type Deck struct {
 	CardCount            int
 	PendingCount         int
 	LikesCount           int
+	FolderID             *int
+	Favorite             bool
 	Added                time.Time
 	Updated              time.Time
 }
@@ -102,4 +104,5 @@ type Repository interface {
 	TagRepository
 	ViewRepository
 	LikeRepository
+	FolderRepository
 }

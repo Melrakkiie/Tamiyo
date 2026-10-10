@@ -40,6 +40,9 @@ func TestDuplicateDeck_CopiesOwnDeckAsPrivate(t *testing.T) {
 	decks.decks[0].Visibility = deck.VisibilityPublic
 	bracket := 3
 	decks.decks[0].Bracket = &bracket
+	folderID := 7
+	decks.decks[0].FolderID = &folderID
+	decks.decks[0].Favorite = true
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
 
 	result, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID)
@@ -53,6 +56,8 @@ func TestDuplicateDeck_CopiesOwnDeckAsPrivate(t *testing.T) {
 	assert.Equal(t, deck.VisibilityPrivate, copied.Visibility)
 	assert.Equal(t, ptrString(solRingSLD), copied.BackgroundScryfallID)
 	assert.Equal(t, &bracket, copied.Bracket)
+	assert.Equal(t, &folderID, copied.FolderID)
+	assert.False(t, copied.Favorite)
 	assert.Equal(t, 1, result.Summary.DecksCreated)
 	assert.Equal(t, 9, result.Summary.CardsPending)
 	assert.Equal(t, "Tamiyo, Inquisitive Student", decks.addedPending[0].Name)
@@ -63,6 +68,8 @@ func TestDuplicateDeck_CopiesOwnDeckAsPrivate(t *testing.T) {
 
 func TestDuplicateDeck_CopiesSomeoneElsesSharedDeck(t *testing.T) {
 	decks := sharedDeckFixture()
+	folderID := 7
+	decks.decks[0].FolderID = &folderID
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
 
 	result, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID)
@@ -70,6 +77,7 @@ func TestDuplicateDeck_CopiesSomeoneElsesSharedDeck(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, decks.created, 1)
 	assert.Equal(t, "Tamiyo tempo (copie)", decks.created[0].Name)
+	assert.Nil(t, decks.created[0].FolderID)
 	assert.Equal(t, 9, result.Summary.CardsPending)
 }
 

@@ -15,6 +15,7 @@ Tamiyo is a REST API for managing a Magic: The Gathering card collection — car
 - [Storage](#storage)
 - [Decks](#decks)
 - [Profiles](#profiles)
+- [Deck folders](#deck-folders)
 - [Deck ↔ Card relationship](#deck--card-relationship)
 - [Deck Insights](#deck-insights)
 - [Shared decks](#shared-decks)
@@ -675,6 +676,8 @@ GET /deck?format=commander&sort=-added&page=1&limit=25
       "pending_count": 2,
       "likes_count": 3,
       "bracket": 3,
+      "folder_id": 4,
+      "favorite": true,
       "added": "2026-01-15 10:30:00",
       "updated": "2026-01-15 10:30:00"
     }
@@ -686,7 +689,7 @@ GET /deck?format=commander&sort=-added&page=1&limit=25
 }
 ```
 
-`card_count` and `pending_count` only count the deck itself (its `main` board, see [Boards](#boards)): the sideboard and the cards being considered are left out. `pending_count` is the number of copies in the deck's pending list (see [Pending cards](#pending-cards-deckidpending)), not counted in `card_count`. `likes_count` is how many users [liked](#likes) the deck. `bracket` is the [Commander bracket](https://magic.wizards.com/en/news/announcements/commander-brackets-beta-update-october-21-2025) the owner gave the deck, `1` (Exhibition) to `5` (cEDH), `null` when not set; the API accepts it on any format. `commander_scryfall_id` is read-only: the Scryfall id of the commander card, so a client can show its art without another call. `color_identity` is read-only too: the deck's colors in WUBRG order, the commander's color identity when the deck has one, otherwise every color in the color identity of its main board's cards, owned or pending (`""` when colorless, `null` for a deck without commander nor cards). `background_scryfall_id` is the art the user picked for the deck (`null` when none was chosen). `visibility` says who may see the deck: `private` (only its owner), `unlisted` (anyone with its link, the default) or `public` (anyone, and listed on its owner's profile). `id` is a random UUID generated when the deck is created, so deck ids can't be guessed from one another. It is also how anyone reaches the deck's read-only page: see [Shared decks](#shared-decks). The routes in this section still only serve the owner's own decks.
+`card_count` and `pending_count` only count the deck itself (its `main` board, see [Boards](#boards)): the sideboard and the cards being considered are left out. `pending_count` is the number of copies in the deck's pending list (see [Pending cards](#pending-cards-deckidpending)), not counted in `card_count`. `likes_count` is how many users [liked](#likes) the deck. `bracket` is the [Commander bracket](https://magic.wizards.com/en/news/announcements/commander-brackets-beta-update-october-21-2025) the owner gave the deck, `1` (Exhibition) to `5` (cEDH), `null` when not set; the API accepts it on any format. `commander_scryfall_id` is read-only: the Scryfall id of the commander card, so a client can show its art without another call. `color_identity` is read-only too: the deck's colors in WUBRG order, the commander's color identity when the deck has one, otherwise every color in the color identity of its main board's cards, owned or pending (`""` when colorless, `null` for a deck without commander nor cards). `folder_id` is the [folder](#deck-folders) the deck is filed in (`null` at the root) and `favorite` whether its owner marked it as a favorite; changing either doesn't touch `updated`. `background_scryfall_id` is the art the user picked for the deck (`null` when none was chosen). `visibility` says who may see the deck: `private` (only its owner), `unlisted` (anyone with its link, the default) or `public` (anyone, and listed on its owner's profile). `id` is a random UUID generated when the deck is created, so deck ids can't be guessed from one another. It is also how anyone reaches the deck's read-only page: see [Shared decks](#shared-decks). The routes in this section still only serve the owner's own decks.
 
 **Errors:** `400` if `page` or `limit` is not a valid integer, `limit` is outside `1..100`, or `sort` is not one of the allowed values.
 
@@ -823,6 +826,62 @@ What any signed-in user can see of another user. **Requires `Authorization: Bear
 That user's **public** decks (`visibility` = `public`), with the same pagination, `sort` and response shape as `GET /deck`. Unlisted and private decks are never listed. An unknown user simply has no decks.
 
 **Errors:** `400` `:id` is not a UUID, or invalid `page` / `limit` / `sort` · `401` missing/invalid token
+
+---
+
+## Deck folders
+
+A user files their decks into folders, which can sit inside other folders to any depth, and marks some decks as favorites. **Requires `Authorization: Bearer <token>`.** Folders are private to their owner, except that a profile shows the folders leading to its public decks (`GET /users/:id/deck-folders`).
+
+### `GET /deck-folders`
+
+Every folder of the user, sorted by name (case-insensitive). The tree is rebuilt from `parent_id` (`null` at the root).
+
+**Response `200 OK`**
+```json
+[
+  { "id": 4, "name": "Commander", "parent_id": null, "collapsed": false, "added": "2026-10-10 15:00:00", "updated": "2026-10-10 15:00:00" },
+  { "id": 7, "name": "Tribal", "parent_id": 4, "collapsed": true, "added": "2026-10-10 15:01:00", "updated": "2026-10-10 15:05:00" }
+]
+```
+
+`collapsed` is a display setting the client saves, whether the folder is shown folded.
+
+### `POST /deck-folders`
+
+Create a folder. Body: `{ "name": "Tribal", "parent_id": 4 }`; `name` is trimmed and must be 1 to 100 characters, `parent_id` is optional (`null` or absent at the root). **Response `201 Created`**: the folder, shaped like an entry of `GET /deck-folders`.
+
+**Errors:** `400` invalid name, or `parent_id` isn't one of your folders
+
+### `PATCH /deck-folders/:id`
+
+Change any of `name`, `collapsed` and `parent_id`; `"clear_parent": true` moves the folder to the root. A folder can't go inside itself or one of its own subfolders. **Response `200 OK`**: the folder.
+
+**Errors:** `400` invalid id or name, `parent_id` isn't one of your folders, or would put the folder inside itself · `404` folder not found
+
+### `DELETE /deck-folders/:id`
+
+Delete a folder. Its decks and subfolders aren't deleted: they move up to the folder's parent (the root for a top-level folder). **Response `204 No Content`**.
+
+**Errors:** `400` invalid id · `404` folder not found
+
+### `PUT /deck/:id/folder`
+
+File a deck into a folder. Body: `{ "folder_id": 7 }`, or `{ "folder_id": null }` to move it back to the root. **Response `204 No Content`**.
+
+**Errors:** `400` invalid id, or `folder_id` isn't one of your folders · `404` deck not found
+
+### `PUT /deck/:id/favorite` and `DELETE /deck/:id/favorite`
+
+Mark one of your decks as a favorite, or unmark it; doing it twice changes nothing. No body. **Response `204 No Content`**. A favorite is the owner's own pick, unrelated to [likes](#likes): a profile shows the user's public favorites first.
+
+**Errors:** `400` invalid id · `404` deck not found
+
+### `GET /users/:id/deck-folders`
+
+The folders a profile shows: those holding at least one of that user's **public** decks, and the folders above them, so the tree from the root can be rebuilt. Folders with only private or unlisted decks never appear. **Response `200 OK`**: `[{ "id": 4, "name": "Commander", "parent_id": null }]`, sorted like `GET /deck-folders`.
+
+**Errors:** `400` `:id` is not a UUID · `401` missing/invalid token
 
 ---
 
