@@ -39,6 +39,8 @@ type PublicDeck struct {
 	CommanderName        *string
 	ColorIdentity        string
 	CardCount            int
+	LikesCount           int
+	LikedAt              *time.Time
 	OwnerID              string
 	OwnerDisplayName     *string
 	OwnerAvatarID        *string

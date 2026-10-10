@@ -33,6 +33,7 @@ type deckResponse struct {
 	Visibility           string  `json:"visibility"`
 	CardCount            int     `json:"card_count"`
 	PendingCount         int     `json:"pending_count"`
+	LikesCount           int     `json:"likes_count"`
 	Added                string  `json:"added"`
 	Updated              string  `json:"updated"`
 }
@@ -49,6 +50,7 @@ func toResponse(d Deck) deckResponse {
 		Visibility:           d.Visibility,
 		CardCount:            d.CardCount,
 		PendingCount:         d.PendingCount,
+		LikesCount:           d.LikesCount,
 		Added:                d.Added.Format("2006-01-02 15:04:05"),
 		Updated:              d.Updated.Format("2006-01-02 15:04:05"),
 	}

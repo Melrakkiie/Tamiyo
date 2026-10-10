@@ -21,6 +21,10 @@ type deckService interface {
 	GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error)
 	BrowsePublicDecks(ctx context.Context, filter deck.PublicFilter) ([]deck.PublicDeck, int, error)
 	CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error)
+	LikeDeck(ctx context.Context, userID string, deckID string) error
+	UnlikeDeck(ctx context.Context, userID string, deckID string) error
+	GetLikeStatus(ctx context.Context, userID string, deckID string) (deck.LikeStatus, error)
+	GetLikedDecks(ctx context.Context, userID string, page int, limit int) ([]deck.PublicDeck, int, error)
 }
 
 type userService interface {

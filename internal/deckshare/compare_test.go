@@ -39,6 +39,8 @@ type fakeDeckStore struct {
 	owned       map[string]int
 	countedFor  string
 	countedKeys []string
+
+	likes map[[2]string]bool
 }
 
 func (f *fakeDeckStore) GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error) {

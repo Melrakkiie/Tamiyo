@@ -24,6 +24,7 @@ type deckRow struct {
 	Visibility           string    `db:"visibility"`
 	CardCount            int       `db:"card_count"`
 	PendingCount         int       `db:"pending_count"`
+	LikesCount           int       `db:"likes_count"`
 	Added                time.Time `db:"added"`
 	Updated              time.Time `db:"updated"`
 }
@@ -40,6 +41,7 @@ func (r deckRow) toDomain() Deck {
 		Visibility:           r.Visibility,
 		CardCount:            r.CardCount,
 		PendingCount:         r.PendingCount,
+		LikesCount:           r.LikesCount,
 		Added:                r.Added,
 		Updated:              r.Updated,
 	}
@@ -132,6 +134,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 			d.background_scryfall_id AS background_scryfall_id,
 			d.visibility AS visibility,
 			(SELECT COALESCE(SUM(p.quantity), 0) FROM tamiyo.deck_pending_cards p WHERE p.deck_id = d.id AND p.board = 'main') AS pending_count,
+			(SELECT count(*) FROM tamiyo.deck_likes l WHERE l.deck_id = d.id) AS likes_count,
 			COALESCE(
 				(SELECT c.scryfall_id FROM tamiyo.cards c WHERE c.id = d.commander_id),
 				(SELECT p.scryfall_id FROM tamiyo.deck_pending_cards p WHERE p.id = d.commander_pending_id)
@@ -209,6 +212,7 @@ func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id str
 			d.background_scryfall_id AS background_scryfall_id,
 			d.visibility AS visibility,
 			(SELECT COALESCE(SUM(p.quantity), 0) FROM tamiyo.deck_pending_cards p WHERE p.deck_id = d.id AND p.board = 'main') AS pending_count,
+			(SELECT count(*) FROM tamiyo.deck_likes l WHERE l.deck_id = d.id) AS likes_count,
 			COALESCE(
 				(SELECT c.scryfall_id FROM tamiyo.cards c WHERE c.id = d.commander_id),
 				(SELECT p.scryfall_id FROM tamiyo.deck_pending_cards p WHERE p.id = d.commander_pending_id)
@@ -245,6 +249,7 @@ func (r *PostgresRepository) FindShared(ctx context.Context, id string) (string,
 			d.background_scryfall_id AS background_scryfall_id,
 			d.visibility AS visibility,
 			(SELECT COALESCE(SUM(p.quantity), 0) FROM tamiyo.deck_pending_cards p WHERE p.deck_id = d.id AND p.board = 'main') AS pending_count,
+			(SELECT count(*) FROM tamiyo.deck_likes l WHERE l.deck_id = d.id) AS likes_count,
 			COALESCE(
 				(SELECT c.scryfall_id FROM tamiyo.cards c WHERE c.id = d.commander_id),
 				(SELECT p.scryfall_id FROM tamiyo.deck_pending_cards p WHERE p.id = d.commander_pending_id)

@@ -27,6 +27,7 @@ type publicDeckResponse struct {
 	CommanderName        *string       `json:"commander_name"`
 	ColorIdentity        string        `json:"color_identity"`
 	CardCount            int           `json:"card_count"`
+	LikesCount           int           `json:"likes_count"`
 	Owner                ownerResponse `json:"owner"`
 	Added                string        `json:"added"`
 	Updated              string        `json:"updated"`
@@ -50,13 +51,14 @@ func toPublicDeckResponse(d deck.PublicDeck) publicDeckResponse {
 		CommanderName:        d.CommanderName,
 		ColorIdentity:        d.ColorIdentity,
 		CardCount:            d.CardCount,
+		LikesCount:           d.LikesCount,
 		Owner:                ownerResponse{ID: d.OwnerID, DisplayName: d.OwnerDisplayName, AvatarScryfallID: d.OwnerAvatarID},
 		Added:                d.Added.Format("2006-01-02 15:04:05"),
 		Updated:              d.Updated.Format("2006-01-02 15:04:05"),
 	}
 }
 
-var browseSorts = map[string]bool{"updated": true, "name": true, "added": true, "card_count": true}
+var browseSorts = map[string]bool{"updated": true, "name": true, "added": true, "card_count": true, "likes": true}
 
 type queryError string
 
@@ -140,7 +142,7 @@ func parseBrowseQuery(ctx *gin.Context) (deck.PublicFilter, error) {
 	if raw := ctx.Query("sort"); raw != "" {
 		field := strings.TrimPrefix(raw, "-")
 		if !browseSorts[field] {
-			return filter, queryError("sort must be one of: updated, -updated, name, -name, added, -added, card_count, -card_count")
+			return filter, queryError("sort must be one of: updated, -updated, name, -name, added, -added, card_count, -card_count, likes, -likes")
 		}
 		filter.SortField = field
 		filter.SortDesc = strings.HasPrefix(raw, "-")

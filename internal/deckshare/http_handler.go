@@ -18,6 +18,10 @@ type sharedDeckService interface {
 	CompareDecks(ctx context.Context, userID string, deckID string, otherID string) (Comparison, error)
 	BrowsePublicDecks(ctx context.Context, filter deck.PublicFilter) ([]deck.PublicDeck, int, error)
 	CollectionOwnership(ctx context.Context, viewerID string, deckID string) ([]OwnedCard, error)
+	LikeStatus(ctx context.Context, userID string, deckID string) (deck.LikeStatus, error)
+	LikeDeck(ctx context.Context, userID string, deckID string) (deck.LikeStatus, error)
+	UnlikeDeck(ctx context.Context, userID string, deckID string) (deck.LikeStatus, error)
+	LikedDecks(ctx context.Context, userID string, page int, limit int) ([]deck.PublicDeck, int, error)
 }
 
 type deckResponse struct {
@@ -28,6 +32,7 @@ type deckResponse struct {
 	BackgroundScryfallID *string `json:"background_scryfall_id"`
 	CommanderScryfallID  *string `json:"commander_scryfall_id"`
 	CardCount            int     `json:"card_count"`
+	LikesCount           int     `json:"likes_count"`
 	Added                string  `json:"added"`
 	Updated              string  `json:"updated"`
 }
@@ -81,6 +86,7 @@ func toResponse(shared SharedDeck) sharedDeckResponse {
 			BackgroundScryfallID: d.BackgroundScryfallID,
 			CommanderScryfallID:  d.CommanderScryfallID,
 			CardCount:            total,
+			LikesCount:           d.LikesCount,
 			Added:                d.Added.Format("2006-01-02 15:04:05"),
 			Updated:              d.Updated.Format("2006-01-02 15:04:05"),
 		},

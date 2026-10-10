@@ -13,6 +13,7 @@ const testUserID = "11111111-1111-1111-1111-111111111111"
 const otherUserID = "22222222-2222-2222-2222-222222222222"
 
 type fakeRepository struct {
+	likeSet      map[fakeLike]bool
 	decks        []Deck
 	findAllTotal int
 	findAllErr   error
@@ -912,4 +913,70 @@ func TestService_CountCopiesByName_AsksTheRepository(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, map[string]int{"sol ring": 2}, counts)
 	assert.Equal(t, testUserID, repo.lastUserID)
+}
+
+type fakeLike struct {
+	userID string
+	deckID string
+}
+
+func (f *fakeRepository) likes() map[fakeLike]bool {
+	if f.likeSet == nil {
+		f.likeSet = map[fakeLike]bool{}
+	}
+	return f.likeSet
+}
+
+func (f *fakeRepository) Like(ctx context.Context, userID string, deckID string) error {
+	f.likes()[fakeLike{userID, deckID}] = true
+	return nil
+}
+
+func (f *fakeRepository) Unlike(ctx context.Context, userID string, deckID string) error {
+	delete(f.likes(), fakeLike{userID, deckID})
+	return nil
+}
+
+func (f *fakeRepository) FindLikeStatus(ctx context.Context, userID string, deckID string) (LikeStatus, error) {
+	var status LikeStatus
+	for like := range f.likes() {
+		if like.deckID == deckID {
+			status.Count++
+			status.LikedByMe = status.LikedByMe || like.userID == userID
+		}
+	}
+	return status, nil
+}
+
+func (f *fakeRepository) FindLiked(ctx context.Context, userID string, page int, limit int) ([]PublicDeck, int, error) {
+	var liked []PublicDeck
+	for like := range f.likes() {
+		if like.userID == userID {
+			liked = append(liked, PublicDeck{ID: like.deckID})
+		}
+	}
+	return liked, len(liked), nil
+}
+
+func TestService_Likes(t *testing.T) {
+	repo := &fakeRepository{}
+	svc := NewService(repo)
+	ctx := context.Background()
+	deckID := "00000000-0000-0000-0000-000000000001"
+
+	require.NoError(t, svc.LikeDeck(ctx, "alice", deckID))
+	require.NoError(t, svc.LikeDeck(ctx, "bob", deckID))
+	status, err := svc.GetLikeStatus(ctx, "alice", deckID)
+	require.NoError(t, err)
+	assert.Equal(t, LikeStatus{Count: 2, LikedByMe: true}, status)
+
+	require.NoError(t, svc.UnlikeDeck(ctx, "alice", deckID))
+	status, err = svc.GetLikeStatus(ctx, "alice", deckID)
+	require.NoError(t, err)
+	assert.Equal(t, LikeStatus{Count: 1}, status)
+
+	liked, total, err := svc.GetLikedDecks(ctx, "bob", 1, 10)
+	require.NoError(t, err)
+	assert.Equal(t, 1, total)
+	assert.Equal(t, deckID, liked[0].ID)
 }

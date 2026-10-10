@@ -23,6 +23,8 @@ type publicDeckRow struct {
 	OwnerID              string         `db:"user_id"`
 	OwnerDisplayName     *string        `db:"display_name"`
 	OwnerAvatarID        *string        `db:"avatar_scryfall_id"`
+	LikesCount           int            `db:"likes_count"`
+	LikedAt              *time.Time     `db:"liked_at"`
 	Added                time.Time      `db:"added"`
 	Updated              time.Time      `db:"updated"`
 }
@@ -38,6 +40,8 @@ const publicDecksSQL = `
 			coalesce(cc.color_identity, cp.color_identity) AS commander_identity,
 			(SELECT count(*) FROM tamiyo.card_deck cd WHERE cd.deck_id = d.id AND cd.board = 'main')
 				+ (SELECT coalesce(sum(p.quantity), 0) FROM tamiyo.deck_pending_cards p WHERE p.deck_id = d.id AND p.board = 'main') AS card_count,
+			(SELECT count(*) FROM tamiyo.deck_likes l WHERE l.deck_id = d.id) AS likes_count,
+			%[1]s AS liked_at,
 			(
 				SELECT string_agg(identity, '') FROM (
 					SELECT c.color_identity AS identity FROM tamiyo.card_deck cd JOIN tamiyo.cards c ON c.id = cd.card_id
@@ -50,19 +54,46 @@ const publicDecksSQL = `
 		JOIN tamiyo.users u ON u.id = d.user_id
 		LEFT JOIN tamiyo.cards cc ON cc.id = d.commander_id
 		LEFT JOIN tamiyo.deck_pending_cards cp ON cp.id = d.commander_pending_id
-		WHERE d.visibility = 'public'
+		WHERE %[2]s
 	), decks AS (
 		SELECT base.*,
 			CASE WHEN commander_identity IS NOT NULL
-				THEN ` + "%s" + `
-				ELSE ` + "%s" + `
+				THEN %[3]s
+				ELSE %[4]s
 			END AS identity
 		FROM base
 	)
 	SELECT id, user_id, name, format, background_scryfall_id, added, updated, display_name, avatar_scryfall_id,
-		commander_scryfall_id, commander_name, card_count, identity
+		commander_scryfall_id, commander_name, card_count, likes_count, liked_at, identity
 	FROM decks
 `
+
+func publicDecksQuery(likedAt string, where string) string {
+	return fmt.Sprintf(publicDecksSQL, likedAt, where,
+		fmt.Sprintf(identityLettersSQL, "commander_identity"),
+		fmt.Sprintf(identityLettersSQL, "cards_identity"),
+	)
+}
+
+func toPublicDeck(row publicDeckRow) PublicDeck {
+	return PublicDeck{
+		ID:                   row.ID,
+		Name:                 row.Name,
+		Format:               row.Format,
+		BackgroundScryfallID: row.BackgroundScryfallID,
+		CommanderScryfallID:  row.CommanderScryfallID,
+		CommanderName:        row.CommanderName,
+		ColorIdentity:        scryfall.ColorCode(row.Identity),
+		CardCount:            row.CardCount,
+		LikesCount:           row.LikesCount,
+		LikedAt:              row.LikedAt,
+		OwnerID:              row.OwnerID,
+		OwnerDisplayName:     row.OwnerDisplayName,
+		OwnerAvatarID:        row.OwnerAvatarID,
+		Added:                row.Added,
+		Updated:              row.Updated,
+	}
+}
 
 func containsSQL(column string, pos int) string {
 	return fmt.Sprintf("strpos(lower(coalesce(%s, '')), lower($%d)) > 0", column, pos)
@@ -80,6 +111,8 @@ func publicOrderBy(filter PublicFilter) string {
 		return fmt.Sprintf(" ORDER BY added %s, id %s", dir, dir)
 	case "card_count":
 		return fmt.Sprintf(" ORDER BY card_count %s, updated DESC, id DESC", dir)
+	case "likes":
+		return fmt.Sprintf(" ORDER BY likes_count %s, updated DESC, id DESC", dir)
 	default:
 		return fmt.Sprintf(" ORDER BY updated %s, id %s", dir, dir)
 	}
@@ -134,10 +167,7 @@ func (r *PostgresRepository) FindPublic(ctx context.Context, filter PublicFilter
 		add(func(pos int) string { return fmt.Sprintf("cardinality(identity) = $%d", pos) }, *filter.ColorCount)
 	}
 
-	query := fmt.Sprintf(publicDecksSQL,
-		fmt.Sprintf(identityLettersSQL, "commander_identity"),
-		fmt.Sprintf(identityLettersSQL, "cards_identity"),
-	)
+	query := publicDecksQuery("NULL::timestamptz", "d.visibility = 'public'")
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
@@ -158,21 +188,7 @@ func (r *PostgresRepository) FindPublic(ctx context.Context, filter PublicFilter
 
 	decks := make([]PublicDeck, 0, len(rows))
 	for _, row := range rows {
-		decks = append(decks, PublicDeck{
-			ID:                   row.ID,
-			Name:                 row.Name,
-			Format:               row.Format,
-			BackgroundScryfallID: row.BackgroundScryfallID,
-			CommanderScryfallID:  row.CommanderScryfallID,
-			CommanderName:        row.CommanderName,
-			ColorIdentity:        scryfall.ColorCode(row.Identity),
-			CardCount:            row.CardCount,
-			OwnerID:              row.OwnerID,
-			OwnerDisplayName:     row.OwnerDisplayName,
-			OwnerAvatarID:        row.OwnerAvatarID,
-			Added:                row.Added,
-			Updated:              row.Updated,
-		})
+		decks = append(decks, toPublicDeck(row))
 	}
 	return decks, total, nil
 }

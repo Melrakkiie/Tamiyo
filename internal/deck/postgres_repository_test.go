@@ -1444,3 +1444,83 @@ func TestPostgresRepository_CountCopiesByName(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, empty)
 }
+
+func TestPostgresRepository_Likes(t *testing.T) {
+	db := getTestDB(t)
+	alice := seedUser(t, db, "alice@example.com")
+	bob := seedUser(t, db, "bob@example.com")
+	carol := seedUser(t, db, "carol@example.com")
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+
+	public, err := repo.Create(ctx, alice, Deck{Name: "Otters", Format: "commander", Visibility: VisibilityPublic})
+	require.NoError(t, err)
+	unlisted, err := repo.Create(ctx, alice, Deck{Name: "Birds", Format: "modern", Visibility: VisibilityUnlisted})
+	require.NoError(t, err)
+	hidden, err := repo.Create(ctx, alice, Deck{Name: "Secret", Format: "modern", Visibility: VisibilityPublic})
+	require.NoError(t, err)
+
+	require.NoError(t, repo.Like(ctx, bob, public.ID))
+	require.NoError(t, repo.Like(ctx, bob, public.ID))
+	require.NoError(t, repo.Like(ctx, carol, public.ID))
+	require.NoError(t, repo.Like(ctx, bob, unlisted.ID))
+	require.NoError(t, repo.Like(ctx, bob, hidden.ID))
+	_, err = db.Exec(`UPDATE tamiyo.deck_likes SET added = now() - interval '1 day' WHERE deck_id = $1`, public.ID)
+	require.NoError(t, err)
+	hidden.Visibility = VisibilityPrivate
+	_, err = repo.Update(ctx, alice, hidden)
+	require.NoError(t, err)
+
+	status, err := repo.FindLikeStatus(ctx, bob, public.ID)
+	require.NoError(t, err)
+	assert.Equal(t, LikeStatus{Count: 2, LikedByMe: true}, status)
+	status, err = repo.FindLikeStatus(ctx, alice, public.ID)
+	require.NoError(t, err)
+	assert.Equal(t, LikeStatus{Count: 2}, status)
+	found, err := repo.FindByID(ctx, alice, public.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 2, found.LikesCount)
+	_, shared, err := repo.FindShared(ctx, public.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 2, shared.LikesCount)
+	all, _, err := repo.FindAll(ctx, alice, Filter{Page: 1, Limit: 10})
+	require.NoError(t, err)
+	for _, d := range all {
+		if d.ID == public.ID {
+			assert.Equal(t, 2, d.LikesCount)
+		}
+	}
+
+	liked, total, err := repo.FindLiked(ctx, bob, 1, 10)
+	require.NoError(t, err)
+	assert.Equal(t, 2, total, "a deck turned private leaves the list")
+	require.Len(t, liked, 2)
+	assert.Equal(t, unlisted.ID, liked[0].ID, "most recent like first")
+	assert.Equal(t, public.ID, liked[1].ID)
+	assert.Equal(t, 2, liked[1].LikesCount)
+	require.NotNil(t, liked[1].LikedAt)
+	assert.Equal(t, alice, liked[1].OwnerID)
+
+	page2, total, err := repo.FindLiked(ctx, bob, 2, 1)
+	require.NoError(t, err)
+	assert.Equal(t, 2, total)
+	require.Len(t, page2, 1)
+	assert.Equal(t, public.ID, page2[0].ID)
+
+	publicDecks, _, err := repo.FindPublic(ctx, PublicFilter{Page: 1, Limit: 10, SortField: "likes", SortDesc: true})
+	require.NoError(t, err)
+	require.NotEmpty(t, publicDecks)
+	assert.Equal(t, public.ID, publicDecks[0].ID)
+	assert.Equal(t, 2, publicDecks[0].LikesCount)
+	assert.Nil(t, publicDecks[0].LikedAt)
+
+	require.NoError(t, repo.Unlike(ctx, bob, public.ID))
+	status, err = repo.FindLikeStatus(ctx, bob, public.ID)
+	require.NoError(t, err)
+	assert.Equal(t, LikeStatus{Count: 1}, status)
+
+	require.NoError(t, repo.Delete(ctx, alice, unlisted.ID))
+	_, total, err = repo.FindLiked(ctx, bob, 1, 10)
+	require.NoError(t, err)
+	assert.Equal(t, 0, total)
+}

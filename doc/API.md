@@ -672,6 +672,7 @@ GET /deck?format=commander&sort=-added&page=1&limit=25
       "visibility": "unlisted",
       "card_count": 4,
       "pending_count": 2,
+      "likes_count": 3,
       "added": "2026-01-15 10:30:00",
       "updated": "2026-01-15 10:30:00"
     }
@@ -683,7 +684,7 @@ GET /deck?format=commander&sort=-added&page=1&limit=25
 }
 ```
 
-`card_count` and `pending_count` only count the deck itself (its `main` board, see [Boards](#boards)): the sideboard and the cards being considered are left out. `pending_count` is the number of copies in the deck's pending list (see [Pending cards](#pending-cards-deckidpending)), not counted in `card_count`. `commander_scryfall_id` is read-only: the Scryfall id of the commander card, so a client can show its art without another call. `background_scryfall_id` is the art the user picked for the deck (`null` when none was chosen). `visibility` says who may see the deck: `private` (only its owner), `unlisted` (anyone with its link, the default) or `public` (anyone, and listed on its owner's profile). `id` is a random UUID generated when the deck is created, so deck ids can't be guessed from one another. It is also how anyone reaches the deck's read-only page: see [Shared decks](#shared-decks). The routes in this section still only serve the owner's own decks.
+`card_count` and `pending_count` only count the deck itself (its `main` board, see [Boards](#boards)): the sideboard and the cards being considered are left out. `pending_count` is the number of copies in the deck's pending list (see [Pending cards](#pending-cards-deckidpending)), not counted in `card_count`. `likes_count` is how many users [liked](#likes) the deck. `commander_scryfall_id` is read-only: the Scryfall id of the commander card, so a client can show its art without another call. `background_scryfall_id` is the art the user picked for the deck (`null` when none was chosen). `visibility` says who may see the deck: `private` (only its owner), `unlisted` (anyone with its link, the default) or `public` (anyone, and listed on its owner's profile). `id` is a random UUID generated when the deck is created, so deck ids can't be guessed from one another. It is also how anyone reaches the deck's read-only page: see [Shared decks](#shared-decks). The routes in this section still only serve the owner's own decks.
 
 **Errors:** `400` if `page` or `limit` is not a valid integer, `limit` is outside `1..100`, or `sort` is not one of the allowed values.
 
@@ -1077,7 +1078,7 @@ Browse every `public` deck, of every user. Unlisted and private decks are never 
 | `colors` | The deck's color identity: letters among `W`, `U`, `B`, `R`, `G` (`UG`), or `C` for colorless decks. |
 | `color_mode` | How `colors` is matched: `exact` (default), `include` (at least these colors) or `within` (at most these colors). Ignored with `colors=C`. |
 | `color_count` | Number of colors in the identity, `0` to `5`. |
-| `sort` | `updated`, `name`, `added` or `card_count`, `-` prefix for descending. Defaults to `-updated`. |
+| `sort` | `updated`, `name`, `added`, `card_count` or `likes`, `-` prefix for descending. Defaults to `-updated`. |
 | `page`, `limit` | Pagination: `limit` defaults to 24, at most 100. |
 
 A deck's color identity is its commander's, or, without a commander (or when the commander's is unknown), the union of the identities of the cards on its `main` board. Text filters can't exceed 100 characters.
@@ -1095,6 +1096,7 @@ A deck's color identity is its commander's, or, without a commander (or when the
       "commander_name": "Kess, Dissident Mage",
       "color_identity": "UBR",
       "card_count": 100,
+      "likes_count": 4,
       "owner": { "id": "4b8a0a9e-2f1c-4c8e-9d3a-1e2f3a4b5c6d", "display_name": "Tamiyo", "avatar_scryfall_id": null },
       "added": "2026-01-15 10:30:00",
       "updated": "2026-01-15 10:30:00"
@@ -1124,6 +1126,7 @@ A deck's color identity is its commander's, or, without a commander (or when the
     "background_scryfall_id": null,
     "commander_scryfall_id": "a0b4c5ad-14f7-4bcb-9a59-6c0ac4f1a5e0",
     "card_count": 100,
+    "likes_count": 4,
     "added": "2026-01-15 10:30:00",
     "updated": "2026-01-15 10:30:00"
   },
@@ -1222,6 +1225,17 @@ How many copies of each card of a deck the **signed-in user** has in their colle
 Sorted by name.
 
 **Errors:** `401` unauthenticated · `404` unknown, malformed, or someone else's private deck
+
+### Likes
+
+A signed-in user can like someone else's `public` or `unlisted` deck. **Requires authentication.** Anyone, signed in or not, sees a deck's `likes_count` in [`GET /shared/decks`](#get-shareddecks) and [`GET /shared/decks/:id`](#get-shareddecksid).
+
+- `GET /deck/:id/like` — the deck's like count, and whether you liked it: `{ "likes_count": 4, "liked_by_me": true }`. Works on your own decks too, whatever their visibility.
+- `PUT /deck/:id/like` — like the deck; liking it again changes nothing. Liking your own deck answers `400`. Returns the same body, after the change.
+- `DELETE /deck/:id/like` — remove your like; not having liked it changes nothing. Returns the same body.
+- `GET /auth/me/liked-decks` — the decks you liked, most recent like first, paginated with `page` and `limit` (default `24`, at most `100`). Each entry has the shape of a [`GET /shared/decks`](#get-shareddecks) entry, plus `liked_at`. A liked deck its owner turned private, or deleted, is left out.
+
+**Errors:** `400` liking your own deck, invalid `page` / `limit` · `401` unauthenticated · `404` unknown, malformed, or someone else's private deck
 
 ---
 

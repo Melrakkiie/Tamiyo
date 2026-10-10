@@ -23,6 +23,7 @@ type Deck struct {
 	Visibility           string
 	CardCount            int
 	PendingCount         int
+	LikesCount           int
 	Added                time.Time
 	Updated              time.Time
 }
@@ -98,4 +99,5 @@ type Repository interface {
 	CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error)
 	TagRepository
 	ViewRepository
+	LikeRepository
 }

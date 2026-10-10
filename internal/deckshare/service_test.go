@@ -117,6 +117,7 @@ func TestService_GetSharedDeck_LoadsCardsAsTheOwner(t *testing.T) {
 	shared, err := service.GetSharedDeck(context.Background(), deckID)
 
 	require.NoError(t, err)
+
 	assert.Equal(t, deckID, decks.lastShareID)
 	assert.Equal(t, ownerID, decks.lastUserID)
 	assert.Equal(t, "00000000-0000-0000-0000-000000000009", decks.lastDeckID)
@@ -291,4 +292,16 @@ func TestService_BrowsePublicDecks_PassesTheFilter(t *testing.T) {
 	assert.Equal(t, 1, total)
 	assert.Equal(t, "Otters", found[0].Name)
 	assert.Equal(t, "commander", decks.lastPublicFilter.Format)
+}
+
+func (f *fakeDecks) LikeDeck(ctx context.Context, userID string, deckID string) error { return nil }
+
+func (f *fakeDecks) UnlikeDeck(ctx context.Context, userID string, deckID string) error { return nil }
+
+func (f *fakeDecks) GetLikeStatus(ctx context.Context, userID string, deckID string) (deck.LikeStatus, error) {
+	return deck.LikeStatus{}, nil
+}
+
+func (f *fakeDecks) GetLikedDecks(ctx context.Context, userID string, page int, limit int) ([]deck.PublicDeck, int, error) {
+	return nil, 0, nil
 }

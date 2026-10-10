@@ -2118,7 +2118,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [updated, -updated, name, -name, added, -added, card_count, -card_count]
+            enum: [updated, -updated, name, -name, added, -added, card_count, -card_count, likes, -likes]
             default: -updated
         - name: page
           in: query
@@ -2409,6 +2409,100 @@ paths:
                 $ref: "#/components/schemas/Preferences"
         "400":
           description: No known field, or a field of the wrong type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /deck/{id}/like:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    get:
+      tags: [shared-decks]
+      summary: A deck's likes, and whether you liked it
+      description: Works on your own decks, whatever their visibility, and on anyone's public or unlisted deck.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LikeStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/LikeDeckNotFound"
+    put:
+      tags: [shared-decks]
+      summary: Like someone else's deck
+      description: Idempotent. You cannot like your own deck.
+      responses:
+        "200":
+          description: The likes after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LikeStatus"
+        "400":
+          description: The deck is yours.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/LikeDeckNotFound"
+    delete:
+      tags: [shared-decks]
+      summary: Remove your like
+      description: Idempotent.
+      responses:
+        "200":
+          description: The likes after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LikeStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/LikeDeckNotFound"
+
+  /auth/me/liked-decks:
+    get:
+      tags: [shared-decks]
+      summary: The decks you liked
+      description: >
+        Most recent like first. A liked deck its owner made private, or
+        deleted, is left out.
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 24
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedLikedDecks"
+        "400":
+          description: Invalid page or limit
           content:
             application/json:
               schema:
@@ -3042,6 +3136,12 @@ components:
         default: 24
 
   responses:
+    LikeDeckNotFound:
+      description: Unknown or malformed deck id, or someone else's private deck
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     FollowBadRequest:
       description: id is not a UUID, invalid page or limit, or following yourself
       content:
@@ -3414,13 +3514,52 @@ components:
         card_count:
           type: integer
           description: Cards of the main board, pending ones included.
+        likes_count:
+          type: integer
+          description: How many users liked the deck.
         owner:
           $ref: "#/components/schemas/Profile"
         added:
           type: string
         updated:
           type: string
-      required: [id, name, format, background_scryfall_id, commander_scryfall_id, commander_name, color_identity, card_count, owner, added, updated]
+      required: [id, name, format, background_scryfall_id, commander_scryfall_id, commander_name, color_identity, card_count, likes_count, owner, added, updated]
+
+    LikedDeck:
+      allOf:
+        - $ref: "#/components/schemas/PublicDeck"
+        - type: object
+          required: [liked_at]
+          properties:
+            liked_at:
+              type: string
+              description: When you liked the deck.
+
+    PaginatedLikedDecks:
+      type: object
+      required: [data, page, limit, total, total_pages]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/LikedDeck"
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+
+    LikeStatus:
+      type: object
+      required: [likes_count, liked_by_me]
+      properties:
+        likes_count:
+          type: integer
+        liked_by_me:
+          type: boolean
 
     PaginatedPublicDecks:
       type: object
@@ -3958,6 +4097,9 @@ components:
         pending_count:
           type: integer
           description: Copies waiting in the main board's pending list (not in the collection yet), not counted in card_count.
+        likes_count:
+          type: integer
+          description: How many users liked the deck.
         added:
           type: string
         updated:
@@ -3988,11 +4130,14 @@ components:
         card_count:
           type: integer
           description: Every card of the main board, owned or pending.
+        likes_count:
+          type: integer
+          description: How many users liked the deck.
         added:
           type: string
         updated:
           type: string
-      required: [id, name, format, visibility, background_scryfall_id, commander_scryfall_id, card_count, added, updated]
+      required: [id, name, format, visibility, background_scryfall_id, commander_scryfall_id, card_count, likes_count, added, updated]
 
     SharedDeckCard:
       type: object

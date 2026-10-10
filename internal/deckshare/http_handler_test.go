@@ -32,6 +32,38 @@ type fakeSharedService struct {
 	publicTotal int
 	owned       []OwnedCard
 	lastFilter  deck.PublicFilter
+
+	likeStatus deck.LikeStatus
+	lastLike   string
+	liked      []deck.PublicDeck
+	lastPage   int
+	lastLimit  int
+}
+
+func (f *fakeSharedService) recordLike(action string, userID string, deckID string) (deck.LikeStatus, error) {
+	f.lastLike = action
+	f.lastUserID = userID
+	f.lastDeckID = deckID
+	return f.likeStatus, f.err
+}
+
+func (f *fakeSharedService) LikeStatus(ctx context.Context, userID string, deckID string) (deck.LikeStatus, error) {
+	return f.recordLike("status", userID, deckID)
+}
+
+func (f *fakeSharedService) LikeDeck(ctx context.Context, userID string, deckID string) (deck.LikeStatus, error) {
+	return f.recordLike("like", userID, deckID)
+}
+
+func (f *fakeSharedService) UnlikeDeck(ctx context.Context, userID string, deckID string) (deck.LikeStatus, error) {
+	return f.recordLike("unlike", userID, deckID)
+}
+
+func (f *fakeSharedService) LikedDecks(ctx context.Context, userID string, page int, limit int) ([]deck.PublicDeck, int, error) {
+	f.lastUserID = userID
+	f.lastPage = page
+	f.lastLimit = limit
+	return f.liked, len(f.liked), f.err
 }
 
 func (f *fakeSharedService) CompareDecks(ctx context.Context, userID string, deckID string, otherID string) (Comparison, error) {
@@ -95,7 +127,7 @@ func get(router *gin.Engine, path string) *httptest.ResponseRecorder {
 
 func TestGetSharedDeck_ReturnsDeckOwnerAndCardsWithoutAuthentication(t *testing.T) {
 	service := &fakeSharedService{shared: SharedDeck{
-		Deck:  deck.Deck{ID: deckID, Name: "Otters", Format: "commander", Visibility: deck.VisibilityUnlisted, Added: time.Now(), Updated: time.Now()},
+		Deck:  deck.Deck{ID: deckID, Name: "Otters", Format: "commander", Visibility: deck.VisibilityUnlisted, LikesCount: 7, Added: time.Now(), Updated: time.Now()},
 		Owner: Owner{ID: ownerID, DisplayName: strPtr("Alice")},
 		Cards: []Card{{Name: "Island", ScryfallID: "i", Quantity: 3, Tags: []string{"Terrain"}}, {Name: "Tamiyo", ScryfallID: "t", Quantity: 1, Commander: true}},
 	}}
@@ -111,6 +143,7 @@ func TestGetSharedDeck_ReturnsDeckOwnerAndCardsWithoutAuthentication(t *testing.
 	assert.Equal(t, "Otters", gotDeck["name"])
 	assert.Equal(t, deckID, gotDeck["id"])
 	assert.Equal(t, float64(4), gotDeck["card_count"])
+	assert.Equal(t, float64(7), gotDeck["likes_count"])
 	assert.Equal(t, "Alice", got["owner"].(map[string]any)["display_name"])
 	cards := got["cards"].([]any)
 	require.Len(t, cards, 2)
