@@ -21,6 +21,7 @@ type Deck struct {
 	BackgroundScryfallID *string
 	CommanderScryfallID  *string
 	Visibility           string
+	Bracket              *int
 	CardCount            int
 	PendingCount         int
 	LikesCount           int

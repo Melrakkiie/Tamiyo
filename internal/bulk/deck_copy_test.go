@@ -38,6 +38,8 @@ func TestDuplicateDeck_CopiesOwnDeckAsPrivate(t *testing.T) {
 	decks := copyDeckFixture()
 	decks.decks[0].BackgroundScryfallID = ptrString(solRingSLD)
 	decks.decks[0].Visibility = deck.VisibilityPublic
+	bracket := 3
+	decks.decks[0].Bracket = &bracket
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
 
 	result, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID)
@@ -50,6 +52,7 @@ func TestDuplicateDeck_CopiesOwnDeckAsPrivate(t *testing.T) {
 	assert.Equal(t, "commander", copied.Format)
 	assert.Equal(t, deck.VisibilityPrivate, copied.Visibility)
 	assert.Equal(t, ptrString(solRingSLD), copied.BackgroundScryfallID)
+	assert.Equal(t, &bracket, copied.Bracket)
 	assert.Equal(t, 1, result.Summary.DecksCreated)
 	assert.Equal(t, 9, result.Summary.CardsPending)
 	assert.Equal(t, "Tamiyo, Inquisitive Student", decks.addedPending[0].Name)

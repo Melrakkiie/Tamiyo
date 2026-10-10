@@ -15,6 +15,7 @@ type publicDeckRow struct {
 	ID                   string         `db:"id"`
 	Name                 string         `db:"name"`
 	Format               string         `db:"format"`
+	Bracket              *int           `db:"bracket"`
 	BackgroundScryfallID *string        `db:"background_scryfall_id"`
 	CommanderScryfallID  *string        `db:"commander_scryfall_id"`
 	CommanderName        *string        `db:"commander_name"`
@@ -33,7 +34,7 @@ const identityLettersSQL = `ARRAY(SELECT DISTINCT letter FROM regexp_split_to_ta
 
 const publicDecksSQL = `
 	WITH base AS (
-		SELECT d.id, d.user_id, d.name, d.format, d.background_scryfall_id, d.added, d.updated,
+		SELECT d.id, d.user_id, d.name, d.format, d.bracket, d.background_scryfall_id, d.added, d.updated,
 			u.display_name, u.avatar_scryfall_id,
 			coalesce(cc.scryfall_id, cp.scryfall_id) AS commander_scryfall_id,
 			coalesce(cc.name, cp.name) AS commander_name,
@@ -63,7 +64,7 @@ const publicDecksSQL = `
 			END AS identity
 		FROM base
 	)
-	SELECT id, user_id, name, format, background_scryfall_id, added, updated, display_name, avatar_scryfall_id,
+	SELECT id, user_id, name, format, bracket, background_scryfall_id, added, updated, display_name, avatar_scryfall_id,
 		commander_scryfall_id, commander_name, card_count, likes_count, liked_at, identity
 	FROM decks
 `
@@ -80,6 +81,7 @@ func toPublicDeck(row publicDeckRow) PublicDeck {
 		ID:                   row.ID,
 		Name:                 row.Name,
 		Format:               row.Format,
+		Bracket:              row.Bracket,
 		BackgroundScryfallID: row.BackgroundScryfallID,
 		CommanderScryfallID:  row.CommanderScryfallID,
 		CommanderName:        row.CommanderName,
@@ -162,6 +164,9 @@ func (r *PostgresRepository) FindPublic(ctx context.Context, filter PublicFilter
 				return fmt.Sprintf("(identity @> $%d::text[] AND identity <@ $%d::text[])", pos, pos)
 			}
 		}, pq.Array(filter.Colors))
+	}
+	if len(filter.Brackets) > 0 {
+		add(func(pos int) string { return fmt.Sprintf("bracket = ANY($%d::int[])", pos) }, pq.Array(filter.Brackets))
 	}
 	if filter.ColorCount != nil {
 		add(func(pos int) string { return fmt.Sprintf("cardinality(identity) = $%d", pos) }, *filter.ColorCount)

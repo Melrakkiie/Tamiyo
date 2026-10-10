@@ -673,6 +673,7 @@ GET /deck?format=commander&sort=-added&page=1&limit=25
       "card_count": 4,
       "pending_count": 2,
       "likes_count": 3,
+      "bracket": 3,
       "added": "2026-01-15 10:30:00",
       "updated": "2026-01-15 10:30:00"
     }
@@ -684,7 +685,7 @@ GET /deck?format=commander&sort=-added&page=1&limit=25
 }
 ```
 
-`card_count` and `pending_count` only count the deck itself (its `main` board, see [Boards](#boards)): the sideboard and the cards being considered are left out. `pending_count` is the number of copies in the deck's pending list (see [Pending cards](#pending-cards-deckidpending)), not counted in `card_count`. `likes_count` is how many users [liked](#likes) the deck. `commander_scryfall_id` is read-only: the Scryfall id of the commander card, so a client can show its art without another call. `background_scryfall_id` is the art the user picked for the deck (`null` when none was chosen). `visibility` says who may see the deck: `private` (only its owner), `unlisted` (anyone with its link, the default) or `public` (anyone, and listed on its owner's profile). `id` is a random UUID generated when the deck is created, so deck ids can't be guessed from one another. It is also how anyone reaches the deck's read-only page: see [Shared decks](#shared-decks). The routes in this section still only serve the owner's own decks.
+`card_count` and `pending_count` only count the deck itself (its `main` board, see [Boards](#boards)): the sideboard and the cards being considered are left out. `pending_count` is the number of copies in the deck's pending list (see [Pending cards](#pending-cards-deckidpending)), not counted in `card_count`. `likes_count` is how many users [liked](#likes) the deck. `bracket` is the [Commander bracket](https://magic.wizards.com/en/news/announcements/commander-brackets-beta-update-october-21-2025) the owner gave the deck, `1` (Exhibition) to `5` (cEDH), `null` when not set; the API accepts it on any format. `commander_scryfall_id` is read-only: the Scryfall id of the commander card, so a client can show its art without another call. `background_scryfall_id` is the art the user picked for the deck (`null` when none was chosen). `visibility` says who may see the deck: `private` (only its owner), `unlisted` (anyone with its link, the default) or `public` (anyone, and listed on its owner's profile). `id` is a random UUID generated when the deck is created, so deck ids can't be guessed from one another. It is also how anyone reaches the deck's read-only page: see [Shared decks](#shared-decks). The routes in this section still only serve the owner's own decks.
 
 **Errors:** `400` if `page` or `limit` is not a valid integer, `limit` is outside `1..100`, or `sort` is not one of the allowed values.
 
@@ -711,6 +712,7 @@ Create a new deck.
 | `commander_id` | int | No | Must reference an existing card if provided. |
 | `background_scryfall_id` | uuid | No | Scryfall id of the printing whose art (`art_crop`) is shown behind the deck. Any printing works, it doesn't have to be in the deck. |
 | `visibility` | string | No | `private`, `unlisted` (default) or `public`. |
+| `bracket` | int | No | Commander bracket, `1` to `5`. |
 
 **Example**
 ```json
@@ -719,7 +721,7 @@ Create a new deck.
 
 **Response `201 Created`**
 
-**Errors:** `400` missing required field, `visibility` not one of `private`, `unlisted`, `public`, or `commander_id` doesn't reference an existing card (`"commander_id does not reference an existing card"`)
+**Errors:** `400` missing required field, `visibility` not one of `private`, `unlisted`, `public`, `bracket` not between 1 and 5, or `commander_id` doesn't reference an existing card (`"commander_id does not reference an existing card"`)
 
 ---
 
@@ -739,6 +741,8 @@ Partially update a deck.
 | `background_scryfall_id` | uuid | Scryfall id of the printing whose art is shown behind the deck. |
 | `clear_background_scryfall_id` | bool | Set to `true` to remove the chosen art (set `background_scryfall_id` to `null`). |
 | `visibility` | string | `private`, `unlisted` or `public`. |
+| `bracket` | int | Commander bracket, `1` to `5`. |
+| `clear_bracket` | bool | Set to `true` to remove the bracket (set `bracket` to `null`). |
 
 **Example — clear the commander**
 ```json
@@ -747,7 +751,7 @@ Partially update a deck.
 
 **Response `200 OK`** — the full, updated deck.
 
-**Errors:** `400` invalid id / invalid body / invalid `commander_id` / `background_scryfall_id` not a UUID / unknown `visibility` · `404` deck not found
+**Errors:** `400` invalid id / invalid body / invalid `commander_id` / `background_scryfall_id` not a UUID / unknown `visibility` / `bracket` not between 1 and 5 · `404` deck not found
 
 ---
 
@@ -1078,6 +1082,7 @@ Browse every `public` deck, of every user. Unlisted and private decks are never 
 | `colors` | The deck's color identity: letters among `W`, `U`, `B`, `R`, `G` (`UG`), or `C` for colorless decks. |
 | `color_mode` | How `colors` is matched: `exact` (default), `include` (at least these colors) or `within` (at most these colors). Ignored with `colors=C`. |
 | `color_count` | Number of colors in the identity, `0` to `5`. |
+| `bracket` | Commander brackets, comma-separated (`bracket=2,3`): decks in any of them. Decks without a bracket are left out. |
 | `sort` | `updated`, `name`, `added`, `card_count` or `likes`, `-` prefix for descending. Defaults to `-updated`. |
 | `page`, `limit` | Pagination: `limit` defaults to 24, at most 100. |
 
@@ -1097,6 +1102,7 @@ A deck's color identity is its commander's, or, without a commander (or when the
       "color_identity": "UBR",
       "card_count": 100,
       "likes_count": 4,
+      "bracket": 3,
       "owner": { "id": "4b8a0a9e-2f1c-4c8e-9d3a-1e2f3a4b5c6d", "display_name": "Tamiyo", "avatar_scryfall_id": null },
       "added": "2026-01-15 10:30:00",
       "updated": "2026-01-15 10:30:00"
@@ -1127,6 +1133,7 @@ A deck's color identity is its commander's, or, without a commander (or when the
     "commander_scryfall_id": "a0b4c5ad-14f7-4bcb-9a59-6c0ac4f1a5e0",
     "card_count": 100,
     "likes_count": 4,
+    "bracket": 3,
     "added": "2026-01-15 10:30:00",
     "updated": "2026-01-15 10:30:00"
   },

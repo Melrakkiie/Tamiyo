@@ -17,6 +17,7 @@ type PublicFilter struct {
 	Commander string
 	Card      string
 	Owner     string
+	Brackets  []int
 
 	Colors     []string
 	Colorless  bool
@@ -34,6 +35,7 @@ type PublicDeck struct {
 	ID                   string
 	Name                 string
 	Format               string
+	Bracket              *int
 	BackgroundScryfallID *string
 	CommanderScryfallID  *string
 	CommanderName        *string

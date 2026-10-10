@@ -280,6 +280,15 @@ func TestBrowsePublicDecks_ParsesTheFilters(t *testing.T) {
 	assert.Equal(t, []any{}, decodeData(t, w))
 }
 
+func TestBrowsePublicDecks_FiltersByBracket(t *testing.T) {
+	service := &fakeSharedService{}
+
+	w := get(setupRouter(service), "/shared/decks?bracket=3,%204,3")
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, []int{3, 4}, service.lastFilter.Brackets)
+}
+
 func TestBrowsePublicDecks_Colorless(t *testing.T) {
 	service := &fakeSharedService{}
 
@@ -293,7 +302,7 @@ func TestBrowsePublicDecks_Colorless(t *testing.T) {
 func TestBrowsePublicDecks_RejectsInvalidQueries(t *testing.T) {
 	for _, query := range []string{
 		"page=0", "limit=101", "limit=x", "colors=WX", "color_mode=some", "color_count=6",
-		"sort=owner", "q=" + strings.Repeat("a", 101),
+		"sort=owner", "q=" + strings.Repeat("a", 101), "bracket=0", "bracket=6", "bracket=2,x",
 	} {
 		w := get(setupRouter(&fakeSharedService{}), "/shared/decks?"+query)
 		assert.Equal(t, http.StatusBadRequest, w.Code, query)

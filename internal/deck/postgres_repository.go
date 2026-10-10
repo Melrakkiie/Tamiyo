@@ -22,6 +22,7 @@ type deckRow struct {
 	BackgroundScryfallID *string   `db:"background_scryfall_id"`
 	CommanderScryfallID  *string   `db:"commander_scryfall_id"`
 	Visibility           string    `db:"visibility"`
+	Bracket              *int      `db:"bracket"`
 	CardCount            int       `db:"card_count"`
 	PendingCount         int       `db:"pending_count"`
 	LikesCount           int       `db:"likes_count"`
@@ -39,6 +40,7 @@ func (r deckRow) toDomain() Deck {
 		BackgroundScryfallID: r.BackgroundScryfallID,
 		CommanderScryfallID:  r.CommanderScryfallID,
 		Visibility:           r.Visibility,
+		Bracket:              r.Bracket,
 		CardCount:            r.CardCount,
 		PendingCount:         r.PendingCount,
 		LikesCount:           r.LikesCount,
@@ -57,6 +59,7 @@ func toDeckRow(userID string, d Deck) deckRow {
 		CommanderPendingID:   d.CommanderPendingID,
 		BackgroundScryfallID: d.BackgroundScryfallID,
 		Visibility:           visibilityOrDefault(d.Visibility),
+		Bracket:              d.Bracket,
 	}
 }
 
@@ -133,6 +136,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 			d.commander_pending_id AS commander_pending_id,
 			d.background_scryfall_id AS background_scryfall_id,
 			d.visibility AS visibility,
+			d.bracket AS bracket,
 			(SELECT COALESCE(SUM(p.quantity), 0) FROM tamiyo.deck_pending_cards p WHERE p.deck_id = d.id AND p.board = 'main') AS pending_count,
 			(SELECT count(*) FROM tamiyo.deck_likes l WHERE l.deck_id = d.id) AS likes_count,
 			COALESCE(
@@ -145,7 +149,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		FROM tamiyo.deck d
 		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id AND cd.board = 'main'
 	` + whereClause + `
-		GROUP BY d.id, d.name, d.format, d.commander_id, d.commander_pending_id, d.background_scryfall_id, d.visibility, d.added, d.updated
+		GROUP BY d.id, d.name, d.format, d.commander_id, d.commander_pending_id, d.background_scryfall_id, d.visibility, d.bracket, d.added, d.updated
 	` + orderByClause(filter) + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 
 	pagedArgs := append(args, filter.Limit, offset)
@@ -211,6 +215,7 @@ func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id str
 			d.commander_pending_id AS commander_pending_id,
 			d.background_scryfall_id AS background_scryfall_id,
 			d.visibility AS visibility,
+			d.bracket AS bracket,
 			(SELECT COALESCE(SUM(p.quantity), 0) FROM tamiyo.deck_pending_cards p WHERE p.deck_id = d.id AND p.board = 'main') AS pending_count,
 			(SELECT count(*) FROM tamiyo.deck_likes l WHERE l.deck_id = d.id) AS likes_count,
 			COALESCE(
@@ -223,7 +228,7 @@ func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id str
 		FROM tamiyo.deck d
 		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id AND cd.board = 'main'
 		WHERE d.id = $1 AND d.user_id = $2
-		GROUP BY d.id, d.name, d.format, d.commander_id, d.commander_pending_id, d.background_scryfall_id, d.visibility, d.added, d.updated
+		GROUP BY d.id, d.name, d.format, d.commander_id, d.commander_pending_id, d.background_scryfall_id, d.visibility, d.bracket, d.added, d.updated
 	`
 
 	var row deckRow
@@ -248,6 +253,7 @@ func (r *PostgresRepository) FindShared(ctx context.Context, id string) (string,
 			d.commander_pending_id AS commander_pending_id,
 			d.background_scryfall_id AS background_scryfall_id,
 			d.visibility AS visibility,
+			d.bracket AS bracket,
 			(SELECT COALESCE(SUM(p.quantity), 0) FROM tamiyo.deck_pending_cards p WHERE p.deck_id = d.id AND p.board = 'main') AS pending_count,
 			(SELECT count(*) FROM tamiyo.deck_likes l WHERE l.deck_id = d.id) AS likes_count,
 			COALESCE(
@@ -260,7 +266,7 @@ func (r *PostgresRepository) FindShared(ctx context.Context, id string) (string,
 		FROM tamiyo.deck d
 		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id AND cd.board = 'main'
 		WHERE d.id = $1 AND d.visibility IN ('public', 'unlisted')
-		GROUP BY d.id, d.user_id, d.name, d.format, d.commander_id, d.commander_pending_id, d.background_scryfall_id, d.visibility, d.added, d.updated
+		GROUP BY d.id, d.user_id, d.name, d.format, d.commander_id, d.commander_pending_id, d.background_scryfall_id, d.visibility, d.bracket, d.added, d.updated
 	`
 
 	var row deckRow
@@ -277,9 +283,9 @@ func (r *PostgresRepository) FindShared(ctx context.Context, id string) (string,
 func (r *PostgresRepository) Create(ctx context.Context, userID string, d Deck) (Deck, error) {
 	row := toDeckRow(userID, d)
 	query := `
-    	INSERT INTO tamiyo.deck (user_id, name, format, commander_id, background_scryfall_id, visibility)
-     	VALUES (:user_id, :name, :format, :commander_id, :background_scryfall_id, :visibility)
-      	RETURNING id, name, format, commander_id, commander_pending_id, background_scryfall_id, visibility, added, updated,
+    	INSERT INTO tamiyo.deck (user_id, name, format, commander_id, background_scryfall_id, visibility, bracket)
+     	VALUES (:user_id, :name, :format, :commander_id, :background_scryfall_id, :visibility, :bracket)
+      	RETURNING id, name, format, commander_id, commander_pending_id, background_scryfall_id, visibility, bracket, added, updated,
       	    (SELECT c.scryfall_id FROM tamiyo.cards c WHERE c.id = commander_id) AS commander_scryfall_id
 	`
 	stmt, err := r.db.PrepareNamedContext(ctx, query)
@@ -306,9 +312,9 @@ func (r *PostgresRepository) Update(ctx context.Context, userID string, d Deck) 
 	row := toDeckRow(userID, d)
 	query := `
 		UPDATE tamiyo.deck
-		SET name = :name, format = :format, commander_id = :commander_id, commander_pending_id = :commander_pending_id, background_scryfall_id = :background_scryfall_id, visibility = :visibility
+		SET name = :name, format = :format, commander_id = :commander_id, commander_pending_id = :commander_pending_id, background_scryfall_id = :background_scryfall_id, visibility = :visibility, bracket = :bracket
 		WHERE id = :id AND user_id = :user_id
-		RETURNING id, name, format, commander_id, commander_pending_id, background_scryfall_id, visibility, added, updated,
+		RETURNING id, name, format, commander_id, commander_pending_id, background_scryfall_id, visibility, bracket, added, updated,
 		    COALESCE(
 		        (SELECT c.scryfall_id FROM tamiyo.cards c WHERE c.id = commander_id),
 		        (SELECT p.scryfall_id FROM tamiyo.deck_pending_cards p WHERE p.id = commander_pending_id)

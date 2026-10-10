@@ -31,6 +31,7 @@ type deckResponse struct {
 	BackgroundScryfallID *string `json:"background_scryfall_id"`
 	CommanderScryfallID  *string `json:"commander_scryfall_id"`
 	Visibility           string  `json:"visibility"`
+	Bracket              *int    `json:"bracket"`
 	CardCount            int     `json:"card_count"`
 	PendingCount         int     `json:"pending_count"`
 	LikesCount           int     `json:"likes_count"`
@@ -48,6 +49,7 @@ func toResponse(d Deck) deckResponse {
 		BackgroundScryfallID: d.BackgroundScryfallID,
 		CommanderScryfallID:  d.CommanderScryfallID,
 		Visibility:           d.Visibility,
+		Bracket:              d.Bracket,
 		CardCount:            d.CardCount,
 		PendingCount:         d.PendingCount,
 		LikesCount:           d.LikesCount,
@@ -70,6 +72,7 @@ type createDeckRequest struct {
 	CommanderID          *int    `json:"commander_id" binding:"omitempty,gt=0"`
 	BackgroundScryfallID *string `json:"background_scryfall_id" binding:"omitempty,uuid"`
 	Visibility           string  `json:"visibility" binding:"omitempty,oneof=public unlisted private"`
+	Bracket              *int    `json:"bracket" binding:"omitempty,min=1,max=5"`
 }
 
 func (r createDeckRequest) toDomain() Deck {
@@ -83,6 +86,7 @@ func (r createDeckRequest) toDomain() Deck {
 		CommanderID:          r.CommanderID,
 		BackgroundScryfallID: r.BackgroundScryfallID,
 		Visibility:           visibility,
+		Bracket:              r.Bracket,
 	}
 }
 
@@ -95,6 +99,8 @@ type updateDeckRequest struct {
 	BackgroundScryfallID *string `json:"background_scryfall_id" binding:"omitempty,uuid"`
 	ClearBackground      bool    `json:"clear_background_scryfall_id"`
 	Visibility           *string `json:"visibility" binding:"omitempty,oneof=public unlisted private"`
+	Bracket              *int    `json:"bracket" binding:"omitempty,min=1,max=5"`
+	ClearBracket         bool    `json:"clear_bracket"`
 }
 
 func (r updateDeckRequest) applyTo(d Deck) Deck {
@@ -121,6 +127,11 @@ func (r updateDeckRequest) applyTo(d Deck) Deck {
 	}
 	if r.Visibility != nil {
 		d.Visibility = *r.Visibility
+	}
+	if r.ClearBracket {
+		d.Bracket = nil
+	} else if r.Bracket != nil {
+		d.Bracket = r.Bracket
 	}
 	return d
 }

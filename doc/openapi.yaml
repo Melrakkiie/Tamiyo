@@ -2114,6 +2114,12 @@ paths:
             type: integer
             minimum: 0
             maximum: 5
+        - name: bracket
+          in: query
+          description: Commander brackets, comma-separated (2,3). Decks without a bracket are left out.
+          schema:
+            type: string
+            example: "2,3"
         - name: sort
           in: query
           schema:
@@ -3497,6 +3503,12 @@ components:
           type: string
         format:
           type: string
+        bracket:
+          type: integer
+          minimum: 1
+          maximum: 5
+          nullable: true
+          description: Commander bracket, 1 (Exhibition) to 5 (cEDH); null when not set.
         background_scryfall_id:
           type: string
           format: uuid
@@ -4091,6 +4103,12 @@ components:
           description: Scryfall id of the commander card, null without a commander.
         visibility:
           $ref: "#/components/schemas/DeckVisibility"
+        bracket:
+          type: integer
+          minimum: 1
+          maximum: 5
+          nullable: true
+          description: Commander bracket, 1 (Exhibition) to 5 (cEDH); null when not set.
         card_count:
           type: integer
           description: Cards of the main board.
@@ -4119,6 +4137,12 @@ components:
         visibility:
           type: string
           enum: [public, unlisted]
+        bracket:
+          type: integer
+          minimum: 1
+          maximum: 5
+          nullable: true
+          description: Commander bracket, 1 (Exhibition) to 5 (cEDH); null when not set.
         background_scryfall_id:
           type: string
           format: uuid
@@ -4380,6 +4404,10 @@ components:
           format: uuid
         visibility:
           $ref: "#/components/schemas/DeckVisibility"
+        bracket:
+          type: integer
+          minimum: 1
+          maximum: 5
       required: [name, format]
 
     UpdateDeckRequest:
@@ -4410,6 +4438,13 @@ components:
           description: Set to true to remove the chosen art (set background_scryfall_id to null).
         visibility:
           $ref: "#/components/schemas/DeckVisibility"
+        bracket:
+          type: integer
+          minimum: 1
+          maximum: 5
+        clear_bracket:
+          type: boolean
+          description: Set to true to remove the bracket.
 
     DeckVisibility:
       type: string

@@ -80,6 +80,7 @@ func (s *Service) DuplicateDeck(ctx context.Context, userID string, deckID strin
 		Name:                 source.deck.Name + copySuffix,
 		Format:               source.deck.Format,
 		Visibility:           deck.VisibilityPrivate,
+		Bracket:              source.deck.Bracket,
 		BackgroundScryfallID: source.deck.BackgroundScryfallID,
 	})
 	if err != nil {

@@ -1524,3 +1524,53 @@ func TestPostgresRepository_Likes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, total)
 }
+
+func TestPostgresRepository_Bracket(t *testing.T) {
+	db := getTestDB(t)
+	alice := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+	three := 3
+
+	created, err := repo.Create(ctx, alice, Deck{Name: "Otters", Format: "commander", Visibility: VisibilityPublic, Bracket: &three})
+	require.NoError(t, err)
+	assert.Equal(t, &three, created.Bracket)
+	plain, err := repo.Create(ctx, alice, Deck{Name: "Burn", Format: "modern", Visibility: VisibilityPublic})
+	require.NoError(t, err)
+	assert.Nil(t, plain.Bracket)
+
+	found, err := repo.FindByID(ctx, alice, created.ID)
+	require.NoError(t, err)
+	assert.Equal(t, &three, found.Bracket)
+	all, _, err := repo.FindAll(ctx, alice, Filter{Page: 1, Limit: 10})
+	require.NoError(t, err)
+	brackets := map[string]*int{}
+	for _, d := range all {
+		brackets[d.ID] = d.Bracket
+	}
+	assert.Equal(t, &three, brackets[created.ID])
+	assert.Nil(t, brackets[plain.ID])
+
+	public, total, err := repo.FindPublic(ctx, PublicFilter{Page: 1, Limit: 10, Brackets: []int{2, 3}})
+	require.NoError(t, err)
+	assert.Equal(t, 1, total)
+	assert.Equal(t, created.ID, public[0].ID)
+	assert.Equal(t, &three, public[0].Bracket)
+
+	five := 5
+	found.Bracket = &five
+	updated, err := repo.Update(ctx, alice, found)
+	require.NoError(t, err)
+	assert.Equal(t, &five, updated.Bracket)
+	_, shared, err := repo.FindShared(ctx, created.ID)
+	require.NoError(t, err)
+	assert.Equal(t, &five, shared.Bracket)
+
+	updated.Bracket = nil
+	cleared, err := repo.Update(ctx, alice, updated)
+	require.NoError(t, err)
+	assert.Nil(t, cleared.Bracket)
+
+	_, err = db.Exec(`UPDATE tamiyo.deck SET bracket = 6 WHERE id = $1`, created.ID)
+	assert.Error(t, err)
+}

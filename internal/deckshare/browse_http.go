@@ -3,6 +3,7 @@ package deckshare
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -22,6 +23,7 @@ type publicDeckResponse struct {
 	ID                   string        `json:"id"`
 	Name                 string        `json:"name"`
 	Format               string        `json:"format"`
+	Bracket              *int          `json:"bracket"`
 	BackgroundScryfallID *string       `json:"background_scryfall_id"`
 	CommanderScryfallID  *string       `json:"commander_scryfall_id"`
 	CommanderName        *string       `json:"commander_name"`
@@ -46,6 +48,7 @@ func toPublicDeckResponse(d deck.PublicDeck) publicDeckResponse {
 		ID:                   d.ID,
 		Name:                 d.Name,
 		Format:               d.Format,
+		Bracket:              d.Bracket,
 		BackgroundScryfallID: d.BackgroundScryfallID,
 		CommanderScryfallID:  d.CommanderScryfallID,
 		CommanderName:        d.CommanderName,
@@ -115,6 +118,18 @@ func parseBrowseQuery(ctx *gin.Context) (deck.PublicFilter, error) {
 				if !contains(filter.Colors, letter) {
 					filter.Colors = append(filter.Colors, letter)
 				}
+			}
+		}
+	}
+
+	if raw := strings.TrimSpace(ctx.Query("bracket")); raw != "" {
+		for _, part := range strings.Split(raw, ",") {
+			bracket, err := strconv.Atoi(strings.TrimSpace(part))
+			if err != nil || bracket < 1 || bracket > 5 {
+				return filter, queryError("bracket must list integers between 1 and 5, comma-separated")
+			}
+			if !slices.Contains(filter.Brackets, bracket) {
+				filter.Brackets = append(filter.Brackets, bracket)
 			}
 		}
 	}
