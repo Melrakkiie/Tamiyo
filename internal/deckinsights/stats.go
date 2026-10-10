@@ -11,12 +11,14 @@ import (
 func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card) DeckStats {
 	stats := DeckStats{
 		ManaCurve:      []ManaCurveBucket{},
+		BackFaceLands:  []BackFaceCard{},
 		ColorBreakdown: make(map[string]int),
 		TypeBreakdown:  make(map[string]int),
 	}
 
 	curve := make(map[int]*ManaCurveBucket)
 	cardIndex := make(map[int]map[string]int)
+	backFaceIndex := make(map[string]int)
 	var totalManaValue float64
 	var nonlandCount int
 
@@ -38,6 +40,14 @@ func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card) 
 		}
 
 		nonlandCount++
+		if _, back, ok := strings.Cut(sc.TypeLine, "//"); ok && scryfall.PrimaryType(back) == scryfall.TypeLand {
+			if i, seen := backFaceIndex[c.Name]; seen {
+				stats.BackFaceLands[i].Quantity++
+			} else {
+				backFaceIndex[c.Name] = len(stats.BackFaceLands)
+				stats.BackFaceLands = append(stats.BackFaceLands, BackFaceCard{Name: c.Name, ScryfallID: c.ScryfallID, Quantity: 1})
+			}
+		}
 		totalManaValue += sc.CMC
 		addToCurve(curve, cardIndex, int(sc.CMC), c, t, isPermanent(sc.TypeLine))
 
@@ -54,6 +64,10 @@ func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card) 
 	if nonlandCount > 0 {
 		stats.AverageManaValue = totalManaValue / float64(nonlandCount)
 	}
+
+	sort.SliceStable(stats.BackFaceLands, func(i, j int) bool {
+		return strings.ToLower(stats.BackFaceLands[i].Name) < strings.ToLower(stats.BackFaceLands[j].Name)
+	})
 
 	manaValues := make([]int, 0, len(curve))
 	for mv := range curve {

@@ -335,6 +335,8 @@ func TestGetDeckStats_ReturnsEmptyManaCurveForLandsOnlyDeck(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, stats.ManaCurve)
 	assert.Empty(t, stats.ManaCurve)
+	require.NotNil(t, stats.BackFaceLands)
+	assert.Empty(t, stats.BackFaceLands)
 }
 
 func TestGetDeckStats_BuildsManaCurveSortedByManaValue(t *testing.T) {
@@ -375,6 +377,7 @@ func TestGetDeckStats_SplitsTheManaCurveIntoPermanentsAndListsItsCards(t *testin
 				{ID: 12, Name: "Mind Stone", ScryfallID: "stone"},
 				{ID: 13, Name: "Bala Ged Recovery // Bala Ged Sanctuary", ScryfallID: "mdfc"},
 				{ID: 14, Name: "Arcane Signet", ScryfallID: "signet"},
+				{ID: 16, Name: "Bala Ged Recovery // Bala Ged Sanctuary", ScryfallID: "mdfc"},
 				{ID: 15, Name: "Forest", ScryfallID: "forest"},
 			},
 		},
@@ -397,9 +400,11 @@ func TestGetDeckStats_SplitsTheManaCurveIntoPermanentsAndListsItsCards(t *testin
 		{Name: "Mind Stone", ScryfallID: "stone", Quantity: 1, Type: "Artifact"},
 		{Name: "Shock", ScryfallID: "shock", Quantity: 2, Type: "Instant"},
 	}}, stats.ManaCurve[0])
-	assert.Equal(t, ManaCurveBucket{ManaValue: 3, Count: 1, NonPermanents: 1, Cards: []ManaCurveCard{
-		{Name: "Bala Ged Recovery // Bala Ged Sanctuary", ScryfallID: "mdfc", Quantity: 1, Type: "Sorcery"},
+	assert.Equal(t, ManaCurveBucket{ManaValue: 3, Count: 2, NonPermanents: 2, Cards: []ManaCurveCard{
+		{Name: "Bala Ged Recovery // Bala Ged Sanctuary", ScryfallID: "mdfc", Quantity: 2, Type: "Sorcery"},
 	}}, stats.ManaCurve[1])
+	assert.Equal(t, []BackFaceCard{{Name: "Bala Ged Recovery // Bala Ged Sanctuary", ScryfallID: "mdfc", Quantity: 2}}, stats.BackFaceLands)
+	assert.Equal(t, 1, stats.LandCount)
 }
 
 func TestGetDeckStats_MulticolorCardCountsUnderEachColor(t *testing.T) {

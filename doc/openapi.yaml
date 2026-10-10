@@ -3697,7 +3697,25 @@ components:
           type: object
           additionalProperties:
             type: integer
-      required: [card_count, land_count, nonland_count, average_mana_value, mana_curve, color_breakdown, type_breakdown]
+        back_face_lands:
+          type: array
+          description: >
+            Cards whose front face isn't a land but whose back face is (modal
+            double-faced cards), by name. They aren't in land_count.
+          items:
+            $ref: "#/components/schemas/BackFaceCard"
+      required: [card_count, land_count, nonland_count, average_mana_value, mana_curve, color_breakdown, type_breakdown, back_face_lands]
+
+    BackFaceCard:
+      type: object
+      properties:
+        name:
+          type: string
+        scryfall_id:
+          type: string
+        quantity:
+          type: integer
+      required: [name, scryfall_id, quantity]
 
     Error:
       type: object

@@ -1119,13 +1119,16 @@ Summarizes the deck's composition: mana curve, color breakdown, and primary card
     }
   ],
   "color_breakdown": { "W": 10, "U": 8, "C": 5 },
-  "type_breakdown": { "Land": 38, "Creature": 30, "Instant": 12, "Sorcery": 10, "Artifact": 10 }
+  "type_breakdown": { "Land": 38, "Creature": 30, "Instant": 12, "Sorcery": 10, "Artifact": 10 },
+  "back_face_lands": [
+    { "name": "Bala Ged Recovery // Bala Ged Sanctuary", "scryfall_id": "9e2d4ad6-8c4d-4b7e-9e73-6a8f4f9c1f0b", "quantity": 1 }
+  ]
 }
 ```
 
 Each `mana_curve` bucket splits its `count` into `permanents` and `non_permanents` (instants and sorceries), and lists its `cards` by name with their number of copies and their primary type (as in `type_breakdown`). A double-faced or split card is a permanent unless its front face is an instant or a sorcery.
 
-A multicolor card counts once per color it has in `color_breakdown`; a dual-typed permanent (e.g. "Artifact Creature") counts once under a single primary type in `type_breakdown` — Creature takes precedence over Artifact/Enchantment, matching how most deckbuilding sites categorize it. A double-faced or split card counts under the type of its front face (a creature with a land on its back is a creature).
+A multicolor card counts once per color it has in `color_breakdown`; a dual-typed permanent (e.g. "Artifact Creature") counts once under a single primary type in `type_breakdown` — Creature takes precedence over Artifact/Enchantment, matching how most deckbuilding sites categorize it. A double-faced or split card counts under the type of its front face (a creature with a land on its back is a creature). `back_face_lands` lists those cards with a land on their back face, by name with their number of copies: they aren't in `land_count`, but a client can show them as extra lands.
 
 ---
 

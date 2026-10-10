@@ -34,6 +34,12 @@ type ManaCurveBucket struct {
 	Cards         []ManaCurveCard `json:"cards"`
 }
 
+type BackFaceCard struct {
+	Name       string `json:"name"`
+	ScryfallID string `json:"scryfall_id"`
+	Quantity   int    `json:"quantity"`
+}
+
 type DeckStats struct {
 	CardCount        int               `json:"card_count"`
 	LandCount        int               `json:"land_count"`
@@ -42,4 +48,5 @@ type DeckStats struct {
 	ManaCurve        []ManaCurveBucket `json:"mana_curve"`
 	ColorBreakdown   map[string]int    `json:"color_breakdown"`
 	TypeBreakdown    map[string]int    `json:"type_breakdown"`
+	BackFaceLands    []BackFaceCard    `json:"back_face_lands"`
 }
