@@ -10,6 +10,8 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
+
+	"Melrakkiie/Tamiyo/internal/scryfall"
 )
 
 type deckRow struct {
@@ -21,6 +23,8 @@ type deckRow struct {
 	CommanderPendingID   *int      `db:"commander_pending_id"`
 	BackgroundScryfallID *string   `db:"background_scryfall_id"`
 	CommanderScryfallID  *string   `db:"commander_scryfall_id"`
+	CommanderIdentity    *string   `db:"commander_color_identity"`
+	CardsIdentity        *string   `db:"cards_color_identity"`
 	Visibility           string    `db:"visibility"`
 	Bracket              *int      `db:"bracket"`
 	CardCount            int       `db:"card_count"`
@@ -39,6 +43,7 @@ func (r deckRow) toDomain() Deck {
 		CommanderPendingID:   r.CommanderPendingID,
 		BackgroundScryfallID: r.BackgroundScryfallID,
 		CommanderScryfallID:  r.CommanderScryfallID,
+		ColorIdentity:        r.colorIdentity(),
 		Visibility:           r.Visibility,
 		Bracket:              r.Bracket,
 		CardCount:            r.CardCount,
@@ -143,6 +148,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 				(SELECT c.scryfall_id FROM tamiyo.cards c WHERE c.id = d.commander_id),
 				(SELECT p.scryfall_id FROM tamiyo.deck_pending_cards p WHERE p.id = d.commander_pending_id)
 			) AS commander_scryfall_id,
+			` + colorIdentitySQL("d.") + `,
 		    d.added AS added,
 			d.updated as updated,
 		    COUNT(cd.card_id) AS card_count
@@ -222,6 +228,7 @@ func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id str
 				(SELECT c.scryfall_id FROM tamiyo.cards c WHERE c.id = d.commander_id),
 				(SELECT p.scryfall_id FROM tamiyo.deck_pending_cards p WHERE p.id = d.commander_pending_id)
 			) AS commander_scryfall_id,
+			` + colorIdentitySQL("d.") + `,
 		    d.added AS added,
 			d.updated as updated,
 		    COUNT(cd.card_id) AS card_count
@@ -260,6 +267,7 @@ func (r *PostgresRepository) FindShared(ctx context.Context, id string) (string,
 				(SELECT c.scryfall_id FROM tamiyo.cards c WHERE c.id = d.commander_id),
 				(SELECT p.scryfall_id FROM tamiyo.deck_pending_cards p WHERE p.id = d.commander_pending_id)
 			) AS commander_scryfall_id,
+			` + colorIdentitySQL("d.") + `,
 		    d.added AS added,
 			d.updated as updated,
 		    COUNT(cd.card_id) AS card_count
@@ -286,7 +294,8 @@ func (r *PostgresRepository) Create(ctx context.Context, userID string, d Deck) 
     	INSERT INTO tamiyo.deck (user_id, name, format, commander_id, background_scryfall_id, visibility, bracket)
      	VALUES (:user_id, :name, :format, :commander_id, :background_scryfall_id, :visibility, :bracket)
       	RETURNING id, name, format, commander_id, commander_pending_id, background_scryfall_id, visibility, bracket, added, updated,
-      	    (SELECT c.scryfall_id FROM tamiyo.cards c WHERE c.id = commander_id) AS commander_scryfall_id
+      	    (SELECT c.scryfall_id FROM tamiyo.cards c WHERE c.id = commander_id) AS commander_scryfall_id,
+      	    ` + colorIdentitySQL("deck.") + `
 	`
 	stmt, err := r.db.PrepareNamedContext(ctx, query)
 	if err != nil {
@@ -318,7 +327,8 @@ func (r *PostgresRepository) Update(ctx context.Context, userID string, d Deck) 
 		    COALESCE(
 		        (SELECT c.scryfall_id FROM tamiyo.cards c WHERE c.id = commander_id),
 		        (SELECT p.scryfall_id FROM tamiyo.deck_pending_cards p WHERE p.id = commander_pending_id)
-		    ) AS commander_scryfall_id
+		    ) AS commander_scryfall_id,
+		    ` + colorIdentitySQL("deck.") + `
 	`
 
 	stmt, err := r.db.PrepareNamedContext(ctx, query)
@@ -416,4 +426,32 @@ func (r *PostgresRepository) UnlinkCardFromDeck(ctx context.Context, userID stri
 	`
 	_, err := r.db.ExecContext(ctx, query, deckID, cardID, userID)
 	return err
+}
+
+func colorIdentitySQL(deck string) string {
+	return fmt.Sprintf(`CASE WHEN %[1]scommander_id IS NOT NULL OR %[1]scommander_pending_id IS NOT NULL THEN COALESCE(
+				(SELECT c.color_identity FROM tamiyo.cards c WHERE c.id = %[1]scommander_id),
+				(SELECT p.color_identity FROM tamiyo.deck_pending_cards p WHERE p.id = %[1]scommander_pending_id),
+				''
+			) END AS commander_color_identity,
+			(
+				SELECT string_agg(coalesce(identities.identity, ''), '') FROM (
+					SELECT c.color_identity AS identity FROM tamiyo.card_deck link JOIN tamiyo.cards c ON c.id = link.card_id
+					WHERE link.deck_id = %[1]sid AND link.board = 'main'
+					UNION ALL
+					SELECT p.color_identity FROM tamiyo.deck_pending_cards p WHERE p.deck_id = %[1]sid AND p.board = 'main'
+				) identities
+			) AS cards_color_identity`, deck)
+}
+
+func (r deckRow) colorIdentity() *string {
+	identity := r.CommanderIdentity
+	if identity == nil {
+		identity = r.CardsIdentity
+	}
+	if identity == nil {
+		return nil
+	}
+	code := scryfall.ColorCode(strings.Split(strings.ToUpper(*identity), ""))
+	return &code
 }

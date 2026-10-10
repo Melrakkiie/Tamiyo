@@ -20,6 +20,7 @@ type Deck struct {
 	CommanderPendingID   *int
 	BackgroundScryfallID *string
 	CommanderScryfallID  *string
+	ColorIdentity        *string
 	Visibility           string
 	Bracket              *int
 	CardCount            int

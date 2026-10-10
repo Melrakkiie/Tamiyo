@@ -30,6 +30,7 @@ type deckResponse struct {
 	CommanderPendingID   *int    `json:"commander_pending_id"`
 	BackgroundScryfallID *string `json:"background_scryfall_id"`
 	CommanderScryfallID  *string `json:"commander_scryfall_id"`
+	ColorIdentity        *string `json:"color_identity"`
 	Visibility           string  `json:"visibility"`
 	Bracket              *int    `json:"bracket"`
 	CardCount            int     `json:"card_count"`
@@ -48,6 +49,7 @@ func toResponse(d Deck) deckResponse {
 		CommanderPendingID:   d.CommanderPendingID,
 		BackgroundScryfallID: d.BackgroundScryfallID,
 		CommanderScryfallID:  d.CommanderScryfallID,
+		ColorIdentity:        d.ColorIdentity,
 		Visibility:           d.Visibility,
 		Bracket:              d.Bracket,
 		CardCount:            d.CardCount,

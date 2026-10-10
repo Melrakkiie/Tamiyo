@@ -4154,6 +4154,16 @@ components:
           nullable: true
           readOnly: true
           description: Scryfall id of the commander card, null without a commander.
+        color_identity:
+          type: string
+          nullable: true
+          readOnly: true
+          example: UBR
+          description: >
+            Colors of the deck in WUBRG order: the commander's color identity
+            when the deck has one, otherwise every color in the color identity
+            of the main board's cards, owned or pending. Empty when colorless,
+            null for a deck without commander nor cards.
         visibility:
           $ref: "#/components/schemas/DeckVisibility"
         bracket:

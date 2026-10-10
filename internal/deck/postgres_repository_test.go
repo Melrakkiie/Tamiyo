@@ -808,6 +808,64 @@ func TestPostgresRepository_ReturnsCommanderScryfallID(t *testing.T) {
 	assert.Nil(t, updated.CommanderScryfallID)
 }
 
+func TestPostgresRepository_ReturnsColorIdentity(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedCardsWithoutStorage(t, db, userID)
+	_, err := db.Exec(`UPDATE tamiyo.cards SET color_identity = CASE id WHEN 1 THEN 'gwu' WHEN 2 THEN 'R' ELSE 'B' END`)
+	require.NoError(t, err)
+
+	commanderID := 1
+	created, err := repo.Create(context.Background(), userID, Deck{Name: "Lotus", Format: "commander", CommanderID: &commanderID})
+	require.NoError(t, err)
+	require.NotNil(t, created.ColorIdentity)
+	assert.Equal(t, "WUG", *created.ColorIdentity)
+
+	require.NoError(t, repo.LinkCardToDeck(context.Background(), userID, created.ID, 2, BoardMain))
+	found, err := repo.FindByID(context.Background(), userID, created.ID)
+	require.NoError(t, err)
+	require.NotNil(t, found.ColorIdentity)
+	assert.Equal(t, "WUG", *found.ColorIdentity)
+
+	pending, err := repo.CreatePendingCard(context.Background(), userID, PendingCard{
+		DeckID: created.ID, Name: "Karn", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "dmu", CollectorNumber: "1", Quantity: 1,
+	})
+	require.NoError(t, err)
+	found.CommanderID = nil
+	found.CommanderPendingID = &pending.ID
+	updated, err := repo.Update(context.Background(), userID, found)
+	require.NoError(t, err)
+	require.NotNil(t, updated.ColorIdentity)
+	assert.Equal(t, "", *updated.ColorIdentity)
+
+	identity := "u"
+	_, err = repo.CreatePendingCard(context.Background(), userID, PendingCard{
+		DeckID: created.ID, Name: "Opt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1e", SetCode: "xln", CollectorNumber: "65", Quantity: 1, ColorIdentity: &identity,
+	})
+	require.NoError(t, err)
+	require.NoError(t, repo.LinkCardToDeck(context.Background(), userID, created.ID, 3, BoardSideboard))
+	updated.CommanderPendingID = nil
+	cleared, err := repo.Update(context.Background(), userID, updated)
+	require.NoError(t, err)
+	require.NotNil(t, cleared.ColorIdentity)
+	assert.Equal(t, "UR", *cleared.ColorIdentity)
+
+	empty, err := repo.Create(context.Background(), userID, Deck{Name: "Vide", Format: "modern"})
+	require.NoError(t, err)
+	assert.Nil(t, empty.ColorIdentity)
+
+	all, _, err := repo.FindAll(context.Background(), userID, Filter{Page: 1, Limit: 25, SortField: "name"})
+	require.NoError(t, err)
+	identities := map[string]*string{}
+	for _, d := range all {
+		identities[d.Name] = d.ColorIdentity
+	}
+	require.NotNil(t, identities["Lotus"])
+	assert.Equal(t, "UR", *identities["Lotus"])
+	assert.Nil(t, identities["Vide"])
+}
+
 func TestPostgresRepository_PendingCards(t *testing.T) {
 	db := getTestDB(t)
 	alice := seedUser(t, db, "alice@example.com")
