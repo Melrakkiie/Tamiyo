@@ -223,7 +223,7 @@ func TestExportDeck_MoxfieldCommanderLineIsWrittenFirst(t *testing.T) {
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	var buf bytes.Buffer
-	err := svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", DeckExportMoxfield, &buf)
+	err := svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: DeckExportMoxfield}, &buf)
 
 	require.NoError(t, err)
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
@@ -245,7 +245,7 @@ func TestExportDeck_MoxfieldCommanderLineIncludesFullQuantityOfThatPrinting(t *t
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	var buf bytes.Buffer
-	require.NoError(t, svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", DeckExportMoxfield, &buf))
+	require.NoError(t, svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: DeckExportMoxfield}, &buf))
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	require.Len(t, lines, 1)
@@ -265,7 +265,7 @@ func TestExportDeck_MoxfieldNoCommanderSortsAlphabeticallyWithNoSpecialFirstLine
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	var buf bytes.Buffer
-	require.NoError(t, svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", DeckExportMoxfield, &buf))
+	require.NoError(t, svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: DeckExportMoxfield}, &buf))
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	require.Len(t, lines, 2)
@@ -283,7 +283,7 @@ func TestExportDeck_MoxfieldFoilSuffix(t *testing.T) {
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	var buf bytes.Buffer
-	require.NoError(t, svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", DeckExportMoxfield, &buf))
+	require.NoError(t, svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: DeckExportMoxfield}, &buf))
 
 	assert.Equal(t, "1 Sol Ring (SLD) 1011 *F*\n", buf.String())
 }
@@ -291,7 +291,7 @@ func TestExportDeck_MoxfieldFoilSuffix(t *testing.T) {
 func TestExportDeck_MoxfieldUnknownDeckReturnsErrDeckNotFound(t *testing.T) {
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
-	err := svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000999", DeckExportMoxfield, &bytes.Buffer{})
+	err := svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000999", DeckExportOptions{Format: DeckExportMoxfield}, &bytes.Buffer{})
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrDeckNotFound)
@@ -304,7 +304,7 @@ func TestExportDeck_MoxfieldPropagatesGetDeckCardsError(t *testing.T) {
 	}
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
-	err := svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", DeckExportMoxfield, &bytes.Buffer{})
+	err := svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: DeckExportMoxfield}, &bytes.Buffer{})
 
 	require.Error(t, err)
 }
@@ -313,7 +313,7 @@ func exportDeckWith(t *testing.T, decks *fakeDeckService, format string) string 
 	t.Helper()
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 	var buf bytes.Buffer
-	require.NoError(t, svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", format, &buf))
+	require.NoError(t, svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: format}, &buf))
 	return buf.String()
 }
 
@@ -379,7 +379,7 @@ func TestExportDeck_APendingCommanderComesFirst(t *testing.T) {
 func TestExportDeck_RejectsAnUnknownFormat(t *testing.T) {
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, mixedDeck(), &fakeResolver{})
 
-	err := svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", "mtgo", &bytes.Buffer{})
+	err := svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: "mtgo"}, &bytes.Buffer{})
 
 	assert.ErrorIs(t, err, ErrUnknownExportFormat)
 }

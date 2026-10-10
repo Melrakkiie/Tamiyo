@@ -87,6 +87,6 @@ func (s *Service) exportDeckAs(ctx context.Context, userID string, deckID string
 	case DeckExportCardmarket:
 		return s.ExportCardmarketDeck(ctx, userID, deckID, opts, w)
 	default:
-		return s.ExportDeck(ctx, userID, deckID, opts.Format, w)
+		return s.ExportDeck(ctx, userID, deckID, opts, w)
 	}
 }

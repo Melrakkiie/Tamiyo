@@ -1364,6 +1364,19 @@ Moxfield tags at the end of a line, each after a `#`, are added to that card's [
 
 A plain list works too, one `<quantity> <name>` per line (`4 Lightning Bolt`, `1x Sol Ring`, `1 Fire // Ice`), and both formats can be mixed. A line without a printing is resolved by name on Scryfall: any printing of that card in the collection can go in the deck, and the copies the collection lacks are added as pending cards in the printing Scryfall returns by default. A split or double-faced card can be written with its full name (` / ` or ` // `) or its front face only. Section headers, with or without a trailing `:` and in any case, are not cards: they choose the [board](#boards) of the lines below them. `Commander`, `Companion`, `Deck` and `Mainboard` mean `main`, `Sideboard` means `sideboard`, `Maybeboard` and `Considering` mean `considering`. Lines before any header go on `main`. Every format from [`GET /deck/:id/export`](#get-deckidexport) can be imported back. `POST /import/list` reads the same format, ignoring the sections and the tags.
 
+### `POST /deck/:id/bulk-edit`
+
+Replace a deck's content with a list: every card on the list ends up in the deck, every card not on it leaves the deck. Same request and line format as [`POST /deck/:id/import`](#post-deckidimport) (the `file` field, a text list; no Tamiyo file, no `commander_from_first_line`). Sending back the [`moxfield`](#get-deckidexport) export with `tags=true` changes nothing.
+
+- Each line is matched against the deck's copies and pending cards on the same [board](#boards): a line with a printing matches that printing and finish, a plain line matches the card by name, any printing (foil only when the line says `*F*`). Lines with a printing are matched first.
+- Copies of the deck that no line matches leave it: owned copies stay in the collection, pending ones are dropped. Removing the commander clears it. Moving a card to another board is a removal plus an addition.
+- What the deck lacks is added as `POST /deck/:id/import` adds it: free owned copies first, pending cards for the rest. Nothing is removed when Scryfall can't resolve the cards to add.
+- Each card on the list gets exactly the tags its lines give (`#tag`, as in the import), no tag clearing its tags.
+
+**Response `200 OK`** — the [import summary](#bulk-import), plus `cards_removed`, the copies that left the deck.
+
+**Errors:** `400` invalid id, missing or unreadable file · `404` deck not found · `502` Scryfall unavailable
+
 ---
 
 ## Bulk Export
@@ -1430,7 +1443,7 @@ Exports **one deck** — not the whole collection — as plain text (`Content-Ty
 | `tamiyo` | A [Tamiyo file](#tamiyo-format) of kind `deck`, served as `application/json`. Add `tags=true` to include the deck's tags. | `Deck_tamiyo.json` |
 | `cardmarket` | A list to paste in a [Cardmarket wants list](https://help.cardmarket.com/en/how-to-add-a-mtg-decklist-to-wants), see below. | `Deck_cardmarket.txt` |
 
-`tags` (`true` or `false`, default `false`) only applies to `tamiyo`. The next three paragraphs are about `moxfield`, `plain` and `arena`.
+`tags` (`true` or `false`, default `false`) applies to `tamiyo`, and to `moxfield`, where each line ends with the card's tags (`1 Sol Ring (sld) 1011 #Ramp`, as the import reads them). The next three paragraphs are about `moxfield`, `plain` and `arena`.
 
 The sideboard follows the deck in a section of its own in every format: `SIDEBOARD:` in `moxfield`, `Sideboard` in `plain` and `arena`. The cards being considered come last, under `MAYBEBOARD:` in `moxfield` and `Maybeboard` in `plain`; `arena` leaves them out. Each section is written only when it has cards, after a blank line.
 

@@ -23,6 +23,7 @@ type Summary struct {
 	CardsSkipped    int      `json:"cards_skipped"`
 	StoragesCreated int      `json:"storages_created"`
 	DecksCreated    int      `json:"decks_created"`
+	CardsRemoved    int      `json:"cards_removed,omitempty"`
 	Warnings        []string `json:"warnings,omitempty"`
 }
 

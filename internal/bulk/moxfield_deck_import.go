@@ -156,7 +156,10 @@ func (s *Service) placeDeckLines(ctx context.Context, userID string, lines []mox
 	if err != nil {
 		return nil, Summary{}, err
 	}
+	return s.placeResolvedLines(ctx, userID, lines, resolved, commanderFromFirstLine, targetDeckID)
+}
 
+func (s *Service) placeResolvedLines(ctx context.Context, userID string, lines []moxfieldDeckLine, resolved map[string]ResolvedCard, commanderFromFirstLine bool, targetDeckID string) ([]deckLinePlacement, Summary, error) {
 	owned, err := s.loadOwnedCopies(ctx, userID, targetDeckID)
 	if err != nil {
 		return nil, Summary{}, err

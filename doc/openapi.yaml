@@ -1798,6 +1798,59 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /deck/{id}/bulk-edit:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    post:
+      tags: [deck-cards]
+      summary: Make a deck match a list
+      description: >
+        Every card on the list ends up in the deck, every card not on it
+        leaves it. Lines are matched against the deck's copies and pending
+        cards on the same board (by printing and finish, or by name for a
+        line without printing); unmatched copies leave the deck (owned ones
+        stay in the collection, a removed commander is cleared), and what
+        the deck lacks is added as POST /deck/{id}/import adds it. Each
+        listed card gets exactly the tags its lines give. Sending back the
+        moxfield export with tags=true changes nothing.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The list, one card per line.
+      responses:
+        "200":
+          description: The deck now matches the list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportSummary"
+        "400":
+          description: id is not a UUID, or the file is missing or can't be parsed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found, or not owned by the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
   /deck/{id}/import:
     parameters:
       - $ref: "#/components/parameters/DeckID"
@@ -2280,7 +2333,7 @@ paths:
         - name: tags
           in: query
           required: false
-          description: With format=tamiyo, include the deck's tags.
+          description: With format=tamiyo or moxfield, include the deck's tags (as "#tag" at the end of each moxfield line).
           schema:
             type: boolean
             default: false
@@ -2979,7 +3032,7 @@ paths:
         - name: tags
           in: query
           required: false
-          description: With format=tamiyo, include the deck's tags.
+          description: With format=tamiyo or moxfield, include the deck's tags (as "#tag" at the end of each moxfield line).
           schema:
             type: boolean
             default: false
@@ -4477,6 +4530,9 @@ components:
           type: integer
         decks_created:
           type: integer
+        cards_removed:
+          type: integer
+          description: Bulk edit only — copies that left the deck. Omitted otherwise.
         warnings:
           type: array
           items:

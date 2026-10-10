@@ -156,6 +156,19 @@ type fakeDeckService struct {
 	owners      map[string]string
 	ownedCopies map[string]int
 	deleted     []string
+
+	unlinkedCards    []int
+	commanderCleared bool
+}
+
+func (f *fakeDeckService) RemoveCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error {
+	f.unlinkedCards = append(f.unlinkedCards, cardID)
+	return nil
+}
+
+func (f *fakeDeckService) ClearCommander(ctx context.Context, userID string, deckID string) error {
+	f.commanderCleared = true
+	return nil
 }
 
 func (f *fakeDeckService) DeleteDeck(ctx context.Context, userID string, id string) error {

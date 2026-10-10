@@ -79,6 +79,14 @@ func (f *fakeImportService) ExportSharedDeck(ctx context.Context, deckID string,
 	return err
 }
 
+func (f *fakeImportService) BulkEditDeck(ctx context.Context, userID string, deckID string, r io.Reader) (Summary, error) {
+	f.lastUserID = userID
+	f.lastDeckID = deckID
+	content, _ := io.ReadAll(r)
+	f.lastFileContent = string(content)
+	return f.summary, f.err
+}
+
 func (f *fakeImportService) DuplicateDeck(ctx context.Context, userID string, deckID string) (DuplicateSummary, error) {
 	f.lastUserID = userID
 	f.lastDeckID = deckID
@@ -193,10 +201,11 @@ func (f *fakeImportService) ExportTamiyoDeck(ctx context.Context, userID string,
 	return err
 }
 
-func (f *fakeImportService) ExportDeck(ctx context.Context, userID string, deckID string, format string, w io.Writer) error {
+func (f *fakeImportService) ExportDeck(ctx context.Context, userID string, deckID string, opts DeckExportOptions, w io.Writer) error {
 	f.lastExportUser = userID
 	f.lastExportDeck = deckID
-	f.lastExportFormat = format
+	f.lastExportFormat = opts.Format
+	f.lastExportOptions = opts
 	if f.exportErr != nil {
 		return f.exportErr
 	}

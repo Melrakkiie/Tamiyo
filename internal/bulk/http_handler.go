@@ -26,7 +26,7 @@ type importService interface {
 
 	ExportManaBox(ctx context.Context, userID string, storageID *int, w io.Writer) error
 	ExportMoxfieldCollection(ctx context.Context, userID string, storageID *int, w io.Writer) error
-	ExportDeck(ctx context.Context, userID string, deckID string, format string, w io.Writer) error
+	ExportDeck(ctx context.Context, userID string, deckID string, opts DeckExportOptions, w io.Writer) error
 	ExportTamiyoCollection(ctx context.Context, userID string, storageID *int, w io.Writer) error
 	ExportTamiyoDeck(ctx context.Context, userID string, deckID string, withTags bool, w io.Writer) error
 	ExportCardmarketDeck(ctx context.Context, userID string, deckID string, opts DeckExportOptions, w io.Writer) error
@@ -35,6 +35,7 @@ type importService interface {
 	RefreshCardDetails(ctx context.Context, userID string, afterID int) (DetailsRefreshSummary, error)
 	CommitPendingCards(ctx context.Context, userID string, deckID string, storageID, pendingID, quantity *int) (PendingCommitSummary, error)
 	DuplicateDeck(ctx context.Context, userID string, deckID string) (DuplicateSummary, error)
+	BulkEditDeck(ctx context.Context, userID string, deckID string, r io.Reader) (Summary, error)
 	CollectDeck(ctx context.Context, userID string, deckID string, req CollectRequest) (Summary, error)
 }
 
@@ -59,6 +60,7 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.POST("/cards/refresh-details", h.refreshCardDetails)
 	router.POST("/deck/:id/pending/commit", h.commitPendingCards)
 	router.POST("/deck/:id/import", h.importIntoDeck)
+	router.POST("/deck/:id/bulk-edit", h.bulkEditDeck)
 	router.GET("/deck/:id/export", h.exportDeck)
 	router.POST("/deck/:id/duplicate", h.duplicateDeck)
 	router.POST("/deck/:id/collect", h.collectDeck)
@@ -334,7 +336,7 @@ func (h *Handler) exportDeck(ctx *gin.Context) {
 		case DeckExportCardmarket:
 			return h.service.ExportCardmarketDeck(ctx.Request.Context(), userID, deckID, opts, w)
 		default:
-			return h.service.ExportDeck(ctx.Request.Context(), userID, deckID, opts.Format, w)
+			return h.service.ExportDeck(ctx.Request.Context(), userID, deckID, opts, w)
 		}
 	})
 }

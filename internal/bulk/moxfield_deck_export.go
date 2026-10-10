@@ -38,7 +38,8 @@ type deckExportBoards struct {
 	considering []deckExportEntry
 }
 
-func (s *Service) ExportDeck(ctx context.Context, userID string, deckID string, format string, w io.Writer) error {
+func (s *Service) ExportDeck(ctx context.Context, userID string, deckID string, opts DeckExportOptions, w io.Writer) error {
+	format := opts.Format
 	if format != DeckExportMoxfield && format != DeckExportPlain && format != DeckExportArena {
 		return ErrUnknownExportFormat
 	}
@@ -62,7 +63,15 @@ func (s *Service) ExportDeck(ctx context.Context, userID string, deckID string, 
 	case DeckExportArena:
 		return writeArenaDeck(w, boards)
 	default:
-		return writeMoxfieldDeck(w, boards)
+		tags := map[string][]string{}
+		if opts.WithTags {
+			deckTags, err := s.decks.GetCardTags(ctx, userID, d.ID)
+			if err != nil {
+				return fmt.Errorf("loading tags: %w", err)
+			}
+			tags = deckTags.ByCardName()
+		}
+		return writeMoxfieldDeck(w, boards, tags)
 	}
 }
 
@@ -166,28 +175,32 @@ func writeSection(w io.Writer, header string, lines []string) error {
 	return nil
 }
 
-func moxfieldLines(entries []deckExportEntry) []string {
+func moxfieldLines(entries []deckExportEntry, tags map[string][]string) []string {
 	lines := make([]string, 0, len(entries))
 	for _, e := range entries {
 		foil := ""
 		if e.key.Foil {
 			foil = " *F*"
 		}
-		lines = append(lines, fmt.Sprintf("%d %s (%s) %s%s", e.quantity, e.key.Name, e.key.SetCode, e.key.CollectorNumber, foil))
+		line := fmt.Sprintf("%d %s (%s) %s%s", e.quantity, e.key.Name, e.key.SetCode, e.key.CollectorNumber, foil)
+		for _, tag := range tags[deck.CardNameKey(e.key.Name)] {
+			line += " #" + tag
+		}
+		lines = append(lines, line)
 	}
 	return lines
 }
 
-func writeMoxfieldDeck(w io.Writer, boards deckExportBoards) error {
-	for _, line := range moxfieldLines(boards.main) {
+func writeMoxfieldDeck(w io.Writer, boards deckExportBoards, tags map[string][]string) error {
+	for _, line := range moxfieldLines(boards.main, tags) {
 		if _, err := fmt.Fprintln(w, line); err != nil {
 			return fmt.Errorf("writing line: %w", err)
 		}
 	}
-	if err := writeSection(w, "SIDEBOARD:", moxfieldLines(boards.sideboard)); err != nil {
+	if err := writeSection(w, "SIDEBOARD:", moxfieldLines(boards.sideboard, tags)); err != nil {
 		return err
 	}
-	return writeSection(w, "MAYBEBOARD:", moxfieldLines(boards.considering))
+	return writeSection(w, "MAYBEBOARD:", moxfieldLines(boards.considering, tags))
 }
 
 type nameCount struct {

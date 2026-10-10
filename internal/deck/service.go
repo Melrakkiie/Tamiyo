@@ -120,3 +120,14 @@ func (s *Service) RemoveCardFromDeck(ctx context.Context, userID string, deckID 
 	}
 	return s.repo.UnlinkCardFromDeck(ctx, userID, deckID, cardID)
 }
+
+func (s *Service) ClearCommander(ctx context.Context, userID string, deckID string) error {
+	d, err := s.repo.FindByID(ctx, userID, deckID)
+	if err != nil {
+		return err
+	}
+	d.CommanderID = nil
+	d.CommanderPendingID = nil
+	_, err = s.repo.Update(ctx, userID, d)
+	return err
+}
