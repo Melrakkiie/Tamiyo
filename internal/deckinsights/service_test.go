@@ -359,8 +359,47 @@ func TestGetDeckStats_BuildsManaCurveSortedByManaValue(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, stats.ManaCurve, 2)
-	assert.Equal(t, ManaCurveBucket{ManaValue: 1, Count: 1}, stats.ManaCurve[0])
-	assert.Equal(t, ManaCurveBucket{ManaValue: 2, Count: 2}, stats.ManaCurve[1])
+	assert.Equal(t, 1, stats.ManaCurve[0].ManaValue)
+	assert.Equal(t, 1, stats.ManaCurve[0].Count)
+	assert.Equal(t, 2, stats.ManaCurve[1].ManaValue)
+	assert.Equal(t, 2, stats.ManaCurve[1].Count)
+}
+
+func TestGetDeckStats_SplitsTheManaCurveIntoPermanentsAndListsItsCards(t *testing.T) {
+	decks := &fakeDeckService{
+		decks: map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Format: "commander"}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {
+				{ID: 10, Name: "Shock", ScryfallID: "shock"},
+				{ID: 11, Name: "Shock", ScryfallID: "shock"},
+				{ID: 12, Name: "Mind Stone", ScryfallID: "stone"},
+				{ID: 13, Name: "Bala Ged Recovery // Bala Ged Sanctuary", ScryfallID: "mdfc"},
+				{ID: 14, Name: "Arcane Signet", ScryfallID: "signet"},
+				{ID: 15, Name: "Forest", ScryfallID: "forest"},
+			},
+		},
+	}
+	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
+		"shock":  {ID: "shock", TypeLine: "Instant", CMC: 2, Colors: []string{"R"}},
+		"stone":  {ID: "stone", TypeLine: "Artifact", CMC: 2},
+		"mdfc":   {ID: "mdfc", TypeLine: "Sorcery // Land", CMC: 3, Colors: []string{"G"}},
+		"signet": {ID: "signet", TypeLine: "Artifact", CMC: 2},
+		"forest": {ID: "forest", TypeLine: "Basic Land — Forest"},
+	}}
+	svc := NewService(decks, fetcher)
+
+	stats, err := svc.GetDeckStats(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
+
+	require.NoError(t, err)
+	require.Len(t, stats.ManaCurve, 2)
+	assert.Equal(t, ManaCurveBucket{ManaValue: 2, Count: 4, Permanents: 2, NonPermanents: 2, Cards: []ManaCurveCard{
+		{Name: "Arcane Signet", ScryfallID: "signet", Quantity: 1, Type: "Artifact"},
+		{Name: "Mind Stone", ScryfallID: "stone", Quantity: 1, Type: "Artifact"},
+		{Name: "Shock", ScryfallID: "shock", Quantity: 2, Type: "Instant"},
+	}}, stats.ManaCurve[0])
+	assert.Equal(t, ManaCurveBucket{ManaValue: 3, Count: 1, NonPermanents: 1, Cards: []ManaCurveCard{
+		{Name: "Bala Ged Recovery // Bala Ged Sanctuary", ScryfallID: "mdfc", Quantity: 1, Type: "Sorcery"},
+	}}, stats.ManaCurve[1])
 }
 
 func TestGetDeckStats_MulticolorCardCountsUnderEachColor(t *testing.T) {

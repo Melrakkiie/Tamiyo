@@ -1048,14 +1048,23 @@ Summarizes the deck's composition: mana curve, color breakdown, and primary card
   "nonland_count": 62,
   "average_mana_value": 2.74,
   "mana_curve": [
-    { "mana_value": 0, "count": 3 },
-    { "mana_value": 1, "count": 12 },
-    { "mana_value": 2, "count": 20 }
+    {
+      "mana_value": 1,
+      "count": 3,
+      "permanents": 1,
+      "non_permanents": 2,
+      "cards": [
+        { "name": "Sol Ring", "scryfall_id": "4cbc6901-6a4a-4d0a-83ea-7eefa3b35021", "quantity": 1, "type": "Artifact" },
+        { "name": "Swords to Plowshares", "scryfall_id": "c07a7fe5-cb8f-4e2b-9fd6-3e3c28bfbc8b", "quantity": 2, "type": "Instant" }
+      ]
+    }
   ],
   "color_breakdown": { "W": 10, "U": 8, "C": 5 },
   "type_breakdown": { "Land": 38, "Creature": 30, "Instant": 12, "Sorcery": 10, "Artifact": 10 }
 }
 ```
+
+Each `mana_curve` bucket splits its `count` into `permanents` and `non_permanents` (instants and sorceries), and lists its `cards` by name with their number of copies and their primary type (as in `type_breakdown`). A double-faced or split card is a permanent unless its front face is an instant or a sorcery.
 
 A multicolor card counts once per color it has in `color_breakdown`; a dual-typed permanent (e.g. "Artifact Creature") counts once under a single primary type in `type_breakdown` — Creature takes precedence over Artifact/Enchantment, matching how most deckbuilding sites categorize it. A double-faced or split card counts under the type of its front face (a creature with a land on its back is a creature).
 

@@ -3426,7 +3426,33 @@ components:
           type: integer
         count:
           type: integer
-      required: [mana_value, count]
+        permanents:
+          type: integer
+          description: Cards of the bucket that are permanents.
+        non_permanents:
+          type: integer
+          description: Instants and sorceries of the bucket.
+        cards:
+          type: array
+          description: The bucket's cards, sorted by name.
+          items:
+            $ref: "#/components/schemas/ManaCurveCard"
+      required: [mana_value, count, permanents, non_permanents, cards]
+
+    ManaCurveCard:
+      type: object
+      properties:
+        name:
+          type: string
+        scryfall_id:
+          type: string
+        quantity:
+          type: integer
+          description: Copies of the card in the bucket.
+        type:
+          type: string
+          description: Primary type of the card, as in type_breakdown.
+      required: [name, scryfall_id, quantity, type]
 
     DeckStats:
       type: object

@@ -19,9 +19,19 @@ type LegalityReport struct {
 	Issues []LegalityIssue `json:"issues,omitempty"`
 }
 
+type ManaCurveCard struct {
+	Name       string `json:"name"`
+	ScryfallID string `json:"scryfall_id"`
+	Quantity   int    `json:"quantity"`
+	Type       string `json:"type"`
+}
+
 type ManaCurveBucket struct {
-	ManaValue int `json:"mana_value"`
-	Count     int `json:"count"`
+	ManaValue     int             `json:"mana_value"`
+	Count         int             `json:"count"`
+	Permanents    int             `json:"permanents"`
+	NonPermanents int             `json:"non_permanents"`
+	Cards         []ManaCurveCard `json:"cards"`
 }
 
 type DeckStats struct {

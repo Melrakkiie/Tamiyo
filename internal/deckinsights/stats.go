@@ -2,6 +2,7 @@ package deckinsights
 
 import (
 	"sort"
+	"strings"
 
 	"Melrakkiie/Tamiyo/internal/deck"
 	"Melrakkiie/Tamiyo/internal/scryfall"
@@ -14,7 +15,8 @@ func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card) 
 		TypeBreakdown:  make(map[string]int),
 	}
 
-	curve := make(map[int]int)
+	curve := make(map[int]*ManaCurveBucket)
+	cardIndex := make(map[int]map[string]int)
 	var totalManaValue float64
 	var nonlandCount int
 
@@ -37,7 +39,7 @@ func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card) 
 
 		nonlandCount++
 		totalManaValue += sc.CMC
-		curve[int(sc.CMC)]++
+		addToCurve(curve, cardIndex, int(sc.CMC), c, t, isPermanent(sc.TypeLine))
 
 		if len(sc.Colors) == 0 {
 			stats.ColorBreakdown["C"]++
@@ -59,8 +61,38 @@ func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card) 
 	}
 	sort.Ints(manaValues)
 	for _, mv := range manaValues {
-		stats.ManaCurve = append(stats.ManaCurve, ManaCurveBucket{ManaValue: mv, Count: curve[mv]})
+		bucket := curve[mv]
+		sort.SliceStable(bucket.Cards, func(i, j int) bool {
+			return strings.ToLower(bucket.Cards[i].Name) < strings.ToLower(bucket.Cards[j].Name)
+		})
+		stats.ManaCurve = append(stats.ManaCurve, *bucket)
 	}
 
 	return stats
+}
+
+func isPermanent(typeLine string) bool {
+	front, _, _ := strings.Cut(typeLine, "//")
+	return !strings.Contains(front, "Instant") && !strings.Contains(front, "Sorcery")
+}
+
+func addToCurve(curve map[int]*ManaCurveBucket, cardIndex map[int]map[string]int, mv int, c deck.DeckCard, cardType string, permanent bool) {
+	bucket, ok := curve[mv]
+	if !ok {
+		bucket = &ManaCurveBucket{ManaValue: mv, Cards: []ManaCurveCard{}}
+		curve[mv] = bucket
+		cardIndex[mv] = make(map[string]int)
+	}
+	bucket.Count++
+	if permanent {
+		bucket.Permanents++
+	} else {
+		bucket.NonPermanents++
+	}
+	if i, ok := cardIndex[mv][c.Name]; ok {
+		bucket.Cards[i].Quantity++
+		return
+	}
+	cardIndex[mv][c.Name] = len(bucket.Cards)
+	bucket.Cards = append(bucket.Cards, ManaCurveCard{Name: c.Name, ScryfallID: c.ScryfallID, Quantity: 1, Type: cardType})
 }
