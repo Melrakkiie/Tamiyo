@@ -26,6 +26,7 @@ import (
 	"Melrakkiie/Tamiyo/internal/deckinsights"
 	"Melrakkiie/Tamiyo/internal/deckshare"
 	"Melrakkiie/Tamiyo/internal/emailchange"
+	"Melrakkiie/Tamiyo/internal/follow"
 	"Melrakkiie/Tamiyo/internal/health"
 	"Melrakkiie/Tamiyo/internal/httplog"
 	"Melrakkiie/Tamiyo/internal/mail"
@@ -128,6 +129,7 @@ func main() {
 	shareService := deckshare.NewService(deckService, userService, insightsService)
 	shareHandler := deckshare.NewHandler(shareService)
 
+	followHandler := follow.NewHandler(follow.NewService(follow.NewPostgresRepository(db)))
 	preferenceHandler := preference.NewHandler(preference.NewService(preference.NewPostgresRepository(db)))
 
 	healthHandler := health.NewHandler(db)
@@ -170,6 +172,7 @@ func main() {
 	userHandler.RegisterProtectedRoutes(protected)
 	emailChangeHandler.RegisterProtectedRoutes(protected)
 	preferenceHandler.RegisterRoutes(protected)
+	followHandler.RegisterRoutes(protected)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.AppPort,

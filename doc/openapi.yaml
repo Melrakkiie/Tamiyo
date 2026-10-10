@@ -1041,6 +1041,106 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /users/{id}/follow:
+    parameters:
+      - $ref: "#/components/parameters/UserID"
+    get:
+      tags: [users]
+      summary: A user's follow counts and how they relate to you
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FollowStatus"
+        "400":
+          $ref: "#/components/responses/FollowBadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/UserNotFound"
+    put:
+      tags: [users]
+      summary: Follow a user
+      description: Idempotent. You cannot follow yourself.
+      responses:
+        "200":
+          description: The follow status after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FollowStatus"
+        "400":
+          $ref: "#/components/responses/FollowBadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/UserNotFound"
+    delete:
+      tags: [users]
+      summary: Stop following a user
+      description: Idempotent.
+      responses:
+        "200":
+          description: The follow status after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FollowStatus"
+        "400":
+          $ref: "#/components/responses/FollowBadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/UserNotFound"
+
+  /users/{id}/followers:
+    get:
+      tags: [users]
+      summary: The users following a user
+      description: Most recent first.
+      parameters:
+        - $ref: "#/components/parameters/UserID"
+        - $ref: "#/components/parameters/ConnectionsPage"
+        - $ref: "#/components/parameters/ConnectionsLimit"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedConnections"
+        "400":
+          $ref: "#/components/responses/FollowBadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/UserNotFound"
+
+  /users/{id}/following:
+    get:
+      tags: [users]
+      summary: The users a user follows
+      description: Most recent first.
+      parameters:
+        - $ref: "#/components/parameters/UserID"
+        - $ref: "#/components/parameters/ConnectionsPage"
+        - $ref: "#/components/parameters/ConnectionsLimit"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedConnections"
+        "400":
+          $ref: "#/components/responses/FollowBadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/UserNotFound"
+
   /deck:
     get:
       tags: [decks]
@@ -2923,8 +3023,37 @@ components:
       schema:
         type: integer
       description: Card ID
+    ConnectionsPage:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    ConnectionsLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 24
 
   responses:
+    FollowBadRequest:
+      description: id is not a UUID, invalid page or limit, or following yourself
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    UserNotFound:
+      description: No such user
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     InvalidID:
       description: id is not a valid integer (a UUID for decks)
       content:
@@ -3309,6 +3438,60 @@ components:
         total_pages:
           type: integer
       required: [data, page, limit, total, total_pages]
+
+    FollowStatus:
+      type: object
+      required: [followers_count, following_count, followed_by_me, follows_me]
+      properties:
+        followers_count:
+          type: integer
+        following_count:
+          type: integer
+        followed_by_me:
+          type: boolean
+          description: The caller follows this user.
+        follows_me:
+          type: boolean
+          description: This user follows the caller.
+
+    Connection:
+      type: object
+      required: [id, display_name, avatar_scryfall_id, since, followed_by_me]
+      properties:
+        id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+          nullable: true
+        avatar_scryfall_id:
+          type: string
+          format: uuid
+          nullable: true
+        since:
+          type: string
+          format: date-time
+          description: When this follow started.
+        followed_by_me:
+          type: boolean
+          description: The caller follows this user.
+
+    PaginatedConnections:
+      type: object
+      required: [data, page, limit, total, total_pages]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Connection"
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
 
     Profile:
       type: object

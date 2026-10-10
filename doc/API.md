@@ -820,6 +820,49 @@ That user's **public** decks (`visibility` = `public`), with the same pagination
 
 ---
 
+## Following
+
+Any signed-in user can follow other users, and see who anyone follows or is followed by. **Requires `Authorization: Bearer <token>`.** `:id` is a user id, as in `GET /users/:id`.
+
+### `GET /users/:id/follow`
+
+That user's follow counts, and how they relate to you.
+
+**Response `200 OK`**
+```json
+{ "followers_count": 12, "following_count": 4, "followed_by_me": true, "follows_me": false }
+```
+
+`followed_by_me`: you follow them. `follows_me`: they follow you.
+
+### `PUT /users/:id/follow`
+
+Follow that user. Following someone you already follow changes nothing. No body. **Response `200 OK`**: the same body as `GET /users/:id/follow`, after the change.
+
+### `DELETE /users/:id/follow`
+
+Stop following that user; not following them already changes nothing. **Response `200 OK`**: the same body as `GET /users/:id/follow`.
+
+### `GET /users/:id/followers` and `GET /users/:id/following`
+
+The users following that user, or followed by them, most recent first, paginated with `page` (default `1`) and `limit` (default `24`, at most `100`).
+
+**Response `200 OK`**
+```json
+{
+  "data": [
+    { "id": "4b8a0a9e-2f1c-4c8e-9d3a-1e2f3a4b5c6d", "display_name": "Tamiyo", "avatar_scryfall_id": null, "since": "2026-10-09T15:33:09Z", "followed_by_me": false }
+  ],
+  "page": 1, "limit": 24, "total": 1, "total_pages": 1
+}
+```
+
+Each entry is a [profile](#get-usersid) plus `since`, when that follow started, and `followed_by_me`, whether you follow that user.
+
+**Errors (all follow routes):** `400` `:id` is not a UUID, invalid `page` / `limit`, or following yourself · `401` missing/invalid token · `404` no such user
+
+---
+
 ## Deck ↔ Card relationship
 
 ### Boards
