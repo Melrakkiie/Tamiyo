@@ -220,10 +220,14 @@ The account's display preferences, saved so they follow the user from one device
 | `card_columns` | int | `6` | Card images per row, `2` to `12`, when `card_display` is `images`. |
 | `show_mana_cost` | bool | `true` | Whether text rows show the mana cost. |
 | `show_card_details` | bool | `true` | Whether card images show the card's details below them (name, printing, storage). |
+| `collection_grouping` | string | `null` | How the collection and the storages group cards: `type`, `color`, `mana`, or `null` for no grouping. `"clear_collection_grouping": true` sets it back to `null`. |
+| `collection_sort` | string | `-added` | How the collection and the storages sort cards, same values as the `sort` of `GET /cards`. |
+
+The display fields (`card_display` to `show_card_details`) are those of the collection and the storages, and of other people's decks; each of your decks keeps its own in its [display settings](#display-settings-deckidview).
 
 `GET` returns them (the defaults until something is saved); `PATCH` changes the fields present in the body and returns them all.
 
-**Errors:** `400` no known field in the body, a field of the wrong type, `card_display` not `text` or `images`, or `card_columns` outside `2..12` · `401` missing/invalid token
+**Errors:** `400` no known field in the body, a field of the wrong type, `card_display` not `text` or `images`, `card_columns` outside `2..12`, or an unknown `collection_grouping` or `collection_sort` · `401` missing/invalid token
 
 ---
 
@@ -1052,10 +1056,10 @@ Tagging changes the deck's `updated` date. Shared decks and the deck comparison 
 
 How the owner last displayed the deck's cards, so the deck page opens the same way next time. It's the owner's own setting: shared decks don't use it. Changing it doesn't change the deck's `updated` date.
 
-- `GET /deck/:id/view` — `{ "grouping": "type", "sort": "mana_value", "collapsed_boards": ["considering"] }`. Those are also the values before anything is saved.
-- `PUT /deck/:id/view` — save them. Body: `grouping` (`type`, `color`, `mana`, `storage`, `tag`, or `null` for no grouping), `sort` (required, same values as the `sort` of `GET /deck/:id/cards`) and `collapsed_boards`, the [boards](#boards) folded on the deck page (`sideboard`, `considering`, or neither; `["considering"]` when left out). Returns the saved settings.
+- `GET /deck/:id/view` — `{ "grouping": "type", "sort": "mana_value", "collapsed_boards": ["considering"], "card_display": "images", "card_columns": 6, "show_mana_cost": true, "show_card_details": true }`. Those are also the values before anything is saved.
+- `PUT /deck/:id/view` — save them. Body: `grouping` (`type`, `color`, `mana`, `storage`, `tag`, or `null` for no grouping), `sort` (required, same values as the `sort` of `GET /deck/:id/cards`), `collapsed_boards`, the [boards](#boards) folded on the deck page (`sideboard`, `considering`, or neither; `["considering"]` when left out), and how the cards are displayed, with the same meaning as in the [preferences](#get-authmepreferences--patch-authmepreferences): `card_display`, `card_columns`, `show_mana_cost`, `show_card_details` (each keeps its saved value when left out). Returns the saved settings.
 
-**Errors:** `400` invalid id, missing `sort`, unknown `grouping` or `sort` · `404` deck not found
+**Errors:** `400` invalid id, missing `sort`, unknown `grouping`, `sort` or `card_display`, `card_columns` outside `2..12` · `404` deck not found
 
 ---
 

@@ -21,10 +21,29 @@ const (
 	MaxCardColumns = 12
 )
 
+const DefaultCollectionSort = "-added"
+
 var (
-	ErrInvalidCardDisplay = errors.New("card_display must be text or images")
-	ErrInvalidCardColumns = errors.New("card_columns must be between 2 and 12")
+	ErrInvalidCardDisplay        = errors.New("card_display must be text or images")
+	ErrInvalidCardColumns        = errors.New("card_columns must be between 2 and 12")
+	ErrInvalidCollectionGrouping = errors.New("collection_grouping must be one of: type, color, mana")
+	ErrInvalidCollectionSort     = errors.New("collection_sort must be one of: name, -name, added, -added, updated, -updated, mana_value, -mana_value, color, -color, type, -type")
 )
+
+var collectionGroupings = map[string]bool{"type": true, "color": true, "mana": true}
+
+var collectionSorts = map[string]bool{
+	"name": true, "-name": true, "added": true, "-added": true, "updated": true, "-updated": true,
+	"mana_value": true, "-mana_value": true, "color": true, "-color": true, "type": true, "-type": true,
+}
+
+func ValidCardDisplay(display string) bool {
+	return display == CardDisplayText || display == CardDisplayImages
+}
+
+func ValidCardColumns(columns int) bool {
+	return columns >= MinCardColumns && columns <= MaxCardColumns
+}
 
 type Preferences struct {
 	ShowCollectionInDecks bool
@@ -32,30 +51,49 @@ type Preferences struct {
 	CardColumns           int
 	ShowManaCost          bool
 	ShowCardDetails       bool
+	CollectionGrouping    *string
+	CollectionSort        string
 }
 
 func Defaults() Preferences {
-	return Preferences{ShowCollectionInDecks: true, CardDisplay: CardDisplayImages, CardColumns: 6, ShowManaCost: true, ShowCardDetails: true}
+	return Preferences{
+		ShowCollectionInDecks: true,
+		CardDisplay:           CardDisplayImages,
+		CardColumns:           6,
+		ShowManaCost:          true,
+		ShowCardDetails:       true,
+		CollectionSort:        DefaultCollectionSort,
+	}
 }
 
 type Changes struct {
-	ShowCollectionInDecks *bool
-	CardDisplay           *string
-	CardColumns           *int
-	ShowManaCost          *bool
-	ShowCardDetails       *bool
+	ShowCollectionInDecks   *bool
+	CardDisplay             *string
+	CardColumns             *int
+	ShowManaCost            *bool
+	ShowCardDetails         *bool
+	CollectionGrouping      *string
+	ClearCollectionGrouping bool
+	CollectionSort          *string
 }
 
 func (c Changes) empty() bool {
-	return c.ShowCollectionInDecks == nil && c.CardDisplay == nil && c.CardColumns == nil && c.ShowManaCost == nil && c.ShowCardDetails == nil
+	return c.ShowCollectionInDecks == nil && c.CardDisplay == nil && c.CardColumns == nil && c.ShowManaCost == nil &&
+		c.ShowCardDetails == nil && c.CollectionGrouping == nil && !c.ClearCollectionGrouping && c.CollectionSort == nil
 }
 
 func (c Changes) validate() error {
-	if c.CardDisplay != nil && *c.CardDisplay != CardDisplayText && *c.CardDisplay != CardDisplayImages {
+	if c.CardDisplay != nil && !ValidCardDisplay(*c.CardDisplay) {
 		return ErrInvalidCardDisplay
 	}
-	if c.CardColumns != nil && (*c.CardColumns < MinCardColumns || *c.CardColumns > MaxCardColumns) {
+	if c.CardColumns != nil && !ValidCardColumns(*c.CardColumns) {
 		return ErrInvalidCardColumns
+	}
+	if c.CollectionGrouping != nil && !collectionGroupings[*c.CollectionGrouping] {
+		return ErrInvalidCollectionGrouping
+	}
+	if c.CollectionSort != nil && !collectionSorts[*c.CollectionSort] {
+		return ErrInvalidCollectionSort
 	}
 	return nil
 }
@@ -75,6 +113,15 @@ func (c Changes) applyTo(p Preferences) Preferences {
 	}
 	if c.ShowCardDetails != nil {
 		p.ShowCardDetails = *c.ShowCardDetails
+	}
+	if c.ClearCollectionGrouping {
+		p.CollectionGrouping = nil
+	} else if c.CollectionGrouping != nil {
+		grouping := *c.CollectionGrouping
+		p.CollectionGrouping = &grouping
+	}
+	if c.CollectionSort != nil {
+		p.CollectionSort = *c.CollectionSort
 	}
 	return p
 }
@@ -129,9 +176,11 @@ func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
 func (r *PostgresRepository) Find(ctx context.Context, userID string) (Preferences, bool, error) {
 	var p Preferences
 	err := r.db.QueryRowContext(ctx, `
-		SELECT show_collection_in_decks, card_display, card_columns, show_mana_cost, show_card_details
+		SELECT show_collection_in_decks, card_display, card_columns, show_mana_cost, show_card_details,
+			collection_grouping, collection_sort
 		FROM tamiyo.user_preferences WHERE user_id = $1
-	`, userID).Scan(&p.ShowCollectionInDecks, &p.CardDisplay, &p.CardColumns, &p.ShowManaCost, &p.ShowCardDetails)
+	`, userID).Scan(&p.ShowCollectionInDecks, &p.CardDisplay, &p.CardColumns, &p.ShowManaCost, &p.ShowCardDetails,
+		&p.CollectionGrouping, &p.CollectionSort)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Preferences{}, false, nil
 	}
@@ -143,15 +192,19 @@ func (r *PostgresRepository) Find(ctx context.Context, userID string) (Preferenc
 
 func (r *PostgresRepository) Save(ctx context.Context, userID string, p Preferences) error {
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO tamiyo.user_preferences (user_id, show_collection_in_decks, card_display, card_columns, show_mana_cost, show_card_details)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO tamiyo.user_preferences (user_id, show_collection_in_decks, card_display, card_columns, show_mana_cost, show_card_details,
+			collection_grouping, collection_sort)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (user_id) DO UPDATE SET
 			show_collection_in_decks = EXCLUDED.show_collection_in_decks,
 			card_display = EXCLUDED.card_display,
 			card_columns = EXCLUDED.card_columns,
 			show_mana_cost = EXCLUDED.show_mana_cost,
-			show_card_details = EXCLUDED.show_card_details
-	`, userID, p.ShowCollectionInDecks, p.CardDisplay, p.CardColumns, p.ShowManaCost, p.ShowCardDetails)
+			show_card_details = EXCLUDED.show_card_details,
+			collection_grouping = EXCLUDED.collection_grouping,
+			collection_sort = EXCLUDED.collection_sort
+	`, userID, p.ShowCollectionInDecks, p.CardDisplay, p.CardColumns, p.ShowManaCost, p.ShowCardDetails,
+		p.CollectionGrouping, p.CollectionSort)
 	return err
 }
 
@@ -174,19 +227,24 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 }
 
 type response struct {
-	ShowCollectionInDecks bool   `json:"show_collection_in_decks"`
-	CardDisplay           string `json:"card_display"`
-	CardColumns           int    `json:"card_columns"`
-	ShowManaCost          bool   `json:"show_mana_cost"`
-	ShowCardDetails       bool   `json:"show_card_details"`
+	ShowCollectionInDecks bool    `json:"show_collection_in_decks"`
+	CardDisplay           string  `json:"card_display"`
+	CardColumns           int     `json:"card_columns"`
+	ShowManaCost          bool    `json:"show_mana_cost"`
+	ShowCardDetails       bool    `json:"show_card_details"`
+	CollectionGrouping    *string `json:"collection_grouping"`
+	CollectionSort        string  `json:"collection_sort"`
 }
 
 type updateRequest struct {
-	ShowCollectionInDecks *bool   `json:"show_collection_in_decks"`
-	CardDisplay           *string `json:"card_display"`
-	CardColumns           *int    `json:"card_columns"`
-	ShowManaCost          *bool   `json:"show_mana_cost"`
-	ShowCardDetails       *bool   `json:"show_card_details"`
+	ShowCollectionInDecks   *bool   `json:"show_collection_in_decks"`
+	CardDisplay             *string `json:"card_display"`
+	CardColumns             *int    `json:"card_columns"`
+	ShowManaCost            *bool   `json:"show_mana_cost"`
+	ShowCardDetails         *bool   `json:"show_card_details"`
+	CollectionGrouping      *string `json:"collection_grouping"`
+	ClearCollectionGrouping bool    `json:"clear_collection_grouping"`
+	CollectionSort          *string `json:"collection_sort"`
 }
 
 func (h *Handler) get(ctx *gin.Context) {
@@ -223,6 +281,8 @@ func (h *Handler) update(ctx *gin.Context) {
 		apierr.Respond(ctx, err,
 			apierr.Mapping{Err: ErrInvalidCardDisplay, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrInvalidCardColumns, Status: http.StatusBadRequest},
+			apierr.Mapping{Err: ErrInvalidCollectionGrouping, Status: http.StatusBadRequest},
+			apierr.Mapping{Err: ErrInvalidCollectionSort, Status: http.StatusBadRequest},
 		)
 		return
 	}

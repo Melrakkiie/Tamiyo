@@ -3575,7 +3575,17 @@ components:
           type: boolean
           default: true
           description: Whether card images show the card's details below them (name, printing, storage).
-      required: [show_collection_in_decks, card_display, card_columns, show_mana_cost, show_card_details]
+        collection_grouping:
+          type: string
+          nullable: true
+          enum: [type, color, mana]
+          description: How the collection and the storages group cards; null for no grouping.
+        collection_sort:
+          type: string
+          enum: [name, -name, added, -added, updated, -updated, mana_value, -mana_value, color, -color, type, -type]
+          default: -added
+          description: How the collection and the storages sort cards.
+      required: [show_collection_in_decks, card_display, card_columns, show_mana_cost, show_card_details, collection_grouping, collection_sort]
 
     PreferencesChanges:
       type: object
@@ -3594,6 +3604,15 @@ components:
           type: boolean
         show_card_details:
           type: boolean
+        collection_grouping:
+          type: string
+          enum: [type, color, mana]
+        clear_collection_grouping:
+          type: boolean
+          description: Set collection_grouping back to null (no grouping).
+        collection_sort:
+          type: string
+          enum: [name, -name, added, -added, updated, -updated, mana_value, -mana_value, color, -color, type, -type]
 
     DeckOwnership:
       type: object
@@ -4781,6 +4800,18 @@ components:
           items:
             type: string
             enum: [sideboard, considering]
+        card_display:
+          type: string
+          enum: [text, images]
+          description: How the deck's cards are shown. Optional when saving, where leaving it out keeps the saved value (as for the next three).
+        card_columns:
+          type: integer
+          minimum: 2
+          maximum: 12
+        show_mana_cost:
+          type: boolean
+        show_card_details:
+          type: boolean
       required: [grouping, sort]
 
     TaggedCard:

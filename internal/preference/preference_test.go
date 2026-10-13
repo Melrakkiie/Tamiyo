@@ -42,7 +42,7 @@ func TestService_DefaultsBeforeAnythingIsSaved(t *testing.T) {
 	p, err := NewService(&fakeRepository{}).Get(context.Background(), testUserID)
 
 	require.NoError(t, err)
-	assert.Equal(t, Preferences{ShowCollectionInDecks: true, CardDisplay: "images", CardColumns: 6, ShowManaCost: true, ShowCardDetails: true}, p)
+	assert.Equal(t, Preferences{ShowCollectionInDecks: true, CardDisplay: "images", CardColumns: 6, ShowManaCost: true, ShowCardDetails: true, CollectionSort: "-added"}, p)
 }
 
 func TestService_UpdateOnlyChangesWhatIsGiven(t *testing.T) {
@@ -69,7 +69,7 @@ func TestService_ValidatesCardDisplay(t *testing.T) {
 
 	updated, err := svc.Update(context.Background(), testUserID, Changes{CardDisplay: &text, CardColumns: &columns, ShowManaCost: &off})
 	require.NoError(t, err)
-	assert.Equal(t, Preferences{ShowCollectionInDecks: true, CardDisplay: "text", CardColumns: 9, ShowManaCost: false, ShowCardDetails: true}, updated)
+	assert.Equal(t, Preferences{ShowCollectionInDecks: true, CardDisplay: "text", CardColumns: 9, ShowManaCost: false, ShowCardDetails: true, CollectionSort: "-added"}, updated)
 
 	_, err = svc.Update(context.Background(), testUserID, Changes{CardDisplay: &unknown})
 	assert.ErrorIs(t, err, ErrInvalidCardDisplay)
@@ -78,6 +78,27 @@ func TestService_ValidatesCardDisplay(t *testing.T) {
 	_, err = svc.Update(context.Background(), testUserID, Changes{CardColumns: &tooFew})
 	assert.ErrorIs(t, err, ErrInvalidCardColumns)
 	assert.Equal(t, 1, repo.saved)
+}
+
+func TestService_SavesTheCollectionGroupingAndSort(t *testing.T) {
+	repo := &fakeRepository{}
+	svc := NewService(repo)
+	color, sort, unknown := "color", "-mana_value", "rarity"
+
+	updated, err := svc.Update(context.Background(), testUserID, Changes{CollectionGrouping: &color, CollectionSort: &sort})
+	require.NoError(t, err)
+	assert.Equal(t, &color, updated.CollectionGrouping)
+	assert.Equal(t, "-mana_value", updated.CollectionSort)
+
+	updated, err = svc.Update(context.Background(), testUserID, Changes{ClearCollectionGrouping: true})
+	require.NoError(t, err)
+	assert.Nil(t, updated.CollectionGrouping)
+	assert.Equal(t, "-mana_value", updated.CollectionSort)
+
+	_, err = svc.Update(context.Background(), testUserID, Changes{CollectionGrouping: &unknown})
+	assert.ErrorIs(t, err, ErrInvalidCollectionGrouping)
+	_, err = svc.Update(context.Background(), testUserID, Changes{CollectionSort: &unknown})
+	assert.ErrorIs(t, err, ErrInvalidCollectionSort)
 }
 
 func TestService_PropagatesErrors(t *testing.T) {
@@ -109,22 +130,22 @@ func TestHandler_GetAndUpdate(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/auth/me/preferences", nil))
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.JSONEq(t, `{"show_collection_in_decks":true,"card_display":"images","card_columns":6,"show_mana_cost":true,"show_card_details":true}`, w.Body.String())
+	assert.JSONEq(t, `{"show_collection_in_decks":true,"card_display":"images","card_columns":6,"show_mana_cost":true,"show_card_details":true,"collection_grouping":null,"collection_sort":"-added"}`, w.Body.String())
 
 	req := httptest.NewRequest(http.MethodPatch, "/auth/me/preferences", bytes.NewBufferString(`{"show_collection_in_decks":false}`))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.JSONEq(t, `{"show_collection_in_decks":false,"card_display":"images","card_columns":6,"show_mana_cost":true,"show_card_details":true}`, w.Body.String())
+	assert.JSONEq(t, `{"show_collection_in_decks":false,"card_display":"images","card_columns":6,"show_mana_cost":true,"show_card_details":true,"collection_grouping":null,"collection_sort":"-added"}`, w.Body.String())
 	assert.False(t, repo.stored[testUserID].ShowCollectionInDecks)
 
-	req = httptest.NewRequest(http.MethodPatch, "/auth/me/preferences", bytes.NewBufferString(`{"card_display":"text","card_columns":4,"show_mana_cost":false,"show_card_details":false}`))
+	req = httptest.NewRequest(http.MethodPatch, "/auth/me/preferences", bytes.NewBufferString(`{"card_display":"text","card_columns":4,"show_mana_cost":false,"show_card_details":false,"collection_grouping":null,"collection_sort":"-added"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.JSONEq(t, `{"show_collection_in_decks":false,"card_display":"text","card_columns":4,"show_mana_cost":false,"show_card_details":false}`, w.Body.String())
+	assert.JSONEq(t, `{"show_collection_in_decks":false,"card_display":"text","card_columns":4,"show_mana_cost":false,"show_card_details":false,"collection_grouping":null,"collection_sort":"-added"}`, w.Body.String())
 }
 
 func TestHandler_Errors(t *testing.T) {
@@ -132,7 +153,7 @@ func TestHandler_Errors(t *testing.T) {
 	router(&fakeRepository{}, "").ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/auth/me/preferences", nil))
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 
-	for _, body := range []string{`{}`, `{"show_collection_in_decks":"yes"}`, `nope`, `{"card_display":"grid"}`, `{"card_columns":13}`} {
+	for _, body := range []string{`{}`, `{"show_collection_in_decks":"yes"}`, `nope`, `{"card_display":"grid"}`, `{"card_columns":13}`, `{"collection_sort":"rarity"}`, `{"collection_grouping":"storage"}`} {
 		req := httptest.NewRequest(http.MethodPatch, "/auth/me/preferences", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()

@@ -1235,14 +1235,22 @@ func TestPostgresRepository_View(t *testing.T) {
 	assert.False(t, found)
 
 	grouping := "tag"
-	require.NoError(t, repo.SaveView(ctx, userID, d.ID, View{Grouping: &grouping, Sort: "-name", CollapsedBoards: []string{"considering"}}))
-	require.NoError(t, repo.SaveView(ctx, userID, d.ID, View{Sort: "name", CollapsedBoards: []string{"sideboard", "considering"}}))
+	require.NoError(t, repo.SaveView(ctx, userID, d.ID, displayed(View{Grouping: &grouping, Sort: "-name", CollapsedBoards: []string{"considering"}})))
+	require.NoError(t, repo.SaveView(ctx, userID, d.ID, displayed(View{Sort: "name", CollapsedBoards: []string{"sideboard", "considering"}})))
 	v, found, err := repo.FindView(ctx, userID, d.ID)
 	require.NoError(t, err)
 	assert.True(t, found)
-	assert.Equal(t, View{Sort: "name", CollapsedBoards: []string{"sideboard", "considering"}}, v)
+	assert.Equal(t, displayed(View{Sort: "name", CollapsedBoards: []string{"sideboard", "considering"}}), v)
 
-	require.NoError(t, repo.SaveView(ctx, userID, d.ID, View{Sort: "name", CollapsedBoards: []string{}}))
+	text := View{Sort: "name", CollapsedBoards: []string{}, CardDisplay: "text", CardColumns: 12}
+	require.NoError(t, repo.SaveView(ctx, userID, d.ID, text))
+	v, _, err = repo.FindView(ctx, userID, d.ID)
+	require.NoError(t, err)
+	assert.Equal(t, text, v)
+	text.CardColumns = 20
+	assert.Error(t, repo.SaveView(ctx, userID, d.ID, text))
+
+	require.NoError(t, repo.SaveView(ctx, userID, d.ID, displayed(View{Sort: "name", CollapsedBoards: []string{}})))
 	v, _, err = repo.FindView(ctx, userID, d.ID)
 	require.NoError(t, err)
 	assert.Empty(t, v.CollapsedBoards)
@@ -1251,7 +1259,7 @@ func TestPostgresRepository_View(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, before.Updated, after.Updated)
 
-	assert.ErrorIs(t, repo.SaveView(ctx, otherID, d.ID, View{Sort: "name", CollapsedBoards: []string{}}), ErrNotFound)
+	assert.ErrorIs(t, repo.SaveView(ctx, otherID, d.ID, displayed(View{Sort: "name", CollapsedBoards: []string{}})), ErrNotFound)
 	_, found, err = repo.FindView(ctx, otherID, d.ID)
 	require.NoError(t, err)
 	assert.False(t, found)

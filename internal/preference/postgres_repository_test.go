@@ -100,17 +100,17 @@ func TestPostgresRepository_Preferences(t *testing.T) {
 	assert.False(t, found)
 
 	require.NoError(t, repo.Save(ctx, alice, Defaults()))
-	require.NoError(t, repo.Save(ctx, alice, Preferences{ShowCollectionInDecks: true, CardDisplay: CardDisplayText, CardColumns: 12, ShowManaCost: false, ShowCardDetails: false}))
-	require.NoError(t, repo.Save(ctx, bob, Preferences{ShowCollectionInDecks: false, CardDisplay: CardDisplayImages, CardColumns: 2, ShowManaCost: true, ShowCardDetails: true}))
+	require.NoError(t, repo.Save(ctx, alice, Preferences{ShowCollectionInDecks: true, CardDisplay: CardDisplayText, CardColumns: 12, ShowManaCost: false, ShowCardDetails: false, CollectionGrouping: strPtr("mana"), CollectionSort: "name"}))
+	require.NoError(t, repo.Save(ctx, bob, Preferences{ShowCollectionInDecks: false, CardDisplay: CardDisplayImages, CardColumns: 2, ShowManaCost: true, ShowCardDetails: true, CollectionSort: "-added"}))
 	assert.Error(t, repo.Save(ctx, bob, Preferences{CardDisplay: "grid", CardColumns: 6}))
 
 	p, found, err := repo.Find(ctx, alice)
 	require.NoError(t, err)
 	assert.True(t, found)
-	assert.Equal(t, Preferences{ShowCollectionInDecks: true, CardDisplay: CardDisplayText, CardColumns: 12, ShowManaCost: false, ShowCardDetails: false}, p)
+	assert.Equal(t, Preferences{ShowCollectionInDecks: true, CardDisplay: CardDisplayText, CardColumns: 12, ShowManaCost: false, ShowCardDetails: false, CollectionGrouping: strPtr("mana"), CollectionSort: "name"}, p)
 	p, _, err = repo.Find(ctx, bob)
 	require.NoError(t, err)
-	assert.Equal(t, Preferences{ShowCollectionInDecks: false, CardDisplay: CardDisplayImages, CardColumns: 2, ShowManaCost: true, ShowCardDetails: true}, p)
+	assert.Equal(t, Preferences{ShowCollectionInDecks: false, CardDisplay: CardDisplayImages, CardColumns: 2, ShowManaCost: true, ShowCardDetails: true, CollectionSort: "-added"}, p)
 
 	_, err = db.Exec(`DELETE FROM tamiyo.users WHERE id = $1`, bob)
 	require.NoError(t, err)
@@ -118,3 +118,5 @@ func TestPostgresRepository_Preferences(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, found)
 }
+
+func strPtr(s string) *string { return &s }

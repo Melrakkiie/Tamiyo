@@ -13,9 +13,13 @@ func (r *PostgresRepository) FindView(ctx context.Context, userID string, deckID
 		Grouping        *string        `db:"grouping"`
 		Sort            string         `db:"sort"`
 		CollapsedBoards pq.StringArray `db:"collapsed_boards"`
+		CardDisplay     string         `db:"card_display"`
+		CardColumns     int            `db:"card_columns"`
+		ShowManaCost    bool           `db:"show_mana_cost"`
+		ShowCardDetails bool           `db:"show_card_details"`
 	}
 	query := `
-		SELECT v.grouping, v.sort, v.collapsed_boards
+		SELECT v.grouping, v.sort, v.collapsed_boards, v.card_display, v.card_columns, v.show_mana_cost, v.show_card_details
 		FROM tamiyo.deck_view_settings v
 		JOIN tamiyo.deck d ON d.id = v.deck_id
 		WHERE d.user_id = $1 AND v.deck_id = $2
@@ -26,15 +30,30 @@ func (r *PostgresRepository) FindView(ctx context.Context, userID string, deckID
 		}
 		return View{}, false, err
 	}
-	return View{Grouping: row.Grouping, Sort: row.Sort, CollapsedBoards: []string(row.CollapsedBoards)}, true, nil
+	return View{
+		Grouping:        row.Grouping,
+		Sort:            row.Sort,
+		CollapsedBoards: []string(row.CollapsedBoards),
+		CardDisplay:     row.CardDisplay,
+		CardColumns:     row.CardColumns,
+		ShowManaCost:    row.ShowManaCost,
+		ShowCardDetails: row.ShowCardDetails,
+	}, true, nil
 }
 
 func (r *PostgresRepository) SaveView(ctx context.Context, userID string, deckID string, v View) error {
 	result, err := r.db.ExecContext(ctx, `
-		INSERT INTO tamiyo.deck_view_settings (deck_id, grouping, sort, collapsed_boards)
-		SELECT d.id, $3, $4, $5 FROM tamiyo.deck d WHERE d.id = $2 AND d.user_id = $1
-		ON CONFLICT (deck_id) DO UPDATE SET grouping = EXCLUDED.grouping, sort = EXCLUDED.sort, collapsed_boards = EXCLUDED.collapsed_boards
-	`, userID, deckID, v.Grouping, v.Sort, pq.Array(v.CollapsedBoards))
+		INSERT INTO tamiyo.deck_view_settings (deck_id, grouping, sort, collapsed_boards, card_display, card_columns, show_mana_cost, show_card_details)
+		SELECT d.id, $3, $4, $5, $6, $7, $8, $9 FROM tamiyo.deck d WHERE d.id = $2 AND d.user_id = $1
+		ON CONFLICT (deck_id) DO UPDATE SET
+			grouping = EXCLUDED.grouping,
+			sort = EXCLUDED.sort,
+			collapsed_boards = EXCLUDED.collapsed_boards,
+			card_display = EXCLUDED.card_display,
+			card_columns = EXCLUDED.card_columns,
+			show_mana_cost = EXCLUDED.show_mana_cost,
+			show_card_details = EXCLUDED.show_card_details
+	`, userID, deckID, v.Grouping, v.Sort, pq.Array(v.CollapsedBoards), v.CardDisplay, v.CardColumns, v.ShowManaCost, v.ShowCardDetails)
 	if err != nil {
 		return err
 	}

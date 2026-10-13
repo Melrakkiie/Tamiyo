@@ -3,12 +3,16 @@ package deck
 import (
 	"context"
 	"errors"
+
+	"Melrakkiie/Tamiyo/internal/preference"
 )
 
 var (
 	ErrInvalidViewGrouping = errors.New("grouping must be one of: type, color, mana, storage, tag, or null")
 	ErrInvalidViewSort     = errors.New("sort must be one of: name, -name, added, -added, updated, -updated, mana_value, -mana_value")
 	ErrInvalidViewBoards   = errors.New("collapsed_boards may only contain sideboard and considering")
+	ErrInvalidViewDisplay  = errors.New("card_display must be text or images")
+	ErrInvalidViewColumns  = errors.New("card_columns must be between 2 and 12")
 )
 
 const defaultViewSort = "mana_value"
@@ -30,6 +34,10 @@ type View struct {
 	Grouping        *string
 	Sort            string
 	CollapsedBoards []string
+	CardDisplay     string
+	CardColumns     int
+	ShowManaCost    bool
+	ShowCardDetails bool
 }
 
 type ViewRepository interface {
@@ -39,7 +47,16 @@ type ViewRepository interface {
 
 func DefaultView() View {
 	grouping := defaultViewGrouping
-	return View{Grouping: &grouping, Sort: defaultViewSort, CollapsedBoards: defaultCollapsedBoards()}
+	display := preference.Defaults()
+	return View{
+		Grouping:        &grouping,
+		Sort:            defaultViewSort,
+		CollapsedBoards: defaultCollapsedBoards(),
+		CardDisplay:     display.CardDisplay,
+		CardColumns:     display.CardColumns,
+		ShowManaCost:    display.ShowManaCost,
+		ShowCardDetails: display.ShowCardDetails,
+	}
 }
 
 func defaultCollapsedBoards() []string {
@@ -86,6 +103,12 @@ func (s *Service) SetView(ctx context.Context, userID string, deckID string, v V
 	}
 	if !viewSorts[v.Sort] {
 		return View{}, ErrInvalidViewSort
+	}
+	if !preference.ValidCardDisplay(v.CardDisplay) {
+		return View{}, ErrInvalidViewDisplay
+	}
+	if !preference.ValidCardColumns(v.CardColumns) {
+		return View{}, ErrInvalidViewColumns
 	}
 	boards, err := normalizeCollapsedBoards(v.CollapsedBoards)
 	if err != nil {
