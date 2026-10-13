@@ -549,7 +549,7 @@ A **storage** represents a physical place where cards live — a binder, a deckb
 A storage can be **locked** so that decks stop drawing from it, like a collection binder or a trade box. A locked storage stays open to the decks in its `allowed_deck_ids`, and with none listed it is closed to every deck. A card is **open to a deck** when it is in no storage, in an unlocked storage, or in a locked storage that allows that deck. For a deck, cards closed to it:
 
 - don't count in the `owned_copies` and `owned_same_printing` of its [pending cards](#pending-cards-deckidpending);
-- are never put in it by [`POST /deck/:id/import`](#post-deckidimport), [`POST /deck/:id/bulk-edit`](#post-deckidbulk-edit), [`POST /deck/:id/switch-foil`](#post-deckidswitch-foil) or [`POST /deck/:id/duplicate`](#post-deckidduplicate) (a duplicated deck is a new deck that no storage allows yet), unless the import is sent with `include_locked_storages=true`;
+- are never put in it by [`POST /deck/:id/import`](#post-deckidimport), [`POST /deck/:id/bulk-edit`](#post-deckidbulk-edit), [`POST /deck/:id/switch-foil`](#post-deckidswitch-foil), [`POST /deck/:id/split-printings`](#post-deckidsplit-printings) or [`POST /deck/:id/duplicate`](#post-deckidduplicate) (a duplicated deck is a new deck that no storage allows yet), unless the import is sent with `include_locked_storages=true`;
 - are left out of `GET /cards?open_to_deck=<deck id>`.
 
 Locking only hides: a card of a locked storage can still be put in any deck explicitly, and the cards already in a deck stay there. While a storage is unlocked, its `allowed_deck_ids` are kept but ignored. Deleting a deck removes it from every `allowed_deck_ids`.
@@ -1491,6 +1491,25 @@ Each listed copy or pending card that isn't already in that finish leaves the de
 **Response `200 OK`** — the [import summary](#bulk-import): `cards_linked` copies found in the collection, `cards_pending` copies left pending, `cards_removed` copies that left the deck. Cards already in that finish are ignored.
 
 **Errors:** `400` invalid id, `foil` missing, no id at all, or an id that isn't an owned copy or a pending card of this deck · `404` deck not found
+
+### `POST /deck/:id/split-printings`
+
+Give each copy of a card in a deck its own printing and finish, without touching the collection. Body:
+
+```json
+{ "card_ids": [12, 13], "pending_ids": [4],
+  "printings": [{ "scryfall_id": "…", "set_code": "tdm", "collector_number": "279", "foil": false }, …] }
+```
+
+`card_ids` are the deck's owned copies, `pending_ids` its [pending cards](#pending-cards-deckidpending); either can be left out, not both. They must all be the same card on the same [board](#boards), not the commander, and `printings` lists one entry per copy: one per owned copy plus the quantity of each pending card.
+
+- Each wanted printing and finish first keeps a copy that already has it (an owned copy, then a pending one): those stay as they are.
+- The copies left over leave the deck: an owned copy stays in the collection, as it is; a pending card loses those copies (and goes away at 0).
+- The remaining printings are added as [`switch-foil`](#post-deckidswitch-foil) adds them, on the same board: your copies of that printing and finish in no deck first, then ones another deck uses, and pending cards for whatever you don't own. Copies in a [storage locked](#storage) against the deck are never used.
+
+**Response `200 OK`** — the [import summary](#bulk-import): `cards_linked` copies found in the collection, `cards_pending` copies left pending, `cards_removed` copies that left the deck. Asking for the printings the copies already have changes nothing.
+
+**Errors:** `400` invalid id, no id at all, no printing or one without `scryfall_id`, an id that isn't an owned copy or a pending card of this deck, copies of several cards or boards, the commander among them, or not one printing per copy · `404` deck not found
 
 ---
 

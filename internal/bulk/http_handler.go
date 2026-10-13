@@ -37,6 +37,7 @@ type importService interface {
 	DuplicateDeck(ctx context.Context, userID string, deckID string) (DuplicateSummary, error)
 	BulkEditDeck(ctx context.Context, userID string, deckID string, r io.Reader) (Summary, error)
 	SwitchFoil(ctx context.Context, userID string, deckID string, req FoilSwitch) (Summary, error)
+	SplitPrintings(ctx context.Context, userID string, deckID string, req PrintingSplit) (Summary, error)
 	CollectDeck(ctx context.Context, userID string, deckID string, req CollectRequest) (Summary, error)
 }
 
@@ -63,6 +64,7 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.POST("/deck/:id/import", h.importIntoDeck)
 	router.POST("/deck/:id/bulk-edit", h.bulkEditDeck)
 	router.POST("/deck/:id/switch-foil", h.switchFoil)
+	router.POST("/deck/:id/split-printings", h.splitPrintings)
 	router.GET("/deck/:id/export", h.exportDeck)
 	router.POST("/deck/:id/duplicate", h.duplicateDeck)
 	router.POST("/deck/:id/collect", h.collectDeck)

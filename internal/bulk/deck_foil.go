@@ -110,7 +110,35 @@ func (s *Service) SwitchFoil(ctx context.Context, userID string, deckID string, 
 }
 
 func (s *Service) copiesToSwitch(ctx context.Context, userID string, deckID string, req FoilSwitch) ([]deck.DeckCard, error) {
-	if len(req.CardIDs) == 0 {
+	copies, err := s.deckCopies(ctx, userID, deckID, req.CardIDs)
+	if err != nil {
+		return nil, err
+	}
+	var toSwitch []deck.DeckCard
+	for _, c := range copies {
+		if c.Foil != req.Foil {
+			toSwitch = append(toSwitch, c)
+		}
+	}
+	return toSwitch, nil
+}
+
+func (s *Service) pendingToSwitch(ctx context.Context, userID string, deckID string, req FoilSwitch) ([]deck.PendingCard, error) {
+	pending, err := s.deckPending(ctx, userID, deckID, req.PendingIDs)
+	if err != nil {
+		return nil, err
+	}
+	var toSwitch []deck.PendingCard
+	for _, p := range pending {
+		if p.Foil != req.Foil {
+			toSwitch = append(toSwitch, p)
+		}
+	}
+	return toSwitch, nil
+}
+
+func (s *Service) deckCopies(ctx context.Context, userID string, deckID string, ids []int) ([]deck.DeckCard, error) {
+	if len(ids) == 0 {
 		return nil, nil
 	}
 	deckCards, err := s.decks.GetDeckCards(ctx, userID, deckID, "updated", true)
@@ -121,14 +149,14 @@ func (s *Service) copiesToSwitch(ctx context.Context, userID string, deckID stri
 	for _, c := range deckCards {
 		byID[c.ID] = c
 	}
-	seen := make(map[int]bool, len(req.CardIDs))
+	seen := make(map[int]bool, len(ids))
 	var copies []deck.DeckCard
-	for _, id := range req.CardIDs {
+	for _, id := range ids {
 		c, ok := byID[id]
 		if !ok {
 			return nil, ErrCardsNotInDeck
 		}
-		if !seen[id] && c.Foil != req.Foil {
+		if !seen[id] {
 			copies = append(copies, c)
 		}
 		seen[id] = true
@@ -136,8 +164,8 @@ func (s *Service) copiesToSwitch(ctx context.Context, userID string, deckID stri
 	return copies, nil
 }
 
-func (s *Service) pendingToSwitch(ctx context.Context, userID string, deckID string, req FoilSwitch) ([]deck.PendingCard, error) {
-	if len(req.PendingIDs) == 0 {
+func (s *Service) deckPending(ctx context.Context, userID string, deckID string, ids []int) ([]deck.PendingCard, error) {
+	if len(ids) == 0 {
 		return nil, nil
 	}
 	items, err := s.decks.GetPendingCards(ctx, userID, deckID)
@@ -148,14 +176,14 @@ func (s *Service) pendingToSwitch(ctx context.Context, userID string, deckID str
 	for _, p := range items {
 		byID[p.ID] = p
 	}
-	seen := make(map[int]bool, len(req.PendingIDs))
+	seen := make(map[int]bool, len(ids))
 	var pending []deck.PendingCard
-	for _, id := range req.PendingIDs {
+	for _, id := range ids {
 		p, ok := byID[id]
 		if !ok {
 			return nil, ErrCardsNotInDeck
 		}
-		if !seen[id] && p.Foil != req.Foil {
+		if !seen[id] {
 			pending = append(pending, p)
 		}
 		seen[id] = true

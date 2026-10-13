@@ -22,6 +22,7 @@ type fakeImportService struct {
 	err     error
 
 	lastFoilSwitch FoilSwitch
+	lastSplit      PrintingSplit
 
 	lastUserID            string
 	lastMoxfieldStorageID int
@@ -87,6 +88,13 @@ func (f *fakeImportService) BulkEditDeck(ctx context.Context, userID string, dec
 	f.lastDeckID = deckID
 	content, _ := io.ReadAll(r)
 	f.lastFileContent = string(content)
+	return f.summary, f.err
+}
+
+func (f *fakeImportService) SplitPrintings(ctx context.Context, userID string, deckID string, req PrintingSplit) (Summary, error) {
+	f.lastUserID = userID
+	f.lastDeckID = deckID
+	f.lastSplit = req
 	return f.summary, f.err
 }
 

@@ -2139,6 +2139,80 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+
+  /deck/{id}/split-printings:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    post:
+      tags: [deck-cards]
+      summary: Give each copy of a card in a deck its own printing and finish
+      description: >
+        The listed owned copies and pending cards, all the same card on the
+        same board and not the commander, get one printing each. Copies that
+        already have a wanted printing and finish stay; the others leave the
+        deck (an owned copy stays in the collection as it is, a pending card
+        loses those copies) and the remaining printings are added on the same
+        board: owned copies in no deck first, then ones another deck uses
+        (never from a storage locked against the deck), and pending cards for
+        the rest. The collection itself is never modified.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [printings]
+              properties:
+                card_ids:
+                  type: array
+                  items:
+                    type: integer
+                  description: Ids of the deck's owned copies.
+                pending_ids:
+                  type: array
+                  items:
+                    type: integer
+                  description: Ids of the deck's pending cards. At least one id overall.
+                printings:
+                  type: array
+                  description: One entry per copy, owned copies plus the quantity of each pending card.
+                  items:
+                    type: object
+                    required: [scryfall_id, foil]
+                    properties:
+                      scryfall_id:
+                        type: string
+                      set_code:
+                        type: string
+                      collector_number:
+                        type: string
+                      foil:
+                        type: boolean
+      responses:
+        "200":
+          description: cards_linked copies found in the collection, cards_pending copies left pending, cards_removed copies that left the deck.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportSummary"
+        "400":
+          description: >
+            id is not a UUID, no id at all, no printing or one without
+            scryfall_id, an id that isn't an owned copy or a pending card of
+            this deck, copies of several cards or boards, the commander among
+            them, or not one printing per copy.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found, or not owned by the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /deck/{id}/import:
     parameters:
       - $ref: "#/components/parameters/DeckID"
