@@ -21,6 +21,10 @@ const (
 
 	MinCardColumns = 2
 	MaxCardColumns = 12
+
+	ThemeDay   = "day"
+	ThemeNight = "night"
+	ThemeAuto  = "auto"
 )
 
 const DefaultCollectionSort = "-added"
@@ -29,6 +33,9 @@ var (
 	ErrInvalidCardDisplay        = errors.New("card_display must be one of: text, images, grid, stacks")
 	ErrInvalidCardColumns        = errors.New("card_columns must be between 2 and 12")
 	ErrInvalidCollectionGrouping = errors.New("collection_grouping must be one of: type, color, mana")
+	ErrInvalidTheme              = errors.New("theme must be one of: day, night, auto")
+	ErrInvalidNightHour          = errors.New("night_starts_at and night_ends_at must be hours between 0 and 23")
+	ErrEmptyNight                = errors.New("night_starts_at and night_ends_at must differ")
 	ErrInvalidCollectionSort     = errors.New("collection_sort must be one of: name, -name, added, -added, updated, -updated, mana_value, -mana_value, color, -color, type, -type")
 )
 
@@ -47,6 +54,14 @@ func ValidCardColumns(columns int) bool {
 	return columns >= MinCardColumns && columns <= MaxCardColumns
 }
 
+func validTheme(theme string) bool {
+	return theme == ThemeDay || theme == ThemeNight || theme == ThemeAuto
+}
+
+func validHour(hour int) bool {
+	return hour >= 0 && hour <= 23
+}
+
 type Preferences struct {
 	ShowCollectionInDecks bool
 	CardDisplay           string
@@ -55,6 +70,9 @@ type Preferences struct {
 	ShowCardDetails       bool
 	CollectionGrouping    *string
 	CollectionSort        string
+	Theme                 string
+	NightStartsAt         int
+	NightEndsAt           int
 }
 
 func Defaults() Preferences {
@@ -65,6 +83,9 @@ func Defaults() Preferences {
 		ShowManaCost:          true,
 		ShowCardDetails:       true,
 		CollectionSort:        DefaultCollectionSort,
+		Theme:                 ThemeAuto,
+		NightStartsAt:         22,
+		NightEndsAt:           6,
 	}
 }
 
@@ -77,11 +98,15 @@ type Changes struct {
 	CollectionGrouping      *string
 	ClearCollectionGrouping bool
 	CollectionSort          *string
+	Theme                   *string
+	NightStartsAt           *int
+	NightEndsAt             *int
 }
 
 func (c Changes) empty() bool {
 	return c.ShowCollectionInDecks == nil && c.CardDisplay == nil && c.CardColumns == nil && c.ShowManaCost == nil &&
-		c.ShowCardDetails == nil && c.CollectionGrouping == nil && !c.ClearCollectionGrouping && c.CollectionSort == nil
+		c.ShowCardDetails == nil && c.CollectionGrouping == nil && !c.ClearCollectionGrouping && c.CollectionSort == nil &&
+		c.Theme == nil && c.NightStartsAt == nil && c.NightEndsAt == nil
 }
 
 func (c Changes) validate() error {
@@ -96,6 +121,12 @@ func (c Changes) validate() error {
 	}
 	if c.CollectionSort != nil && !collectionSorts[*c.CollectionSort] {
 		return ErrInvalidCollectionSort
+	}
+	if c.Theme != nil && !validTheme(*c.Theme) {
+		return ErrInvalidTheme
+	}
+	if (c.NightStartsAt != nil && !validHour(*c.NightStartsAt)) || (c.NightEndsAt != nil && !validHour(*c.NightEndsAt)) {
+		return ErrInvalidNightHour
 	}
 	return nil
 }
@@ -124,6 +155,15 @@ func (c Changes) applyTo(p Preferences) Preferences {
 	}
 	if c.CollectionSort != nil {
 		p.CollectionSort = *c.CollectionSort
+	}
+	if c.Theme != nil {
+		p.Theme = *c.Theme
+	}
+	if c.NightStartsAt != nil {
+		p.NightStartsAt = *c.NightStartsAt
+	}
+	if c.NightEndsAt != nil {
+		p.NightEndsAt = *c.NightEndsAt
 	}
 	return p
 }
@@ -161,6 +201,9 @@ func (s *Service) Update(ctx context.Context, userID string, changes Changes) (P
 		return Preferences{}, err
 	}
 	updated := changes.applyTo(current)
+	if updated.NightStartsAt == updated.NightEndsAt {
+		return Preferences{}, ErrEmptyNight
+	}
 	if err := s.repo.Save(ctx, userID, updated); err != nil {
 		return Preferences{}, err
 	}
@@ -179,10 +222,10 @@ func (r *PostgresRepository) Find(ctx context.Context, userID string) (Preferenc
 	var p Preferences
 	err := r.db.QueryRowContext(ctx, `
 		SELECT show_collection_in_decks, card_display, card_columns, show_mana_cost, show_card_details,
-			collection_grouping, collection_sort
+			collection_grouping, collection_sort, theme, night_starts_at, night_ends_at
 		FROM tamiyo.user_preferences WHERE user_id = $1
 	`, userID).Scan(&p.ShowCollectionInDecks, &p.CardDisplay, &p.CardColumns, &p.ShowManaCost, &p.ShowCardDetails,
-		&p.CollectionGrouping, &p.CollectionSort)
+		&p.CollectionGrouping, &p.CollectionSort, &p.Theme, &p.NightStartsAt, &p.NightEndsAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Preferences{}, false, nil
 	}
@@ -195,8 +238,8 @@ func (r *PostgresRepository) Find(ctx context.Context, userID string) (Preferenc
 func (r *PostgresRepository) Save(ctx context.Context, userID string, p Preferences) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO tamiyo.user_preferences (user_id, show_collection_in_decks, card_display, card_columns, show_mana_cost, show_card_details,
-			collection_grouping, collection_sort)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			collection_grouping, collection_sort, theme, night_starts_at, night_ends_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		ON CONFLICT (user_id) DO UPDATE SET
 			show_collection_in_decks = EXCLUDED.show_collection_in_decks,
 			card_display = EXCLUDED.card_display,
@@ -204,9 +247,12 @@ func (r *PostgresRepository) Save(ctx context.Context, userID string, p Preferen
 			show_mana_cost = EXCLUDED.show_mana_cost,
 			show_card_details = EXCLUDED.show_card_details,
 			collection_grouping = EXCLUDED.collection_grouping,
-			collection_sort = EXCLUDED.collection_sort
+			collection_sort = EXCLUDED.collection_sort,
+			theme = EXCLUDED.theme,
+			night_starts_at = EXCLUDED.night_starts_at,
+			night_ends_at = EXCLUDED.night_ends_at
 	`, userID, p.ShowCollectionInDecks, p.CardDisplay, p.CardColumns, p.ShowManaCost, p.ShowCardDetails,
-		p.CollectionGrouping, p.CollectionSort)
+		p.CollectionGrouping, p.CollectionSort, p.Theme, p.NightStartsAt, p.NightEndsAt)
 	return err
 }
 
@@ -236,6 +282,9 @@ type response struct {
 	ShowCardDetails       bool    `json:"show_card_details"`
 	CollectionGrouping    *string `json:"collection_grouping"`
 	CollectionSort        string  `json:"collection_sort"`
+	Theme                 string  `json:"theme"`
+	NightStartsAt         int     `json:"night_starts_at"`
+	NightEndsAt           int     `json:"night_ends_at"`
 }
 
 type updateRequest struct {
@@ -247,6 +296,9 @@ type updateRequest struct {
 	CollectionGrouping      *string `json:"collection_grouping"`
 	ClearCollectionGrouping bool    `json:"clear_collection_grouping"`
 	CollectionSort          *string `json:"collection_sort"`
+	Theme                   *string `json:"theme"`
+	NightStartsAt           *int    `json:"night_starts_at"`
+	NightEndsAt             *int    `json:"night_ends_at"`
 }
 
 func (h *Handler) get(ctx *gin.Context) {
@@ -285,6 +337,9 @@ func (h *Handler) update(ctx *gin.Context) {
 			apierr.Mapping{Err: ErrInvalidCardColumns, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrInvalidCollectionGrouping, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrInvalidCollectionSort, Status: http.StatusBadRequest},
+			apierr.Mapping{Err: ErrInvalidTheme, Status: http.StatusBadRequest},
+			apierr.Mapping{Err: ErrInvalidNightHour, Status: http.StatusBadRequest},
+			apierr.Mapping{Err: ErrEmptyNight, Status: http.StatusBadRequest},
 		)
 		return
 	}

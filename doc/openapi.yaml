@@ -3585,7 +3585,24 @@ components:
           enum: [name, -name, added, -added, updated, -updated, mana_value, -mana_value, color, -color, type, -type]
           default: -added
           description: How the collection and the storages sort cards.
-      required: [show_collection_in_decks, card_display, card_columns, show_mana_cost, show_card_details, collection_grouping, collection_sort]
+        theme:
+          type: string
+          enum: [day, night, auto]
+          default: auto
+          description: Whether the app shows its day or its night colors; auto follows the time of day.
+        night_starts_at:
+          type: integer
+          minimum: 0
+          maximum: 23
+          default: 22
+          description: With theme auto, the hour night starts, in the user's own time zone.
+        night_ends_at:
+          type: integer
+          minimum: 0
+          maximum: 23
+          default: 6
+          description: With theme auto, the hour night ends; must differ from night_starts_at.
+      required: [show_collection_in_decks, card_display, card_columns, show_mana_cost, show_card_details, collection_grouping, collection_sort, theme, night_starts_at, night_ends_at]
 
     PreferencesChanges:
       type: object
@@ -3613,6 +3630,17 @@ components:
         collection_sort:
           type: string
           enum: [name, -name, added, -added, updated, -updated, mana_value, -mana_value, color, -color, type, -type]
+        theme:
+          type: string
+          enum: [day, night, auto]
+        night_starts_at:
+          type: integer
+          minimum: 0
+          maximum: 23
+        night_ends_at:
+          type: integer
+          minimum: 0
+          maximum: 23
 
     DeckOwnership:
       type: object

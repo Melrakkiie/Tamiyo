@@ -210,7 +210,7 @@ Set or clear the account's profile: its display name, a purely cosmetic name the
 The account's display preferences, saved so they follow the user from one device to another. **Requires `Authorization: Bearer <token>`.**
 
 ```json
-{ "show_collection_in_decks": true, "card_display": "images", "card_columns": 6, "show_mana_cost": true, "show_card_details": true }
+{ "show_collection_in_decks": true, "card_display": "images", "card_columns": 6, "show_mana_cost": true, "show_card_details": true, "collection_grouping": null, "collection_sort": "-added", "theme": "auto", "night_starts_at": 22, "night_ends_at": 6 }
 ```
 
 | Field | Type | Default | Notes |
@@ -222,12 +222,15 @@ The account's display preferences, saved so they follow the user from one device
 | `show_card_details` | bool | `true` | Whether card images show the card's details below them (name, printing, storage). |
 | `collection_grouping` | string | `null` | How the collection and the storages group cards: `type`, `color`, `mana`, or `null` for no grouping. `"clear_collection_grouping": true` sets it back to `null`. |
 | `collection_sort` | string | `-added` | How the collection and the storages sort cards, same values as the `sort` of `GET /cards`. |
+| `theme` | string | `auto` | Whether the app shows its day or its night colors: `day`, `night`, or `auto` to follow the time of day. |
+| `night_starts_at` | int | `22` | With `theme` `auto`, the hour night starts, `0` to `23`, in the user's own time zone. |
+| `night_ends_at` | int | `6` | With `theme` `auto`, the hour night ends, `0` to `23`; it must differ from `night_starts_at`. Night may run past midnight (`22` to `6`) or not (`1` to `5`). |
 
 The display fields (`card_display` to `show_card_details`) are those of the collection and the storages, and of other people's decks; each of your decks keeps its own in its [display settings](#display-settings-deckidview).
 
 `GET` returns them (the defaults until something is saved); `PATCH` changes the fields present in the body and returns them all.
 
-**Errors:** `400` no known field in the body, a field of the wrong type, `card_display` not `text`, `images`, `grid` or `stacks`, `card_columns` outside `2..12`, or an unknown `collection_grouping` or `collection_sort` · `401` missing/invalid token
+**Errors:** `400` no known field in the body, a field of the wrong type, `card_display` not `text`, `images`, `grid` or `stacks`, `card_columns` outside `2..12`, an unknown `collection_grouping` or `collection_sort`, `theme` not `day`, `night` or `auto`, a night hour outside `0..23`, or night starting and ending at the same hour · `401` missing/invalid token
 
 ---
 
