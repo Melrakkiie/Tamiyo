@@ -1033,6 +1033,23 @@ func TestHandler_CreateDeck_AcceptsAVisibility(t *testing.T) {
 	assert.Equal(t, VisibilityPrivate, service.lastCreatedDeck.Visibility)
 }
 
+func TestHandler_CreateDeck_InAFolder(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	w := postDeck(router, `{"name": "Otterly Playful", "format": "commander", "folder_id": 4}`)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	assert.Equal(t, intPtr(4), service.lastCreatedDeck.FolderID)
+	assert.Contains(t, w.Body.String(), `"folder_id": 4`)
+
+	assert.Equal(t, http.StatusBadRequest, postDeck(router, `{"name": "A", "format": "commander", "folder_id": 0}`).Code)
+	service.createErr = ErrTargetFolderNotFound
+	w = postDeck(router, `{"name": "A", "format": "commander", "folder_id": 99}`)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), ErrTargetFolderNotFound.Error())
+}
+
 func TestHandler_CreateDeck_RejectsAnUnknownVisibility(t *testing.T) {
 	router := setupRouter(&fakeService{})
 

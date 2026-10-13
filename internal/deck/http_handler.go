@@ -79,6 +79,7 @@ type createDeckRequest struct {
 	BackgroundScryfallID *string `json:"background_scryfall_id" binding:"omitempty,uuid"`
 	Visibility           string  `json:"visibility" binding:"omitempty,oneof=public unlisted private"`
 	Bracket              *int    `json:"bracket" binding:"omitempty,min=1,max=5"`
+	FolderID             *int    `json:"folder_id" binding:"omitempty,gt=0"`
 }
 
 func (r createDeckRequest) toDomain() Deck {
@@ -93,6 +94,7 @@ func (r createDeckRequest) toDomain() Deck {
 		BackgroundScryfallID: r.BackgroundScryfallID,
 		Visibility:           visibility,
 		Bracket:              r.Bracket,
+		FolderID:             r.FolderID,
 	}
 }
 
@@ -377,7 +379,10 @@ func (h *Handler) createDeck(ctx *gin.Context) {
 
 	created, err := h.service.CreateDeck(ctx.Request.Context(), userID, req.toDomain())
 	if err != nil {
-		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrCommanderNotFound, Status: http.StatusBadRequest, Message: "commander_id does not reference an existing card"})
+		apierr.Respond(ctx, err,
+			apierr.Mapping{Err: ErrCommanderNotFound, Status: http.StatusBadRequest, Message: "commander_id does not reference an existing card"},
+			apierr.Mapping{Err: ErrTargetFolderNotFound, Status: http.StatusBadRequest},
+		)
 		return
 	}
 

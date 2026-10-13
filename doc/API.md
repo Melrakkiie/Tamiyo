@@ -717,6 +717,7 @@ Create a new deck.
 | `background_scryfall_id` | uuid | No | Scryfall id of the printing whose art (`art_crop`) is shown behind the deck. Any printing works, it doesn't have to be in the deck. |
 | `visibility` | string | No | `private`, `unlisted` (default) or `public`. |
 | `bracket` | int | No | Commander bracket, `1` to `5`. |
+| `folder_id` | int | No | One of your [folders](#deck-folders) to create the deck in; at the root when absent. |
 
 **Example**
 ```json
@@ -725,7 +726,7 @@ Create a new deck.
 
 **Response `201 Created`**
 
-**Errors:** `400` missing required field, `visibility` not one of `private`, `unlisted`, `public`, `bracket` not between 1 and 5, or `commander_id` doesn't reference an existing card (`"commander_id does not reference an existing card"`)
+**Errors:** `400` missing required field, `visibility` not one of `private`, `unlisted`, `public`, `bracket` not between 1 and 5, `commander_id` doesn't reference an existing card (`"commander_id does not reference an existing card"`), or `folder_id` isn't one of your folders
 
 ---
 

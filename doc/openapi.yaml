@@ -4830,6 +4830,10 @@ components:
           type: integer
           minimum: 1
           maximum: 5
+        folder_id:
+          type: integer
+          minimum: 1
+          description: One of your folders to create the deck in; at the root when absent.
       required: [name, format]
 
     UpdateDeckRequest:
