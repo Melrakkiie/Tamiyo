@@ -780,6 +780,72 @@ func TestPostgresRepository_CardLinks_RefreshUpdatedTimestamp(t *testing.T) {
 	assert.True(t, afterUnlink.Updated.After(afterLink.Updated))
 }
 
+func TestPostgresRepository_CardBoardMove_RefreshesUpdatedTimestamp(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userID)
+	seedCardsWithoutStorage(t, db, userID)
+	deckID := "00000000-0000-0000-0000-000000000001"
+	require.NoError(t, repo.LinkCardToDeck(context.Background(), userID, deckID, 1, BoardMain))
+
+	before, err := repo.FindByID(context.Background(), userID, deckID)
+	require.NoError(t, err)
+
+	time.Sleep(10 * time.Millisecond)
+	require.NoError(t, repo.LinkCardToDeck(context.Background(), userID, deckID, 1, BoardSideboard))
+
+	after, err := repo.FindByID(context.Background(), userID, deckID)
+	require.NoError(t, err)
+	assert.True(t, after.Updated.After(before.Updated))
+}
+
+func TestPostgresRepository_PendingCardChanges_RefreshUpdatedTimestamp(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userID)
+	deckID := "00000000-0000-0000-0000-000000000001"
+
+	updatedAt := func() time.Time {
+		t.Helper()
+		found, err := repo.FindByID(context.Background(), userID, deckID)
+		require.NoError(t, err)
+		return found.Updated
+	}
+	other, err := repo.FindByID(context.Background(), userID, "00000000-0000-0000-0000-000000000002")
+	require.NoError(t, err)
+
+	last := updatedAt()
+	time.Sleep(10 * time.Millisecond)
+	pending, err := repo.CreatePendingCard(context.Background(), userID, PendingCard{
+		DeckID: deckID, Name: "Opt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1e", SetCode: "xln", CollectorNumber: "65", Quantity: 1,
+	})
+	require.NoError(t, err)
+	assert.True(t, updatedAt().After(last), "adding a pending card")
+
+	last = updatedAt()
+	time.Sleep(10 * time.Millisecond)
+	_, err = repo.UpdatePendingBoard(context.Background(), userID, deckID, pending.ID, BoardSideboard)
+	require.NoError(t, err)
+	assert.True(t, updatedAt().After(last), "moving a pending card to another board")
+
+	last = updatedAt()
+	time.Sleep(10 * time.Millisecond)
+	_, err = repo.UpdatePendingQuantity(context.Background(), userID, deckID, pending.ID, 3)
+	require.NoError(t, err)
+	assert.True(t, updatedAt().After(last), "changing a pending card's quantity")
+
+	last = updatedAt()
+	time.Sleep(10 * time.Millisecond)
+	require.NoError(t, repo.DeletePendingCard(context.Background(), userID, deckID, pending.ID))
+	assert.True(t, updatedAt().After(last), "removing a pending card")
+
+	untouched, err := repo.FindByID(context.Background(), userID, "00000000-0000-0000-0000-000000000002")
+	require.NoError(t, err)
+	assert.Equal(t, other.Updated, untouched.Updated)
+}
+
 func TestPostgresRepository_ReturnsCommanderScryfallID(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db, "alice@example.com")
