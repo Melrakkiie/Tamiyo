@@ -1449,6 +1449,16 @@ Replace a deck's content with a list: every card on the list ends up in the deck
 
 **Errors:** `400` invalid id, missing or unreadable file · `404` deck not found · `502` Scryfall unavailable
 
+### `POST /deck/:id/switch-foil`
+
+Switch cards of a deck to the other finish, without touching the collection. Body: `{ "card_ids": [12, 13], "pending_ids": [4], "foil": true }`: `card_ids` are the deck's owned copies (as in `GET /deck/:id/cards`), `pending_ids` its [pending cards](#pending-cards-deckidpending); either can be left out, not both.
+
+Each listed copy or pending card that isn't already in that finish leaves the deck (an owned copy stays in the collection, as it is) and is replaced, on the same board, by copies of the same printing in that finish: your copies in no deck first, then ones another deck uses, and pending cards for whatever you don't own. A pending card of 3 copies thus becomes the owned copies you have, plus a pending card for the rest. The commander stays the commander, owned when a copy was found.
+
+**Response `200 OK`** — the [import summary](#bulk-import): `cards_linked` copies found in the collection, `cards_pending` copies left pending, `cards_removed` copies that left the deck. Cards already in that finish are ignored.
+
+**Errors:** `400` invalid id, `foil` missing, no id at all, or an id that isn't an owned copy or a pending card of this deck · `404` deck not found
+
 ---
 
 ## Bulk Export

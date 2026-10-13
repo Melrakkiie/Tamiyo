@@ -2071,6 +2071,60 @@ paths:
         "502":
           $ref: "#/components/responses/BadGateway"
 
+  /deck/{id}/switch-foil:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    post:
+      tags: [deck-cards]
+      summary: Switch cards of a deck to the other finish
+      description: >
+        Each listed owned copy or pending card not already in that finish
+        leaves the deck (an owned copy stays in the collection as it is) and
+        is replaced on the same board by copies of the same printing in that
+        finish: ones in no deck first, then ones another deck uses, and
+        pending cards for the rest. The commander stays the commander. The
+        collection itself is never modified.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [foil]
+              properties:
+                card_ids:
+                  type: array
+                  items:
+                    type: integer
+                  description: Ids of the deck's owned copies.
+                pending_ids:
+                  type: array
+                  items:
+                    type: integer
+                  description: Ids of the deck's pending cards. At least one id overall.
+                foil:
+                  type: boolean
+      responses:
+        "200":
+          description: cards_linked copies found in the collection, cards_pending copies left pending, cards_removed copies that left the deck.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportSummary"
+        "400":
+          description: id is not a UUID, foil missing, no id at all, or an id that isn't an owned copy or a pending card of this deck.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found, or not owned by the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /deck/{id}/import:
     parameters:
       - $ref: "#/components/parameters/DeckID"

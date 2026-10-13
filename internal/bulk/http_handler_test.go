@@ -21,6 +21,8 @@ type fakeImportService struct {
 	summary Summary
 	err     error
 
+	lastFoilSwitch FoilSwitch
+
 	lastUserID            string
 	lastMoxfieldStorageID int
 	lastManaBoxStorageID  *int
@@ -84,6 +86,13 @@ func (f *fakeImportService) BulkEditDeck(ctx context.Context, userID string, dec
 	f.lastDeckID = deckID
 	content, _ := io.ReadAll(r)
 	f.lastFileContent = string(content)
+	return f.summary, f.err
+}
+
+func (f *fakeImportService) SwitchFoil(ctx context.Context, userID string, deckID string, req FoilSwitch) (Summary, error) {
+	f.lastUserID = userID
+	f.lastDeckID = deckID
+	f.lastFoilSwitch = req
 	return f.summary, f.err
 }
 

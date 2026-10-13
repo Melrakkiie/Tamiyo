@@ -36,6 +36,7 @@ type importService interface {
 	CommitPendingCards(ctx context.Context, userID string, deckID string, storageID, pendingID, quantity *int) (PendingCommitSummary, error)
 	DuplicateDeck(ctx context.Context, userID string, deckID string) (DuplicateSummary, error)
 	BulkEditDeck(ctx context.Context, userID string, deckID string, r io.Reader) (Summary, error)
+	SwitchFoil(ctx context.Context, userID string, deckID string, req FoilSwitch) (Summary, error)
 	CollectDeck(ctx context.Context, userID string, deckID string, req CollectRequest) (Summary, error)
 }
 
@@ -61,6 +62,7 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.POST("/deck/:id/pending/commit", h.commitPendingCards)
 	router.POST("/deck/:id/import", h.importIntoDeck)
 	router.POST("/deck/:id/bulk-edit", h.bulkEditDeck)
+	router.POST("/deck/:id/switch-foil", h.switchFoil)
 	router.GET("/deck/:id/export", h.exportDeck)
 	router.POST("/deck/:id/duplicate", h.duplicateDeck)
 	router.POST("/deck/:id/collect", h.collectDeck)
