@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 
 	"Melrakkiie/Tamiyo/internal/apierr"
 	"Melrakkiie/Tamiyo/internal/auth"
+	"Melrakkiie/Tamiyo/internal/deck"
 )
 
 const (
@@ -19,6 +21,8 @@ const (
 	maxLimit     = 100
 )
 
+var errInvalidAllowedDeckID = errors.New("allowed_deck_ids must only contain deck ids")
+
 type storageResponse struct {
 	ID        int    `json:"id"`
 	Name      string `json:"name"`
@@ -26,16 +30,25 @@ type storageResponse struct {
 	CardCount int    `json:"card_count"`
 	Added     string `json:"added"`
 	Updated   string `json:"updated"`
+
+	Locked         bool     `json:"locked"`
+	AllowedDeckIDs []string `json:"allowed_deck_ids"`
 }
 
 func toResponse(s Storage) storageResponse {
+	allowed := s.AllowedDeckIDs
+	if allowed == nil {
+		allowed = []string{}
+	}
 	return storageResponse{
-		ID:        s.ID,
-		Name:      s.Name,
-		Type:      s.Type,
-		CardCount: s.CardCount,
-		Added:     s.Added.Format("2006-01-02 15:04:05"),
-		Updated:   s.Updated.Format("2006-01-02 15:04:05"),
+		ID:             s.ID,
+		Name:           s.Name,
+		Type:           s.Type,
+		CardCount:      s.CardCount,
+		Added:          s.Added.Format("2006-01-02 15:04:05"),
+		Updated:        s.Updated.Format("2006-01-02 15:04:05"),
+		Locked:         s.Locked,
+		AllowedDeckIDs: allowed,
 	}
 }
 
@@ -48,17 +61,37 @@ type paginatedStorageResponse struct {
 }
 
 type createStorageRequest struct {
-	Name string `json:"name" binding:"required"`
-	Type string `json:"type" binding:"required"`
+	Name           string   `json:"name" binding:"required"`
+	Type           string   `json:"type" binding:"required"`
+	Locked         bool     `json:"locked"`
+	AllowedDeckIDs []string `json:"allowed_deck_ids"`
 }
 
-func (r createStorageRequest) toDomain() Storage {
-	return Storage{Name: r.Name, Type: r.Type}
+func (r createStorageRequest) toDomain() (Storage, error) {
+	allowed, err := normalizeDeckIDs(r.AllowedDeckIDs)
+	if err != nil {
+		return Storage{}, err
+	}
+	return Storage{Name: r.Name, Type: r.Type, Locked: r.Locked, AllowedDeckIDs: allowed}, nil
 }
 
 type updateStorageRequest struct {
-	Name *string `json:"name" binding:"omitempty"`
-	Type *string `json:"type" binding:"omitempty"`
+	Name           *string   `json:"name" binding:"omitempty"`
+	Type           *string   `json:"type" binding:"omitempty"`
+	Locked         *bool     `json:"locked"`
+	AllowedDeckIDs *[]string `json:"allowed_deck_ids"`
+}
+
+func (r *updateStorageRequest) normalize() error {
+	if r.AllowedDeckIDs == nil {
+		return nil
+	}
+	allowed, err := normalizeDeckIDs(*r.AllowedDeckIDs)
+	if err != nil {
+		return err
+	}
+	r.AllowedDeckIDs = &allowed
+	return nil
 }
 
 func (r updateStorageRequest) applyTo(s Storage) Storage {
@@ -68,7 +101,30 @@ func (r updateStorageRequest) applyTo(s Storage) Storage {
 	if r.Type != nil {
 		s.Type = *r.Type
 	}
+	if r.Locked != nil {
+		s.Locked = *r.Locked
+	}
+	if r.AllowedDeckIDs != nil {
+		s.AllowedDeckIDs = *r.AllowedDeckIDs
+	}
 	return s
+}
+
+func normalizeDeckIDs(raw []string) ([]string, error) {
+	ids := make([]string, 0, len(raw))
+	seen := make(map[string]bool, len(raw))
+	for _, value := range raw {
+		id, valid := deck.ParseID(value)
+		if !valid {
+			return nil, errInvalidAllowedDeckID
+		}
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
 
 type storageService interface {
@@ -209,9 +265,15 @@ func (h *Handler) createStorage(ctx *gin.Context) {
 		return
 	}
 
-	created, err := h.service.CreateStorage(ctx.Request.Context(), userID, req.toDomain())
+	newStorage, err := req.toDomain()
 	if err != nil {
-		apierr.Respond(ctx, err)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	created, err := h.service.CreateStorage(ctx.Request.Context(), userID, newStorage)
+	if err != nil {
+		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusBadRequest})
 		return
 	}
 
@@ -236,10 +298,17 @@ func (h *Handler) updateStorage(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if err := req.normalize(); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	updated, err := h.service.UpdateStorage(ctx.Request.Context(), userID, id, req)
 	if err != nil {
-		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "storage not found"})
+		apierr.Respond(ctx, err,
+			apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "storage not found"},
+			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusBadRequest},
+		)
 		return
 	}
 

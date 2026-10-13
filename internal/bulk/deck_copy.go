@@ -96,7 +96,7 @@ func (s *Service) DuplicateDeck(ctx context.Context, userID string, deckID strin
 		return DuplicateSummary{DeckID: created.ID, Summary: Summary{DecksCreated: 1}}, nil
 	}
 
-	summary, err := s.ImportIntoDeck(ctx, userID, created.ID, false, &file)
+	summary, err := s.ImportIntoDeck(ctx, userID, created.ID, DeckImportOptions{}, &file)
 	if err != nil {
 		if deleteErr := s.decks.DeleteDeck(ctx, userID, created.ID); deleteErr != nil {
 			return DuplicateSummary{}, errors.Join(err, fmt.Errorf("removing the unfinished copy: %w", deleteErr))

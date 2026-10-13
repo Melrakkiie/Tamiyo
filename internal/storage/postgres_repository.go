@@ -9,37 +9,40 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 type storageRow struct {
 	ID        int       `db:"id"`
-	UserID    string    `db:"user_id"`
 	Name      string    `db:"name"`
 	Type      string    `db:"type"`
 	CardCount int       `db:"card_count"`
 	Added     time.Time `db:"added"`
 	Updated   time.Time `db:"updated"`
+
+	Locked         bool           `db:"locked"`
+	AllowedDeckIDs pq.StringArray `db:"allowed_deck_ids"`
 }
 
 func (r storageRow) toDomain() Storage {
 	return Storage{
-		ID:        r.ID,
-		Name:      r.Name,
-		Type:      r.Type,
-		CardCount: r.CardCount,
-		Added:     r.Added,
-		Updated:   r.Updated,
+		ID:             r.ID,
+		Name:           r.Name,
+		Type:           r.Type,
+		CardCount:      r.CardCount,
+		Added:          r.Added,
+		Updated:        r.Updated,
+		Locked:         r.Locked,
+		AllowedDeckIDs: []string(r.AllowedDeckIDs),
 	}
 }
 
-func toStorageRow(userID string, storage Storage) storageRow {
-	return storageRow{
-		ID:     storage.ID,
-		UserID: userID,
-		Name:   storage.Name,
-		Type:   storage.Type,
-	}
-}
+const allowedDeckIDsColumn = `
+		    COALESCE((
+		        SELECT array_agg(a.deck_id::text ORDER BY a.deck_id)
+		        FROM tamiyo.storage_allowed_deck a
+		        WHERE a.storage_id = tamiyo.storage.id
+		    ), '{}') AS allowed_deck_ids`
 
 type PostgresRepository struct {
 	db *sqlx.DB
@@ -77,11 +80,12 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		    tamiyo.storage.type AS type,
 		    tamiyo.storage.added AS added,
 			tamiyo.storage.updated as updated,
-		    COUNT(tamiyo.cards.id) AS card_count
+		    tamiyo.storage.locked AS locked,
+		    COUNT(tamiyo.cards.id) AS card_count,` + allowedDeckIDsColumn + `
 		FROM tamiyo.storage
 		LEFT JOIN tamiyo.cards ON tamiyo.storage.id = tamiyo.cards.storage_id AND tamiyo.cards.user_id = $1
 	` + whereClause + `
-		GROUP BY tamiyo.storage.id, tamiyo.storage.name, tamiyo.storage.type, tamiyo.storage.added, tamiyo.storage.updated
+		GROUP BY tamiyo.storage.id
 	` + orderByClause(filter) + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 
 	pagedArgs := append(args, filter.Limit, offset)
@@ -125,11 +129,12 @@ func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int
 		    tamiyo.storage.type AS type,
 		    tamiyo.storage.added AS added,
 			tamiyo.storage.updated as updated,
-		    COUNT(tamiyo.cards.id) AS card_count
+		    tamiyo.storage.locked AS locked,
+		    COUNT(tamiyo.cards.id) AS card_count,` + allowedDeckIDsColumn + `
 		FROM tamiyo.storage
 		LEFT JOIN tamiyo.cards ON tamiyo.storage.id = tamiyo.cards.storage_id AND tamiyo.cards.user_id = $2
 		WHERE tamiyo.storage.id = $1 AND tamiyo.storage.user_id = $2
-		GROUP BY tamiyo.storage.id, tamiyo.storage.name, tamiyo.storage.type, tamiyo.storage.added, tamiyo.storage.updated
+		GROUP BY tamiyo.storage.id
 	`
 
 	var row storageRow
@@ -144,54 +149,103 @@ func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int
 }
 
 func (r *PostgresRepository) Create(ctx context.Context, userID string, storage Storage) (Storage, error) {
-	row := toStorageRow(userID, storage)
-	query := `
-    	INSERT INTO tamiyo.storage (user_id, name, type)
-     	VALUES (:user_id, :name, :type)
-      	RETURNING id, name, type, added, updated
-	`
-	stmt, err := r.db.PrepareNamedContext(ctx, query)
+	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return Storage{}, err
 	}
 	defer func() {
-		_ = stmt.Close()
+		_ = tx.Rollback()
 	}()
 
 	var created storageRow
-	if err := stmt.GetContext(ctx, &created, row); err != nil {
+	if err := tx.GetContext(ctx, &created, `
+		INSERT INTO tamiyo.storage (user_id, name, type, locked)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, name, type, locked, added, updated
+	`, userID, storage.Name, storage.Type, storage.Locked); err != nil {
 		return Storage{}, err
 	}
 
+	allowed, err := replaceAllowedDecks(ctx, tx, userID, created.ID, storage.AllowedDeckIDs)
+	if err != nil {
+		return Storage{}, err
+	}
+	created.AllowedDeckIDs = allowed
+
+	if err := tx.Commit(); err != nil {
+		return Storage{}, err
+	}
 	return created.toDomain(), nil
 }
 
 func (r *PostgresRepository) Update(ctx context.Context, userID string, s Storage) (Storage, error) {
-	row := toStorageRow(userID, s)
-	query := `
-		UPDATE tamiyo.storage
-		SET name = :name, type = :type
-		WHERE id = :id AND user_id = :user_id
-		RETURNING id, name, type, added, updated
-	`
-
-	stmt, err := r.db.PrepareNamedContext(ctx, query)
+	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return Storage{}, err
 	}
 	defer func() {
-		_ = stmt.Close()
+		_ = tx.Rollback()
 	}()
 
 	var updated storageRow
-	if err := stmt.GetContext(ctx, &updated, row); err != nil {
+	if err := tx.GetContext(ctx, &updated, `
+		UPDATE tamiyo.storage
+		SET name = $1, type = $2, locked = $3
+		WHERE id = $4 AND user_id = $5
+		RETURNING id, name, type, locked, added, updated
+	`, s.Name, s.Type, s.Locked, s.ID, userID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Storage{}, ErrNotFound
 		}
 		return Storage{}, err
 	}
 
+	allowed, err := replaceAllowedDecks(ctx, tx, userID, updated.ID, s.AllowedDeckIDs)
+	if err != nil {
+		return Storage{}, err
+	}
+	updated.AllowedDeckIDs = allowed
+
+	if err := tx.Commit(); err != nil {
+		return Storage{}, err
+	}
 	return updated.toDomain(), nil
+}
+
+func replaceAllowedDecks(ctx context.Context, tx *sqlx.Tx, userID string, storageID int, deckIDs []string) (pq.StringArray, error) {
+	if deckIDs == nil {
+		deckIDs = []string{}
+	}
+
+	var owned int
+	if err := tx.GetContext(ctx, &owned,
+		`SELECT count(*) FROM tamiyo.deck WHERE user_id = $1 AND id = ANY($2::uuid[])`,
+		userID, pq.Array(deckIDs),
+	); err != nil {
+		return nil, err
+	}
+	if owned != len(deckIDs) {
+		return nil, ErrDeckNotFound
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM tamiyo.storage_allowed_deck WHERE storage_id = $1`, storageID); err != nil {
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO tamiyo.storage_allowed_deck (storage_id, deck_id) SELECT $1, unnest($2::uuid[])`,
+		storageID, pq.Array(deckIDs),
+	); err != nil {
+		return nil, err
+	}
+
+	var allowed pq.StringArray
+	if err := tx.GetContext(ctx, &allowed,
+		`SELECT COALESCE(array_agg(deck_id::text ORDER BY deck_id), '{}') FROM tamiyo.storage_allowed_deck WHERE storage_id = $1`,
+		storageID,
+	); err != nil {
+		return nil, err
+	}
+	return allowed, nil
 }
 
 func (r *PostgresRepository) Delete(ctx context.Context, userID string, id int) error {

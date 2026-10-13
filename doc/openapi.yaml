@@ -593,6 +593,16 @@ paths:
             type: string
             maxLength: 50
           description: Only cards in a storage of this type, case-insensitive.
+        - name: open_to_deck
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: >
+            Only cards open to this deck: in no storage, in an unlocked
+            storage, or in a locked storage whose allowed_deck_ids contain
+            this deck.
         - name: group
           in: query
           required: false
@@ -891,7 +901,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Storage"
         "400":
-          description: Missing required field
+          description: Missing required field, or an allowed_deck_ids entry that isn't one of the user's decks
           content:
             application/json:
               schema:
@@ -939,7 +949,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/Storage"
         "400":
-          $ref: "#/components/responses/InvalidID"
+          description: Invalid id or body, or an allowed_deck_ids entry that isn't one of the user's decks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -2140,7 +2154,8 @@ paths:
         default printing), or a mix of both. Owned copies go in the deck
         (cards_linked), copies in no deck and of the same finish first,
         each copy used once and copies already in this deck never used
-        twice; missing copies become pending cards (cards_pending). Section
+        twice, copies in storages locked against this deck left out unless
+        include_locked_storages is true; missing copies become pending cards (cards_pending). Section
         headers choose the board of the lines below them: Sideboard for
         sideboard, Maybeboard or Considering for considering, main
         otherwise. With commander_from_first_line, the first card line of
@@ -2166,6 +2181,12 @@ paths:
                   type: boolean
                   default: false
                   description: Treat the first line as the commander when the deck has none.
+                include_locked_storages:
+                  type: boolean
+                  default: false
+                  description: >
+                    Also use copies in storages locked against this deck,
+                    after the open ones, for an explicit addition by the user.
       responses:
         "200":
           description: Cards added (possibly with some lines skipped — see ImportSummary.warnings).
@@ -2174,7 +2195,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ImportSummary"
         "400":
-          description: id is not a UUID, the file is missing or can't be parsed, or commander_from_first_line is invalid.
+          description: id is not a UUID, the file is missing or can't be parsed, or commander_from_first_line or include_locked_storages is invalid.
           content:
             application/json:
               schema:
@@ -4276,8 +4297,9 @@ components:
           type: integer
           description: >
             Cards of the same name in the collection, any printing, outside
-            this deck (copies in other decks count). Only computed by
-            GET /deck/{id}/pending, 0 elsewhere.
+            this deck (copies in other decks count), leaving out the storages
+            locked against this deck. Only computed by GET /deck/{id}/pending,
+            0 elsewhere.
         owned_same_printing:
           type: integer
           description: >
@@ -4481,7 +4503,21 @@ components:
           type: string
         updated:
           type: string
-      required: [id, name, type, card_count, added, updated]
+        locked:
+          type: boolean
+          description: >
+            A locked storage is hidden from the decks it doesn't allow: its
+            cards don't count as owned copies for their pending cards and are
+            never put in them by imports, duplications or finish switches.
+        allowed_deck_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: >
+            The decks a locked storage stays open to; empty means closed to
+            every deck. Kept but ignored while the storage is unlocked.
+      required: [id, name, type, card_count, added, updated, locked, allowed_deck_ids]
 
     PaginatedStorages:
       type: object
@@ -4507,6 +4543,14 @@ components:
           type: string
         type:
           type: string
+        locked:
+          type: boolean
+          description: Defaults to false.
+        allowed_deck_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
       required: [name, type]
 
     UpdateStorageRequest:
@@ -4517,6 +4561,14 @@ components:
           type: string
         type:
           type: string
+        locked:
+          type: boolean
+        allowed_deck_ids:
+          type: array
+          description: Replaces the whole list. Duplicates are dropped.
+          items:
+            type: string
+            format: uuid
 
     Deck:
       type: object
@@ -4596,7 +4648,7 @@ components:
           type: string
         updated:
           type: string
-      required: [id, name, format, visibility, card_count, added, updated]
+      required: [id, name, format, visibility, card_count, likes_count, added, updated]
 
     DeckFolder:
       type: object

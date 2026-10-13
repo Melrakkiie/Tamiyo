@@ -16,6 +16,11 @@ var ErrDeckNotFound = errors.New("deck does not exist")
 
 var ErrScryfallUnavailable = errors.New("could not resolve cards against scryfall")
 
+type DeckImportOptions struct {
+	CommanderFromFirstLine bool
+	IncludeLockedStorages  bool
+}
+
 type Summary struct {
 	CardsCreated    int      `json:"cards_created"`
 	CardsLinked     int      `json:"cards_linked"`

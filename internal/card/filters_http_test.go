@@ -15,7 +15,7 @@ func TestHandler_GetCards_PassesAdvancedFilters(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet,
-		"/cards?colors=gw&color_mode=within&mana_value=3&mana_value_op=lte&type=Creature&subtype=%20Elf%20&legal_in=commander&color_count=2&foil=true&storage_type=deckbox", nil))
+		"/cards?colors=gw&color_mode=within&mana_value=3&mana_value_op=lte&type=Creature&subtype=%20Elf%20&legal_in=commander&color_count=2&foil=true&storage_type=deckbox&open_to_deck=0A0A0A0A-0000-0000-0000-000000000001", nil))
 
 	require.Equal(t, http.StatusOK, w.Code)
 	f := service.lastFilter
@@ -33,6 +33,8 @@ func TestHandler_GetCards_PassesAdvancedFilters(t *testing.T) {
 	require.NotNil(t, f.Foil)
 	assert.True(t, *f.Foil)
 	assert.Equal(t, "deckbox", f.StorageType)
+	require.NotNil(t, f.OpenToDeck)
+	assert.Equal(t, "0a0a0a0a-0000-0000-0000-000000000001", *f.OpenToDeck)
 }
 
 func TestHandler_GetCards_AdvancedFilterDefaults(t *testing.T) {
@@ -70,6 +72,7 @@ func TestHandler_GetCards_RejectsInvalidAdvancedFilters(t *testing.T) {
 		"legal_in=nope",
 		"color_count=6",
 		"foil=maybe",
+		"open_to_deck=nope",
 		"subtype=" + "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	} {
 		t.Run(query, func(t *testing.T) {

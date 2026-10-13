@@ -130,7 +130,7 @@ func (s *Service) BulkEditDeck(ctx context.Context, userID string, deckID string
 	}
 
 	if len(toAdd) > 0 {
-		placements, placed, err := s.placeResolvedLines(ctx, userID, toAdd, resolved, false, d.ID)
+		placements, placed, err := s.placeResolvedLines(ctx, userID, toAdd, resolved, false, d.ID, false)
 		if err != nil {
 			return summary, err
 		}

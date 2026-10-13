@@ -118,7 +118,11 @@ CORS_ALLOWED_ORIGINS=http://localhost:5173
 
 ## Card search
 
-`GET /cards` filters by name, storage, storage type, colors (exactly / at least / at most), mana value (`=`, `<`, `<=`, `>`, `>=`), card type, subtype, format legality, number of colors, commander color identity and foil. Type lines and legalities come from Scryfall: the API keeps them in `tamiyo.printings`, fetching new printings within a few minutes and refreshing every printing once a day in a background job, so a ban shows up the next day. See [`doc/API.md`](./doc/API.md#get-cards).
+`GET /cards` filters by name, storage, storage type, colors (exactly / at least / at most), mana value (`=`, `<`, `<=`, `>`, `>=`), card type, subtype, format legality, number of colors, commander color identity, foil, and the storages open to a given deck. Type lines and legalities come from Scryfall: the API keeps them in `tamiyo.printings`, fetching new printings within a few minutes and refreshing every printing once a day in a background job, so a ban shows up the next day. See [`doc/API.md`](./doc/API.md#get-cards).
+
+## Locked storages
+
+A storage can be locked so decks stop drawing from it (a collection binder, a trade box), optionally keeping it open to a few decks. Its cards then no longer count as owned copies for the other decks' pending cards, and deck imports, duplications and finish switches never put them in those decks. Nothing is blocked: a card can still be put in any deck explicitly. See [`doc/API.md`](./doc/API.md#storage).
 
 ## API Documentation
 

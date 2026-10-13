@@ -245,7 +245,7 @@ func TestImportIntoDeck_ReadsATamiyoDeckFile(t *testing.T) {
 	decks := &fakeDeckService{tags: deck.DeckTags{Cards: []deck.TaggedCard{{Name: "Sol Ring", Tags: []string{"Artefact"}}}}}
 	svc := NewService(cards, &fakeStorageService{}, withTargetDeck(decks), tamiyoResolver())
 
-	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, false, &exported)
+	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, &exported)
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, summary.CardsLinked)
@@ -268,7 +268,7 @@ func TestImportIntoDeck_KeepsTheCurrentCommander(t *testing.T) {
 	require.NoError(t, NewService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{}).ExportTamiyoDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", false, &exported))
 	decks := &fakeDeckService{decks: []deck.Deck{{ID: targetDeckID, Name: "Target", CommanderID: ptr(1)}}}
 
-	_, err := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver()).ImportIntoDeck(context.Background(), testUserID, targetDeckID, false, &exported)
+	_, err := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver()).ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, &exported)
 
 	require.NoError(t, err)
 	assert.Zero(t, decks.pendingCommanderID)
@@ -279,9 +279,9 @@ func TestImportIntoDeck_KeepsTheCurrentCommander(t *testing.T) {
 func TestImportIntoDeck_RefusesATamiyoCollectionFile(t *testing.T) {
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, withTargetDeck(&fakeDeckService{}), tamiyoResolver())
 
-	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, false, strings.NewReader(`{"tamiyo": 1, "kind": "storage", "cards": []}`))
+	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader(`{"tamiyo": 1, "kind": "storage", "cards": []}`))
 	assert.ErrorIs(t, err, ErrTamiyoCollectionFile)
 
-	_, err = svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, false, strings.NewReader(`{"tamiyo": 1, "kind": "deck", "cards": [{"name": "Sol Ring", "scryfall_id": "`+solRingSLD+`", "quantity": 1, "board": "graveyard"}]}`))
+	_, err = svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader(`{"tamiyo": 1, "kind": "deck", "cards": [{"name": "Sol Ring", "scryfall_id": "`+solRingSLD+`", "quantity": 1, "board": "graveyard"}]}`))
 	assert.ErrorIs(t, err, ErrInvalidFile)
 }

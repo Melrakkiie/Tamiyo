@@ -370,6 +370,7 @@ List cards, with optional filtering, sorting, and pagination.
 | `color_count` | int | No | Number of colors, `0` to `5`. |
 | `foil` | bool | No | `true` for foil cards only, `false` for non-foil ones. |
 | `storage_type` | string | No | Only cards in a storage of this type (`binder`, `box`, `deckbox`…), case-insensitive. |
+| `open_to_deck` | uuid | No | Only cards [open to this deck](#storage): in no storage, in an unlocked one, or in a locked one that allows this deck. A deck id that isn't yours is accepted and only keeps the cards of unlocked storages and of none. |
 
 `type` (beyond the primary type), `subtype` and `legal_in` rely on each printing's type line and legalities, which the API fetches from Scryfall in the background: a newly added printing becomes searchable by them within a few minutes, and legalities are refreshed every day so bans show up.
 
@@ -403,7 +404,7 @@ GET /cards?storage_id=1&sort=-added&page=1&limit=25
 }
 ```
 
-**Errors:** `400` if `storage_id`, `page`, or `limit` is not a valid integer, `stack` is not a boolean, or `sort` is not one of the allowed values.
+**Errors:** `400` if `storage_id`, `page`, or `limit` is not a valid integer, `stack` is not a boolean, `sort` is not one of the allowed values, a filter has an invalid value, or `open_to_deck` is not a deck id.
 
 ---
 
@@ -545,6 +546,14 @@ Delete **every** card of the account at once, with the same clean-up as above (e
 
 A **storage** represents a physical place where cards live — a binder, a deckbox, a box, etc.
 
+A storage can be **locked** so that decks stop drawing from it, like a collection binder or a trade box. A locked storage stays open to the decks in its `allowed_deck_ids`, and with none listed it is closed to every deck. A card is **open to a deck** when it is in no storage, in an unlocked storage, or in a locked storage that allows that deck. For a deck, cards closed to it:
+
+- don't count in the `owned_copies` and `owned_same_printing` of its [pending cards](#pending-cards-deckidpending);
+- are never put in it by [`POST /deck/:id/import`](#post-deckidimport), [`POST /deck/:id/bulk-edit`](#post-deckidbulk-edit), [`POST /deck/:id/switch-foil`](#post-deckidswitch-foil) or [`POST /deck/:id/duplicate`](#post-deckidduplicate) (a duplicated deck is a new deck that no storage allows yet), unless the import is sent with `include_locked_storages=true`;
+- are left out of `GET /cards?open_to_deck=<deck id>`.
+
+Locking only hides: a card of a locked storage can still be put in any deck explicitly, and the cards already in a deck stay there. While a storage is unlocked, its `allowed_deck_ids` are kept but ignored. Deleting a deck removes it from every `allowed_deck_ids`.
+
 > All endpoints below require `Authorization: Bearer <token>` and only ever operate on the authenticated account's own storages.
 
 ### `GET /storage`
@@ -575,7 +584,9 @@ GET /storage?type=binder&sort=-added&page=1&limit=25
       "type": "binder",
       "card_count": 3,
       "added": "2026-01-15 10:30:00",
-      "updated": "2026-01-15 10:30:00"
+      "updated": "2026-01-15 10:30:00",
+      "locked": true,
+      "allowed_deck_ids": ["9b2f6c1e-3d4a-4b5c-8d9e-0f1a2b3c4d5e"]
     }
   ],
   "page": 1,
@@ -609,6 +620,8 @@ Create a new storage.
 |---|---|---|
 | `name` | string | Yes |
 | `type` | string | Yes |
+| `locked` | bool | No, defaults to `false` |
+| `allowed_deck_ids` | array of deck ids | No, defaults to `[]` |
 
 **Example**
 ```json
@@ -617,7 +630,7 @@ Create a new storage.
 
 **Response `201 Created`**
 
-**Errors:** `400` missing required field
+**Errors:** `400` missing required field, or an `allowed_deck_ids` entry that isn't one of your decks
 
 ---
 
@@ -631,10 +644,17 @@ Partially update a storage.
 |---|---|
 | `name` | string |
 | `type` | string |
+| `locked` | bool |
+| `allowed_deck_ids` | array of deck ids, replacing the whole list (duplicates are dropped) |
+
+**Example — reserve a box for one deck**
+```json
+{ "locked": true, "allowed_deck_ids": ["9b2f6c1e-3d4a-4b5c-8d9e-0f1a2b3c4d5e"] }
+```
 
 **Response `200 OK`** — the full, updated storage.
 
-**Errors:** `400` invalid id / invalid body · `404` storage not found
+**Errors:** `400` invalid id / invalid body / an `allowed_deck_ids` entry that isn't one of your decks · `404` storage not found
 
 ---
 
@@ -1029,12 +1049,12 @@ Remove a card from a deck. **Idempotent** — always returns success, whether or
 
 Cards wanted in a deck but not in the collection yet (typically picked on Scryfall from the deck page). They are stored per deck until they're added to the collection all at once.
 
-- `GET /deck/:id/pending` — the list, sorted by name. Each item also tells what the collection already holds, outside this deck: `owned_copies` counts the cards of the same name (any printing, ` / ` and ` // ` alike, including copies in other decks), and `owned_same_printing` those of this exact printing. A client can tell a card missing from the collection (`0`) from one owned in another printing. Both are `0` in the responses of the routes below.
+- `GET /deck/:id/pending` — the list, sorted by name. Each item also tells what the collection already holds, outside this deck: `owned_copies` counts the cards of the same name (any printing, ` / ` and ` // ` alike, including copies in other decks), and `owned_same_printing` those of this exact printing. Both leave out the cards of [storages locked](#storage) against this deck. A client can tell a card missing from the collection (`0`) from one owned in another printing. Both are `0` in the responses of the routes below.
 - `POST /deck/:id/pending` — add one. Body: `name`, `scryfall_id`, `set_code`, `collector_number` (required), `foil`, `quantity` (1–100, default 1), `mana_value`, `colors`, `card_type`, `color_identity` (same rules as `POST /cards`), `board` (`main` by default, see [Boards](#boards)). Returns `201` with the item. If the deck already has a pending card of the same printing, finish and board (other than its pending commander), its quantity is raised instead and that item is returned.
 - `PATCH /deck/:id/pending/:pending_id` — change how many copies it stands for, its board, or both. Body: `{ "quantity": 12 }` (1–1000) and/or `{ "board": "considering" }`. Returns the item. Moved onto a board that already has a pending card of the same printing and finish, the two are merged and the remaining item is returned. The pending commander can't leave `main` (`409`).
 - `DELETE /deck/:id/pending/:pending_id` — remove one. `204`, or `404` if it doesn't exist.
 - `POST /deck/:id/pending/commit` — create every pending card in the collection (one card per copy, in `storage_id` if given), put each in the deck on the board it was pending on, and clear the list. Pending cards on the `considering` board are left out, unless given as `pending_id`. Body optional: `{ "storage_id": 4 }`, plus `"pending_id": 12` to only add that one pending card (all its copies), and `"quantity": 5` with it to only add that many copies (the pending card keeps the rest). Returns `{ "cards_created": 7 }`. Items are handled one by one: on a failure, those already handled stay done and the rest stay pending.
-- `POST /deck/:id/import` — add a list of cards to this deck, as `multipart/form-data` with the list in a `file` field and an optional `commander_from_first_line` (default `false`). It never creates cards: owned copies go in the deck, missing ones become pending cards. Details, list format and response in [`POST /deck/:id/import`](#post-deckidimport) under Bulk Import.
+- `POST /deck/:id/import` — add a list of cards to this deck, as `multipart/form-data` with the list in a `file` field and optional `commander_from_first_line` and `include_locked_storages` (both `false` by default). It never creates cards: owned copies go in the deck, missing ones become pending cards. Details, list format and response in [`POST /deck/:id/import`](#post-deckidimport) under Bulk Import.
 
 Each item has a `board` field, like the deck's own cards.
 
@@ -1422,7 +1442,7 @@ Import a [Tamiyo file](#tamiyo-format) of kind `collection` or `storage` into th
 
 Add a decklist to an **existing** deck — the front end creates the deck first (`POST /deck`), then calls this route. **It never creates cards in the collection**: each line is resolved against Scryfall, then:
 
-- copies of that exact printing already in the collection are put in the deck (`cards_linked`). Copies that are in no deck yet and of the same finish (foil or not) are used first, but a copy already in another deck can be used too, since a card can belong to several decks. Copies already in this deck are never used twice, and each copy is used at most once per import;
+- copies of that exact printing already in the collection are put in the deck (`cards_linked`). Copies that are in no deck yet and of the same finish (foil or not) are used first, but a copy already in another deck can be used too, since a card can belong to several decks. Copies already in this deck are never used twice, each copy is used at most once per import, and copies in a [storage locked](#storage) against this deck are never used, unless `include_locked_storages` is `true`;
 - the copies the collection lacks are added to the deck's [pending cards](#pending-cards-deckidpending) (`cards_pending`), to add to the collection later with `POST /deck/:id/pending/commit`. A pending card of the same printing, finish and board already in the deck has its quantity raised instead.
 
 Each card goes on the [board](#boards) of the section it's listed under: `main` by default, `sideboard` under a `Sideboard` header, `considering` under `Maybeboard` or `Considering` (see the list format below).
@@ -1437,6 +1457,7 @@ When `commander_from_first_line` is `true`, the first card line of `main` is tre
 |---|---|---|
 | `file` | Yes | The decklist, as plain text, or a [Tamiyo](#tamiyo-format) `deck` file. |
 | `commander_from_first_line` | No | `true` or `false`. Defaults to `false`. Ignored for a Tamiyo file. |
+| `include_locked_storages` | No | `true` or `false`. Defaults to `false`. `true` also uses copies in [storages locked](#storage) against this deck, after the open ones: for a client adding cards on the user's explicit request rather than matching a list. |
 
 A file starting with `{` is read as a [Tamiyo](#tamiyo-format) `deck` file: its cards go on their own boards, with their exact printing and finish, owned copies and missing ones handled as above. Its commander becomes the deck's commander if the deck has none yet. Its tags, when it has any, are added to the deck's [tags](#card-tags-deckidtags) (a card keeps the tags it already had); a tag that can't be set, for a card that couldn't be added, is noted in `warnings`. The file's `deck` name and format are not applied: the deck keeps its own.
 
@@ -1465,7 +1486,7 @@ Replace a deck's content with a list: every card on the list ends up in the deck
 
 Switch cards of a deck to the other finish, without touching the collection. Body: `{ "card_ids": [12, 13], "pending_ids": [4], "foil": true }`: `card_ids` are the deck's owned copies (as in `GET /deck/:id/cards`), `pending_ids` its [pending cards](#pending-cards-deckidpending); either can be left out, not both.
 
-Each listed copy or pending card that isn't already in that finish leaves the deck (an owned copy stays in the collection, as it is) and is replaced, on the same board, by copies of the same printing in that finish: your copies in no deck first, then ones another deck uses, and pending cards for whatever you don't own. A pending card of 3 copies thus becomes the owned copies you have, plus a pending card for the rest. The commander stays the commander, owned when a copy was found.
+Each listed copy or pending card that isn't already in that finish leaves the deck (an owned copy stays in the collection, as it is) and is replaced, on the same board, by copies of the same printing in that finish: your copies in no deck first, then ones another deck uses, and pending cards for whatever you don't own. Copies in a [storage locked](#storage) against the deck are never used. A pending card of 3 copies thus becomes the owned copies you have, plus a pending card for the rest. The commander stays the commander, owned when a copy was found.
 
 **Response `200 OK`** — the [import summary](#bulk-import): `cards_linked` copies found in the collection, `cards_pending` copies left pending, `cards_removed` copies that left the deck. Cards already in that finish are ignored.
 

@@ -43,6 +43,7 @@ type CardFilter struct {
 	ColorCount  *int
 	Foil        *bool
 	StorageType string
+	OpenToDeck  *string
 
 	GroupBy   string
 	SortField string

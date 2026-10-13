@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"Melrakkiie/Tamiyo/internal/deck"
 	"Melrakkiie/Tamiyo/internal/scryfall"
 )
 
@@ -21,6 +22,7 @@ var (
 	errInvalidFoilFilter   = errors.New("foil must be true or false")
 	errInvalidSubtype      = errors.New("subtype must have at most 50 characters")
 	errInvalidStorageType  = errors.New("storage_type must have at most 50 characters")
+	errInvalidOpenToDeck   = errors.New("open_to_deck must be a deck id")
 )
 
 func parseAdvancedFilters(ctx *gin.Context) (CardFilter, error) {
@@ -99,6 +101,14 @@ func parseAdvancedFilters(ctx *gin.Context) (CardFilter, error) {
 			return filter, errInvalidStorageType
 		}
 		filter.StorageType = raw
+	}
+
+	if raw := ctx.Query("open_to_deck"); raw != "" {
+		deckID, valid := deck.ParseID(raw)
+		if !valid {
+			return filter, errInvalidOpenToDeck
+		}
+		filter.OpenToDeck = &deckID
 	}
 
 	return filter, nil

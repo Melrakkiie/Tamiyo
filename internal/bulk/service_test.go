@@ -629,7 +629,7 @@ func withTargetDeck(decks *fakeDeckService) *fakeDeckService {
 func importDeck(t *testing.T, cards *fakeCardService, decks *fakeDeckService, decklist string, commanderFromFirstLine bool) Summary {
 	t.Helper()
 	svc := NewService(cards, &fakeStorageService{}, withTargetDeck(decks), deckImportResolver())
-	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, commanderFromFirstLine, strings.NewReader(decklist))
+	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{CommanderFromFirstLine: commanderFromFirstLine}, strings.NewReader(decklist))
 	require.NoError(t, err)
 	return summary
 }
@@ -661,6 +661,54 @@ func TestImportIntoDeck_PutsOwnedCopiesInTheDeck(t *testing.T) {
 	assert.Equal(t, 5, decks.cardCommanderID)
 	assert.ElementsMatch(t, []int{5, 6, 7}, decks.linkedCards[targetDeckID])
 	assert.Empty(t, decks.addedPending)
+}
+
+func TestImportIntoDeck_SkipsCopiesInStoragesClosedToTheDeck(t *testing.T) {
+	cards := &fakeCardService{allCards: []card.Card{
+		{ID: 6, Name: "Sol Ring", ScryfallID: solRingID, StorageID: ptr(1)},
+		{ID: 7, Name: "Sol Ring", ScryfallID: solRingID, StorageID: ptr(2)},
+		{ID: 8, Name: "Sol Ring", ScryfallID: solRingID, StorageID: ptr(3)},
+	}}
+	storages := &fakeStorageService{storages: []storage.Storage{
+		{ID: 1, Name: "Trades", Locked: true},
+		{ID: 2, Name: "Reserved", Locked: true, AllowedDeckIDs: []string{targetDeckID}},
+		{ID: 3, Name: "Binder", AllowedDeckIDs: []string{"00000000-0000-0000-0000-000000000099"}},
+	}}
+	decks := withTargetDeck(&fakeDeckService{})
+	svc := NewService(cards, storages, decks, deckImportResolver())
+
+	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader("3 Sol Ring (SLD) 1011\n"))
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, summary.CardsLinked)
+	assert.Equal(t, 1, summary.CardsPending)
+	assert.ElementsMatch(t, []int{7, 8}, decks.linkedCards[targetDeckID])
+}
+
+func TestImportIntoDeck_IncludeLockedStoragesUsesOpenCopiesFirst(t *testing.T) {
+	cards := &fakeCardService{allCards: []card.Card{
+		{ID: 6, Name: "Sol Ring", ScryfallID: solRingID, StorageID: ptr(1)},
+		{ID: 7, Name: "Sol Ring", ScryfallID: solRingID, StorageID: ptr(2)},
+	}}
+	storages := &fakeStorageService{storages: []storage.Storage{
+		{ID: 1, Name: "Trades", Locked: true},
+		{ID: 2, Name: "Binder"},
+	}}
+
+	decks := withTargetDeck(&fakeDeckService{})
+	svc := NewService(cards, storages, decks, deckImportResolver())
+	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{IncludeLockedStorages: true}, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
+	require.NoError(t, err)
+	assert.Equal(t, 1, summary.CardsLinked)
+	assert.Equal(t, []int{7}, decks.linkedCards[targetDeckID])
+
+	decks = withTargetDeck(&fakeDeckService{})
+	svc = NewService(cards, storages, decks, deckImportResolver())
+	summary, err = svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{IncludeLockedStorages: true}, strings.NewReader("2 Sol Ring (SLD) 1011\n"))
+	require.NoError(t, err)
+	assert.Equal(t, 2, summary.CardsLinked)
+	assert.Equal(t, 0, summary.CardsPending)
+	assert.ElementsMatch(t, []int{6, 7}, decks.linkedCards[targetDeckID])
 }
 
 func TestImportIntoDeck_AddsMissingCopiesAsPending(t *testing.T) {
@@ -791,7 +839,7 @@ func importPlainList(t *testing.T, cards *fakeCardService, decks *fakeDeckServic
 	t.Helper()
 	resolver := plainListResolver()
 	svc := NewService(cards, &fakeStorageService{}, withTargetDeck(decks), resolver)
-	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, false, strings.NewReader(decklist))
+	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader(decklist))
 	require.NoError(t, err)
 	return summary, resolver
 }
@@ -848,7 +896,7 @@ func TestImportIntoDeck_PlainListWarnsAboutUnknownNames(t *testing.T) {
 func importIntoDeck(t *testing.T, cards *fakeCardService, decks *fakeDeckService, decklist string, commanderFromFirstLine bool) Summary {
 	t.Helper()
 	svc := NewService(cards, &fakeStorageService{}, decks, deckImportResolver())
-	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, commanderFromFirstLine, strings.NewReader(decklist))
+	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{CommanderFromFirstLine: commanderFromFirstLine}, strings.NewReader(decklist))
 	require.NoError(t, err)
 	return summary
 }
@@ -901,7 +949,7 @@ func TestImportIntoDeck_SetsTheCommanderOnlyWhenTheDeckHasNone(t *testing.T) {
 func TestImportIntoDeck_ReturnsDeckNotFound(t *testing.T) {
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, deckImportResolver())
 
-	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, false, strings.NewReader("1 Sol Ring\n"))
+	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader("1 Sol Ring\n"))
 
 	assert.ErrorIs(t, err, ErrDeckNotFound)
 }
@@ -910,7 +958,7 @@ func TestImportIntoDeck_ReturnsErrorWhenScryfallResolveFails(t *testing.T) {
 	resolver := &fakeResolver{err: errors.New("scryfall is down")}
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, withTargetDeck(&fakeDeckService{}), resolver)
 
-	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, false, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
+	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
 
 	assert.ErrorIs(t, err, ErrScryfallUnavailable)
 }
@@ -918,7 +966,7 @@ func TestImportIntoDeck_ReturnsErrorWhenScryfallResolveFails(t *testing.T) {
 func TestImportIntoDeck_ReturnsErrorWhenTheCollectionCannotBeLoaded(t *testing.T) {
 	svc := NewService(&fakeCardService{getAllErr: errors.New("db is down")}, &fakeStorageService{}, withTargetDeck(&fakeDeckService{}), deckImportResolver())
 
-	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, false, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
+	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
 
 	require.Error(t, err)
 }

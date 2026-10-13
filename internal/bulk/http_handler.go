@@ -21,7 +21,7 @@ type importService interface {
 	ImportManaBox(ctx context.Context, userID string, storageID *int, r io.Reader) (Summary, error)
 	ImportMoxfieldCollection(ctx context.Context, userID string, storageID int, r io.Reader) (Summary, error)
 	ImportCardList(ctx context.Context, userID string, storageID *int, r io.Reader) (Summary, error)
-	ImportIntoDeck(ctx context.Context, userID string, deckID string, commanderFromFirstLine bool, r io.Reader) (Summary, error)
+	ImportIntoDeck(ctx context.Context, userID string, deckID string, opts DeckImportOptions, r io.Reader) (Summary, error)
 	ImportTamiyoCollection(ctx context.Context, userID string, storageID *int, r io.Reader) (Summary, error)
 
 	ExportManaBox(ctx context.Context, userID string, storageID *int, w io.Writer) error
@@ -215,14 +215,22 @@ func (h *Handler) importIntoDeck(ctx *gin.Context) {
 		return
 	}
 
-	commanderFromFirstLine := false
-	if raw := ctx.PostForm("commander_from_first_line"); raw != "" {
-		parsed, err := strconv.ParseBool(raw)
-		if err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "commander_from_first_line must be a boolean"})
-			return
+	var opts DeckImportOptions
+	for _, field := range []struct {
+		name  string
+		value *bool
+	}{
+		{"commander_from_first_line", &opts.CommanderFromFirstLine},
+		{"include_locked_storages", &opts.IncludeLockedStorages},
+	} {
+		if raw := ctx.PostForm(field.name); raw != "" {
+			parsed, err := strconv.ParseBool(raw)
+			if err != nil {
+				ctx.JSON(http.StatusBadRequest, gin.H{"error": field.name + " must be a boolean"})
+				return
+			}
+			*field.value = parsed
 		}
-		commanderFromFirstLine = parsed
 	}
 
 	file, err := openUploadedFile(ctx, "file")
@@ -234,7 +242,7 @@ func (h *Handler) importIntoDeck(ctx *gin.Context) {
 		_ = file.Close()
 	}()
 
-	summary, err := h.service.ImportIntoDeck(ctx.Request.Context(), userID, deckID, commanderFromFirstLine, file)
+	summary, err := h.service.ImportIntoDeck(ctx.Request.Context(), userID, deckID, opts, file)
 	if err != nil {
 		apierr.Respond(ctx, err,
 			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},

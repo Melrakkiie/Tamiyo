@@ -28,6 +28,7 @@ type fakeService struct {
 
 	updateStorage Storage
 	updateErr     error
+	lastUpdateReq updateStorageRequest
 
 	deleteErr error
 }
@@ -57,6 +58,7 @@ func (f *fakeService) CreateStorage(ctx context.Context, userID string, storage 
 
 func (f *fakeService) UpdateStorage(ctx context.Context, userID string, id int, req updateStorageRequest) (Storage, error) {
 	f.lastUserID = userID
+	f.lastUpdateReq = req
 	if f.updateErr != nil {
 		return Storage{}, f.updateErr
 	}
@@ -249,6 +251,9 @@ func TestHandler_GetStorage_ReturnsStorageAsJSON(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
 	assert.Equal(t, "Vintage Collection", response.Name)
+	assert.False(t, response.Locked)
+	assert.NotNil(t, response.AllowedDeckIDs)
+	assert.Contains(t, w.Body.String(), `"allowed_deck_ids": []`)
 }
 
 func TestHandler_GetStorage_ReturnsNotFoundWhenStorageDoesNotBelongToUser(t *testing.T) {
@@ -403,4 +408,72 @@ func TestHandler_DeleteStorage_ReturnsInternalServerErrorOnOtherServiceError(t *
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func patchStorage(router *gin.Engine, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPatch, "/storage/1", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	return w
+}
+
+func TestHandler_UpdateStorage_PassesNormalizedLockToService(t *testing.T) {
+	deckID := "0a0a0a0a-0000-0000-0000-000000000001"
+	service := &fakeService{updateStorage: Storage{ID: 1, Locked: true, AllowedDeckIDs: []string{deckID}}}
+	router := setupRouter(service)
+
+	w := patchStorage(router, `{"locked": true, "allowed_deck_ids": ["0A0A0A0A-0000-0000-0000-000000000001", "0a0a0a0a-0000-0000-0000-000000000001"]}`)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, service.lastUpdateReq.Locked)
+	assert.True(t, *service.lastUpdateReq.Locked)
+	require.NotNil(t, service.lastUpdateReq.AllowedDeckIDs)
+	assert.Equal(t, []string{deckID}, *service.lastUpdateReq.AllowedDeckIDs)
+
+	var response storageResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	assert.True(t, response.Locked)
+	assert.Equal(t, []string{deckID}, response.AllowedDeckIDs)
+}
+
+func TestHandler_UpdateStorage_LeavesAllowedDecksAloneWhenAbsent(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	w := patchStorage(router, `{"locked": false}`)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Nil(t, service.lastUpdateReq.AllowedDeckIDs)
+}
+
+func TestHandler_UpdateStorage_ReturnsBadRequestOnInvalidAllowedDeckID(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	w := patchStorage(router, `{"allowed_deck_ids": ["not-a-uuid"]}`)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "allowed_deck_ids")
+}
+
+func TestHandler_UpdateStorage_ReturnsBadRequestOnUnknownAllowedDeck(t *testing.T) {
+	service := &fakeService{updateErr: ErrDeckNotFound}
+	router := setupRouter(service)
+
+	w := patchStorage(router, `{"allowed_deck_ids": ["0a0a0a0a-0000-0000-0000-000000000001"]}`)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_CreateStorage_ReturnsBadRequestOnInvalidAllowedDeckID(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPost, "/storage", bytes.NewBufferString(`{"name": "Trades", "type": "box", "locked": true, "allowed_deck_ids": ["nope"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }

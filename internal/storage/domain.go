@@ -3,10 +3,14 @@ package storage
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 )
 
-var ErrNotFound = errors.New("storage not found")
+var (
+	ErrNotFound     = errors.New("storage not found")
+	ErrDeckNotFound = errors.New("allowed_deck_ids must only contain your own decks")
+)
 
 type Storage struct {
 	ID        int
@@ -15,6 +19,13 @@ type Storage struct {
 	CardCount int
 	Added     time.Time
 	Updated   time.Time
+
+	Locked         bool
+	AllowedDeckIDs []string
+}
+
+func (s Storage) OpenTo(deckID string) bool {
+	return !s.Locked || slices.Contains(s.AllowedDeckIDs, deckID)
 }
 
 type Filter struct {

@@ -145,6 +145,13 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 	if filter.StorageType != "" {
 		add("storage_id IN (SELECT s.id FROM tamiyo.storage s WHERE s.user_id = $1 AND lower(trim(s.type)) = lower(trim($%d)))", filter.StorageType)
 	}
+	if filter.OpenToDeck != nil {
+		add(`(storage_id IS NULL OR NOT EXISTS (
+			SELECT 1 FROM tamiyo.storage s
+			WHERE s.id = cards.storage_id AND s.locked
+			  AND NOT EXISTS (SELECT 1 FROM tamiyo.storage_allowed_deck a WHERE a.storage_id = s.id AND a.deck_id = $%d)
+		))`, *filter.OpenToDeck)
+	}
 
 	whereClause := " WHERE " + strings.Join(conditions, " AND ")
 

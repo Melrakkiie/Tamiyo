@@ -60,6 +60,11 @@ func (r *PostgresRepository) FindPendingCards(ctx context.Context, userID string
 			FROM tamiyo.cards c
 			WHERE c.user_id = $1
 			  AND NOT EXISTS (SELECT 1 FROM tamiyo.card_deck cd WHERE cd.card_id = c.id AND cd.deck_id = $2)
+			  AND (c.storage_id IS NULL OR NOT EXISTS (
+			      SELECT 1 FROM tamiyo.storage s
+			      WHERE s.id = c.storage_id AND s.locked
+			        AND NOT EXISTS (SELECT 1 FROM tamiyo.storage_allowed_deck a WHERE a.storage_id = s.id AND a.deck_id = $2)
+			  ))
 		)
 		SELECT ` + pendingColumns + `,
 			(SELECT count(*) FROM available a WHERE a.name_key = ` + normalizedNameSQL("p.name") + `) AS owned_copies,

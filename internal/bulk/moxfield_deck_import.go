@@ -18,6 +18,7 @@ type ownedCopies struct {
 	byName     map[string][]card.Card
 	inDeck     map[int]bool
 	used       map[int]bool
+	locked     map[int]bool
 }
 
 func (o *ownedCopies) takePrinting(scryfallID string, foil bool, quantity int) []int {
@@ -32,6 +33,9 @@ func (o *ownedCopies) take(copies []card.Card, foil bool, quantity int) []int {
 	candidates := append([]card.Card(nil), copies...)
 	sort.SliceStable(candidates, func(i, j int) bool {
 		a, b := candidates[i], candidates[j]
+		if o.locked[a.ID] != o.locked[b.ID] {
+			return !o.locked[a.ID]
+		}
 		if o.inDeck[a.ID] != o.inDeck[b.ID] {
 			return !o.inDeck[a.ID]
 		}
@@ -54,18 +58,31 @@ func (o *ownedCopies) take(copies []card.Card, foil bool, quantity int) []int {
 	return ids
 }
 
-func (s *Service) loadOwnedCopies(ctx context.Context, userID string, targetDeckID string) (*ownedCopies, error) {
+func (s *Service) loadOwnedCopies(ctx context.Context, userID string, targetDeckID string, includeLocked bool) (*ownedCopies, error) {
 	cards, err := s.loadAllCards(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("loading the collection: %w", err)
+	}
+	storagesByID, err := s.loadAllStoragesByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("loading storages: %w", err)
 	}
 	owned := &ownedCopies{
 		byPrinting: make(map[string][]card.Card),
 		byName:     make(map[string][]card.Card),
 		inDeck:     make(map[int]bool),
 		used:       make(map[int]bool),
+		locked:     make(map[int]bool),
 	}
 	for _, c := range cards {
+		if c.StorageID != nil {
+			if st, ok := storagesByID[*c.StorageID]; ok && !st.OpenTo(targetDeckID) {
+				if !includeLocked {
+					continue
+				}
+				owned.locked[c.ID] = true
+			}
+		}
 		key := strings.ToLower(c.ScryfallID)
 		owned.byPrinting[key] = append(owned.byPrinting[key], c)
 		full, front := deck.CardNameKey(c.Name), deck.CardNameKey(frontFaceName(c.Name))
@@ -151,16 +168,16 @@ type deckLinePlacement struct {
 	commander bool
 }
 
-func (s *Service) placeDeckLines(ctx context.Context, userID string, lines []moxfieldDeckLine, commanderFromFirstLine bool, targetDeckID string) ([]deckLinePlacement, Summary, error) {
+func (s *Service) placeDeckLines(ctx context.Context, userID string, lines []moxfieldDeckLine, commanderFromFirstLine bool, targetDeckID string, includeLocked bool) ([]deckLinePlacement, Summary, error) {
 	resolved, err := s.resolveDeckLines(ctx, lines)
 	if err != nil {
 		return nil, Summary{}, err
 	}
-	return s.placeResolvedLines(ctx, userID, lines, resolved, commanderFromFirstLine, targetDeckID)
+	return s.placeResolvedLines(ctx, userID, lines, resolved, commanderFromFirstLine, targetDeckID, includeLocked)
 }
 
-func (s *Service) placeResolvedLines(ctx context.Context, userID string, lines []moxfieldDeckLine, resolved map[string]ResolvedCard, commanderFromFirstLine bool, targetDeckID string) ([]deckLinePlacement, Summary, error) {
-	owned, err := s.loadOwnedCopies(ctx, userID, targetDeckID)
+func (s *Service) placeResolvedLines(ctx context.Context, userID string, lines []moxfieldDeckLine, resolved map[string]ResolvedCard, commanderFromFirstLine bool, targetDeckID string, includeLocked bool) ([]deckLinePlacement, Summary, error) {
+	owned, err := s.loadOwnedCopies(ctx, userID, targetDeckID, includeLocked)
 	if err != nil {
 		return nil, Summary{}, err
 	}
@@ -273,7 +290,7 @@ func lineTags(lines []moxfieldDeckLine) []tamiyoCardTags {
 	return tags
 }
 
-func (s *Service) ImportIntoDeck(ctx context.Context, userID string, deckID string, commanderFromFirstLine bool, r io.Reader) (Summary, error) {
+func (s *Service) ImportIntoDeck(ctx context.Context, userID string, deckID string, opts DeckImportOptions, r io.Reader) (Summary, error) {
 	d, err := s.decks.GetDeck(ctx, userID, deckID)
 	if err != nil {
 		if errors.Is(err, deck.ErrNotFound) {
@@ -287,6 +304,7 @@ func (s *Service) ImportIntoDeck(ctx context.Context, userID string, deckID stri
 		return Summary{}, err
 	}
 
+	commanderFromFirstLine := opts.CommanderFromFirstLine
 	var lines []moxfieldDeckLine
 	var tags []tamiyoCardTags
 	if looksLikeJSON(data) {
@@ -310,7 +328,7 @@ func (s *Service) ImportIntoDeck(ctx context.Context, userID string, deckID stri
 	}
 
 	hasCommander := d.CommanderID != nil || d.CommanderPendingID != nil
-	placements, summary, err := s.placeDeckLines(ctx, userID, lines, commanderFromFirstLine && !hasCommander, d.ID)
+	placements, summary, err := s.placeDeckLines(ctx, userID, lines, commanderFromFirstLine && !hasCommander, d.ID, opts.IncludeLockedStorages)
 	if err != nil {
 		return Summary{}, err
 	}

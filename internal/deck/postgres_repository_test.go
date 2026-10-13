@@ -1285,6 +1285,52 @@ func TestPostgresRepository_FindPendingCards_CountsOwnedCopiesOutsideTheDeck(t *
 	assert.Equal(t, 0, byName["Counterspell"].OwnedSamePrinting)
 }
 
+func TestPostgresRepository_FindPendingCards_IgnoresStoragesClosedToTheDeck(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+	d, err := repo.Create(ctx, userID, Deck{Name: "Kess", Format: "commander"})
+	require.NoError(t, err)
+	other, err := repo.Create(ctx, userID, Deck{Name: "Other", Format: "commander"})
+	require.NoError(t, err)
+
+	var closedID, reservedID, unlockedID int
+	require.NoError(t, db.Get(&closedID, `INSERT INTO tamiyo.storage (user_id, name, type, locked) VALUES ($1, 'Trades', 'box', true) RETURNING id`, userID))
+	require.NoError(t, db.Get(&reservedID, `INSERT INTO tamiyo.storage (user_id, name, type, locked) VALUES ($1, 'Reserved', 'box', true) RETURNING id`, userID))
+	require.NoError(t, db.Get(&unlockedID, `INSERT INTO tamiyo.storage (user_id, name, type) VALUES ($1, 'Binder', 'binder') RETURNING id`, userID))
+	_, err = db.Exec(`INSERT INTO tamiyo.storage_allowed_deck (storage_id, deck_id) VALUES ($1, $2), ($3, $4)`, reservedID, other.ID, unlockedID, other.ID)
+	require.NoError(t, err)
+
+	const solRing = "11111111-1111-1111-1111-111111111111"
+	_, err = db.Exec(`
+		INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value)
+		VALUES
+		    ($1, 'Sol Ring', $2, 'sld', '1011', false, $3, 1),
+		    ($1, 'Sol Ring', $2, 'sld', '1011', false, $4, 1),
+		    ($1, 'Sol Ring', $2, 'sld', '1011', false, $5, 1),
+		    ($1, 'Sol Ring', $2, 'sld', '1011', false, null, 1)
+	`, userID, solRing, closedID, reservedID, unlockedID)
+	require.NoError(t, err)
+
+	for _, deckID := range []string{d.ID, other.ID} {
+		_, err := repo.CreatePendingCard(ctx, userID, PendingCard{DeckID: deckID, Name: "Sol Ring", ScryfallID: solRing, SetCode: "sld", CollectorNumber: "1011", Quantity: 1})
+		require.NoError(t, err)
+	}
+
+	pending, err := repo.FindPendingCards(ctx, userID, d.ID)
+	require.NoError(t, err)
+	require.Len(t, pending, 1)
+	assert.Equal(t, 2, pending[0].OwnedCopies)
+	assert.Equal(t, 2, pending[0].OwnedSamePrinting)
+
+	pending, err = repo.FindPendingCards(ctx, userID, other.ID)
+	require.NoError(t, err)
+	require.Len(t, pending, 1)
+	assert.Equal(t, 3, pending[0].OwnedCopies)
+	assert.Equal(t, 3, pending[0].OwnedSamePrinting)
+}
+
 func TestPostgresRepository_View(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db, "alice@example.com")

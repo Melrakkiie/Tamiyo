@@ -995,4 +995,18 @@ func TestPostgresRepository_FindAll_AdvancedFilters(t *testing.T) {
 	assert.Equal(t, []string{"Esika's Chariot", "Lightning Helix"}, names(CardFilter{Foil: &yes}))
 	assert.Equal(t, []string{"Lightning Helix", "Sol Ring"}, names(CardFilter{StorageType: "deckbox"}))
 	assert.Equal(t, []string{"Lightning Helix"}, names(CardFilter{StorageType: "deckbox", LegalIn: "modern", Stack: true}))
+
+	var allowedDeck, otherDeck string
+	require.NoError(t, db.Get(&allowedDeck, `INSERT INTO tamiyo.deck (user_id, name, format) VALUES ($1, 'Allowed', 'commander') RETURNING id`, userID))
+	require.NoError(t, db.Get(&otherDeck, `INSERT INTO tamiyo.deck (user_id, name, format) VALUES ($1, 'Other', 'commander') RETURNING id`, userID))
+	_, err := db.Exec(`UPDATE tamiyo.storage SET locked = true WHERE id = $1`, deckboxID)
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO tamiyo.storage_allowed_deck (storage_id, deck_id) VALUES ($1, $2)`, deckboxID, allowedDeck)
+	require.NoError(t, err)
+
+	everything := []string{"Esika's Chariot", "Grist, the Hunger Tide", "Lightning Helix", "Llanowar Elves", "Sol Ring", "Unknown"}
+	assert.Equal(t, everything, names(CardFilter{OpenToDeck: str(allowedDeck)}))
+	assert.Equal(t, []string{"Esika's Chariot", "Grist, the Hunger Tide", "Llanowar Elves", "Unknown"}, names(CardFilter{OpenToDeck: str(otherDeck)}))
+	assert.Equal(t, []string{"Esika's Chariot", "Llanowar Elves"}, names(CardFilter{OpenToDeck: str(otherDeck), Colors: str("G"), ColorMode: ColorModeExact, Stack: true}))
+	assert.Equal(t, everything, names(CardFilter{}))
 }

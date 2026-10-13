@@ -43,6 +43,7 @@ type fakeImportService struct {
 	lastDeckID    string
 
 	lastIntoDeckCommander bool
+	lastIncludeLocked     bool
 	lastTamiyoStorageID   *int
 	lastExportTags        bool
 	tamiyoImportCalled    bool
@@ -171,10 +172,11 @@ func (f *fakeImportService) ExportMoxfieldCollection(ctx context.Context, userID
 	return err
 }
 
-func (f *fakeImportService) ImportIntoDeck(ctx context.Context, userID string, deckID string, commanderFromFirstLine bool, r io.Reader) (Summary, error) {
+func (f *fakeImportService) ImportIntoDeck(ctx context.Context, userID string, deckID string, opts DeckImportOptions, r io.Reader) (Summary, error) {
 	f.lastUserID = userID
 	f.lastDeckID = deckID
-	f.lastIntoDeckCommander = commanderFromFirstLine
+	f.lastIntoDeckCommander = opts.CommanderFromFirstLine
+	f.lastIncludeLocked = opts.IncludeLockedStorages
 	content, _ := io.ReadAll(r)
 	f.lastFileContent = string(content)
 	return f.summary, f.err
@@ -745,6 +747,35 @@ func TestImportIntoDeck_DefaultsCommanderFromFirstLineToFalse(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.False(t, service.lastIntoDeckCommander)
+	assert.False(t, service.lastIncludeLocked)
+}
+
+func TestImportIntoDeck_PassesIncludeLockedStorages(t *testing.T) {
+	service := &fakeImportService{}
+	router := setupRouter(service)
+
+	req := multipartRequest(t, "/deck/00000000-0000-0000-0000-000000000077/import", "2 Sol Ring", map[string]string{
+		"include_locked_storages": "true",
+	})
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, service.lastIncludeLocked)
+	assert.False(t, service.lastIntoDeckCommander)
+}
+
+func TestImportIntoDeck_RejectsAnInvalidIncludeLockedStorages(t *testing.T) {
+	router := setupRouter(&fakeImportService{})
+
+	req := multipartRequest(t, "/deck/00000000-0000-0000-0000-000000000077/import", "2 Sol Ring", map[string]string{
+		"include_locked_storages": "maybe",
+	})
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "include_locked_storages must be a boolean")
 }
 
 func TestImportIntoDeck_RejectsAnInvalidDeckID(t *testing.T) {

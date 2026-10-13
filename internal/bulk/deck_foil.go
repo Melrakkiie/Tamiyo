@@ -72,7 +72,7 @@ func (s *Service) SwitchFoil(ctx context.Context, userID string, deckID string, 
 		return Summary{}, nil
 	}
 
-	owned, err := s.loadOwnedCopies(ctx, userID, deckID)
+	owned, err := s.loadOwnedCopies(ctx, userID, deckID, false)
 	if err != nil {
 		return Summary{}, err
 	}

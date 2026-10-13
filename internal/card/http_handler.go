@@ -358,6 +358,7 @@ func (h *Handler) getCards(ctx *gin.Context) {
 		ColorCount:    advanced.ColorCount,
 		Foil:          advanced.Foil,
 		StorageType:   advanced.StorageType,
+		OpenToDeck:    advanced.OpenToDeck,
 		GroupBy:       groupBy,
 		SortField:     sortField,
 		SortDesc:      sortDesc,

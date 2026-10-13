@@ -529,3 +529,106 @@ func TestPostgresRepository_CardActivity_RefreshesUpdatedTimestamp(t *testing.T)
 	require.NoError(t, err)
 	assert.True(t, afterDelete.Updated.After(afterMoveTo.Updated))
 }
+
+func seedDeck(t *testing.T, db *sqlx.DB, userID string, name string) string {
+	t.Helper()
+
+	var deckID string
+	require.NoError(t, db.Get(&deckID, `INSERT INTO tamiyo.deck (user_id, name, format) VALUES ($1, $2, 'commander') RETURNING id`, userID, name))
+	return deckID
+}
+
+func TestPostgresRepository_Update_ReplacesLockAndAllowedDecks(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userID)
+	kess := seedDeck(t, db, userID, "Kess")
+	atraxa := seedDeck(t, db, userID, "Atraxa")
+
+	existing, err := repo.FindByID(context.Background(), userID, 1)
+	require.NoError(t, err)
+	assert.False(t, existing.Locked)
+	assert.Empty(t, existing.AllowedDeckIDs)
+
+	existing.Locked = true
+	existing.AllowedDeckIDs = []string{kess, atraxa}
+	updated, err := repo.Update(context.Background(), userID, existing)
+	require.NoError(t, err)
+	assert.True(t, updated.Locked)
+	assert.ElementsMatch(t, []string{kess, atraxa}, updated.AllowedDeckIDs)
+
+	updated.AllowedDeckIDs = []string{atraxa}
+	_, err = repo.Update(context.Background(), userID, updated)
+	require.NoError(t, err)
+
+	all, _, err := repo.FindAll(context.Background(), userID, defaultFilter())
+	require.NoError(t, err)
+	byID := map[int]Storage{}
+	for _, s := range all {
+		byID[s.ID] = s
+	}
+	assert.True(t, byID[1].Locked)
+	assert.Equal(t, []string{atraxa}, byID[1].AllowedDeckIDs)
+	assert.False(t, byID[2].Locked)
+	assert.Empty(t, byID[2].AllowedDeckIDs)
+}
+
+func TestPostgresRepository_Update_RejectsAnotherUsersDeck(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userA)
+	bobsDeck := seedDeck(t, db, userB, "Bob's deck")
+
+	existing, err := repo.FindByID(context.Background(), userA, 1)
+	require.NoError(t, err)
+	existing.Locked = true
+	existing.AllowedDeckIDs = []string{bobsDeck}
+
+	_, err = repo.Update(context.Background(), userA, existing)
+	assert.ErrorIs(t, err, ErrDeckNotFound)
+
+	refetched, err := repo.FindByID(context.Background(), userA, 1)
+	require.NoError(t, err)
+	assert.False(t, refetched.Locked)
+
+	_, err = db.Exec(`INSERT INTO tamiyo.storage_allowed_deck (storage_id, deck_id) VALUES (1, $1)`, bobsDeck)
+	assert.Error(t, err)
+}
+
+func TestPostgresRepository_Create_SavesLockAndAllowedDecks(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	kess := seedDeck(t, db, userID, "Kess")
+
+	created, err := repo.Create(context.Background(), userID, Storage{Name: "Trades", Type: "box", Locked: true, AllowedDeckIDs: []string{kess}})
+	require.NoError(t, err)
+	assert.True(t, created.Locked)
+	assert.Equal(t, []string{kess}, created.AllowedDeckIDs)
+}
+
+func TestPostgresRepository_DeletingADeckRemovesItFromAllowedDecks(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userID)
+	kess := seedDeck(t, db, userID, "Kess")
+
+	existing, err := repo.FindByID(context.Background(), userID, 1)
+	require.NoError(t, err)
+	existing.Locked = true
+	existing.AllowedDeckIDs = []string{kess}
+	_, err = repo.Update(context.Background(), userID, existing)
+	require.NoError(t, err)
+
+	_, err = db.Exec(`DELETE FROM tamiyo.deck WHERE id = $1`, kess)
+	require.NoError(t, err)
+
+	refetched, err := repo.FindByID(context.Background(), userID, 1)
+	require.NoError(t, err)
+	assert.True(t, refetched.Locked)
+	assert.Empty(t, refetched.AllowedDeckIDs)
+}
