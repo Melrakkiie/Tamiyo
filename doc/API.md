@@ -210,16 +210,20 @@ Set or clear the account's profile: its display name, a purely cosmetic name the
 The account's display preferences, saved so they follow the user from one device to another. **Requires `Authorization: Bearer <token>`.**
 
 ```json
-{ "show_collection_in_decks": true }
+{ "show_collection_in_decks": true, "card_display": "images", "card_columns": 6, "show_mana_cost": true, "show_card_details": true }
 ```
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `show_collection_in_decks` | bool | `true` | Whether deck pages show what the collection holds: in the user's own decks, which cards are pending, where each copy is stored; in other people's decks, which cards the user owns (see [`GET /deck/:id/ownership`](#get-deckidownership)). |
+| `card_display` | string | `images` | How card lists are shown: `text` (one row per card) or `images` (card images). |
+| `card_columns` | int | `6` | Card images per row, `2` to `12`, when `card_display` is `images`. |
+| `show_mana_cost` | bool | `true` | Whether text rows show the mana cost. |
+| `show_card_details` | bool | `true` | Whether card images show the card's details below them (name, printing, storage). |
 
 `GET` returns them (the defaults until something is saved); `PATCH` changes the fields present in the body and returns them all.
 
-**Errors:** `400` no known field in the body, or a field of the wrong type · `401` missing/invalid token
+**Errors:** `400` no known field in the body, a field of the wrong type, `card_display` not `text` or `images`, or `card_columns` outside `2..12` · `401` missing/invalid token
 
 ---
 

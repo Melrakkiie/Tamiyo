@@ -2732,7 +2732,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Preferences"
+              $ref: "#/components/schemas/PreferencesChanges"
       responses:
         "200":
           description: OK
@@ -2741,7 +2741,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Preferences"
         "400":
-          description: No known field, or a field of the wrong type
+          description: No known field, a field of the wrong type, an unknown card_display, or card_columns outside 2..12
           content:
             application/json:
               schema:
@@ -3556,7 +3556,44 @@ components:
             Whether deck pages show what the collection holds: pending cards
             and storages in the user's own decks, owned cards in other
             people's decks.
-      required: [show_collection_in_decks]
+        card_display:
+          type: string
+          enum: [text, images]
+          default: images
+          description: How card lists are shown, as text rows or card images.
+        card_columns:
+          type: integer
+          minimum: 2
+          maximum: 12
+          default: 6
+          description: Card images per row.
+        show_mana_cost:
+          type: boolean
+          default: true
+          description: Whether text rows show the mana cost.
+        show_card_details:
+          type: boolean
+          default: true
+          description: Whether card images show the card's details below them (name, printing, storage).
+      required: [show_collection_in_decks, card_display, card_columns, show_mana_cost, show_card_details]
+
+    PreferencesChanges:
+      type: object
+      description: Any of the preferences; at least one.
+      properties:
+        show_collection_in_decks:
+          type: boolean
+        card_display:
+          type: string
+          enum: [text, images]
+        card_columns:
+          type: integer
+          minimum: 2
+          maximum: 12
+        show_mana_cost:
+          type: boolean
+        show_card_details:
+          type: boolean
 
     DeckOwnership:
       type: object

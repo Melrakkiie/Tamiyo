@@ -13,21 +13,68 @@ import (
 	"Melrakkiie/Tamiyo/internal/auth"
 )
 
+const (
+	CardDisplayText   = "text"
+	CardDisplayImages = "images"
+
+	MinCardColumns = 2
+	MaxCardColumns = 12
+)
+
+var (
+	ErrInvalidCardDisplay = errors.New("card_display must be text or images")
+	ErrInvalidCardColumns = errors.New("card_columns must be between 2 and 12")
+)
+
 type Preferences struct {
 	ShowCollectionInDecks bool
+	CardDisplay           string
+	CardColumns           int
+	ShowManaCost          bool
+	ShowCardDetails       bool
 }
 
 func Defaults() Preferences {
-	return Preferences{ShowCollectionInDecks: true}
+	return Preferences{ShowCollectionInDecks: true, CardDisplay: CardDisplayImages, CardColumns: 6, ShowManaCost: true, ShowCardDetails: true}
 }
 
 type Changes struct {
 	ShowCollectionInDecks *bool
+	CardDisplay           *string
+	CardColumns           *int
+	ShowManaCost          *bool
+	ShowCardDetails       *bool
+}
+
+func (c Changes) empty() bool {
+	return c.ShowCollectionInDecks == nil && c.CardDisplay == nil && c.CardColumns == nil && c.ShowManaCost == nil && c.ShowCardDetails == nil
+}
+
+func (c Changes) validate() error {
+	if c.CardDisplay != nil && *c.CardDisplay != CardDisplayText && *c.CardDisplay != CardDisplayImages {
+		return ErrInvalidCardDisplay
+	}
+	if c.CardColumns != nil && (*c.CardColumns < MinCardColumns || *c.CardColumns > MaxCardColumns) {
+		return ErrInvalidCardColumns
+	}
+	return nil
 }
 
 func (c Changes) applyTo(p Preferences) Preferences {
 	if c.ShowCollectionInDecks != nil {
 		p.ShowCollectionInDecks = *c.ShowCollectionInDecks
+	}
+	if c.CardDisplay != nil {
+		p.CardDisplay = *c.CardDisplay
+	}
+	if c.CardColumns != nil {
+		p.CardColumns = *c.CardColumns
+	}
+	if c.ShowManaCost != nil {
+		p.ShowManaCost = *c.ShowManaCost
+	}
+	if c.ShowCardDetails != nil {
+		p.ShowCardDetails = *c.ShowCardDetails
 	}
 	return p
 }
@@ -57,6 +104,9 @@ func (s *Service) Get(ctx context.Context, userID string) (Preferences, error) {
 }
 
 func (s *Service) Update(ctx context.Context, userID string, changes Changes) (Preferences, error) {
+	if err := changes.validate(); err != nil {
+		return Preferences{}, err
+	}
 	current, err := s.Get(ctx, userID)
 	if err != nil {
 		return Preferences{}, err
@@ -78,8 +128,10 @@ func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
 
 func (r *PostgresRepository) Find(ctx context.Context, userID string) (Preferences, bool, error) {
 	var p Preferences
-	err := r.db.QueryRowContext(ctx, `SELECT show_collection_in_decks FROM tamiyo.user_preferences WHERE user_id = $1`, userID).
-		Scan(&p.ShowCollectionInDecks)
+	err := r.db.QueryRowContext(ctx, `
+		SELECT show_collection_in_decks, card_display, card_columns, show_mana_cost, show_card_details
+		FROM tamiyo.user_preferences WHERE user_id = $1
+	`, userID).Scan(&p.ShowCollectionInDecks, &p.CardDisplay, &p.CardColumns, &p.ShowManaCost, &p.ShowCardDetails)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Preferences{}, false, nil
 	}
@@ -91,10 +143,15 @@ func (r *PostgresRepository) Find(ctx context.Context, userID string) (Preferenc
 
 func (r *PostgresRepository) Save(ctx context.Context, userID string, p Preferences) error {
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO tamiyo.user_preferences (user_id, show_collection_in_decks)
-		VALUES ($1, $2)
-		ON CONFLICT (user_id) DO UPDATE SET show_collection_in_decks = EXCLUDED.show_collection_in_decks
-	`, userID, p.ShowCollectionInDecks)
+		INSERT INTO tamiyo.user_preferences (user_id, show_collection_in_decks, card_display, card_columns, show_mana_cost, show_card_details)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (user_id) DO UPDATE SET
+			show_collection_in_decks = EXCLUDED.show_collection_in_decks,
+			card_display = EXCLUDED.card_display,
+			card_columns = EXCLUDED.card_columns,
+			show_mana_cost = EXCLUDED.show_mana_cost,
+			show_card_details = EXCLUDED.show_card_details
+	`, userID, p.ShowCollectionInDecks, p.CardDisplay, p.CardColumns, p.ShowManaCost, p.ShowCardDetails)
 	return err
 }
 
@@ -117,11 +174,19 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 }
 
 type response struct {
-	ShowCollectionInDecks bool `json:"show_collection_in_decks"`
+	ShowCollectionInDecks bool   `json:"show_collection_in_decks"`
+	CardDisplay           string `json:"card_display"`
+	CardColumns           int    `json:"card_columns"`
+	ShowManaCost          bool   `json:"show_mana_cost"`
+	ShowCardDetails       bool   `json:"show_card_details"`
 }
 
 type updateRequest struct {
-	ShowCollectionInDecks *bool `json:"show_collection_in_decks"`
+	ShowCollectionInDecks *bool   `json:"show_collection_in_decks"`
+	CardDisplay           *string `json:"card_display"`
+	CardColumns           *int    `json:"card_columns"`
+	ShowManaCost          *bool   `json:"show_mana_cost"`
+	ShowCardDetails       *bool   `json:"show_card_details"`
 }
 
 func (h *Handler) get(ctx *gin.Context) {
@@ -149,13 +214,16 @@ func (h *Handler) update(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if req.ShowCollectionInDecks == nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "show_collection_in_decks is required"})
+	if Changes(req).empty() {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "give at least one preference to change"})
 		return
 	}
 	p, err := h.service.Update(ctx.Request.Context(), userID, Changes(req))
 	if err != nil {
-		apierr.Respond(ctx, err)
+		apierr.Respond(ctx, err,
+			apierr.Mapping{Err: ErrInvalidCardDisplay, Status: http.StatusBadRequest},
+			apierr.Mapping{Err: ErrInvalidCardColumns, Status: http.StatusBadRequest},
+		)
 		return
 	}
 	ctx.JSON(http.StatusOK, response(p))
