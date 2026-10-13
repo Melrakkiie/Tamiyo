@@ -16,6 +16,8 @@ import (
 const (
 	CardDisplayText   = "text"
 	CardDisplayImages = "images"
+	CardDisplayGrid   = "grid"
+	CardDisplayStacks = "stacks"
 
 	MinCardColumns = 2
 	MaxCardColumns = 12
@@ -24,7 +26,7 @@ const (
 const DefaultCollectionSort = "-added"
 
 var (
-	ErrInvalidCardDisplay        = errors.New("card_display must be text or images")
+	ErrInvalidCardDisplay        = errors.New("card_display must be one of: text, images, grid, stacks")
 	ErrInvalidCardColumns        = errors.New("card_columns must be between 2 and 12")
 	ErrInvalidCollectionGrouping = errors.New("collection_grouping must be one of: type, color, mana")
 	ErrInvalidCollectionSort     = errors.New("collection_sort must be one of: name, -name, added, -added, updated, -updated, mana_value, -mana_value, color, -color, type, -type")
@@ -38,7 +40,7 @@ var collectionSorts = map[string]bool{
 }
 
 func ValidCardDisplay(display string) bool {
-	return display == CardDisplayText || display == CardDisplayImages
+	return display == CardDisplayText || display == CardDisplayImages || display == CardDisplayGrid || display == CardDisplayStacks
 }
 
 func ValidCardColumns(columns int) bool {

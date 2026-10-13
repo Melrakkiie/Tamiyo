@@ -3558,7 +3558,7 @@ components:
             people's decks.
         card_display:
           type: string
-          enum: [text, images]
+          enum: [text, images, grid, stacks]
           default: images
           description: How card lists are shown, as text rows or card images.
         card_columns:
@@ -3595,7 +3595,7 @@ components:
           type: boolean
         card_display:
           type: string
-          enum: [text, images]
+          enum: [text, images, grid, stacks]
         card_columns:
           type: integer
           minimum: 2
@@ -4802,7 +4802,7 @@ components:
             enum: [sideboard, considering]
         card_display:
           type: string
-          enum: [text, images]
+          enum: [text, images, grid, stacks]
           description: How the deck's cards are shown. Optional when saving, where leaving it out keeps the saved value (as for the next three).
         card_columns:
           type: integer

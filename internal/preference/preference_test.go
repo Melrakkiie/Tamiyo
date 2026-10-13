@@ -63,7 +63,7 @@ func TestService_UpdateOnlyChangesWhatIsGiven(t *testing.T) {
 func TestService_ValidatesCardDisplay(t *testing.T) {
 	repo := &fakeRepository{}
 	svc := NewService(repo)
-	text, unknown := "text", "grid"
+	text, unknown := "text", "mosaic"
 	columns, tooMany, tooFew := 9, 13, 1
 	off := false
 
@@ -71,13 +71,17 @@ func TestService_ValidatesCardDisplay(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, Preferences{ShowCollectionInDecks: true, CardDisplay: "text", CardColumns: 9, ShowManaCost: false, ShowCardDetails: true, CollectionSort: "-added"}, updated)
 
+	for _, display := range []string{"images", "grid", "stacks"} {
+		_, err = svc.Update(context.Background(), testUserID, Changes{CardDisplay: &display})
+		require.NoError(t, err)
+	}
 	_, err = svc.Update(context.Background(), testUserID, Changes{CardDisplay: &unknown})
 	assert.ErrorIs(t, err, ErrInvalidCardDisplay)
 	_, err = svc.Update(context.Background(), testUserID, Changes{CardColumns: &tooMany})
 	assert.ErrorIs(t, err, ErrInvalidCardColumns)
 	_, err = svc.Update(context.Background(), testUserID, Changes{CardColumns: &tooFew})
 	assert.ErrorIs(t, err, ErrInvalidCardColumns)
-	assert.Equal(t, 1, repo.saved)
+	assert.Equal(t, 4, repo.saved)
 }
 
 func TestService_SavesTheCollectionGroupingAndSort(t *testing.T) {
@@ -153,7 +157,7 @@ func TestHandler_Errors(t *testing.T) {
 	router(&fakeRepository{}, "").ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/auth/me/preferences", nil))
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 
-	for _, body := range []string{`{}`, `{"show_collection_in_decks":"yes"}`, `nope`, `{"card_display":"grid"}`, `{"card_columns":13}`, `{"collection_sort":"rarity"}`, `{"collection_grouping":"storage"}`} {
+	for _, body := range []string{`{}`, `{"show_collection_in_decks":"yes"}`, `nope`, `{"card_display":"mosaic"}`, `{"card_columns":13}`, `{"collection_sort":"rarity"}`, `{"collection_grouping":"storage"}`} {
 		req := httptest.NewRequest(http.MethodPatch, "/auth/me/preferences", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()

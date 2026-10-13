@@ -216,8 +216,8 @@ The account's display preferences, saved so they follow the user from one device
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `show_collection_in_decks` | bool | `true` | Whether deck pages show what the collection holds: in the user's own decks, which cards are pending, where each copy is stored; in other people's decks, which cards the user owns (see [`GET /deck/:id/ownership`](#get-deckidownership)). |
-| `card_display` | string | `images` | How card lists are shown: `text` (one row per card) or `images` (card images). |
-| `card_columns` | int | `6` | Card images per row, `2` to `12`, when `card_display` is `images`. |
+| `card_display` | string | `images` | How card lists are shown: `text` (one row per card), `images` (card images), `grid` (card images in overlapping rows, only the top of each row showing) or `stacks` (columns of overlapping cards, only each card's title showing). |
+| `card_columns` | int | `6` | Card images, or stacks, per row, `2` to `12`, for every `card_display` but `text`. |
 | `show_mana_cost` | bool | `true` | Whether text rows show the mana cost. |
 | `show_card_details` | bool | `true` | Whether card images show the card's details below them (name, printing, storage). |
 | `collection_grouping` | string | `null` | How the collection and the storages group cards: `type`, `color`, `mana`, or `null` for no grouping. `"clear_collection_grouping": true` sets it back to `null`. |
@@ -227,7 +227,7 @@ The display fields (`card_display` to `show_card_details`) are those of the coll
 
 `GET` returns them (the defaults until something is saved); `PATCH` changes the fields present in the body and returns them all.
 
-**Errors:** `400` no known field in the body, a field of the wrong type, `card_display` not `text` or `images`, `card_columns` outside `2..12`, or an unknown `collection_grouping` or `collection_sort` · `401` missing/invalid token
+**Errors:** `400` no known field in the body, a field of the wrong type, `card_display` not `text`, `images`, `grid` or `stacks`, `card_columns` outside `2..12`, or an unknown `collection_grouping` or `collection_sort` · `401` missing/invalid token
 
 ---
 

@@ -84,7 +84,7 @@ func TestSetView_RejectsInvalidValues(t *testing.T) {
 	_, err = svc.SetView(context.Background(), testUserID, viewDeckID, displayed(View{Sort: "name", CollapsedBoards: []string{"main"}}))
 	assert.ErrorIs(t, err, ErrInvalidViewBoards)
 	text := displayed(View{Sort: "name"})
-	text.CardDisplay = "grid"
+	text.CardDisplay = "mosaic"
 	_, err = svc.SetView(context.Background(), testUserID, viewDeckID, text)
 	assert.ErrorIs(t, err, ErrInvalidViewDisplay)
 	wide := displayed(View{Sort: "name"})
@@ -137,7 +137,7 @@ func TestHandler_ViewErrors(t *testing.T) {
 		"invalid grouping": {http.MethodPut, `{"grouping":"x","sort":"name"}`, ErrInvalidViewGrouping, http.StatusBadRequest},
 		"invalid sort":     {http.MethodPut, `{"sort":"x"}`, ErrInvalidViewSort, http.StatusBadRequest},
 		"invalid boards":   {http.MethodPut, `{"sort":"name","collapsed_boards":["main"]}`, ErrInvalidViewBoards, http.StatusBadRequest},
-		"invalid display":  {http.MethodPut, `{"sort":"name","card_display":"grid"}`, ErrInvalidViewDisplay, http.StatusBadRequest},
+		"invalid display":  {http.MethodPut, `{"sort":"name","card_display":"mosaic"}`, ErrInvalidViewDisplay, http.StatusBadRequest},
 		"invalid columns":  {http.MethodPut, `{"sort":"name","card_columns":13}`, ErrInvalidViewColumns, http.StatusBadRequest},
 	}
 	for name, tc := range cases {
