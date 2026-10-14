@@ -456,3 +456,23 @@ func (r *PostgresRepository) SetDetails(ctx context.Context, userID string, id i
 	`, details.Colors, details.CardType, details.ManaValue, details.ColorIdentity, id, userID)
 	return err
 }
+
+func (r *PostgresRepository) MoveToStorage(ctx context.Context, userID string, ids []int, storageID int) (int, error) {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE tamiyo.cards
+		SET storage_id = $3
+		WHERE user_id = $1 AND id = ANY($2) AND storage_id IS DISTINCT FROM $3
+	`, userID, pq.Array(ids), storageID)
+	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23503" {
+			return 0, ErrStorageNotFound
+		}
+		return 0, err
+	}
+	moved, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return int(moved), nil
+}

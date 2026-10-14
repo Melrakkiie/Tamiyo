@@ -1054,3 +1054,51 @@ func TestPostgresRepository_Value_SumsPricesOfOwnedNonProxyCards(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, Value{}, empty)
 }
+
+func TestPostgresRepository_MoveToStorage(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userA)
+	ctx := context.Background()
+
+	binder, deckbox := 1, 2
+	loose := createCardWithDetails(t, repo, userA, "Sol Ring", nil, nil)
+	inBinder, err := repo.Create(ctx, userA, Card{Name: "Counterspell", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "1", StorageID: &binder})
+	require.NoError(t, err)
+	already, err := repo.Create(ctx, userA, Card{Name: "Island", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "1", StorageID: &deckbox})
+	require.NoError(t, err)
+	unlisted := createCardWithDetails(t, repo, userA, "Forest", nil, nil)
+	foreign := createCardWithDetails(t, repo, userB, "Other User Card", nil, nil)
+
+	moved, err := repo.MoveToStorage(ctx, userA, []int{loose.ID, inBinder.ID, already.ID, foreign.ID}, deckbox)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, moved)
+	for _, id := range []int{loose.ID, inBinder.ID, already.ID} {
+		c, err := repo.FindByID(ctx, userA, id)
+		require.NoError(t, err)
+		require.NotNil(t, c.StorageID)
+		assert.Equal(t, deckbox, *c.StorageID)
+	}
+	c, err := repo.FindByID(ctx, userA, unlisted.ID)
+	require.NoError(t, err)
+	assert.Nil(t, c.StorageID)
+	c, err = repo.FindByID(ctx, userB, foreign.ID)
+	require.NoError(t, err)
+	assert.Nil(t, c.StorageID)
+}
+
+func TestPostgresRepository_MoveToStorage_ReturnsErrStorageNotFound(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userA)
+	foreign := createCardWithDetails(t, repo, userB, "Other User Card", nil, nil)
+
+	_, err := repo.MoveToStorage(context.Background(), userB, []int{foreign.ID}, 1)
+
+	assert.ErrorIs(t, err, ErrStorageNotFound)
+}

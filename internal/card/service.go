@@ -56,3 +56,10 @@ func (s *Service) CountCardsMissingDetails(ctx context.Context, userID string, a
 func (s *Service) SetCardDetails(ctx context.Context, userID string, id int, details Details) error {
 	return s.repo.SetDetails(ctx, userID, id, details)
 }
+
+func (s *Service) MoveCardsToStorage(ctx context.Context, userID string, ids []int, storageID int) (int, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	return s.repo.MoveToStorage(ctx, userID, ids, storageID)
+}

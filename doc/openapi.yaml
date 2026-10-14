@@ -2498,6 +2498,66 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /deck/{id}/store:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    post:
+      tags: [deck-cards]
+      summary: Put the owned cards of one of the user's decks in a storage
+      description: >
+        Sets the storage of every owned card of the chosen boards of one of
+        the user's own decks to storage_id, in one statement. Pending cards
+        are not in the collection and are left alone. Cards already in that
+        storage are left untouched and not counted. A locked storage is
+        accepted: locking only hides, and the cards stay in the deck.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [storage_id, boards]
+              properties:
+                storage_id:
+                  type: integer
+                  minimum: 1
+                boards:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: string
+                    enum: [main, sideboard, considering]
+      responses:
+        "200":
+          description: Cards moved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cards_moved]
+                properties:
+                  cards_moved:
+                    type: integer
+                    description: Cards whose storage changed.
+        "400":
+          description: >
+            Invalid id or body, missing or non-positive storage_id, unknown
+            board or none, or storage_id doesn't reference an existing storage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found, or someone else's deck
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /deck/{id}/legality:
     parameters:
       - $ref: "#/components/parameters/DeckID"

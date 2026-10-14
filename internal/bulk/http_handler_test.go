@@ -59,6 +59,18 @@ type fakeImportService struct {
 
 	lastExportOptions DeckExportOptions
 	lastCollect       CollectRequest
+
+	storeSummary    StoreSummary
+	lastStoreID     int
+	lastStoreBoards []string
+}
+
+func (f *fakeImportService) StoreDeck(ctx context.Context, userID string, deckID string, storageID int, boards []string) (StoreSummary, error) {
+	f.lastUserID = userID
+	f.lastDeckID = deckID
+	f.lastStoreID = storageID
+	f.lastStoreBoards = boards
+	return f.storeSummary, f.err
 }
 
 func (f *fakeImportService) ExportCardmarketDeck(ctx context.Context, userID string, deckID string, opts DeckExportOptions, w io.Writer) error {

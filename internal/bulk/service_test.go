@@ -32,6 +32,19 @@ type fakeCardService struct {
 	lastMissingAfterID int
 	lastMissingLimit   int
 	setDetails         map[int]card.Details
+
+	movedIDs     []int
+	movedStorage int
+	moveErr      error
+}
+
+func (f *fakeCardService) MoveCardsToStorage(ctx context.Context, userID string, ids []int, storageID int) (int, error) {
+	if f.moveErr != nil {
+		return 0, f.moveErr
+	}
+	f.movedIDs = ids
+	f.movedStorage = storageID
+	return len(ids), nil
 }
 
 func (f *fakeCardService) GetCardsMissingDetails(ctx context.Context, userID string, afterID int, limit int) ([]card.Card, error) {

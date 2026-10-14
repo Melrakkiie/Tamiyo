@@ -40,6 +40,7 @@ type importService interface {
 	SwitchProxy(ctx context.Context, userID string, deckID string, req ProxySwitch) (Summary, error)
 	SplitPrintings(ctx context.Context, userID string, deckID string, req PrintingSplit) (Summary, error)
 	CollectDeck(ctx context.Context, userID string, deckID string, req CollectRequest) (Summary, error)
+	StoreDeck(ctx context.Context, userID string, deckID string, storageID int, boards []string) (StoreSummary, error)
 }
 
 type Handler struct {
@@ -70,6 +71,7 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.GET("/deck/:id/export", h.exportDeck)
 	router.POST("/deck/:id/duplicate", h.duplicateDeck)
 	router.POST("/deck/:id/collect", h.collectDeck)
+	router.POST("/deck/:id/store", h.storeDeck)
 }
 
 func (h *Handler) RegisterPublicRoutes(router gin.IRoutes) {

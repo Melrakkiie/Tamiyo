@@ -585,7 +585,7 @@ A storage can be **locked** so that decks stop drawing from it, like a collectio
 - are never put in it by [`POST /deck/:id/import`](#post-deckidimport), [`POST /deck/:id/bulk-edit`](#post-deckidbulk-edit), [`POST /deck/:id/switch-foil`](#post-deckidswitch-foil), [`POST /deck/:id/switch-proxy`](#post-deckidswitch-proxy), [`POST /deck/:id/split-printings`](#post-deckidsplit-printings) or [`POST /deck/:id/duplicate`](#post-deckidduplicate) (a duplicated deck is a new deck that no storage allows yet), unless the import is sent with `include_locked_storages=true`;
 - are left out of `GET /cards?open_to_deck=<deck id>`.
 
-Locking only hides: a card of a locked storage can still be put in any deck explicitly, and the cards already in a deck stay there. While a storage is unlocked, its `allowed_deck_ids` are kept but ignored. Deleting a deck removes it from every `allowed_deck_ids`.
+Locking only hides: a card of a locked storage can still be put in any deck explicitly, and the cards already in a deck stay there, even when [`POST /deck/:id/store`](#post-deckidstore) moves them into a locked storage. While a storage is unlocked, its `allowed_deck_ids` are kept but ignored. Deleting a deck removes it from every `allowed_deck_ids`.
 
 > All endpoints below require `Authorization: Bearer <token>` and only ever operate on the authenticated account's own storages.
 
@@ -870,6 +870,28 @@ Add the cards of a deck to your collection, one card per copy, in the exact prin
 **Response `200 OK`** — the [import summary](#bulk-import): `cards_created`, and `cards_linked` for the pending cards also put in the deck. Cards are handled one by one: on a failure, those already added stay added, and a pending card that fails is reported in `warnings`.
 
 **Errors:** `400` invalid id or body, unknown `mode` or board, `pending` on someone else's deck or `missing` on yours, unknown `storage_id` · `404` unknown deck, or someone else's private deck
+
+---
+
+### `POST /deck/:id/store`
+
+Put the owned cards of one of your decks in a storage, limited to the boards listed. [Pending cards](#pending-cards-deckidpending) are not in the collection and are left alone. Cards already in that storage are left untouched.
+
+```json
+{ "storage_id": 4, "boards": ["main", "sideboard"] }
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `storage_id` | int | Yes | One of your storages. A [locked](#storage) storage is accepted: locking only hides, and the cards stay in the deck. |
+| `boards` | array | Yes | At least one of `main`, `sideboard`, `considering`. |
+
+**Response `200 OK`** — the number of cards whose storage changed.
+```json
+{ "cards_moved": 12 }
+```
+
+**Errors:** `400` invalid id or body, missing or non-positive `storage_id`, unknown board or none, unknown `storage_id` (`"storage_id does not reference an existing storage"`) · `404` unknown deck, or someone else's deck
 
 ---
 

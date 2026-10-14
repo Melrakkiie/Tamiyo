@@ -38,6 +38,10 @@ type fakeRepository struct {
 	lastAfterID    int
 	lastLimit      int
 	setDetails     map[int]Details
+
+	movedIDs     []int
+	moveCalled   bool
+	movedStorage int
 }
 
 func (f *fakeRepository) FindAll(ctx context.Context, userID string, filter CardFilter) ([]Card, int, error) {
@@ -98,6 +102,14 @@ func (f *fakeRepository) SetDetails(ctx context.Context, userID string, id int, 
 	}
 	f.setDetails[id] = details
 	return nil
+}
+
+func (f *fakeRepository) MoveToStorage(ctx context.Context, userID string, ids []int, storageID int) (int, error) {
+	f.lastUserID = userID
+	f.moveCalled = true
+	f.movedIDs = ids
+	f.movedStorage = storageID
+	return len(ids), nil
 }
 
 func (f *fakeRepository) Value(ctx context.Context, userID string) (Value, error) {
@@ -424,4 +436,28 @@ func TestService_GetValue_ReturnsRepositoryValue(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, Value{EUR: 1.5, USD: 2}, value)
+}
+
+func TestService_MoveCardsToStorage(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	moved, err := service.MoveCardsToStorage(context.Background(), testUserID, []int{3, 5}, 4)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, moved)
+	assert.Equal(t, []int{3, 5}, repo.movedIDs)
+	assert.Equal(t, 4, repo.movedStorage)
+	assert.Equal(t, testUserID, repo.lastUserID)
+}
+
+func TestService_MoveCardsToStorage_SkipsTheQueryWithoutCards(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	moved, err := service.MoveCardsToStorage(context.Background(), testUserID, nil, 4)
+
+	require.NoError(t, err)
+	assert.Zero(t, moved)
+	assert.False(t, repo.moveCalled)
 }
