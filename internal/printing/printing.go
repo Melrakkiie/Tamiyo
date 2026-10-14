@@ -21,6 +21,7 @@ type Printing struct {
 	ScryfallID   string
 	TypeLine     string
 	LegalFormats []string
+	Prices       scryfall.Prices
 }
 
 type Repository interface {
@@ -51,7 +52,7 @@ func FromScryfall(card scryfall.Card) Printing {
 		}
 	}
 	sort.Strings(formats)
-	return Printing{ScryfallID: card.ID, TypeLine: card.TypeLine, LegalFormats: formats}
+	return Printing{ScryfallID: card.ID, TypeLine: card.TypeLine, LegalFormats: formats, Prices: card.Prices}
 }
 
 func (r *Refresher) RefreshBatch(ctx context.Context) (int, error) {

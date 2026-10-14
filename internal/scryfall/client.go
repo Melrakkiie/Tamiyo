@@ -47,6 +47,32 @@ type Card struct {
 	Colors          []string
 	ColorIdentity   []string
 	Legalities      map[string]string
+	Prices          Prices
+}
+
+type Prices struct {
+	EUR     *float64
+	EURFoil *float64
+	USD     *float64
+	USDFoil *float64
+}
+
+func (p Prices) For(foil bool) (eur, usd float64) {
+	return pick(foil, p.EUR, p.EURFoil), pick(foil, p.USD, p.USDFoil)
+}
+
+func pick(foil bool, regular, foiled *float64) float64 {
+	first, second := regular, foiled
+	if foil {
+		first, second = foiled, regular
+	}
+	if first != nil {
+		return *first
+	}
+	if second != nil {
+		return *second
+	}
+	return 0
 }
 
 type identifier struct {
@@ -72,6 +98,29 @@ type wireCard struct {
 	ColorIdentity   []string          `json:"color_identity"`
 	Legalities      map[string]string `json:"legalities"`
 	CardFaces       []wireCardFace    `json:"card_faces"`
+	Prices          wirePrices        `json:"prices"`
+}
+
+type wirePrices struct {
+	EUR     *string `json:"eur"`
+	EURFoil *string `json:"eur_foil"`
+	USD     *string `json:"usd"`
+	USDFoil *string `json:"usd_foil"`
+}
+
+func (w wirePrices) toPrices() Prices {
+	return Prices{EUR: parsePrice(w.EUR), EURFoil: parsePrice(w.EURFoil), USD: parsePrice(w.USD), USDFoil: parsePrice(w.USDFoil)}
+}
+
+func parsePrice(raw *string) *float64 {
+	if raw == nil {
+		return nil
+	}
+	value, err := strconv.ParseFloat(*raw, 64)
+	if err != nil {
+		return nil
+	}
+	return &value
 }
 
 type wireCardFace struct {
@@ -98,6 +147,7 @@ func (w wireCard) toCard() Card {
 		Colors:          colors,
 		ColorIdentity:   w.ColorIdentity,
 		Legalities:      w.Legalities,
+		Prices:          w.Prices.toPrices(),
 	}
 }
 

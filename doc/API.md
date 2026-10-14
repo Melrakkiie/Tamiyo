@@ -210,7 +210,7 @@ Set or clear the account's profile: its display name, a purely cosmetic name the
 The account's display preferences, saved so they follow the user from one device to another. **Requires `Authorization: Bearer <token>`.**
 
 ```json
-{ "show_collection_in_decks": true, "card_display": "images", "card_columns": 6, "show_mana_cost": true, "show_card_details": true, "collection_grouping": null, "collection_sort": "-added", "theme": "auto", "night_starts_at": 22, "night_ends_at": 6 }
+{ "show_collection_in_decks": true, "card_display": "images", "card_columns": 6, "show_mana_cost": true, "show_card_details": true, "collection_grouping": null, "collection_sort": "-added", "theme": "auto", "night_starts_at": 22, "night_ends_at": 6, "show_prices": false, "price_currency": "eur" }
 ```
 
 | Field | Type | Default | Notes |
@@ -225,12 +225,14 @@ The account's display preferences, saved so they follow the user from one device
 | `theme` | string | `auto` | Whether the app shows its day or its night colors: `day`, `night`, or `auto` to follow the time of day. |
 | `night_starts_at` | int | `22` | With `theme` `auto`, the hour night starts, `0` to `23`, in the user's own time zone. |
 | `night_ends_at` | int | `6` | With `theme` `auto`, the hour night ends, `0` to `23`; it must differ from `night_starts_at`. Night may run past midnight (`22` to `6`) or not (`1` to `5`). |
+| `show_prices` | bool | `false` | Whether the app shows card prices and the value of the collection, of each storage and of each deck. |
+| `price_currency` | string | `eur` | Which prices the app shows: `eur` (Cardmarket, from Scryfall) or `usd` (TCGplayer, from Scryfall). The API always sends both currencies in its [values](#prices-and-values); the client picks the one to show. |
 
 The display fields (`card_display` to `show_card_details`) are those of the collection and the storages, and of other people's decks; each of your decks keeps its own in its [display settings](#display-settings-deckidview).
 
 `GET` returns them (the defaults until something is saved); `PATCH` changes the fields present in the body and returns them all.
 
-**Errors:** `400` no known field in the body, a field of the wrong type, `card_display` not `text`, `images`, `grid` or `stacks`, `card_columns` outside `2..12`, an unknown `collection_grouping` or `collection_sort`, `theme` not `day`, `night` or `auto`, a night hour outside `0..23`, or night starting and ending at the same hour · `401` missing/invalid token
+**Errors:** `400` no known field in the body, a field of the wrong type, `card_display` not `text`, `images`, `grid` or `stacks`, `card_columns` outside `2..12`, an unknown `collection_grouping` or `collection_sort`, `theme` not `day`, `night` or `auto`, a night hour outside `0..23`, night starting and ending at the same hour, or `price_currency` not `eur` or `usd` · `401` missing/invalid token
 
 ---
 
@@ -332,6 +334,16 @@ Every resource carries `added` and `updated` timestamps, generated and maintaine
 ### Optional relations
 Fields like `storage_id` or `commander_id` are nullable. A card doesn't have to belong to a storage, and a deck doesn't have to have a commander.
 
+### Prices and values
+
+The value of the collection ([`GET /cards/value`](#get-cardsvalue)), of a storage (`value` on [storages](#get-storage)) and of a deck (`value` in [`GET /deck/:id/stats`](#get-deckidstats)) is an object with both currencies, in euros (Cardmarket) and US dollars (TCGplayer) as Scryfall gives them:
+
+```json
+{ "eur": 12.34, "usd": 15.6 }
+```
+
+Each card counts its printing's price: its foil price when it is foil, its regular price otherwise, and the other one when that price is missing. A card with no price at all counts `0`. Proxies never count. The collection and storage values use the prices stored with the printings, refreshed in the background once a day; deck values use Scryfall's current prices.
+
 ### Partial updates
 All `PATCH` endpoints accept a partial body — only the fields you include are modified. Omitted fields are left untouched.
 
@@ -405,6 +417,17 @@ GET /cards?storage_id=1&sort=-added&page=1&limit=25
 ```
 
 **Errors:** `400` if `storage_id`, `page`, or `limit` is not a valid integer, `stack` is not a boolean, `sort` is not one of the allowed values, a filter has an invalid value, or `open_to_deck` is not a deck id.
+
+---
+
+### `GET /cards/value`
+
+The value of the whole collection, every card but proxies (see [Prices and values](#prices-and-values)).
+
+**Response `200 OK`**
+```json
+{ "eur": 1234.56, "usd": 1402.1 }
+```
 
 ---
 
@@ -558,7 +581,7 @@ Locking only hides: a card of a locked storage can still be put in any deck expl
 
 ### `GET /storage`
 
-List all storages, each annotated with its current card count. Supports optional filtering and pagination.
+List all storages, each annotated with its current card count and the [value](#prices-and-values) of its cards (proxies left out). Supports optional filtering and pagination.
 
 **Query parameters**
 
@@ -583,6 +606,7 @@ GET /storage?type=binder&sort=-added&page=1&limit=25
       "name": "Vintage Collection",
       "type": "binder",
       "card_count": 3,
+      "value": { "eur": 41.5, "usd": 48.25 },
       "added": "2026-01-15 10:30:00",
       "updated": "2026-01-15 10:30:00",
       "locked": true,
@@ -1154,13 +1178,16 @@ Summarizes the deck's composition: mana curve, color breakdown, and primary card
   "type_breakdown": { "Land": 38, "Creature": 30, "Instant": 12, "Sorcery": 10, "Artifact": 10 },
   "back_face_lands": [
     { "name": "Bala Ged Recovery // Bala Ged Sanctuary", "scryfall_id": "9e2d4ad6-8c4d-4b7e-9e73-6a8f4f9c1f0b", "quantity": 1 }
-  ]
+  ],
+  "value": { "eur": 312.4, "usd": 356.75 }
 }
 ```
 
 Each `mana_curve` bucket splits its `count` into `permanents` and `non_permanents` (instants and sorceries), and lists its `cards` by name with their number of copies and their primary type (as in `type_breakdown`). A double-faced or split card is a permanent unless its front face is an instant or a sorcery.
 
 A multicolor card counts once per color it has in `color_breakdown`; a dual-typed permanent (e.g. "Artifact Creature") counts once under a single primary type in `type_breakdown` — Creature takes precedence over Artifact/Enchantment, matching how most deckbuilding sites categorize it. A double-faced or split card counts under the type of its front face (a creature with a land on its back is a creature). `back_face_lands` lists those cards with a land on their back face, by name with their number of copies: they aren't in `land_count`, but a client can show them as extra lands.
+
+`value` is the [value](#prices-and-values) of the `main` board, owned and pending cards, proxies left out, from Scryfall's current prices, rounded to the cent.
 
 ---
 

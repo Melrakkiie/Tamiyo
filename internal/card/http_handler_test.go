@@ -33,6 +33,9 @@ type fakeService struct {
 
 	deleteErr error
 
+	value    Value
+	valueErr error
+
 	deleteAllCount  int
 	deleteAllErr    error
 	deleteAllCalled bool
@@ -74,6 +77,11 @@ func (f *fakeService) DeleteAllCards(ctx context.Context, userID string) (int, e
 	f.lastUserID = userID
 	f.deleteAllCalled = true
 	return f.deleteAllCount, f.deleteAllErr
+}
+
+func (f *fakeService) GetValue(ctx context.Context, userID string) (Value, error) {
+	f.lastUserID = userID
+	return f.value, f.valueErr
 }
 
 func (f *fakeService) DeleteCard(ctx context.Context, userID string, id int) error {
@@ -909,4 +917,25 @@ func TestHandler_UpdateCard_SetsProxy(t *testing.T) {
 	var response cardResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
 	assert.True(t, response.Proxy)
+}
+
+func TestHandler_GetValue_ReturnsBothCurrencies(t *testing.T) {
+	service := &fakeService{value: Value{EUR: 12.34, USD: 15.6}}
+	router := setupRouter(service)
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards/value", nil))
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.JSONEq(t, `{"eur":12.34,"usd":15.6}`, w.Body.String())
+	assert.Equal(t, testUserID, service.lastUserID)
+}
+
+func TestHandler_GetValue_ReturnsServerErrorOnFailure(t *testing.T) {
+	router := setupRouter(&fakeService{valueErr: errors.New("db down")})
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards/value", nil))
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }

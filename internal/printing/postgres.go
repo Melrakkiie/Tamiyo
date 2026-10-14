@@ -42,11 +42,14 @@ func (r *PostgresRepository) Upsert(ctx context.Context, printings []Printing) e
 	}()
 	for _, p := range printings {
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO tamiyo.printings (scryfall_id, type_line, legal_formats, refreshed_at)
-			VALUES ($1, $2, $3, now())
+			INSERT INTO tamiyo.printings (scryfall_id, type_line, legal_formats, eur, eur_foil, usd, usd_foil, refreshed_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, now())
 			ON CONFLICT (scryfall_id) DO UPDATE
-			SET type_line = EXCLUDED.type_line, legal_formats = EXCLUDED.legal_formats, refreshed_at = now()
-		`, p.ScryfallID, p.TypeLine, pq.Array(p.LegalFormats)); err != nil {
+			SET type_line = EXCLUDED.type_line, legal_formats = EXCLUDED.legal_formats,
+				eur = EXCLUDED.eur, eur_foil = EXCLUDED.eur_foil, usd = EXCLUDED.usd, usd_foil = EXCLUDED.usd_foil,
+				refreshed_at = now()
+		`, p.ScryfallID, p.TypeLine, pq.Array(p.LegalFormats),
+			p.Prices.EUR, p.Prices.EURFoil, p.Prices.USD, p.Prices.USDFoil); err != nil {
 			return err
 		}
 	}

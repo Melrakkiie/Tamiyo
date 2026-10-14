@@ -124,6 +124,10 @@ CORS_ALLOWED_ORIGINS=http://localhost:5173
 
 A storage can be locked so decks stop drawing from it (a collection binder, a trade box), optionally keeping it open to a few decks. Its cards then no longer count as owned copies for the other decks' pending cards, and deck imports, duplications, finish and proxy switches and printing splits never put them in those decks. Nothing is blocked: a card can still be put in any deck explicitly. See [`doc/API.md`](./doc/API.md#storage).
 
+## Prices
+
+Prices are optional: the `show_prices` preference turns them on and `price_currency` picks euros (Cardmarket) or US dollars (TCGplayer), both from Scryfall. `GET /cards/value`, each storage's `value` and the `value` of `GET /deck/:id/stats` sum the prices in both currencies, foil prices for foil cards, proxies left out; the client shows the one the user picked. Collection and storage values use the prices kept in `tamiyo.printings` and refreshed daily, deck values Scryfall's current prices. See [`doc/API.md`](./doc/API.md#prices-and-values).
+
 ## API Documentation
 
 See [`openapi.yaml`](./openapi.yaml) for the full API reference — endpoints, request/response schemas, and error codes. You can view it interactively by pasting it into [Swagger Editor](https://editor.swagger.io/).
@@ -197,10 +201,10 @@ curl -X GET "localhost:8080/deck/<deck-id>/export?format=moxfield" \
 
 ## Deck Insights
 
-Two read-only, player-facing routes analyze a deck — nothing financial, nothing persisted, computed fresh from [Scryfall](https://scryfall.com/) data on every call (see [`internal/scryfall`](./internal/scryfall) for the shared client, also used by Bulk Import):
+Two read-only, player-facing routes analyze a deck — nothing persisted, computed fresh from [Scryfall](https://scryfall.com/) data on every call (see [`internal/scryfall`](./internal/scryfall) for the shared client, also used by Bulk Import):
 
 - `GET /deck/:id/legality` — checks every card against the deck's own format; for `commander` specifically, also checks singleton (one copy per card name, basic lands excepted) and color identity against the deck's commander.
-- `GET /deck/:id/stats` — mana curve, color breakdown and card types (lands excluded from the curve/colors/average, since they skew every one of those without adding anything).
+- `GET /deck/:id/stats` — mana curve, color breakdown and card types (lands excluded from the curve/colors/average, since they skew every one of those without adding anything), and the main board's value.
 
 See [`doc/API.md`](./doc/API.md#deck-insights) for the exact response shapes and known limitations (e.g. no partner commanders, no named singleton exceptions like Relentless Rats).
 

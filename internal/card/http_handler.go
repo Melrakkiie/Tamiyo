@@ -231,10 +231,16 @@ type cardService interface {
 	UpdateCard(ctx context.Context, userID string, id int, req updateCardRequest) (Card, error)
 	DeleteCard(ctx context.Context, userID string, id int) error
 	DeleteAllCards(ctx context.Context, userID string) (int, error)
+	GetValue(ctx context.Context, userID string) (Value, error)
 }
 
 type deleteAllCardsResponse struct {
 	Deleted int `json:"deleted"`
+}
+
+type valueResponse struct {
+	EUR float64 `json:"eur"`
+	USD float64 `json:"usd"`
 }
 
 type Handler struct {
@@ -247,6 +253,7 @@ func NewHandler(service cardService) *Handler {
 
 func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.GET("/cards", h.getCards)
+	router.GET("/cards/value", h.getValue)
 	router.GET("/cards/:id", h.getCard)
 	router.POST("/cards", h.createCard)
 	router.PATCH("/cards/:id", h.updateCard)
@@ -389,6 +396,22 @@ func (h *Handler) getCards(ctx *gin.Context) {
 		Total:      total,
 		TotalPages: totalPages,
 	})
+}
+
+func (h *Handler) getValue(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+
+	value, err := h.service.GetValue(ctx.Request.Context(), userID)
+	if err != nil {
+		apierr.Respond(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, valueResponse(value))
 }
 
 func (h *Handler) getCard(ctx *gin.Context) {

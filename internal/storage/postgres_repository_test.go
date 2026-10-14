@@ -73,7 +73,7 @@ func getTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
 
 	_, err := testDB.Exec(`
-		TRUNCATE TABLE tamiyo.card_deck, tamiyo.deck, tamiyo.cards, tamiyo.storage, tamiyo.users
+		TRUNCATE TABLE tamiyo.card_deck, tamiyo.deck, tamiyo.cards, tamiyo.storage, tamiyo.users, tamiyo.printings
 		RESTART IDENTITY CASCADE
 	`)
 	require.NoError(t, err)
@@ -161,6 +161,49 @@ func TestPostgresRepository_FindAll_ReturnsCorrectCardCount(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, vintage.CardCount)
+}
+
+func TestPostgresRepository_FindAllAndFindByID_SumNonProxyPrices(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userID)
+	const both = "11111111-1111-1111-1111-111111111111"
+	const foilOnly = "22222222-2222-2222-2222-222222222222"
+	_, err := db.Exec(`
+		INSERT INTO tamiyo.printings (scryfall_id, type_line, eur, eur_foil, usd, usd_foil) VALUES
+			($1, 'Instant', 1.00, 5.00, 1.50, 6.00),
+			($2, 'Instant', NULL, 3.25, NULL, 4.00)
+	`, both, foilOnly)
+	require.NoError(t, err)
+	_, err = db.Exec(`
+		INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, proxy, storage_id) VALUES
+			($1, 'A', $2, 'tst', '1', false, false, 1),
+			($1, 'A', $2, 'tst', '1', true, false, 1),
+			($1, 'A', $2, 'tst', '1', true, true, 1),
+			($1, 'B', $3, 'tst', '2', false, false, 1),
+			($1, 'C', '33333333-3333-3333-3333-333333333333', 'tst', '3', false, false, 1),
+			($1, 'A', $2, 'tst', '1', false, false, NULL)
+	`, userID, both, foilOnly)
+	require.NoError(t, err)
+
+	result, _, err := repo.FindAll(context.Background(), userID, defaultFilter())
+	require.NoError(t, err)
+	for _, s := range result {
+		if s.ID == 1 {
+			assert.Equal(t, 5, s.CardCount)
+			assert.InDelta(t, 9.25, s.Value.EUR, 0.001)
+			assert.InDelta(t, 11.5, s.Value.USD, 0.001)
+		} else {
+			assert.Equal(t, Value{}, s.Value)
+		}
+	}
+
+	found, err := repo.FindByID(context.Background(), userID, 1)
+	require.NoError(t, err)
+	assert.Equal(t, 5, found.CardCount)
+	assert.InDelta(t, 9.25, found.Value.EUR, 0.001)
+	assert.InDelta(t, 11.5, found.Value.USD, 0.001)
 }
 
 func TestPostgresRepository_FindAll_ReturnsZeroCardCountForEmptyStorage(t *testing.T) {

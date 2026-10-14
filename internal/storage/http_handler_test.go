@@ -238,7 +238,7 @@ func TestHandler_GetStorages_ReturnsErrorOnServiceFailure(t *testing.T) {
 }
 
 func TestHandler_GetStorage_ReturnsStorageAsJSON(t *testing.T) {
-	service := &fakeService{getStorage: Storage{ID: 1, Name: "Vintage Collection", Type: "binder"}}
+	service := &fakeService{getStorage: Storage{ID: 1, Name: "Vintage Collection", Type: "binder", Value: Value{EUR: 12.5, USD: 14}}}
 	router := setupRouter(service)
 
 	req := httptest.NewRequest(http.MethodGet, "/storage/1", nil)
@@ -254,6 +254,7 @@ func TestHandler_GetStorage_ReturnsStorageAsJSON(t *testing.T) {
 	assert.False(t, response.Locked)
 	assert.NotNil(t, response.AllowedDeckIDs)
 	assert.Contains(t, w.Body.String(), `"allowed_deck_ids": []`)
+	assert.Equal(t, valueResponse{EUR: 12.5, USD: 14}, response.Value)
 }
 
 func TestHandler_GetStorage_ReturnsNotFoundWhenStorageDoesNotBelongToUser(t *testing.T) {

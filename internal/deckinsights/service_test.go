@@ -572,6 +572,41 @@ func TestGetDeckStats_CountsPendingCopies(t *testing.T) {
 	assert.Len(t, fetcher.lastRequest, 1)
 }
 
+func TestGetDeckStats_SumsMainBoardPricesWithoutProxies(t *testing.T) {
+	price := func(v float64) *float64 { return &v }
+	decks := &fakeDeckService{
+		decks: map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {ID: "00000000-0000-0000-0000-000000000001", Name: "Pile", Format: "commander"}},
+		cardsByDeck: map[string][]deck.DeckCard{
+			"00000000-0000-0000-0000-000000000001": {
+				{ID: 10, Name: "Sol Ring", ScryfallID: "ring"},
+				{ID: 11, Name: "Sol Ring", ScryfallID: "ring", Foil: true},
+				{ID: 12, Name: "Sol Ring", ScryfallID: "ring", Proxy: true},
+				{ID: 13, Name: "Sol Ring", ScryfallID: "ring", Board: deck.BoardSideboard},
+				{ID: 14, Name: "Bolt", ScryfallID: "bolt", Foil: true},
+				{ID: 15, Name: "Mountain", ScryfallID: "mtn"},
+				{ID: 16, Name: "Missing", ScryfallID: "missing"},
+			},
+		},
+		pendingByDeck: map[string][]deck.PendingCard{
+			"00000000-0000-0000-0000-000000000001": {
+				{ID: 5, Name: "Sol Ring", ScryfallID: "ring", Quantity: 2},
+				{ID: 6, Name: "Sol Ring", ScryfallID: "ring", Quantity: 1, Proxy: true},
+			},
+		},
+	}
+	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
+		"ring": {ID: "ring", TypeLine: "Artifact", Prices: scryfall.Prices{EUR: price(1.1), EURFoil: price(4.2), USD: price(1.3), USDFoil: price(5)}},
+		"bolt": {ID: "bolt", TypeLine: "Instant", Prices: scryfall.Prices{EUR: price(0.35), USD: price(0.5)}},
+		"mtn":  {ID: "mtn", TypeLine: "Basic Land — Mountain"},
+	}}
+	svc := NewService(decks, fetcher)
+
+	stats, err := svc.GetDeckStats(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
+
+	require.NoError(t, err)
+	assert.Equal(t, Value{EUR: 7.85, USD: 9.4}, stats.Value)
+}
+
 func ignoringDeckSize(report LegalityReport) LegalityReport {
 	var issues []LegalityIssue
 	for _, issue := range report.Issues {

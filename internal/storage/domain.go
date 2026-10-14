@@ -17,11 +17,17 @@ type Storage struct {
 	Name      string
 	Type      string
 	CardCount int
+	Value     Value
 	Added     time.Time
 	Updated   time.Time
 
 	Locked         bool
 	AllowedDeckIDs []string
+}
+
+type Value struct {
+	EUR float64
+	USD float64
 }
 
 func (s Storage) OpenTo(deckID string) bool {

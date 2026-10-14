@@ -33,6 +33,10 @@ func (s *Service) UpdateCard(ctx context.Context, userID string, id int, req upd
 	return s.repo.Update(ctx, userID, updated)
 }
 
+func (s *Service) GetValue(ctx context.Context, userID string) (Value, error) {
+	return s.repo.Value(ctx, userID)
+}
+
 func (s *Service) DeleteCard(ctx context.Context, userID string, id int) error {
 	return s.repo.Delete(ctx, userID, id)
 }

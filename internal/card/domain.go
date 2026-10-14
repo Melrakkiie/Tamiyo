@@ -63,6 +63,12 @@ type Repository interface {
 	FindMissingDetails(ctx context.Context, userID string, afterID int, limit int) ([]Card, error)
 	CountMissingDetails(ctx context.Context, userID string, afterID int) (int, error)
 	SetDetails(ctx context.Context, userID string, id int, details Details) error
+	Value(ctx context.Context, userID string) (Value, error)
+}
+
+type Value struct {
+	EUR float64
+	USD float64
 }
 
 type Details struct {

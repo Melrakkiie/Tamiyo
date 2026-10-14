@@ -100,6 +100,10 @@ func (f *fakeRepository) SetDetails(ctx context.Context, userID string, id int, 
 	return nil
 }
 
+func (f *fakeRepository) Value(ctx context.Context, userID string) (Value, error) {
+	return Value{EUR: 1.5, USD: 2}, nil
+}
+
 func (f *fakeRepository) DeleteAll(ctx context.Context, userID string) (int, error) {
 	f.lastUserID = userID
 	return f.deleteAllCount, f.deleteAllErr
@@ -413,4 +417,11 @@ func TestService_UpdateCard_TogglesProxyOnlyWhenGiven(t *testing.T) {
 	changed, err := service.UpdateCard(context.Background(), testUserID, 1, updateCardRequest{Proxy: &notProxy})
 	require.NoError(t, err)
 	assert.False(t, changed.Proxy)
+}
+
+func TestService_GetValue_ReturnsRepositoryValue(t *testing.T) {
+	value, err := NewService(&fakeRepository{}).GetValue(context.Background(), testUserID)
+
+	require.NoError(t, err)
+	assert.Equal(t, Value{EUR: 1.5, USD: 2}, value)
 }

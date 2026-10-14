@@ -25,6 +25,9 @@ const (
 	ThemeDay   = "day"
 	ThemeNight = "night"
 	ThemeAuto  = "auto"
+
+	CurrencyEUR = "eur"
+	CurrencyUSD = "usd"
 )
 
 const DefaultCollectionSort = "-added"
@@ -36,6 +39,7 @@ var (
 	ErrInvalidTheme              = errors.New("theme must be one of: day, night, auto")
 	ErrInvalidNightHour          = errors.New("night_starts_at and night_ends_at must be hours between 0 and 23")
 	ErrEmptyNight                = errors.New("night_starts_at and night_ends_at must differ")
+	ErrInvalidPriceCurrency      = errors.New("price_currency must be one of: eur, usd")
 	ErrInvalidCollectionSort     = errors.New("collection_sort must be one of: name, -name, added, -added, updated, -updated, mana_value, -mana_value, color, -color, type, -type")
 )
 
@@ -58,6 +62,10 @@ func validTheme(theme string) bool {
 	return theme == ThemeDay || theme == ThemeNight || theme == ThemeAuto
 }
 
+func validCurrency(currency string) bool {
+	return currency == CurrencyEUR || currency == CurrencyUSD
+}
+
 func validHour(hour int) bool {
 	return hour >= 0 && hour <= 23
 }
@@ -73,6 +81,8 @@ type Preferences struct {
 	Theme                 string
 	NightStartsAt         int
 	NightEndsAt           int
+	ShowPrices            bool
+	PriceCurrency         string
 }
 
 func Defaults() Preferences {
@@ -86,6 +96,7 @@ func Defaults() Preferences {
 		Theme:                 ThemeAuto,
 		NightStartsAt:         22,
 		NightEndsAt:           6,
+		PriceCurrency:         CurrencyEUR,
 	}
 }
 
@@ -101,12 +112,14 @@ type Changes struct {
 	Theme                   *string
 	NightStartsAt           *int
 	NightEndsAt             *int
+	ShowPrices              *bool
+	PriceCurrency           *string
 }
 
 func (c Changes) empty() bool {
 	return c.ShowCollectionInDecks == nil && c.CardDisplay == nil && c.CardColumns == nil && c.ShowManaCost == nil &&
 		c.ShowCardDetails == nil && c.CollectionGrouping == nil && !c.ClearCollectionGrouping && c.CollectionSort == nil &&
-		c.Theme == nil && c.NightStartsAt == nil && c.NightEndsAt == nil
+		c.Theme == nil && c.NightStartsAt == nil && c.NightEndsAt == nil && c.ShowPrices == nil && c.PriceCurrency == nil
 }
 
 func (c Changes) validate() error {
@@ -127,6 +140,9 @@ func (c Changes) validate() error {
 	}
 	if (c.NightStartsAt != nil && !validHour(*c.NightStartsAt)) || (c.NightEndsAt != nil && !validHour(*c.NightEndsAt)) {
 		return ErrInvalidNightHour
+	}
+	if c.PriceCurrency != nil && !validCurrency(*c.PriceCurrency) {
+		return ErrInvalidPriceCurrency
 	}
 	return nil
 }
@@ -164,6 +180,12 @@ func (c Changes) applyTo(p Preferences) Preferences {
 	}
 	if c.NightEndsAt != nil {
 		p.NightEndsAt = *c.NightEndsAt
+	}
+	if c.ShowPrices != nil {
+		p.ShowPrices = *c.ShowPrices
+	}
+	if c.PriceCurrency != nil {
+		p.PriceCurrency = *c.PriceCurrency
 	}
 	return p
 }
@@ -222,10 +244,10 @@ func (r *PostgresRepository) Find(ctx context.Context, userID string) (Preferenc
 	var p Preferences
 	err := r.db.QueryRowContext(ctx, `
 		SELECT show_collection_in_decks, card_display, card_columns, show_mana_cost, show_card_details,
-			collection_grouping, collection_sort, theme, night_starts_at, night_ends_at
+			collection_grouping, collection_sort, theme, night_starts_at, night_ends_at, show_prices, price_currency
 		FROM tamiyo.user_preferences WHERE user_id = $1
 	`, userID).Scan(&p.ShowCollectionInDecks, &p.CardDisplay, &p.CardColumns, &p.ShowManaCost, &p.ShowCardDetails,
-		&p.CollectionGrouping, &p.CollectionSort, &p.Theme, &p.NightStartsAt, &p.NightEndsAt)
+		&p.CollectionGrouping, &p.CollectionSort, &p.Theme, &p.NightStartsAt, &p.NightEndsAt, &p.ShowPrices, &p.PriceCurrency)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Preferences{}, false, nil
 	}
@@ -238,8 +260,8 @@ func (r *PostgresRepository) Find(ctx context.Context, userID string) (Preferenc
 func (r *PostgresRepository) Save(ctx context.Context, userID string, p Preferences) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO tamiyo.user_preferences (user_id, show_collection_in_decks, card_display, card_columns, show_mana_cost, show_card_details,
-			collection_grouping, collection_sort, theme, night_starts_at, night_ends_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			collection_grouping, collection_sort, theme, night_starts_at, night_ends_at, show_prices, price_currency)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		ON CONFLICT (user_id) DO UPDATE SET
 			show_collection_in_decks = EXCLUDED.show_collection_in_decks,
 			card_display = EXCLUDED.card_display,
@@ -250,9 +272,11 @@ func (r *PostgresRepository) Save(ctx context.Context, userID string, p Preferen
 			collection_sort = EXCLUDED.collection_sort,
 			theme = EXCLUDED.theme,
 			night_starts_at = EXCLUDED.night_starts_at,
-			night_ends_at = EXCLUDED.night_ends_at
+			night_ends_at = EXCLUDED.night_ends_at,
+			show_prices = EXCLUDED.show_prices,
+			price_currency = EXCLUDED.price_currency
 	`, userID, p.ShowCollectionInDecks, p.CardDisplay, p.CardColumns, p.ShowManaCost, p.ShowCardDetails,
-		p.CollectionGrouping, p.CollectionSort, p.Theme, p.NightStartsAt, p.NightEndsAt)
+		p.CollectionGrouping, p.CollectionSort, p.Theme, p.NightStartsAt, p.NightEndsAt, p.ShowPrices, p.PriceCurrency)
 	return err
 }
 
@@ -285,6 +309,8 @@ type response struct {
 	Theme                 string  `json:"theme"`
 	NightStartsAt         int     `json:"night_starts_at"`
 	NightEndsAt           int     `json:"night_ends_at"`
+	ShowPrices            bool    `json:"show_prices"`
+	PriceCurrency         string  `json:"price_currency"`
 }
 
 type updateRequest struct {
@@ -299,6 +325,8 @@ type updateRequest struct {
 	Theme                   *string `json:"theme"`
 	NightStartsAt           *int    `json:"night_starts_at"`
 	NightEndsAt             *int    `json:"night_ends_at"`
+	ShowPrices              *bool   `json:"show_prices"`
+	PriceCurrency           *string `json:"price_currency"`
 }
 
 func (h *Handler) get(ctx *gin.Context) {
@@ -340,6 +368,7 @@ func (h *Handler) update(ctx *gin.Context) {
 			apierr.Mapping{Err: ErrInvalidTheme, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrInvalidNightHour, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrEmptyNight, Status: http.StatusBadRequest},
+			apierr.Mapping{Err: ErrInvalidPriceCurrency, Status: http.StatusBadRequest},
 		)
 		return
 	}

@@ -248,3 +248,46 @@ func TestClient_TakesColorsFromFacesForDoubleFacedCards(t *testing.T) {
 	require.Len(t, cards, 1)
 	assert.Equal(t, []string{"U"}, cards[0].Colors)
 }
+
+func TestClient_ParsesPrices(t *testing.T) {
+	withFakeScryfall(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":[{"id":"11111111-1111-1111-1111-111111111111","prices":{"eur":"1.23","eur_foil":null,"usd":"2.50","usd_foil":"bad"}}]}`))
+	})
+
+	cards, err := NewClient().Fetch(context.Background(), []Identifier{{ID: "11111111-1111-1111-1111-111111111111"}})
+
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	prices := cards[0].Prices
+	require.NotNil(t, prices.EUR)
+	assert.Equal(t, 1.23, *prices.EUR)
+	assert.Nil(t, prices.EURFoil)
+	require.NotNil(t, prices.USD)
+	assert.Equal(t, 2.5, *prices.USD)
+	assert.Nil(t, prices.USDFoil)
+}
+
+func TestPrices_For(t *testing.T) {
+	price := func(v float64) *float64 { return &v }
+	tests := []struct {
+		name    string
+		prices  Prices
+		foil    bool
+		wantEUR float64
+		wantUSD float64
+	}{
+		{name: "regular", prices: Prices{EUR: price(1), EURFoil: price(3), USD: price(2), USDFoil: price(4)}, wantEUR: 1, wantUSD: 2},
+		{name: "foil", prices: Prices{EUR: price(1), EURFoil: price(3), USD: price(2), USDFoil: price(4)}, foil: true, wantEUR: 3, wantUSD: 4},
+		{name: "regular falls back to foil", prices: Prices{EURFoil: price(3), USDFoil: price(4)}, wantEUR: 3, wantUSD: 4},
+		{name: "foil falls back to regular", prices: Prices{EUR: price(1), USD: price(2)}, foil: true, wantEUR: 1, wantUSD: 2},
+		{name: "no price", foil: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			eur, usd := tt.prices.For(tt.foil)
+			assert.Equal(t, tt.wantEUR, eur)
+			assert.Equal(t, tt.wantUSD, usd)
+		})
+	}
+}

@@ -1,6 +1,7 @@
 package deckinsights
 
 import (
+	"math"
 	"sort"
 	"strings"
 
@@ -29,6 +30,12 @@ func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card) 
 		if !ok {
 			stats.TypeBreakdown["Unknown"]++
 			continue
+		}
+
+		if !c.Proxy {
+			eur, usd := sc.Prices.For(c.Foil)
+			stats.Value.EUR += eur
+			stats.Value.USD += usd
 		}
 
 		t := scryfall.PrimaryType(sc.TypeLine)
@@ -60,6 +67,7 @@ func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card) 
 		}
 	}
 
+	stats.Value = Value{EUR: roundToCents(stats.Value.EUR), USD: roundToCents(stats.Value.USD)}
 	stats.NonlandCount = nonlandCount
 	if nonlandCount > 0 {
 		stats.AverageManaValue = totalManaValue / float64(nonlandCount)
@@ -83,6 +91,10 @@ func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card) 
 	}
 
 	return stats
+}
+
+func roundToCents(amount float64) float64 {
+	return math.Round(amount*100) / 100
 }
 
 func isPermanent(typeLine string) bool {

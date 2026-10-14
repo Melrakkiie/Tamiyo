@@ -17,6 +17,8 @@ type storageRow struct {
 	Name      string    `db:"name"`
 	Type      string    `db:"type"`
 	CardCount int       `db:"card_count"`
+	EUR       float64   `db:"eur"`
+	USD       float64   `db:"usd"`
 	Added     time.Time `db:"added"`
 	Updated   time.Time `db:"updated"`
 
@@ -30,12 +32,19 @@ func (r storageRow) toDomain() Storage {
 		Name:           r.Name,
 		Type:           r.Type,
 		CardCount:      r.CardCount,
+		Value:          Value{EUR: r.EUR, USD: r.USD},
 		Added:          r.Added,
 		Updated:        r.Updated,
 		Locked:         r.Locked,
 		AllowedDeckIDs: []string(r.AllowedDeckIDs),
 	}
 }
+
+const valueColumns = `
+		    COALESCE(SUM(COALESCE(CASE WHEN tamiyo.cards.foil THEN tamiyo.printings.eur_foil ELSE tamiyo.printings.eur END,
+		        tamiyo.printings.eur, tamiyo.printings.eur_foil)) FILTER (WHERE NOT tamiyo.cards.proxy), 0)::float8 AS eur,
+		    COALESCE(SUM(COALESCE(CASE WHEN tamiyo.cards.foil THEN tamiyo.printings.usd_foil ELSE tamiyo.printings.usd END,
+		        tamiyo.printings.usd, tamiyo.printings.usd_foil)) FILTER (WHERE NOT tamiyo.cards.proxy), 0)::float8 AS usd,`
 
 const allowedDeckIDsColumn = `
 		    COALESCE((
@@ -81,9 +90,10 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		    tamiyo.storage.added AS added,
 			tamiyo.storage.updated as updated,
 		    tamiyo.storage.locked AS locked,
-		    COUNT(tamiyo.cards.id) AS card_count,` + allowedDeckIDsColumn + `
+		    COUNT(tamiyo.cards.id) AS card_count,` + valueColumns + allowedDeckIDsColumn + `
 		FROM tamiyo.storage
 		LEFT JOIN tamiyo.cards ON tamiyo.storage.id = tamiyo.cards.storage_id AND tamiyo.cards.user_id = $1
+		LEFT JOIN tamiyo.printings ON tamiyo.printings.scryfall_id = tamiyo.cards.scryfall_id
 	` + whereClause + `
 		GROUP BY tamiyo.storage.id
 	` + orderByClause(filter) + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
@@ -130,9 +140,10 @@ func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int
 		    tamiyo.storage.added AS added,
 			tamiyo.storage.updated as updated,
 		    tamiyo.storage.locked AS locked,
-		    COUNT(tamiyo.cards.id) AS card_count,` + allowedDeckIDsColumn + `
+		    COUNT(tamiyo.cards.id) AS card_count,` + valueColumns + allowedDeckIDsColumn + `
 		FROM tamiyo.storage
 		LEFT JOIN tamiyo.cards ON tamiyo.storage.id = tamiyo.cards.storage_id AND tamiyo.cards.user_id = $2
+		LEFT JOIN tamiyo.printings ON tamiyo.printings.scryfall_id = tamiyo.cards.scryfall_id
 		WHERE tamiyo.storage.id = $1 AND tamiyo.storage.user_id = $2
 		GROUP BY tamiyo.storage.id
 	`

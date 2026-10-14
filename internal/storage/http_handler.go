@@ -24,15 +24,21 @@ const (
 var errInvalidAllowedDeckID = errors.New("allowed_deck_ids must only contain deck ids")
 
 type storageResponse struct {
-	ID        int    `json:"id"`
-	Name      string `json:"name"`
-	Type      string `json:"type"`
-	CardCount int    `json:"card_count"`
-	Added     string `json:"added"`
-	Updated   string `json:"updated"`
+	ID        int           `json:"id"`
+	Name      string        `json:"name"`
+	Type      string        `json:"type"`
+	CardCount int           `json:"card_count"`
+	Value     valueResponse `json:"value"`
+	Added     string        `json:"added"`
+	Updated   string        `json:"updated"`
 
 	Locked         bool     `json:"locked"`
 	AllowedDeckIDs []string `json:"allowed_deck_ids"`
+}
+
+type valueResponse struct {
+	EUR float64 `json:"eur"`
+	USD float64 `json:"usd"`
 }
 
 func toResponse(s Storage) storageResponse {
@@ -45,6 +51,7 @@ func toResponse(s Storage) storageResponse {
 		Name:           s.Name,
 		Type:           s.Type,
 		CardCount:      s.CardCount,
+		Value:          valueResponse(s.Value),
 		Added:          s.Added.Format("2006-01-02 15:04:05"),
 		Updated:        s.Updated.Format("2006-01-02 15:04:05"),
 		Locked:         s.Locked,

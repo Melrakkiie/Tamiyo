@@ -749,6 +749,26 @@ paths:
         "502":
           $ref: "#/components/responses/BadGateway"
 
+  /cards/value:
+    get:
+      tags: [cards]
+      summary: Value of the collection
+      description: >
+        Sum of the Scryfall prices of every card of the account but proxies,
+        in both currencies. A foil card counts its foil price, another card
+        its regular price, and the other price when that one is missing.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Value"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /cards/{id}:
     parameters:
       - $ref: "#/components/parameters/CardID"
@@ -2892,7 +2912,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Preferences"
         "400":
-          description: No known field, a field of the wrong type, an unknown card_display, or card_columns outside 2..12
+          description: No known field, a field of the wrong type, an unknown card_display, card_columns outside 2..12, or price_currency not eur or usd
           content:
             application/json:
               schema:
@@ -3753,7 +3773,16 @@ components:
           maximum: 23
           default: 6
           description: With theme auto, the hour night ends; must differ from night_starts_at.
-      required: [show_collection_in_decks, card_display, card_columns, show_mana_cost, show_card_details, collection_grouping, collection_sort, theme, night_starts_at, night_ends_at]
+        show_prices:
+          type: boolean
+          default: false
+          description: Whether the app shows card prices and the value of the collection, storages and decks.
+        price_currency:
+          type: string
+          enum: [eur, usd]
+          default: eur
+          description: Which prices the app shows, eur (Cardmarket) or usd (TCGplayer).
+      required: [show_collection_in_decks, card_display, card_columns, show_mana_cost, show_card_details, collection_grouping, collection_sort, theme, night_starts_at, night_ends_at, show_prices, price_currency]
 
     PreferencesChanges:
       type: object
@@ -3792,6 +3821,11 @@ components:
           type: integer
           minimum: 0
           maximum: 23
+        show_prices:
+          type: boolean
+        price_currency:
+          type: string
+          enum: [eur, usd]
 
     DeckOwnership:
       type: object
@@ -3993,7 +4027,27 @@ components:
             double-faced cards), by name. They aren't in land_count.
           items:
             $ref: "#/components/schemas/BackFaceCard"
-      required: [card_count, land_count, nonland_count, average_mana_value, mana_curve, color_breakdown, type_breakdown, back_face_lands]
+        value:
+          allOf:
+            - $ref: "#/components/schemas/Value"
+          description: >
+            Value of the main board, owned and pending cards, proxies left
+            out, from Scryfall's current prices, rounded to the cent.
+      required: [card_count, land_count, nonland_count, average_mana_value, mana_curve, color_breakdown, type_breakdown, back_face_lands, value]
+
+    Value:
+      type: object
+      description: >
+        A sum of Scryfall prices, in euros (Cardmarket) and US dollars
+        (TCGplayer). Proxies never count; a foil card counts its foil price,
+        another card its regular price, and the other price when that one is
+        missing; a card without any price counts 0.
+      properties:
+        eur:
+          type: number
+        usd:
+          type: number
+      required: [eur, usd]
 
     BackFaceCard:
       type: object
@@ -4633,6 +4687,10 @@ components:
           type: string
         card_count:
           type: integer
+        value:
+          allOf:
+            - $ref: "#/components/schemas/Value"
+          description: Value of the storage's cards, proxies left out.
         added:
           type: string
         updated:
@@ -4651,7 +4709,7 @@ components:
           description: >
             The decks a locked storage stays open to; empty means closed to
             every deck. Kept but ignored while the storage is unlocked.
-      required: [id, name, type, card_count, added, updated, locked, allowed_deck_ids]
+      required: [id, name, type, card_count, value, added, updated, locked, allowed_deck_ids]
 
     PaginatedStorages:
       type: object

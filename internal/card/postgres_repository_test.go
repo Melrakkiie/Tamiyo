@@ -112,9 +112,9 @@ func seedCards(t *testing.T, db *sqlx.DB, userID string, cards []Card) {
 
 	for _, c := range cards {
 		_, err := db.Exec(`
-			INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		`, userID, c.Name, c.ScryfallID, c.SetCode, c.CollectorNumber, c.Foil, c.StorageID, c.ManaValue)
+			INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, proxy, storage_id, mana_value)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		`, userID, c.Name, c.ScryfallID, c.SetCode, c.CollectorNumber, c.Foil, c.Proxy, c.StorageID, c.ManaValue)
 		require.NoError(t, err)
 	}
 }
@@ -1009,4 +1009,40 @@ func TestPostgresRepository_FindAll_AdvancedFilters(t *testing.T) {
 	assert.Equal(t, []string{"Esika's Chariot", "Grist, the Hunger Tide", "Llanowar Elves", "Unknown"}, names(CardFilter{OpenToDeck: str(otherDeck)}))
 	assert.Equal(t, []string{"Esika's Chariot", "Llanowar Elves"}, names(CardFilter{OpenToDeck: str(otherDeck), Colors: str("G"), ColorMode: ColorModeExact, Stack: true}))
 	assert.Equal(t, everything, names(CardFilter{}))
+}
+
+func TestPostgresRepository_Value_SumsPricesOfOwnedNonProxyCards(t *testing.T) {
+	db := getTestDB(t)
+	alice := seedUser(t, db, "alice@example.com")
+	bob := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	const both = "11111111-1111-1111-1111-111111111111"
+	const foilOnly = "22222222-2222-2222-2222-222222222222"
+	const unpriced = "33333333-3333-3333-3333-333333333333"
+	const unknown = "44444444-4444-4444-4444-444444444444"
+	_, err := db.Exec(`
+		INSERT INTO tamiyo.printings (scryfall_id, type_line, eur, eur_foil, usd, usd_foil) VALUES
+			($1, 'Instant', 1.00, 5.00, 1.50, 6.00),
+			($2, 'Instant', NULL, 3.25, NULL, 4.00),
+			($3, 'Instant', NULL, NULL, NULL, NULL)
+	`, both, foilOnly, unpriced)
+	require.NoError(t, err)
+	seedCards(t, db, alice, []Card{
+		{Name: "A", ScryfallID: both, SetCode: "tst", CollectorNumber: "1"},
+		{Name: "A", ScryfallID: both, SetCode: "tst", CollectorNumber: "1", Foil: true},
+		{Name: "A", ScryfallID: both, SetCode: "tst", CollectorNumber: "1", Proxy: true},
+		{Name: "B", ScryfallID: foilOnly, SetCode: "tst", CollectorNumber: "2"},
+		{Name: "C", ScryfallID: unpriced, SetCode: "tst", CollectorNumber: "3"},
+		{Name: "D", ScryfallID: unknown, SetCode: "tst", CollectorNumber: "4"},
+	})
+	seedCards(t, db, bob, []Card{{Name: "A", ScryfallID: both, SetCode: "tst", CollectorNumber: "1", Foil: true}})
+
+	value, err := repo.Value(context.Background(), alice)
+	require.NoError(t, err)
+	assert.InDelta(t, 9.25, value.EUR, 0.001)
+	assert.InDelta(t, 11.5, value.USD, 0.001)
+
+	empty, err := repo.Value(context.Background(), seedUser(t, db, "carol@example.com"))
+	require.NoError(t, err)
+	assert.Equal(t, Value{}, empty)
 }

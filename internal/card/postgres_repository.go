@@ -400,6 +400,19 @@ func (r *PostgresRepository) DeleteAll(ctx context.Context, userID string) (int,
 	return int(deleted), nil
 }
 
+func (r *PostgresRepository) Value(ctx context.Context, userID string) (Value, error) {
+	var v Value
+	err := r.db.QueryRowContext(ctx, `
+		SELECT
+			COALESCE(SUM(COALESCE(CASE WHEN c.foil THEN p.eur_foil ELSE p.eur END, p.eur, p.eur_foil)), 0)::float8,
+			COALESCE(SUM(COALESCE(CASE WHEN c.foil THEN p.usd_foil ELSE p.usd END, p.usd, p.usd_foil)), 0)::float8
+		FROM tamiyo.cards c
+		LEFT JOIN tamiyo.printings p USING (scryfall_id)
+		WHERE c.user_id = $1 AND NOT c.proxy
+	`, userID).Scan(&v.EUR, &v.USD)
+	return v, err
+}
+
 func (r *PostgresRepository) FindMissingDetails(ctx context.Context, userID string, afterID int, limit int) ([]Card, error) {
 	query := `
 		SELECT id, name, scryfall_id, set_code, collector_number, foil, proxy, storage_id, mana_value, colors, card_type, color_identity, added, updated

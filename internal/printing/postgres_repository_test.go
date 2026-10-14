@@ -16,6 +16,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	"Melrakkiie/Tamiyo/_devops/database/migrations"
+	"Melrakkiie/Tamiyo/internal/scryfall"
 )
 
 var testDB *sqlx.DB
@@ -143,4 +144,28 @@ func TestPostgresRepository_IDsToRefreshAndUpsert(t *testing.T) {
 	require.NoError(t, db.QueryRow(`SELECT type_line, legal_formats FROM tamiyo.printings WHERE scryfall_id = $1`, a).Scan(&typeLine, pq.Array(&formats)))
 	assert.Equal(t, "Creature — Elf Druid", typeLine)
 	assert.Equal(t, []string{"commander"}, formats)
+}
+
+func TestPostgresRepository_UpsertStoresPrices(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+	const a = "11111111-1111-1111-1111-111111111111"
+	eur, usdFoil := 1.25, 7.5
+
+	require.NoError(t, repo.Upsert(ctx, []Printing{{ScryfallID: a, TypeLine: "Instant", LegalFormats: []string{}, Prices: scryfall.Prices{EUR: &eur, USDFoil: &usdFoil}}}))
+
+	var gotEUR, gotEURFoil, gotUSD, gotUSDFoil *float64
+	require.NoError(t, db.QueryRow(`SELECT eur, eur_foil, usd, usd_foil FROM tamiyo.printings WHERE scryfall_id = $1`, a).
+		Scan(&gotEUR, &gotEURFoil, &gotUSD, &gotUSDFoil))
+	require.NotNil(t, gotEUR)
+	assert.Equal(t, 1.25, *gotEUR)
+	assert.Nil(t, gotEURFoil)
+	assert.Nil(t, gotUSD)
+	require.NotNil(t, gotUSDFoil)
+	assert.Equal(t, 7.5, *gotUSDFoil)
+
+	require.NoError(t, repo.Upsert(ctx, []Printing{{ScryfallID: a, TypeLine: "Instant", LegalFormats: []string{}}}))
+	require.NoError(t, db.QueryRow(`SELECT eur FROM tamiyo.printings WHERE scryfall_id = $1`, a).Scan(&gotEUR))
+	assert.Nil(t, gotEUR)
 }

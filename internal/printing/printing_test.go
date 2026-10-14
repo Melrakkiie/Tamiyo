@@ -61,6 +61,15 @@ func TestFromScryfall_KeepsLegalAndRestrictedFormatsSorted(t *testing.T) {
 	assert.Equal(t, Printing{ScryfallID: "a", TypeLine: "Artifact", LegalFormats: []string{"commander", "vintage"}}, p)
 }
 
+func TestFromScryfall_KeepsPrices(t *testing.T) {
+	eur, usdFoil := 2.5, 9.99
+	prices := scryfall.Prices{EUR: &eur, USDFoil: &usdFoil}
+
+	p := FromScryfall(scryfall.Card{ID: "a", Prices: prices})
+
+	assert.Equal(t, prices, p.Prices)
+}
+
 func TestRefreshBatch_StoresFoundAndMissingPrintings(t *testing.T) {
 	repo := &fakeRepo{batches: [][]string{{"AAAA", "bbbb"}}}
 	fetcher := &fakeFetcher{cards: []scryfall.Card{{ID: "aaaa", TypeLine: "Creature — Elf", Legalities: map[string]string{"commander": "legal"}}}}

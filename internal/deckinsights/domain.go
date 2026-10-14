@@ -49,4 +49,10 @@ type DeckStats struct {
 	ColorBreakdown   map[string]int    `json:"color_breakdown"`
 	TypeBreakdown    map[string]int    `json:"type_breakdown"`
 	BackFaceLands    []BackFaceCard    `json:"back_face_lands"`
+	Value            Value             `json:"value"`
+}
+
+type Value struct {
+	EUR float64 `json:"eur"`
+	USD float64 `json:"usd"`
 }
