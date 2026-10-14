@@ -9,7 +9,7 @@ import (
 	"Melrakkiie/Tamiyo/internal/scryfall"
 )
 
-func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card) DeckStats {
+func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card, usdPerEUR float64) DeckStats {
 	stats := DeckStats{
 		ManaCurve:      []ManaCurveBucket{},
 		BackFaceLands:  []BackFaceCard{},
@@ -33,7 +33,7 @@ func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card) 
 		}
 
 		if !c.Proxy {
-			eur, usd := sc.Prices.For(c.Foil)
+			eur, usd := sc.Prices.For(c.Foil, usdPerEUR)
 			stats.Value.EUR += eur
 			stats.Value.USD += usd
 		}

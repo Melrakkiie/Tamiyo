@@ -74,7 +74,7 @@ func getTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
 
 	_, err := testDB.Exec(`
-		TRUNCATE TABLE tamiyo.card_deck, tamiyo.deck, tamiyo.cards, tamiyo.storage, tamiyo.users, tamiyo.printings
+		TRUNCATE TABLE tamiyo.card_deck, tamiyo.deck, tamiyo.cards, tamiyo.storage, tamiyo.users, tamiyo.printings, tamiyo.exchange_rates
 		RESTART IDENTITY CASCADE
 	`)
 	require.NoError(t, err)
@@ -1020,12 +1020,16 @@ func TestPostgresRepository_Value_SumsPricesOfOwnedNonProxyCards(t *testing.T) {
 	const foilOnly = "22222222-2222-2222-2222-222222222222"
 	const unpriced = "33333333-3333-3333-3333-333333333333"
 	const unknown = "44444444-4444-4444-4444-444444444444"
+	const dollarsOnly = "55555555-5555-5555-5555-555555555555"
 	_, err := db.Exec(`
 		INSERT INTO tamiyo.printings (scryfall_id, type_line, eur, eur_foil, usd, usd_foil) VALUES
 			($1, 'Instant', 1.00, 5.00, 1.50, 6.00),
 			($2, 'Instant', NULL, 3.25, NULL, 4.00),
-			($3, 'Instant', NULL, NULL, NULL, NULL)
-	`, both, foilOnly, unpriced)
+			($3, 'Instant', NULL, NULL, NULL, NULL),
+			($4, 'Instant', NULL, NULL, 2.50, NULL)
+	`, both, foilOnly, unpriced, dollarsOnly)
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO tamiyo.exchange_rates (currency, per_eur, rate_date) VALUES ('usd', 1.25, '2026-10-13')`)
 	require.NoError(t, err)
 	seedCards(t, db, alice, []Card{
 		{Name: "A", ScryfallID: both, SetCode: "tst", CollectorNumber: "1"},
@@ -1034,13 +1038,14 @@ func TestPostgresRepository_Value_SumsPricesOfOwnedNonProxyCards(t *testing.T) {
 		{Name: "B", ScryfallID: foilOnly, SetCode: "tst", CollectorNumber: "2"},
 		{Name: "C", ScryfallID: unpriced, SetCode: "tst", CollectorNumber: "3"},
 		{Name: "D", ScryfallID: unknown, SetCode: "tst", CollectorNumber: "4"},
+		{Name: "E", ScryfallID: dollarsOnly, SetCode: "tst", CollectorNumber: "5"},
 	})
 	seedCards(t, db, bob, []Card{{Name: "A", ScryfallID: both, SetCode: "tst", CollectorNumber: "1", Foil: true}})
 
 	value, err := repo.Value(context.Background(), alice)
 	require.NoError(t, err)
-	assert.InDelta(t, 9.25, value.EUR, 0.001)
-	assert.InDelta(t, 11.5, value.USD, 0.001)
+	assert.InDelta(t, 11.25, value.EUR, 0.001)
+	assert.InDelta(t, 14, value.USD, 0.001)
 
 	empty, err := repo.Value(context.Background(), seedUser(t, db, "carol@example.com"))
 	require.NoError(t, err)

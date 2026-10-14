@@ -342,7 +342,16 @@ The value of the collection ([`GET /cards/value`](#get-cardsvalue)), of a storag
 { "eur": 12.34, "usd": 15.6 }
 ```
 
-Each card counts its printing's price: its foil price when it is foil, its regular price otherwise, and the other one when that price is missing. A card with no price at all counts `0`. Proxies never count. The collection and storage values use the prices stored with the printings, refreshed in the background once a day; deck values use Scryfall's current prices.
+Each card counts its printing's price: its foil price when it is foil, its regular price otherwise, and the other one when that price is missing. A card with no euro price counts its dollar price converted to euros, with the dollar price of its own finish tried before the euro price of the other. A card with no price at all counts `0`. Proxies never count. The collection and storage values use the prices stored with the printings, refreshed in the background once a day; deck values use Scryfall's current prices.
+
+#### `GET /exchange-rate`
+
+The exchange rate used to convert dollars to euros: the European Central Bank's reference rate, in US dollars per euro, refreshed in the background every 6 hours (the bank publishes it once a working day). Works without authentication, so that a client can convert the prices it reads from Scryfall the same way. Until a first rate has been fetched, both fields are `null` and dollar prices are not converted.
+
+**Response `200 OK`**
+```json
+{ "usd_per_eur": 1.0876, "date": "2026-10-13" }
+```
 
 ### Partial updates
 All `PATCH` endpoints accept a partial body — only the fields you include are modified. Omitted fields are left untouched.

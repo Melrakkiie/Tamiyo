@@ -19,13 +19,18 @@ type scryfallFetcher interface {
 	Fetch(ctx context.Context, identifiers []scryfall.Identifier) ([]scryfall.Card, error)
 }
 
+type exchangeRates interface {
+	USDPerEUR(ctx context.Context) (float64, error)
+}
+
 type Service struct {
 	decks    deckService
 	scryfall scryfallFetcher
+	rates    exchangeRates
 }
 
-func NewService(decks deckService, scryfall scryfallFetcher) *Service {
-	return &Service{decks: decks, scryfall: scryfall}
+func NewService(decks deckService, scryfall scryfallFetcher, rates exchangeRates) *Service {
+	return &Service{decks: decks, scryfall: scryfall, rates: rates}
 }
 
 func (s *Service) GetDeckLegality(ctx context.Context, userID string, deckID string) (LegalityReport, error) {
@@ -47,7 +52,11 @@ func (s *Service) GetDeckStats(ctx context.Context, userID string, deckID string
 	if err != nil {
 		return DeckStats{}, err
 	}
-	return computeStats(mainBoard(cards), scryfallByID), nil
+	usdPerEUR, err := s.rates.USDPerEUR(ctx)
+	if err != nil {
+		return DeckStats{}, fmt.Errorf("loading exchange rate: %w", err)
+	}
+	return computeStats(mainBoard(cards), scryfallByID, usdPerEUR), nil
 }
 
 func (s *Service) loadDeckWithScryfallData(ctx context.Context, userID string, deckID string) (deck.Deck, []deck.DeckCard, map[string]scryfall.Card, error) {

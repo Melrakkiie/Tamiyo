@@ -57,20 +57,32 @@ type Prices struct {
 	USDFoil *float64
 }
 
-func (p Prices) For(foil bool) (eur, usd float64) {
-	return pick(foil, p.EUR, p.EURFoil), pick(foil, p.USD, p.USDFoil)
+func (p Prices) For(foil bool, usdPerEUR float64) (eur, usd float64) {
+	eurFirst, eurSecond := ordered(foil, p.EUR, p.EURFoil)
+	usdFirst, usdSecond := ordered(foil, p.USD, p.USDFoil)
+	return firstOf(eurFirst, toEUR(usdFirst, usdPerEUR), eurSecond, toEUR(usdSecond, usdPerEUR)), firstOf(usdFirst, usdSecond)
 }
 
-func pick(foil bool, regular, foiled *float64) float64 {
-	first, second := regular, foiled
+func ordered(foil bool, regular, foiled *float64) (first, second *float64) {
 	if foil {
-		first, second = foiled, regular
+		return foiled, regular
 	}
-	if first != nil {
-		return *first
+	return regular, foiled
+}
+
+func toEUR(usd *float64, usdPerEUR float64) *float64 {
+	if usd == nil || usdPerEUR <= 0 {
+		return nil
 	}
-	if second != nil {
-		return *second
+	eur := *usd / usdPerEUR
+	return &eur
+}
+
+func firstOf(prices ...*float64) float64 {
+	for _, price := range prices {
+		if price != nil {
+			return *price
+		}
 	}
 	return 0
 }

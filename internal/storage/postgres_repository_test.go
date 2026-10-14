@@ -73,7 +73,7 @@ func getTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
 
 	_, err := testDB.Exec(`
-		TRUNCATE TABLE tamiyo.card_deck, tamiyo.deck, tamiyo.cards, tamiyo.storage, tamiyo.users, tamiyo.printings
+		TRUNCATE TABLE tamiyo.card_deck, tamiyo.deck, tamiyo.cards, tamiyo.storage, tamiyo.users, tamiyo.printings, tamiyo.exchange_rates
 		RESTART IDENTITY CASCADE
 	`)
 	require.NoError(t, err)
@@ -170,11 +170,15 @@ func TestPostgresRepository_FindAllAndFindByID_SumNonProxyPrices(t *testing.T) {
 	seedStorages(t, db, userID)
 	const both = "11111111-1111-1111-1111-111111111111"
 	const foilOnly = "22222222-2222-2222-2222-222222222222"
+	const dollarsOnly = "44444444-4444-4444-4444-444444444444"
 	_, err := db.Exec(`
 		INSERT INTO tamiyo.printings (scryfall_id, type_line, eur, eur_foil, usd, usd_foil) VALUES
 			($1, 'Instant', 1.00, 5.00, 1.50, 6.00),
-			($2, 'Instant', NULL, 3.25, NULL, 4.00)
-	`, both, foilOnly)
+			($2, 'Instant', NULL, 3.25, NULL, 4.00),
+			($3, 'Instant', NULL, NULL, 2.50, NULL)
+	`, both, foilOnly, dollarsOnly)
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO tamiyo.exchange_rates (currency, per_eur, rate_date) VALUES ('usd', 1.25, '2026-10-13')`)
 	require.NoError(t, err)
 	_, err = db.Exec(`
 		INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, proxy, storage_id) VALUES
@@ -183,17 +187,18 @@ func TestPostgresRepository_FindAllAndFindByID_SumNonProxyPrices(t *testing.T) {
 			($1, 'A', $2, 'tst', '1', true, true, 1),
 			($1, 'B', $3, 'tst', '2', false, false, 1),
 			($1, 'C', '33333333-3333-3333-3333-333333333333', 'tst', '3', false, false, 1),
+			($1, 'D', $4, 'tst', '4', false, false, 1),
 			($1, 'A', $2, 'tst', '1', false, false, NULL)
-	`, userID, both, foilOnly)
+	`, userID, both, foilOnly, dollarsOnly)
 	require.NoError(t, err)
 
 	result, _, err := repo.FindAll(context.Background(), userID, defaultFilter())
 	require.NoError(t, err)
 	for _, s := range result {
 		if s.ID == 1 {
-			assert.Equal(t, 5, s.CardCount)
-			assert.InDelta(t, 9.25, s.Value.EUR, 0.001)
-			assert.InDelta(t, 11.5, s.Value.USD, 0.001)
+			assert.Equal(t, 6, s.CardCount)
+			assert.InDelta(t, 11.25, s.Value.EUR, 0.001)
+			assert.InDelta(t, 14, s.Value.USD, 0.001)
 		} else {
 			assert.Equal(t, Value{}, s.Value)
 		}
@@ -201,9 +206,9 @@ func TestPostgresRepository_FindAllAndFindByID_SumNonProxyPrices(t *testing.T) {
 
 	found, err := repo.FindByID(context.Background(), userID, 1)
 	require.NoError(t, err)
-	assert.Equal(t, 5, found.CardCount)
-	assert.InDelta(t, 9.25, found.Value.EUR, 0.001)
-	assert.InDelta(t, 11.5, found.Value.USD, 0.001)
+	assert.Equal(t, 6, found.CardCount)
+	assert.InDelta(t, 11.25, found.Value.EUR, 0.001)
+	assert.InDelta(t, 14, found.Value.USD, 0.001)
 }
 
 func TestPostgresRepository_FindAll_ReturnsZeroCardCountForEmptyStorage(t *testing.T) {

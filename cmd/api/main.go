@@ -26,6 +26,7 @@ import (
 	"Melrakkiie/Tamiyo/internal/deckinsights"
 	"Melrakkiie/Tamiyo/internal/deckshare"
 	"Melrakkiie/Tamiyo/internal/emailchange"
+	"Melrakkiie/Tamiyo/internal/exchangerate"
 	"Melrakkiie/Tamiyo/internal/follow"
 	"Melrakkiie/Tamiyo/internal/health"
 	"Melrakkiie/Tamiyo/internal/httplog"
@@ -123,7 +124,11 @@ func main() {
 	importService := bulk.NewService(cardService, storageService, deckService, bulk.NewScryfallClient())
 	importHandler := bulk.NewHandler(importService)
 
-	insightsService := deckinsights.NewService(deckService, scryfall.NewClient())
+	exchangeRateRepo := exchangerate.NewPostgresRepository(db)
+	exchangeRateService := exchangerate.NewService(exchangeRateRepo)
+	exchangeRateHandler := exchangerate.NewHandler(exchangeRateService)
+
+	insightsService := deckinsights.NewService(deckService, scryfall.NewClient(), exchangeRateService)
 	insightsHandler := deckinsights.NewHandler(insightsService)
 
 	shareService := deckshare.NewService(deckService, userService, insightsService)
@@ -137,6 +142,7 @@ func main() {
 	refresherCtx, stopRefresher := context.WithCancel(context.Background())
 	defer stopRefresher()
 	go printing.NewRefresher(printing.NewPostgresRepository(db), scryfall.NewClient(), logger).Run(refresherCtx)
+	go exchangerate.NewRefresher(exchangeRateRepo, exchangerate.NewECBClient(), logger).Run(refresherCtx)
 
 	authLimiter := ratelimit.NewLimiter(cfg.AuthRateLimitMax, cfg.AuthRateLimitWindow)
 	shareLimiter := ratelimit.NewLimiter(cfg.ShareRateLimitMax, cfg.ShareRateLimitWindow)
@@ -160,6 +166,7 @@ func main() {
 	emailChangeHandler.RegisterRoutes(api, ratelimit.Middleware(authLimiter))
 	shareHandler.RegisterRoutes(api.Group("", ratelimit.Middleware(shareLimiter)))
 	importHandler.RegisterPublicRoutes(api.Group("", ratelimit.Middleware(shareLimiter)))
+	exchangeRateHandler.RegisterRoutes(api)
 
 	protected := api.Group("")
 	protected.Use(auth.RequireAuth(cfg.JWTSecret))

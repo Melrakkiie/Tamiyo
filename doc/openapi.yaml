@@ -4,8 +4,8 @@ info:
   description: >
     REST API for managing a Magic: The Gathering card collection —
     cards, physical storage (binders, boxes, deckboxes), and decks.
-    Every endpoint except /health and /auth/register, /auth/login,
-    /auth/refresh, /auth/logout requires a Bearer access token
+    Every endpoint except /health, /exchange-rate and /auth/register,
+    /auth/login, /auth/refresh, /auth/logout requires a Bearer access token
     (obtained from /auth/register or /auth/login) and scopes all data
     to the authenticated user.
   version: "1.0.0"
@@ -756,7 +756,9 @@ paths:
       description: >
         Sum of the Scryfall prices of every card of the account but proxies,
         in both currencies. A foil card counts its foil price, another card
-        its regular price, and the other price when that one is missing.
+        its regular price, and the other price when that one is missing. A
+        card with no euro price counts its dollar price converted with the
+        rate of GET /exchange-rate.
       responses:
         "200":
           description: OK
@@ -766,6 +768,26 @@ paths:
                 $ref: "#/components/schemas/Value"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /exchange-rate:
+    get:
+      tags: [cards]
+      summary: Dollar to euro exchange rate
+      description: >
+        The European Central Bank's reference rate, in US dollars per euro,
+        refreshed every 6 hours, used to convert a card's dollar price when
+        it has no euro price. Both fields are null until a first rate has
+        been fetched. Works without authentication.
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExchangeRate"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -4041,13 +4063,31 @@ components:
         A sum of Scryfall prices, in euros (Cardmarket) and US dollars
         (TCGplayer). Proxies never count; a foil card counts its foil price,
         another card its regular price, and the other price when that one is
-        missing; a card without any price counts 0.
+        missing; a card without a euro price counts its dollar price converted
+        with the rate of GET /exchange-rate, the dollar price of its own
+        finish before the euro price of the other; a card without any price
+        counts 0.
       properties:
         eur:
           type: number
         usd:
           type: number
       required: [eur, usd]
+
+    ExchangeRate:
+      type: object
+      properties:
+        usd_per_eur:
+          type: number
+          nullable: true
+          example: 1.0876
+        date:
+          type: string
+          format: date
+          nullable: true
+          description: The day the European Central Bank published the rate.
+          example: "2026-10-13"
+      required: [usd_per_eur, date]
 
     BackFaceCard:
       type: object
