@@ -210,7 +210,7 @@ Set or clear the account's profile: its display name, a purely cosmetic name the
 The account's display preferences, saved so they follow the user from one device to another. **Requires `Authorization: Bearer <token>`.**
 
 ```json
-{ "show_collection_in_decks": true, "card_display": "images", "card_columns": 6, "show_mana_cost": true, "show_card_details": true, "collection_grouping": null, "collection_sort": "-added", "theme": "auto", "night_starts_at": 22, "night_ends_at": 6, "show_prices": false, "price_currency": "eur" }
+{ "show_collection_in_decks": true, "card_display": "images", "card_columns": 6, "show_mana_cost": true, "show_card_details": true, "collection_grouping": null, "collection_sort": "-added", "theme": "auto", "night_starts_at": 22, "night_ends_at": 6, "show_prices": false, "price_currency": "eur", "playtest_zoom": 100 }
 ```
 
 | Field | Type | Default | Notes |
@@ -227,12 +227,13 @@ The account's display preferences, saved so they follow the user from one device
 | `night_ends_at` | int | `6` | With `theme` `auto`, the hour night ends, `0` to `23`; it must differ from `night_starts_at`. Night may run past midnight (`22` to `6`) or not (`1` to `5`). |
 | `show_prices` | bool | `false` | Whether the app shows card prices and the value of the collection, of each storage and of each deck. |
 | `price_currency` | string | `eur` | Which prices the app shows: `eur` (Cardmarket, from Scryfall) or `usd` (TCGplayer, from Scryfall). The API always sends both currencies in its [values](#prices-and-values); the client picks the one to show. |
+| `playtest_zoom` | int | `100` | The card size a deck playtest opens with, as a percentage of the normal size, `50` to `200`. The front saves it whenever the player zooms in or out. |
 
 The display fields (`card_display` to `show_card_details`) are those of the collection and the storages, and of other people's decks; each of your decks keeps its own in its [display settings](#display-settings-deckidview).
 
 `GET` returns them (the defaults until something is saved); `PATCH` changes the fields present in the body and returns them all.
 
-**Errors:** `400` no known field in the body, a field of the wrong type, `card_display` not `text`, `images`, `grid` or `stacks`, `card_columns` outside `2..12`, an unknown `collection_grouping` or `collection_sort`, `theme` not `day`, `night` or `auto`, a night hour outside `0..23`, night starting and ending at the same hour, or `price_currency` not `eur` or `usd` · `401` missing/invalid token
+**Errors:** `400` no known field in the body, a field of the wrong type, `card_display` not `text`, `images`, `grid` or `stacks`, `card_columns` outside `2..12`, an unknown `collection_grouping` or `collection_sort`, `theme` not `day`, `night` or `auto`, a night hour outside `0..23`, night starting and ending at the same hour, `price_currency` not `eur` or `usd`, or `playtest_zoom` outside `50..200` · `401` missing/invalid token
 
 ---
 
@@ -1359,6 +1360,12 @@ Cards are matched **by name only**: printings and finishes are ignored, and a sp
 - Every list is sorted by name and always present, possibly empty. `scryfall_id`, `mana_value`, `colors`, `card_type` and `color_identity` come from one of the matching printings, preferring `:id`'s. `commander` / `other_commander` tell whether the card is that deck's commander, and `tags` / `other_tags` are its [tags](#card-tags-deckidtags) in each deck. `mine` tells whether the deck belongs to the caller.
 
 **Errors:** `400` an id isn't a UUID · `401` unauthenticated · `404` a deck doesn't exist, or is someone else's private deck
+
+### `GET /deck/:id/content`
+
+A deck's full card list, for a deck the **signed-in user** can see: one of theirs, whatever its visibility, or someone else's `public` or `unlisted` deck. **Requires authentication** (it is not rate-limited like the `/shared/decks` routes). The response is exactly the one of [`GET /shared/decks/:id`](#get-shareddecksid), `visibility` included. The front uses it to playtest a deck, its own private ones too.
+
+**Errors:** `401` unauthenticated · `404` unknown, malformed, or someone else's private deck
 
 ### `GET /deck/:id/ownership`
 

@@ -67,12 +67,33 @@ func toComparedCardsResponse(cards []ComparedCard) []comparedCardResponse {
 }
 
 func (h *Handler) RegisterProtectedRoutes(router gin.IRoutes) {
+	router.GET("/deck/:id/content", h.visibleDeck)
 	router.GET("/deck/:id/compare/:other_id", h.compareDecks)
 	router.GET("/deck/:id/ownership", h.collectionOwnership)
 	router.GET("/deck/:id/like", h.likeStatus)
 	router.PUT("/deck/:id/like", h.likeDeck)
 	router.DELETE("/deck/:id/like", h.unlikeDeck)
 	router.GET("/auth/me/liked-decks", h.likedDecks)
+}
+
+func (h *Handler) visibleDeck(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+		return
+	}
+	deckID, ok := parseDeckID(ctx)
+	if !ok {
+		return
+	}
+
+	visible, err := h.service.GetVisibleDeck(ctx.Request.Context(), userID, deckID)
+	if err != nil {
+		h.respondError(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, toResponse(visible))
 }
 
 type ownedCardResponse struct {

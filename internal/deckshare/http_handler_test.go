@@ -89,6 +89,12 @@ func (f *fakeSharedService) GetSharedDeck(ctx context.Context, deckID string) (S
 	return f.shared, f.err
 }
 
+func (f *fakeSharedService) GetVisibleDeck(ctx context.Context, userID string, deckID string) (SharedDeck, error) {
+	f.lastUserID = userID
+	f.lastDeckID = deckID
+	return f.shared, f.err
+}
+
 func (f *fakeSharedService) GetSharedDeckLegality(ctx context.Context, deckID string) (deckinsights.LegalityReport, error) {
 	f.lastDeckID = deckID
 	return f.legality, f.err

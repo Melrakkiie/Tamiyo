@@ -2934,7 +2934,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Preferences"
         "400":
-          description: No known field, a field of the wrong type, an unknown card_display, card_columns outside 2..12, or price_currency not eur or usd
+          description: No known field, a field of the wrong type, an unknown card_display, card_columns outside 2..12, price_currency not eur or usd, or playtest_zoom outside 50..200
           content:
             application/json:
               schema:
@@ -3035,6 +3035,34 @@ paths:
                 $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
+
+  /deck/{id}/content:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    get:
+      tags: [shared-decks]
+      summary: A deck the caller can see, its owner and its cards
+      description: >
+        Same response as GET /shared/decks/{id}. The deck can be one of the
+        caller's, whatever its visibility, or someone else's public or
+        unlisted deck. Not rate-limited like the shared routes.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SharedDeck"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Unknown or malformed id, or someone else's private deck
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /deck/{id}/ownership:
     parameters:
@@ -3804,7 +3832,13 @@ components:
           enum: [eur, usd]
           default: eur
           description: Which prices the app shows, eur (Cardmarket) or usd (TCGplayer).
-      required: [show_collection_in_decks, card_display, card_columns, show_mana_cost, show_card_details, collection_grouping, collection_sort, theme, night_starts_at, night_ends_at, show_prices, price_currency]
+        playtest_zoom:
+          type: integer
+          minimum: 50
+          maximum: 200
+          default: 100
+          description: The card size a deck playtest opens with, as a percentage of the normal size.
+      required: [show_collection_in_decks, card_display, card_columns, show_mana_cost, show_card_details, collection_grouping, collection_sort, theme, night_starts_at, night_ends_at, show_prices, price_currency, playtest_zoom]
 
     PreferencesChanges:
       type: object
@@ -3848,6 +3882,10 @@ components:
         price_currency:
           type: string
           enum: [eur, usd]
+        playtest_zoom:
+          type: integer
+          minimum: 50
+          maximum: 200
 
     DeckOwnership:
       type: object

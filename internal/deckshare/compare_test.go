@@ -352,3 +352,83 @@ func TestCollectionOwnership_WorksOnTheViewersOwnDeckButNotOnAPrivateOne(t *test
 	_, err = svc.CollectionOwnership(context.Background(), viewerID, privateID)
 	assert.ErrorIs(t, err, ErrNotFound)
 }
+
+func TestGetVisibleDeck_LoadsTheViewersOwnPrivateDeck(t *testing.T) {
+	store := compareStore()
+	svc := NewService(store, compareUsers(), &fakeInsights{})
+
+	visible, err := svc.GetVisibleDeck(context.Background(), viewerID, myDeckID)
+
+	require.NoError(t, err)
+	assert.Equal(t, "Mine", visible.Deck.Name)
+	assert.Equal(t, viewerID, visible.Owner.ID)
+	assert.Contains(t, store.visited, viewerID+":"+myDeckID)
+	require.Len(t, visible.Cards, 6)
+	assert.True(t, visible.Cards[0].Commander)
+	assert.Equal(t, 2, visible.Cards[1].Quantity)
+}
+
+func TestGetVisibleDeck_LoadsSomeoneElsesSharedDeckAsTheOwner(t *testing.T) {
+	store := compareStore()
+	svc := NewService(store, compareUsers(), &fakeInsights{})
+
+	visible, err := svc.GetVisibleDeck(context.Background(), viewerID, theirDeck)
+
+	require.NoError(t, err)
+	assert.Equal(t, "Theirs", visible.Deck.Name)
+	assert.Equal(t, "Alice", *visible.Owner.DisplayName)
+	assert.Contains(t, store.visited, strangerID+":"+theirDeck)
+	assert.Len(t, visible.Cards, 5)
+}
+
+func TestGetVisibleDeck_SomeoneElsesPrivateDeckIsNotFound(t *testing.T) {
+	svc := NewService(compareStore(), compareUsers(), &fakeInsights{})
+
+	_, err := svc.GetVisibleDeck(context.Background(), viewerID, privateID)
+	assert.ErrorIs(t, err, ErrNotFound)
+
+	_, err = svc.GetVisibleDeck(context.Background(), viewerID, "88888888-8888-8888-8888-888888888888")
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestVisibleDeckHandler_ReturnsTheSharedDeckShape(t *testing.T) {
+	service := &fakeSharedService{shared: SharedDeck{
+		Deck:  deck.Deck{ID: myDeckID, Name: "Mine", Visibility: deck.VisibilityPrivate},
+		Owner: Owner{ID: viewerID},
+		Cards: []Card{{Name: "Island", ScryfallID: "i", Quantity: 3, Board: deck.BoardMain}, {Name: "Opt", Quantity: 1, Board: deck.BoardSideboard}},
+	}}
+	router := setupProtectedRouter(service, viewerID)
+
+	w := get(router, "/deck/"+myDeckID+"/content")
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, viewerID, service.lastUserID)
+	assert.Equal(t, myDeckID, service.lastDeckID)
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.Equal(t, "private", body["deck"].(map[string]any)["visibility"])
+	assert.Equal(t, 3.0, body["deck"].(map[string]any)["card_count"])
+	assert.Len(t, body["cards"], 2)
+	assert.Equal(t, []any{}, body["cards"].([]any)[0].(map[string]any)["tags"])
+}
+
+func TestVisibleDeckHandler_Errors(t *testing.T) {
+	cases := map[string]struct {
+		userID string
+		path   string
+		err    error
+		want   int
+	}{
+		"unauthenticated": {"", "/deck/" + myDeckID + "/content", nil, http.StatusUnauthorized},
+		"invalid id":      {viewerID, "/deck/nope/content", nil, http.StatusNotFound},
+		"not visible":     {viewerID, "/deck/" + privateID + "/content", ErrNotFound, http.StatusNotFound},
+		"failure":         {viewerID, "/deck/" + myDeckID + "/content", errors.New("db is down"), http.StatusInternalServerError},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			router := setupProtectedRouter(&fakeSharedService{err: tc.err}, tc.userID)
+
+			assert.Equal(t, tc.want, get(router, tc.path).Code)
+		})
+	}
+}

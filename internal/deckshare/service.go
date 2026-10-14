@@ -98,6 +98,19 @@ func (s *Service) GetSharedDeck(ctx context.Context, deckID string) (SharedDeck,
 	return SharedDeck{Deck: d, Owner: owner, Cards: cards}, nil
 }
 
+func (s *Service) GetVisibleDeck(ctx context.Context, userID string, deckID string) (SharedDeck, error) {
+	ownerID, d, err := s.resolveVisible(ctx, userID, deckID)
+	if err != nil {
+		return SharedDeck{}, err
+	}
+
+	owner, cards, err := s.loadContent(ctx, ownerID, d)
+	if err != nil {
+		return SharedDeck{}, err
+	}
+	return SharedDeck{Deck: d, Owner: owner, Cards: cards}, nil
+}
+
 func (s *Service) loadContent(ctx context.Context, ownerID string, d deck.Deck) (Owner, []Card, error) {
 	owner, err := s.users.GetUser(ctx, ownerID)
 	if err != nil {
