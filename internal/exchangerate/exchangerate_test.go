@@ -95,6 +95,86 @@ func TestECBClient_FetchFailsOnAnErrorStatus(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestECBClient_FetchReportsTheStartOfANonXMLBody(t *testing.T) {
+	withFakeECB(t, http.StatusOK, "<html><body>Access Denied</body></html>")
+
+	_, err := NewECBClient().Fetch(context.Background(), USD)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Access Denied")
+}
+
+func TestECBClient_FetchReportsTheBodyOfAnErrorStatus(t *testing.T) {
+	withFakeECB(t, http.StatusForbidden, "Access Denied")
+
+	_, err := NewECBClient().Fetch(context.Background(), USD)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "403")
+	assert.Contains(t, err.Error(), "Access Denied")
+}
+
+func withFakeFrankfurter(t *testing.T, status int, body string) {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "EUR", r.URL.Query().Get("base"))
+		assert.Equal(t, "USD", r.URL.Query().Get("symbols"))
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(server.Close)
+
+	original := frankfurterURL
+	frankfurterURL = server.URL
+	t.Cleanup(func() { frankfurterURL = original })
+}
+
+func TestFrankfurterClient_FetchParsesTheLatestRate(t *testing.T) {
+	withFakeFrankfurter(t, http.StatusOK, `{"amount":1.0,"base":"EUR","date":"2026-10-13","rates":{"USD":1.0876}}`)
+
+	rate, err := NewFrankfurterClient().Fetch(context.Background(), USD)
+
+	require.NoError(t, err)
+	assert.Equal(t, USD, rate.Currency)
+	assert.Equal(t, 1.0876, rate.PerEUR)
+	assert.Equal(t, "2026-10-13", rate.Date.Format(time.DateOnly))
+}
+
+func TestFrankfurterClient_FetchFailsWithoutTheCurrency(t *testing.T) {
+	withFakeFrankfurter(t, http.StatusOK, `{"amount":1.0,"base":"EUR","date":"2026-10-13","rates":{}}`)
+
+	_, err := NewFrankfurterClient().Fetch(context.Background(), USD)
+
+	require.Error(t, err)
+}
+
+func TestFrankfurterClient_FetchFailsOnAnErrorStatus(t *testing.T) {
+	withFakeFrankfurter(t, http.StatusServiceUnavailable, "")
+
+	_, err := NewFrankfurterClient().Fetch(context.Background(), USD)
+
+	require.Error(t, err)
+}
+
+func TestFallbackSource_FetchUsesTheNextSourceAfterAFailure(t *testing.T) {
+	rate := Rate{Currency: USD, PerEUR: 1.0876}
+
+	got, err := FallbackSource{fakeSource{err: errors.New("ecb down")}, fakeSource{rate: rate}}.Fetch(context.Background(), USD)
+
+	require.NoError(t, err)
+	assert.Equal(t, rate, got)
+}
+
+func TestFallbackSource_FetchJoinsTheErrorsWhenEverySourceFails(t *testing.T) {
+	ecbErr := errors.New("ecb down")
+	frankfurterErr := errors.New("frankfurter down")
+
+	_, err := FallbackSource{fakeSource{err: ecbErr}, fakeSource{err: frankfurterErr}}.Fetch(context.Background(), USD)
+
+	require.ErrorIs(t, err, ecbErr)
+	require.ErrorIs(t, err, frankfurterErr)
+}
+
 func TestRefresher_RefreshSavesTheFetchedRate(t *testing.T) {
 	repo := &fakeRepo{}
 	rate := Rate{Currency: USD, PerEUR: 1.0876, Date: time.Date(2026, 10, 13, 0, 0, 0, 0, time.UTC)}

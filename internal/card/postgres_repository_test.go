@@ -1021,13 +1021,15 @@ func TestPostgresRepository_Value_SumsPricesOfOwnedNonProxyCards(t *testing.T) {
 	const unpriced = "33333333-3333-3333-3333-333333333333"
 	const unknown = "44444444-4444-4444-4444-444444444444"
 	const dollarsOnly = "55555555-5555-5555-5555-555555555555"
+	const etchedOnly = "66666666-6666-6666-6666-666666666666"
 	_, err := db.Exec(`
-		INSERT INTO tamiyo.printings (scryfall_id, type_line, eur, eur_foil, usd, usd_foil) VALUES
-			($1, 'Instant', 1.00, 5.00, 1.50, 6.00),
-			($2, 'Instant', NULL, 3.25, NULL, 4.00),
-			($3, 'Instant', NULL, NULL, NULL, NULL),
-			($4, 'Instant', NULL, NULL, 2.50, NULL)
-	`, both, foilOnly, unpriced, dollarsOnly)
+		INSERT INTO tamiyo.printings (scryfall_id, type_line, eur, eur_foil, usd, usd_foil, usd_etched) VALUES
+			($1, 'Instant', 1.00, 5.00, 1.50, 6.00, NULL),
+			($2, 'Instant', NULL, 3.25, NULL, 4.00, NULL),
+			($3, 'Instant', NULL, NULL, NULL, NULL, NULL),
+			($4, 'Instant', NULL, NULL, 2.50, NULL, NULL),
+			($5, 'Instant', NULL, NULL, NULL, NULL, 10.00)
+	`, both, foilOnly, unpriced, dollarsOnly, etchedOnly)
 	require.NoError(t, err)
 	_, err = db.Exec(`INSERT INTO tamiyo.exchange_rates (currency, per_eur, rate_date) VALUES ('usd', 1.25, '2026-10-13')`)
 	require.NoError(t, err)
@@ -1039,13 +1041,14 @@ func TestPostgresRepository_Value_SumsPricesOfOwnedNonProxyCards(t *testing.T) {
 		{Name: "C", ScryfallID: unpriced, SetCode: "tst", CollectorNumber: "3"},
 		{Name: "D", ScryfallID: unknown, SetCode: "tst", CollectorNumber: "4"},
 		{Name: "E", ScryfallID: dollarsOnly, SetCode: "tst", CollectorNumber: "5"},
+		{Name: "F", ScryfallID: etchedOnly, SetCode: "tst", CollectorNumber: "6", Foil: true},
 	})
 	seedCards(t, db, bob, []Card{{Name: "A", ScryfallID: both, SetCode: "tst", CollectorNumber: "1", Foil: true}})
 
 	value, err := repo.Value(context.Background(), alice)
 	require.NoError(t, err)
-	assert.InDelta(t, 11.25, value.EUR, 0.001)
-	assert.InDelta(t, 14, value.USD, 0.001)
+	assert.InDelta(t, 19.25, value.EUR, 0.001)
+	assert.InDelta(t, 24, value.USD, 0.001)
 
 	empty, err := repo.Value(context.Background(), seedUser(t, db, "carol@example.com"))
 	require.NoError(t, err)

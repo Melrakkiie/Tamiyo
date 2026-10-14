@@ -142,7 +142,7 @@ func main() {
 	refresherCtx, stopRefresher := context.WithCancel(context.Background())
 	defer stopRefresher()
 	go printing.NewRefresher(printing.NewPostgresRepository(db), scryfall.NewClient(), logger).Run(refresherCtx)
-	go exchangerate.NewRefresher(exchangeRateRepo, exchangerate.NewECBClient(), logger).Run(refresherCtx)
+	go exchangerate.NewRefresher(exchangeRateRepo, exchangerate.FallbackSource{exchangerate.NewECBClient(), exchangerate.NewFrankfurterClient()}, logger).Run(refresherCtx)
 
 	authLimiter := ratelimit.NewLimiter(cfg.AuthRateLimitMax, cfg.AuthRateLimitWindow)
 	shareLimiter := ratelimit.NewLimiter(cfg.ShareRateLimitMax, cfg.ShareRateLimitWindow)

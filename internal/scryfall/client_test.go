@@ -252,7 +252,7 @@ func TestClient_TakesColorsFromFacesForDoubleFacedCards(t *testing.T) {
 func TestClient_ParsesPrices(t *testing.T) {
 	withFakeScryfall(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"data":[{"id":"11111111-1111-1111-1111-111111111111","prices":{"eur":"1.23","eur_foil":null,"usd":"2.50","usd_foil":"bad"}}]}`))
+		_, _ = w.Write([]byte(`{"data":[{"id":"11111111-1111-1111-1111-111111111111","prices":{"eur":"1.23","eur_foil":null,"usd":"2.50","usd_foil":"bad","usd_etched":"9.75"}}]}`))
 	})
 
 	cards, err := NewClient().Fetch(context.Background(), []Identifier{{ID: "11111111-1111-1111-1111-111111111111"}})
@@ -266,6 +266,8 @@ func TestClient_ParsesPrices(t *testing.T) {
 	require.NotNil(t, prices.USD)
 	assert.Equal(t, 2.5, *prices.USD)
 	assert.Nil(t, prices.USDFoil)
+	require.NotNil(t, prices.USDEtched)
+	assert.Equal(t, 9.75, *prices.USDEtched)
 }
 
 func TestPrices_For(t *testing.T) {
@@ -284,6 +286,9 @@ func TestPrices_For(t *testing.T) {
 		{name: "foil falls back to regular", prices: Prices{EUR: price(1), USD: price(2)}, foil: true, wantEUR: 1, wantUSD: 2},
 		{name: "euros converted from dollars", prices: Prices{USD: price(5)}, usdPerEUR: 1.25, wantEUR: 4, wantUSD: 5},
 		{name: "converted dollars of the same finish before euros of the other", prices: Prices{EUR: price(1), USDFoil: price(10)}, foil: true, usdPerEUR: 1.25, wantEUR: 8, wantUSD: 10},
+		{name: "etched dollars stand for the foil price", prices: Prices{USDEtched: price(10)}, foil: true, usdPerEUR: 1.25, wantEUR: 8, wantUSD: 10},
+		{name: "foil dollars before etched dollars", prices: Prices{USDFoil: price(4), USDEtched: price(10)}, foil: true, wantUSD: 4},
+		{name: "regular falls back to etched", prices: Prices{USDEtched: price(10)}, usdPerEUR: 1.25, wantEUR: 8, wantUSD: 10},
 		{name: "no conversion without a rate", prices: Prices{USD: price(5)}, wantUSD: 5},
 		{name: "no price", foil: true, usdPerEUR: 1.25},
 	}

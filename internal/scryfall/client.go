@@ -51,15 +51,16 @@ type Card struct {
 }
 
 type Prices struct {
-	EUR     *float64
-	EURFoil *float64
-	USD     *float64
-	USDFoil *float64
+	EUR       *float64
+	EURFoil   *float64
+	USD       *float64
+	USDFoil   *float64
+	USDEtched *float64
 }
 
 func (p Prices) For(foil bool, usdPerEUR float64) (eur, usd float64) {
 	eurFirst, eurSecond := ordered(foil, p.EUR, p.EURFoil)
-	usdFirst, usdSecond := ordered(foil, p.USD, p.USDFoil)
+	usdFirst, usdSecond := ordered(foil, p.USD, firstNonNil(p.USDFoil, p.USDEtched))
 	return firstOf(eurFirst, toEUR(usdFirst, usdPerEUR), eurSecond, toEUR(usdSecond, usdPerEUR)), firstOf(usdFirst, usdSecond)
 }
 
@@ -68,6 +69,13 @@ func ordered(foil bool, regular, foiled *float64) (first, second *float64) {
 		return foiled, regular
 	}
 	return regular, foiled
+}
+
+func firstNonNil(first, second *float64) *float64 {
+	if first != nil {
+		return first
+	}
+	return second
 }
 
 func toEUR(usd *float64, usdPerEUR float64) *float64 {
@@ -114,14 +122,15 @@ type wireCard struct {
 }
 
 type wirePrices struct {
-	EUR     *string `json:"eur"`
-	EURFoil *string `json:"eur_foil"`
-	USD     *string `json:"usd"`
-	USDFoil *string `json:"usd_foil"`
+	EUR       *string `json:"eur"`
+	EURFoil   *string `json:"eur_foil"`
+	USD       *string `json:"usd"`
+	USDFoil   *string `json:"usd_foil"`
+	USDEtched *string `json:"usd_etched"`
 }
 
 func (w wirePrices) toPrices() Prices {
-	return Prices{EUR: parsePrice(w.EUR), EURFoil: parsePrice(w.EURFoil), USD: parsePrice(w.USD), USDFoil: parsePrice(w.USDFoil)}
+	return Prices{EUR: parsePrice(w.EUR), EURFoil: parsePrice(w.EURFoil), USD: parsePrice(w.USD), USDFoil: parsePrice(w.USDFoil), USDEtched: parsePrice(w.USDEtched)}
 }
 
 func parsePrice(raw *string) *float64 {

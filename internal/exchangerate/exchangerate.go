@@ -2,6 +2,7 @@ package exchangerate
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.uber.org/zap"
@@ -26,6 +27,20 @@ type Repository interface {
 
 type Source interface {
 	Fetch(ctx context.Context, currency string) (Rate, error)
+}
+
+type FallbackSource []Source
+
+func (f FallbackSource) Fetch(ctx context.Context, currency string) (Rate, error) {
+	var errs []error
+	for _, source := range f {
+		rate, err := source.Fetch(ctx, currency)
+		if err == nil {
+			return rate, nil
+		}
+		errs = append(errs, err)
+	}
+	return Rate{}, errors.Join(errs...)
 }
 
 type Service struct {
@@ -71,7 +86,12 @@ func (r *Refresher) Refresh(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return r.repo.Save(ctx, rate)
+	if err := r.repo.Save(ctx, rate); err != nil {
+		return err
+	}
+	r.logger.Info("exchange rate refreshed", zap.String("currency", rate.Currency),
+		zap.Float64("per_eur", rate.PerEUR), zap.String("date", rate.Date.Format(time.DateOnly)))
+	return nil
 }
 
 func (r *Refresher) Run(ctx context.Context) {

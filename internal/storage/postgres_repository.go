@@ -43,12 +43,12 @@ func (r storageRow) toDomain() Storage {
 const valueColumns = `
 		    COALESCE(SUM(COALESCE(
 		        CASE WHEN tamiyo.cards.foil THEN tamiyo.printings.eur_foil ELSE tamiyo.printings.eur END,
-		        CASE WHEN tamiyo.cards.foil THEN tamiyo.printings.usd_foil ELSE tamiyo.printings.usd END / tamiyo.exchange_rates.per_eur,
+		        CASE WHEN tamiyo.cards.foil THEN COALESCE(tamiyo.printings.usd_foil, tamiyo.printings.usd_etched) ELSE tamiyo.printings.usd END / tamiyo.exchange_rates.per_eur,
 		        CASE WHEN tamiyo.cards.foil THEN tamiyo.printings.eur ELSE tamiyo.printings.eur_foil END,
-		        CASE WHEN tamiyo.cards.foil THEN tamiyo.printings.usd ELSE tamiyo.printings.usd_foil END / tamiyo.exchange_rates.per_eur
+		        CASE WHEN tamiyo.cards.foil THEN tamiyo.printings.usd ELSE COALESCE(tamiyo.printings.usd_foil, tamiyo.printings.usd_etched) END / tamiyo.exchange_rates.per_eur
 		    )) FILTER (WHERE NOT tamiyo.cards.proxy), 0)::float8 AS eur,
-		    COALESCE(SUM(COALESCE(CASE WHEN tamiyo.cards.foil THEN tamiyo.printings.usd_foil ELSE tamiyo.printings.usd END,
-		        tamiyo.printings.usd, tamiyo.printings.usd_foil)) FILTER (WHERE NOT tamiyo.cards.proxy), 0)::float8 AS usd,`
+		    COALESCE(SUM(COALESCE(CASE WHEN tamiyo.cards.foil THEN COALESCE(tamiyo.printings.usd_foil, tamiyo.printings.usd_etched) ELSE tamiyo.printings.usd END,
+		        tamiyo.printings.usd, tamiyo.printings.usd_foil, tamiyo.printings.usd_etched)) FILTER (WHERE NOT tamiyo.cards.proxy), 0)::float8 AS usd,`
 
 const allowedDeckIDsColumn = `
 		    COALESCE((

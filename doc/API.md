@@ -343,11 +343,11 @@ The value of the collection ([`GET /cards/value`](#get-cardsvalue)), of a storag
 { "eur": 12.34, "usd": 15.6 }
 ```
 
-Each card counts its printing's price: its foil price when it is foil, its regular price otherwise, and the other one when that price is missing. A card with no euro price counts its dollar price converted to euros, with the dollar price of its own finish tried before the euro price of the other. A card with no price at all counts `0`. Proxies never count. The collection and storage values use the prices stored with the printings, refreshed in the background once a day; deck values use Scryfall's current prices.
+Each card counts its printing's price: its foil price when it is foil, its regular price otherwise, and the other one when that price is missing. The foil dollar price falls back to Scryfall's etched price (`usd_etched`), the only price of etched-only printings. A card with no euro price counts its dollar price converted to euros, with the dollar price of its own finish tried before the euro price of the other. A card with no price at all counts `0`. Proxies never count. The collection and storage values use the prices stored with the printings, refreshed in the background once a day; deck values use Scryfall's current prices.
 
 #### `GET /exchange-rate`
 
-The exchange rate used to convert dollars to euros: the European Central Bank's reference rate, in US dollars per euro, refreshed in the background every 6 hours (the bank publishes it once a working day). Works without authentication, so that a client can convert the prices it reads from Scryfall the same way. Until a first rate has been fetched, both fields are `null` and dollar prices are not converted.
+The exchange rate used to convert dollars to euros: the European Central Bank's reference rate, in US dollars per euro, refreshed in the background every 6 hours (the bank publishes it once a working day). It is read from the ECB's daily feed, or from [Frankfurter](https://frankfurter.dev), which republishes the same rates, when the ECB cannot be reached. A failed refresh keeps the last rate and is retried after 5 minutes. Works without authentication, so that a client can convert the prices it reads from Scryfall the same way. Until a first rate has been fetched, both fields are `null` and dollar prices are not converted.
 
 **Response `200 OK`**
 ```json

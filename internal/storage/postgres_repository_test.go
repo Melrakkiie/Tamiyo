@@ -171,12 +171,14 @@ func TestPostgresRepository_FindAllAndFindByID_SumNonProxyPrices(t *testing.T) {
 	const both = "11111111-1111-1111-1111-111111111111"
 	const foilOnly = "22222222-2222-2222-2222-222222222222"
 	const dollarsOnly = "44444444-4444-4444-4444-444444444444"
+	const etchedOnly = "55555555-5555-5555-5555-555555555555"
 	_, err := db.Exec(`
-		INSERT INTO tamiyo.printings (scryfall_id, type_line, eur, eur_foil, usd, usd_foil) VALUES
-			($1, 'Instant', 1.00, 5.00, 1.50, 6.00),
-			($2, 'Instant', NULL, 3.25, NULL, 4.00),
-			($3, 'Instant', NULL, NULL, 2.50, NULL)
-	`, both, foilOnly, dollarsOnly)
+		INSERT INTO tamiyo.printings (scryfall_id, type_line, eur, eur_foil, usd, usd_foil, usd_etched) VALUES
+			($1, 'Instant', 1.00, 5.00, 1.50, 6.00, NULL),
+			($2, 'Instant', NULL, 3.25, NULL, 4.00, NULL),
+			($3, 'Instant', NULL, NULL, 2.50, NULL, NULL),
+			($4, 'Instant', NULL, NULL, NULL, NULL, 10.00)
+	`, both, foilOnly, dollarsOnly, etchedOnly)
 	require.NoError(t, err)
 	_, err = db.Exec(`INSERT INTO tamiyo.exchange_rates (currency, per_eur, rate_date) VALUES ('usd', 1.25, '2026-10-13')`)
 	require.NoError(t, err)
@@ -188,17 +190,18 @@ func TestPostgresRepository_FindAllAndFindByID_SumNonProxyPrices(t *testing.T) {
 			($1, 'B', $3, 'tst', '2', false, false, 1),
 			($1, 'C', '33333333-3333-3333-3333-333333333333', 'tst', '3', false, false, 1),
 			($1, 'D', $4, 'tst', '4', false, false, 1),
+			($1, 'E', $5, 'tst', '5', true, false, 1),
 			($1, 'A', $2, 'tst', '1', false, false, NULL)
-	`, userID, both, foilOnly, dollarsOnly)
+	`, userID, both, foilOnly, dollarsOnly, etchedOnly)
 	require.NoError(t, err)
 
 	result, _, err := repo.FindAll(context.Background(), userID, defaultFilter())
 	require.NoError(t, err)
 	for _, s := range result {
 		if s.ID == 1 {
-			assert.Equal(t, 6, s.CardCount)
-			assert.InDelta(t, 11.25, s.Value.EUR, 0.001)
-			assert.InDelta(t, 14, s.Value.USD, 0.001)
+			assert.Equal(t, 7, s.CardCount)
+			assert.InDelta(t, 19.25, s.Value.EUR, 0.001)
+			assert.InDelta(t, 24, s.Value.USD, 0.001)
 		} else {
 			assert.Equal(t, Value{}, s.Value)
 		}
@@ -206,9 +209,9 @@ func TestPostgresRepository_FindAllAndFindByID_SumNonProxyPrices(t *testing.T) {
 
 	found, err := repo.FindByID(context.Background(), userID, 1)
 	require.NoError(t, err)
-	assert.Equal(t, 6, found.CardCount)
-	assert.InDelta(t, 11.25, found.Value.EUR, 0.001)
-	assert.InDelta(t, 14, found.Value.USD, 0.001)
+	assert.Equal(t, 7, found.CardCount)
+	assert.InDelta(t, 19.25, found.Value.EUR, 0.001)
+	assert.InDelta(t, 24, found.Value.USD, 0.001)
 }
 
 func TestPostgresRepository_FindAll_ReturnsZeroCardCountForEmptyStorage(t *testing.T) {

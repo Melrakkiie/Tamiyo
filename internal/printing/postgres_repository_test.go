@@ -151,19 +151,21 @@ func TestPostgresRepository_UpsertStoresPrices(t *testing.T) {
 	repo := NewPostgresRepository(db)
 	ctx := context.Background()
 	const a = "11111111-1111-1111-1111-111111111111"
-	eur, usdFoil := 1.25, 7.5
+	eur, usdFoil, usdEtched := 1.25, 7.5, 9.75
 
-	require.NoError(t, repo.Upsert(ctx, []Printing{{ScryfallID: a, TypeLine: "Instant", LegalFormats: []string{}, Prices: scryfall.Prices{EUR: &eur, USDFoil: &usdFoil}}}))
+	require.NoError(t, repo.Upsert(ctx, []Printing{{ScryfallID: a, TypeLine: "Instant", LegalFormats: []string{}, Prices: scryfall.Prices{EUR: &eur, USDFoil: &usdFoil, USDEtched: &usdEtched}}}))
 
-	var gotEUR, gotEURFoil, gotUSD, gotUSDFoil *float64
-	require.NoError(t, db.QueryRow(`SELECT eur, eur_foil, usd, usd_foil FROM tamiyo.printings WHERE scryfall_id = $1`, a).
-		Scan(&gotEUR, &gotEURFoil, &gotUSD, &gotUSDFoil))
+	var gotEUR, gotEURFoil, gotUSD, gotUSDFoil, gotUSDEtched *float64
+	require.NoError(t, db.QueryRow(`SELECT eur, eur_foil, usd, usd_foil, usd_etched FROM tamiyo.printings WHERE scryfall_id = $1`, a).
+		Scan(&gotEUR, &gotEURFoil, &gotUSD, &gotUSDFoil, &gotUSDEtched))
 	require.NotNil(t, gotEUR)
 	assert.Equal(t, 1.25, *gotEUR)
 	assert.Nil(t, gotEURFoil)
 	assert.Nil(t, gotUSD)
 	require.NotNil(t, gotUSDFoil)
 	assert.Equal(t, 7.5, *gotUSDFoil)
+	require.NotNil(t, gotUSDEtched)
+	assert.Equal(t, 9.75, *gotUSDEtched)
 
 	require.NoError(t, repo.Upsert(ctx, []Printing{{ScryfallID: a, TypeLine: "Instant", LegalFormats: []string{}}}))
 	require.NoError(t, db.QueryRow(`SELECT eur FROM tamiyo.printings WHERE scryfall_id = $1`, a).Scan(&gotEUR))

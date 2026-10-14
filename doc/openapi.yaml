@@ -756,9 +756,10 @@ paths:
       description: >
         Sum of the Scryfall prices of every card of the account but proxies,
         in both currencies. A foil card counts its foil price, another card
-        its regular price, and the other price when that one is missing. A
-        card with no euro price counts its dollar price converted with the
-        rate of GET /exchange-rate.
+        its regular price, and the other price when that one is missing. The
+        foil dollar price falls back to the etched dollar price. A card with
+        no euro price counts its dollar price converted with the rate of
+        GET /exchange-rate.
       responses:
         "200":
           description: OK
@@ -778,7 +779,8 @@ paths:
       description: >
         The European Central Bank's reference rate, in US dollars per euro,
         refreshed every 6 hours, used to convert a card's dollar price when
-        it has no euro price. Both fields are null until a first rate has
+        it has no euro price. Read from the ECB's daily feed, or from
+        Frankfurter (same rates) when the ECB cannot be reached. Both fields are null until a first rate has
         been fetched. Works without authentication.
       security: []
       responses:
@@ -4101,7 +4103,8 @@ components:
         A sum of Scryfall prices, in euros (Cardmarket) and US dollars
         (TCGplayer). Proxies never count; a foil card counts its foil price,
         another card its regular price, and the other price when that one is
-        missing; a card without a euro price counts its dollar price converted
+        missing; the foil dollar price falls back to the etched dollar price;
+        a card without a euro price counts its dollar price converted
         with the rate of GET /exchange-rate, the dollar price of its own
         finish before the euro price of the other; a card without any price
         counts 0.
