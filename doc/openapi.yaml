@@ -550,6 +550,38 @@ paths:
             type: string
             enum: [eq, lt, lte, gt, gte]
             default: eq
+        - name: power
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: -1000000
+            maximum: 1000000
+          description: >
+            Compared with power_op. A card matches if any of its faces does; only numeric powers are compared (*, 1+*, X never match).
+        - name: power_op
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [eq, lt, lte, gt, gte]
+            default: eq
+        - name: toughness
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: -1000000
+            maximum: 1000000
+          description: >
+            Compared with toughness_op. A card matches if any of its faces does; only numeric toughnesses are compared (*, 1+*, X never match).
+        - name: toughness_op
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [eq, lt, lte, gt, gte]
+            default: eq
         - name: type
           in: query
           required: false

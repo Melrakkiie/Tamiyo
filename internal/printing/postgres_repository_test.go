@@ -171,3 +171,21 @@ func TestPostgresRepository_UpsertStoresPrices(t *testing.T) {
 	require.NoError(t, db.QueryRow(`SELECT eur FROM tamiyo.printings WHERE scryfall_id = $1`, a).Scan(&gotEUR))
 	assert.Nil(t, gotEUR)
 }
+
+func TestPostgresRepository_UpsertStoresPowersAndToughnesses(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+	const a = "11111111-1111-1111-1111-111111111111"
+	var powers, toughnesses []string
+
+	require.NoError(t, repo.Upsert(ctx, []Printing{{ScryfallID: a, TypeLine: "Creature", LegalFormats: []string{}, Powers: []string{"1", "3"}, Toughnesses: []string{"*"}}}))
+	require.NoError(t, db.QueryRow(`SELECT powers, toughnesses FROM tamiyo.printings WHERE scryfall_id = $1`, a).Scan(pq.Array(&powers), pq.Array(&toughnesses)))
+	assert.Equal(t, []string{"1", "3"}, powers)
+	assert.Equal(t, []string{"*"}, toughnesses)
+
+	require.NoError(t, repo.Upsert(ctx, []Printing{{ScryfallID: a, TypeLine: "Instant", LegalFormats: []string{}}}))
+	require.NoError(t, db.QueryRow(`SELECT powers, toughnesses FROM tamiyo.printings WHERE scryfall_id = $1`, a).Scan(pq.Array(&powers), pq.Array(&toughnesses)))
+	assert.Empty(t, powers)
+	assert.Empty(t, toughnesses)
+}

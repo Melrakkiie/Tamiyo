@@ -42,14 +42,15 @@ func (r *PostgresRepository) Upsert(ctx context.Context, printings []Printing) e
 	}()
 	for _, p := range printings {
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO tamiyo.printings (scryfall_id, type_line, legal_formats, eur, eur_foil, usd, usd_foil, usd_etched, refreshed_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+			INSERT INTO tamiyo.printings (scryfall_id, type_line, legal_formats, powers, toughnesses, eur, eur_foil, usd, usd_foil, usd_etched, refreshed_at)
+			VALUES ($1, $2, $3, COALESCE($4::text[], '{}'), COALESCE($5::text[], '{}'), $6, $7, $8, $9, $10, now())
 			ON CONFLICT (scryfall_id) DO UPDATE
 			SET type_line = EXCLUDED.type_line, legal_formats = EXCLUDED.legal_formats,
+				powers = EXCLUDED.powers, toughnesses = EXCLUDED.toughnesses,
 				eur = EXCLUDED.eur, eur_foil = EXCLUDED.eur_foil, usd = EXCLUDED.usd, usd_foil = EXCLUDED.usd_foil,
 				usd_etched = EXCLUDED.usd_etched,
 				refreshed_at = now()
-		`, p.ScryfallID, p.TypeLine, pq.Array(p.LegalFormats),
+		`, p.ScryfallID, p.TypeLine, pq.Array(p.LegalFormats), pq.Array(p.Powers), pq.Array(p.Toughnesses),
 			p.Prices.EUR, p.Prices.EURFoil, p.Prices.USD, p.Prices.USDFoil, p.Prices.USDEtched); err != nil {
 			return err
 		}

@@ -47,6 +47,8 @@ type Card struct {
 	Colors          []string
 	ColorIdentity   []string
 	Legalities      map[string]string
+	Powers          []string
+	Toughnesses     []string
 	Prices          Prices
 }
 
@@ -114,6 +116,8 @@ type wireCard struct {
 	ManaCost        string            `json:"mana_cost"`
 	CMC             float64           `json:"cmc"`
 	TypeLine        string            `json:"type_line"`
+	Power           string            `json:"power"`
+	Toughness       string            `json:"toughness"`
 	Colors          []string          `json:"colors"`
 	ColorIdentity   []string          `json:"color_identity"`
 	Legalities      map[string]string `json:"legalities"`
@@ -145,7 +149,9 @@ func parsePrice(raw *string) *float64 {
 }
 
 type wireCardFace struct {
-	Colors []string `json:"colors"`
+	Colors    []string `json:"colors"`
+	Power     string   `json:"power"`
+	Toughness string   `json:"toughness"`
 }
 
 func (w wireCard) toCard() Card {
@@ -155,6 +161,13 @@ func (w wireCard) toCard() Card {
 			colors = append(colors, face.Colors...)
 		}
 		colors = dedupe(colors)
+	}
+
+	powers := nonEmpty(w.Power)
+	toughnesses := nonEmpty(w.Toughness)
+	for _, face := range w.CardFaces {
+		powers = append(powers, nonEmpty(face.Power)...)
+		toughnesses = append(toughnesses, nonEmpty(face.Toughness)...)
 	}
 
 	return Card{
@@ -168,8 +181,17 @@ func (w wireCard) toCard() Card {
 		Colors:          colors,
 		ColorIdentity:   w.ColorIdentity,
 		Legalities:      w.Legalities,
+		Powers:          dedupe(powers),
+		Toughnesses:     dedupe(toughnesses),
 		Prices:          w.Prices.toPrices(),
 	}
+}
+
+func nonEmpty(value string) []string {
+	if value == "" {
+		return nil
+	}
+	return []string{value}
 }
 
 func dedupe(values []string) []string {

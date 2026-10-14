@@ -1011,6 +1011,55 @@ func TestPostgresRepository_FindAll_AdvancedFilters(t *testing.T) {
 	assert.Equal(t, everything, names(CardFilter{}))
 }
 
+func TestPostgresRepository_FindAll_FiltersByPowerAndToughness(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+
+	seeds := []struct {
+		name, scryfallID    string
+		powers, toughnesses []string
+	}{
+		{"Llanowar Elves", "11111111-1111-1111-1111-111111111111", []string{"1"}, []string{"1"}},
+		{"Delver of Secrets", "22222222-2222-2222-2222-222222222222", []string{"1", "3"}, []string{"1", "2"}},
+		{"Tarmogoyf", "33333333-3333-3333-3333-333333333333", []string{"*"}, []string{"1+*"}},
+		{"Esika's Chariot", "44444444-4444-4444-4444-444444444444", []string{"4"}, []string{"4"}},
+		{"Sol Ring", "55555555-5555-5555-5555-555555555555", []string{}, []string{}},
+		{"Half Squirrel", "66666666-6666-6666-6666-666666666666", []string{".5"}, []string{"-1"}},
+	}
+	for _, s := range seeds {
+		_, err := repo.Create(ctx, userID, Card{Name: s.name, ScryfallID: s.scryfallID, SetCode: "tst", CollectorNumber: "1"})
+		require.NoError(t, err)
+		_, err = db.Exec(`INSERT INTO tamiyo.printings (scryfall_id, type_line, powers, toughnesses) VALUES ($1, 'Creature', $2, $3)`,
+			s.scryfallID, pq.Array(s.powers), pq.Array(s.toughnesses))
+		require.NoError(t, err)
+	}
+	_, err := repo.Create(ctx, userID, Card{Name: "Unknown", ScryfallID: "77777777-7777-7777-7777-777777777777", SetCode: "tst", CollectorNumber: "1"})
+	require.NoError(t, err)
+
+	names := func(filter CardFilter) []string {
+		t.Helper()
+		filter.Page, filter.Limit, filter.SortField = 1, 25, "name"
+		result, _, err := repo.FindAll(ctx, userID, filter)
+		require.NoError(t, err)
+		out := make([]string, len(result))
+		for i, c := range result {
+			out[i] = c.Name
+		}
+		return out
+	}
+	num := func(f float64) *float64 { return &f }
+
+	assert.Equal(t, []string{"Delver of Secrets", "Llanowar Elves"}, names(CardFilter{Power: num(1), PowerOp: "eq"}))
+	assert.Equal(t, []string{"Delver of Secrets", "Esika's Chariot"}, names(CardFilter{Power: num(3), PowerOp: "gte"}))
+	assert.Equal(t, []string{"Half Squirrel"}, names(CardFilter{Power: num(1), PowerOp: "lt"}))
+	assert.Empty(t, names(CardFilter{Power: num(0), PowerOp: "eq"}))
+	assert.Equal(t, []string{"Half Squirrel"}, names(CardFilter{Toughness: num(0), ToughnessOp: "lt"}))
+	assert.Equal(t, []string{"Delver of Secrets"}, names(CardFilter{Toughness: num(2), ToughnessOp: "eq"}))
+	assert.Equal(t, []string{"Delver of Secrets"}, names(CardFilter{Power: num(3), PowerOp: "eq", Toughness: num(1), ToughnessOp: "eq", Stack: true}))
+}
+
 func TestPostgresRepository_Value_SumsPricesOfOwnedNonProxyCards(t *testing.T) {
 	db := getTestDB(t)
 	alice := seedUser(t, db, "alice@example.com")

@@ -15,7 +15,7 @@ func TestHandler_GetCards_PassesAdvancedFilters(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet,
-		"/cards?colors=gw&color_mode=within&mana_value=3&mana_value_op=lte&type=Creature&subtype=%20Elf%20&legal_in=commander&color_count=2&foil=true&storage_type=deckbox&open_to_deck=0A0A0A0A-0000-0000-0000-000000000001", nil))
+		"/cards?colors=gw&color_mode=within&mana_value=3&mana_value_op=lte&power=-1&power_op=gte&toughness=.5&toughness_op=lt&type=Creature&subtype=%20Elf%20&legal_in=commander&color_count=2&foil=true&storage_type=deckbox&open_to_deck=0A0A0A0A-0000-0000-0000-000000000001", nil))
 
 	require.Equal(t, http.StatusOK, w.Code)
 	f := service.lastFilter
@@ -25,6 +25,12 @@ func TestHandler_GetCards_PassesAdvancedFilters(t *testing.T) {
 	require.NotNil(t, f.ManaValue)
 	assert.Equal(t, 3.0, *f.ManaValue)
 	assert.Equal(t, "lte", f.ManaValueOp)
+	require.NotNil(t, f.Power)
+	assert.Equal(t, -1.0, *f.Power)
+	assert.Equal(t, "gte", f.PowerOp)
+	require.NotNil(t, f.Toughness)
+	assert.Equal(t, 0.5, *f.Toughness)
+	assert.Equal(t, "lt", f.ToughnessOp)
 	assert.Equal(t, "Creature", f.Type)
 	assert.Equal(t, "Elf", f.Subtype)
 	assert.Equal(t, "commander", f.LegalIn)
@@ -42,7 +48,7 @@ func TestHandler_GetCards_AdvancedFilterDefaults(t *testing.T) {
 	router := setupRouter(service)
 
 	w := httptest.NewRecorder()
-	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards?colors=&mana_value=2", nil))
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards?colors=&mana_value=2&power=3&toughness=4", nil))
 
 	require.Equal(t, http.StatusOK, w.Code)
 	f := service.lastFilter
@@ -50,6 +56,8 @@ func TestHandler_GetCards_AdvancedFilterDefaults(t *testing.T) {
 	assert.Equal(t, "", *f.Colors)
 	assert.Equal(t, ColorModeExact, f.ColorMode)
 	assert.Equal(t, "eq", f.ManaValueOp)
+	assert.Equal(t, "eq", f.PowerOp)
+	assert.Equal(t, "eq", f.ToughnessOp)
 	assert.Nil(t, f.ColorCount)
 	assert.Nil(t, f.Foil)
 
@@ -58,6 +66,8 @@ func TestHandler_GetCards_AdvancedFilterDefaults(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Nil(t, service.lastFilter.Colors)
 	assert.Nil(t, service.lastFilter.ManaValue)
+	assert.Nil(t, service.lastFilter.Power)
+	assert.Nil(t, service.lastFilter.Toughness)
 }
 
 func TestHandler_GetCards_RejectsInvalidAdvancedFilters(t *testing.T) {
@@ -67,6 +77,12 @@ func TestHandler_GetCards_RejectsInvalidAdvancedFilters(t *testing.T) {
 		"mana_value=abc",
 		"mana_value=-1",
 		"mana_value=2&mana_value_op=ne",
+		"power=*",
+		"power=-1000001",
+		"power=2&power_op=ne",
+		"toughness=X",
+		"toughness=1000001",
+		"toughness=2&toughness_op=ne",
 		"type=Other",
 		"type=creature",
 		"legal_in=nope",

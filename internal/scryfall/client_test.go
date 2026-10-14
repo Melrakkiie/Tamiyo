@@ -249,6 +249,35 @@ func TestClient_TakesColorsFromFacesForDoubleFacedCards(t *testing.T) {
 	assert.Equal(t, []string{"U"}, cards[0].Colors)
 }
 
+func TestClient_GathersPowersAndToughnessesFromEveryFace(t *testing.T) {
+	withFakeScryfall(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(collectionResponse{
+			Data: []wireCard{
+				{
+					ID:        "22222222-2222-2222-2222-222222222222",
+					CardFaces: []wireCardFace{{Power: "1", Toughness: "1"}, {Power: "3", Toughness: "1"}},
+				},
+				{ID: "33333333-3333-3333-3333-333333333333", Power: "*", Toughness: "1+*"},
+				{ID: "44444444-4444-4444-4444-444444444444"},
+			},
+		})
+	})
+
+	cards, err := NewClient().Fetch(context.Background(), []Identifier{
+		{ID: "22222222-2222-2222-2222-222222222222"}, {ID: "33333333-3333-3333-3333-333333333333"}, {ID: "44444444-4444-4444-4444-444444444444"},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, cards, 3)
+	assert.Equal(t, []string{"1", "3"}, cards[0].Powers)
+	assert.Equal(t, []string{"1"}, cards[0].Toughnesses)
+	assert.Equal(t, []string{"*"}, cards[1].Powers)
+	assert.Equal(t, []string{"1+*"}, cards[1].Toughnesses)
+	assert.Equal(t, []string{}, cards[2].Powers)
+	assert.Equal(t, []string{}, cards[2].Toughnesses)
+}
+
 func TestClient_ParsesPrices(t *testing.T) {
 	withFakeScryfall(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

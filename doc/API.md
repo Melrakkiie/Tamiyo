@@ -386,6 +386,10 @@ List cards, with optional filtering, sorting, and pagination.
 | `color_mode` | string | No | How `colors` is matched: `exact` (default, exactly these colors; an empty `colors=` keeps colorless cards), `include` (at least these colors), `within` (only colors among these, colorless included). |
 | `mana_value` | number | No | Compared with `mana_value_op`. |
 | `mana_value_op` | string | No | `eq` (default), `lt`, `lte`, `gt`, `gte`. |
+| `power` | number | No | Compared with `power_op`, between `-1000000` and `1000000`. A card matches if any of its faces does. Only numeric powers are compared: `*`, `1+*`, `X` never match. Vehicles and other non-creatures with a power count too. |
+| `power_op` | string | No | `eq` (default), `lt`, `lte`, `gt`, `gte`. |
+| `toughness` | number | No | Same as `power`, for toughness, compared with `toughness_op`. Checked independently of `power`: a double-faced card can match `power` on one face and `toughness` on the other. |
+| `toughness_op` | string | No | `eq` (default), `lt`, `lte`, `gt`, `gte`. |
 | `type` | string | No | A card type: `Creature`, `Planeswalker`, `Battle`, `Instant`, `Sorcery`, `Artifact`, `Enchantment` or `Land`. Matches the primary type, and any type of the card's type line (an artifact creature is also an `Artifact`). |
 | `subtype` | string | No | Part of the subtypes, after the dash of the type line (`elf`, `vehicle`…), case-insensitive. At most 50 characters. |
 | `legal_in` | string | No | A Scryfall format (`commander`, `modern`, `pioneer`, `standard`, `pauper`, `legacy`, `vintage`…): only cards legal or restricted in it. |
@@ -394,7 +398,7 @@ List cards, with optional filtering, sorting, and pagination.
 | `storage_type` | string | No | Only cards in a storage of this type (`binder`, `box`, `deckbox`…), case-insensitive. |
 | `open_to_deck` | uuid | No | Only cards [open to this deck](#storage): in no storage, in an unlocked one, or in a locked one that allows this deck. A deck id that isn't yours is accepted and only keeps the cards of unlocked storages and of none. |
 
-`type` (beyond the primary type), `subtype` and `legal_in` rely on each printing's type line and legalities, which the API fetches from Scryfall in the background: a newly added printing becomes searchable by them within a few minutes, and legalities are refreshed every day so bans show up.
+`type` (beyond the primary type), `subtype`, `legal_in`, `power` and `toughness` rely on each printing's type line, legalities, power and toughness, which the API fetches from Scryfall in the background: a newly added printing becomes searchable by them within a few minutes, and legalities are refreshed every day so bans show up.
 
 **Example**
 ```

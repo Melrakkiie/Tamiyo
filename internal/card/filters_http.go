@@ -16,6 +16,10 @@ var (
 	errInvalidColorMode    = errors.New("color_mode must be one of: exact, include, within")
 	errInvalidManaValue    = errors.New("mana_value must be a number between 0 and 1000000")
 	errInvalidManaValueOp  = errors.New("mana_value_op must be one of: eq, lt, lte, gt, gte")
+	errInvalidPower        = errors.New("power must be a number between -1000000 and 1000000")
+	errInvalidPowerOp      = errors.New("power_op must be one of: eq, lt, lte, gt, gte")
+	errInvalidToughness    = errors.New("toughness must be a number between -1000000 and 1000000")
+	errInvalidToughnessOp  = errors.New("toughness_op must be one of: eq, lt, lte, gt, gte")
 	errInvalidTypeFilter   = errors.New("type must be one of: Creature, Planeswalker, Battle, Instant, Sorcery, Artifact, Enchantment, Land")
 	errInvalidLegalIn      = errors.New("legal_in must be a Scryfall format, such as commander or modern")
 	errInvalidColorCount   = errors.New("color_count must be an integer between 0 and 5")
@@ -44,19 +48,15 @@ func parseAdvancedFilters(ctx *gin.Context) (CardFilter, error) {
 		}
 	}
 
-	if raw := ctx.Query("mana_value"); raw != "" {
-		value, err := strconv.ParseFloat(raw, 64)
-		if err != nil || value < 0 || value > 1000000 {
-			return filter, errInvalidManaValue
-		}
-		filter.ManaValue = &value
-		filter.ManaValueOp = "eq"
-		if op := ctx.Query("mana_value_op"); op != "" {
-			if _, ok := manaValueOperators[op]; !ok {
-				return filter, errInvalidManaValueOp
-			}
-			filter.ManaValueOp = op
-		}
+	var err error
+	if filter.ManaValue, filter.ManaValueOp, err = parseComparison(ctx, "mana_value", 0, errInvalidManaValue, errInvalidManaValueOp); err != nil {
+		return filter, err
+	}
+	if filter.Power, filter.PowerOp, err = parseComparison(ctx, "power", -1000000, errInvalidPower, errInvalidPowerOp); err != nil {
+		return filter, err
+	}
+	if filter.Toughness, filter.ToughnessOp, err = parseComparison(ctx, "toughness", -1000000, errInvalidToughness, errInvalidToughnessOp); err != nil {
+		return filter, err
 	}
 
 	if raw := ctx.Query("type"); raw != "" {
@@ -112,4 +112,23 @@ func parseAdvancedFilters(ctx *gin.Context) (CardFilter, error) {
 	}
 
 	return filter, nil
+}
+
+func parseComparison(ctx *gin.Context, key string, min float64, errValue, errOp error) (*float64, string, error) {
+	raw := ctx.Query(key)
+	if raw == "" {
+		return nil, "", nil
+	}
+	value, err := strconv.ParseFloat(raw, 64)
+	if err != nil || value < min || value > 1000000 {
+		return nil, "", errValue
+	}
+	op := ctx.Query(key + "_op")
+	if op == "" {
+		return &value, "eq", nil
+	}
+	if _, ok := comparisonOperators[op]; !ok {
+		return nil, "", errOp
+	}
+	return &value, op, nil
 }

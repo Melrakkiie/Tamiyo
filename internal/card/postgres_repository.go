@@ -119,7 +119,13 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		}
 	}
 	if filter.ManaValue != nil {
-		add("mana_value "+manaValueOperators[filter.ManaValueOp]+" $%d", *filter.ManaValue)
+		add("mana_value "+comparisonOperators[filter.ManaValueOp]+" $%d", *filter.ManaValue)
+	}
+	if filter.Power != nil {
+		add(printingStatCondition("powers", filter.PowerOp), *filter.Power)
+	}
+	if filter.Toughness != nil {
+		add(printingStatCondition("toughnesses", filter.ToughnessOp), *filter.Toughness)
 	}
 	if filter.Type != "" {
 		add(`(card_type = $%d OR EXISTS (
@@ -185,6 +191,14 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 	}
 
 	return cards, total, nil
+}
+
+func printingStatCondition(column, op string) string {
+	return `EXISTS (
+			SELECT 1 FROM tamiyo.printings p, unnest(p.` + column + `) v
+			WHERE p.scryfall_id = cards.scryfall_id
+			  AND (CASE WHEN v ~ '^-?[0-9]*\.?[0-9]+$' THEN v::numeric END) ` + comparisonOperators[op] + ` $%d
+		)`
 }
 
 type stackRow struct {

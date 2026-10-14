@@ -37,6 +37,10 @@ type CardFilter struct {
 	ColorMode   string
 	ManaValue   *float64
 	ManaValueOp string
+	Power       *float64
+	PowerOp     string
+	Toughness   *float64
+	ToughnessOp string
 	Type        string
 	Subtype     string
 	LegalIn     string
@@ -85,7 +89,7 @@ const (
 	ColorModeWithin  = "within"
 )
 
-var manaValueOperators = map[string]string{
+var comparisonOperators = map[string]string{
 	"eq":  "=",
 	"lt":  "<",
 	"lte": "<=",

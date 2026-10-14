@@ -70,6 +70,13 @@ func TestFromScryfall_KeepsPrices(t *testing.T) {
 	assert.Equal(t, prices, p.Prices)
 }
 
+func TestFromScryfall_KeepsPowersAndToughnesses(t *testing.T) {
+	p := FromScryfall(scryfall.Card{ID: "a", Powers: []string{"1", "3"}, Toughnesses: []string{"1", "2"}})
+
+	assert.Equal(t, []string{"1", "3"}, p.Powers)
+	assert.Equal(t, []string{"1", "2"}, p.Toughnesses)
+}
+
 func TestRefreshBatch_StoresFoundAndMissingPrintings(t *testing.T) {
 	repo := &fakeRepo{batches: [][]string{{"AAAA", "bbbb"}}}
 	fetcher := &fakeFetcher{cards: []scryfall.Card{{ID: "aaaa", TypeLine: "Creature — Elf", Legalities: map[string]string{"commander": "legal"}}}}
@@ -86,7 +93,7 @@ func TestRefreshBatch_StoresFoundAndMissingPrintings(t *testing.T) {
 	assert.Equal(t, []scryfall.Identifier{{ID: "AAAA"}, {ID: "bbbb"}}, fetcher.requested)
 	assert.Equal(t, []Printing{
 		{ScryfallID: "AAAA", TypeLine: "Creature — Elf", LegalFormats: []string{"commander"}},
-		{ScryfallID: "bbbb", LegalFormats: []string{}},
+		{ScryfallID: "bbbb", LegalFormats: []string{}, Powers: []string{}, Toughnesses: []string{}},
 	}, repo.upserted)
 }
 
