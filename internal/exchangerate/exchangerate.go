@@ -10,6 +10,7 @@ import (
 const (
 	USD             = "usd"
 	refreshInterval = 6 * time.Hour
+	retryInterval   = 5 * time.Minute
 )
 
 type Rate struct {
@@ -48,13 +49,21 @@ func (s *Service) USDPerEUR(ctx context.Context) (float64, error) {
 }
 
 type Refresher struct {
-	repo   Repository
-	source Source
-	logger *zap.Logger
+	repo            Repository
+	source          Source
+	logger          *zap.Logger
+	refreshInterval time.Duration
+	retryInterval   time.Duration
 }
 
 func NewRefresher(repo Repository, source Source, logger *zap.Logger) *Refresher {
-	return &Refresher{repo: repo, source: source, logger: logger}
+	return &Refresher{
+		repo:            repo,
+		source:          source,
+		logger:          logger,
+		refreshInterval: refreshInterval,
+		retryInterval:   retryInterval,
+	}
 }
 
 func (r *Refresher) Refresh(ctx context.Context) error {
@@ -66,16 +75,22 @@ func (r *Refresher) Refresh(ctx context.Context) error {
 }
 
 func (r *Refresher) Run(ctx context.Context) {
-	ticker := time.NewTicker(refreshInterval)
-	defer ticker.Stop()
+	timer := time.NewTimer(0)
+	defer timer.Stop()
 	for {
-		if err := r.Refresh(ctx); err != nil && ctx.Err() == nil {
-			r.logger.Warn("refreshing exchange rates failed", zap.Error(err))
-		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-timer.C:
 		}
+		delay := r.refreshInterval
+		if err := r.Refresh(ctx); err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			r.logger.Warn("refreshing exchange rates failed", zap.Error(err), zap.Duration("retry_in", r.retryInterval))
+			delay = r.retryInterval
+		}
+		timer.Reset(delay)
 	}
 }

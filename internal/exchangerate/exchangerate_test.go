@@ -114,6 +114,86 @@ func TestRefresher_RefreshKeepsTheLastRateWhenTheSourceFails(t *testing.T) {
 	assert.Equal(t, previous, repo.rates[USD])
 }
 
+type flakySource struct {
+	failures int
+	rate     Rate
+	calls    chan struct{}
+}
+
+func (f *flakySource) Fetch(ctx context.Context, currency string) (Rate, error) {
+	f.calls <- struct{}{}
+	if f.failures > 0 {
+		f.failures--
+		return Rate{}, errors.New("down")
+	}
+	return f.rate, nil
+}
+
+func runRefresher(t *testing.T, refresher *Refresher) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		refresher.Run(ctx)
+		close(done)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+}
+
+func waitForCall(t *testing.T, calls <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-calls:
+	case <-time.After(time.Second):
+		t.Fatal("the source was not called")
+	}
+}
+
+func TestRefresher_RunRetriesSoonAfterAFailure(t *testing.T) {
+	source := &flakySource{failures: 1, rate: Rate{Currency: USD, PerEUR: 1.0876}, calls: make(chan struct{})}
+	refresher := NewRefresher(&fakeRepo{}, source, zap.NewNop())
+	refresher.refreshInterval = time.Hour
+	refresher.retryInterval = time.Millisecond
+	runRefresher(t, refresher)
+
+	waitForCall(t, source.calls)
+	waitForCall(t, source.calls)
+}
+
+func TestRefresher_RunWaitsTheRefreshIntervalAfterASuccess(t *testing.T) {
+	source := &flakySource{rate: Rate{Currency: USD, PerEUR: 1.0876}, calls: make(chan struct{})}
+	refresher := NewRefresher(&fakeRepo{}, source, zap.NewNop())
+	refresher.refreshInterval = time.Hour
+	refresher.retryInterval = time.Millisecond
+	runRefresher(t, refresher)
+
+	waitForCall(t, source.calls)
+	select {
+	case <-source.calls:
+		t.Fatal("the source was called again before the refresh interval")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestRefresher_RunStopsWithItsContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		NewRefresher(&fakeRepo{}, fakeSource{err: errors.New("down")}, zap.NewNop()).Run(ctx)
+		close(done)
+	}()
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Run did not stop")
+	}
+}
+
 func TestService_USDPerEURIsZeroWithoutARate(t *testing.T) {
 	rate, err := NewService(&fakeRepo{}).USDPerEUR(context.Background())
 
