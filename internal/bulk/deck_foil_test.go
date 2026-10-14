@@ -65,6 +65,21 @@ func TestSwitchFoil_GoesPendingWithoutACopyOfThatFinish(t *testing.T) {
 	assert.Equal(t, Summary{CardsPending: 1, CardsRemoved: 1}, summary)
 }
 
+func TestSwitchFoil_LeavesProxyCopiesForNonProxyCards(t *testing.T) {
+	cards, decks := foilFixture()
+	cards.allCards = append(cards.allCards, card.Card{ID: 30, Name: "Duress", ScryfallID: duressM19, Foil: true, Proxy: true})
+	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+
+	summary, err := svc.SwitchFoil(context.Background(), testUserID, fixtureDeckID, FoilSwitch{CardIDs: []int{4}, Foil: true})
+
+	require.NoError(t, err)
+	assert.Empty(t, decks.linkedCards[fixtureDeckID], "the foil Duress is a proxy, the deck card is not")
+	require.Len(t, decks.addedPending, 1)
+	assert.True(t, decks.addedPending[0].Foil)
+	assert.False(t, decks.addedPending[0].Proxy)
+	assert.Equal(t, Summary{CardsPending: 1, CardsRemoved: 1}, summary)
+}
+
 func TestSwitchFoil_KeepsTheCommander(t *testing.T) {
 	cards, decks := foilFixture()
 	decks.decks[0].CommanderPendingID = nil

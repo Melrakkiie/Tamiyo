@@ -105,8 +105,9 @@ func (s *Service) SplitPrintings(ctx context.Context, userID string, deckID stri
 		want.ScryfallID = group.choice.ScryfallID
 		want.SetCode = group.choice.SetCode
 		want.CollectorNumber = group.choice.CollectorNumber
+		want.Foil = group.choice.Foil
 		want.Quantity = group.quantity
-		if err := s.replaceWithFinish(ctx, userID, deckID, owned, want, group.choice.Foil, false, &summary); err != nil {
+		if err := s.replaceWithFinish(ctx, userID, deckID, owned, want, false, &summary); err != nil {
 			return summary, err
 		}
 	}

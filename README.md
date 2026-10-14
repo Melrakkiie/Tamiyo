@@ -122,7 +122,7 @@ CORS_ALLOWED_ORIGINS=http://localhost:5173
 
 ## Locked storages
 
-A storage can be locked so decks stop drawing from it (a collection binder, a trade box), optionally keeping it open to a few decks. Its cards then no longer count as owned copies for the other decks' pending cards, and deck imports, duplications, finish switches and printing splits never put them in those decks. Nothing is blocked: a card can still be put in any deck explicitly. See [`doc/API.md`](./doc/API.md#storage).
+A storage can be locked so decks stop drawing from it (a collection binder, a trade box), optionally keeping it open to a few decks. Its cards then no longer count as owned copies for the other decks' pending cards, and deck imports, duplications, finish and proxy switches and printing splits never put them in those decks. Nothing is blocked: a card can still be put in any deck explicitly. See [`doc/API.md`](./doc/API.md#storage).
 
 ## API Documentation
 

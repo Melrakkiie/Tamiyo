@@ -21,6 +21,7 @@ type pendingCardResponse struct {
 	SetCode         string  `json:"set_code"`
 	CollectorNumber string  `json:"collector_number"`
 	Foil            bool    `json:"foil"`
+	Proxy           bool    `json:"proxy"`
 	Quantity        int     `json:"quantity"`
 	ManaValue       float64 `json:"mana_value"`
 	Colors          *string `json:"colors"`
@@ -42,6 +43,7 @@ func toPendingResponse(p PendingCard) pendingCardResponse {
 		SetCode:         p.SetCode,
 		CollectorNumber: p.CollectorNumber,
 		Foil:            p.Foil,
+		Proxy:           p.Proxy,
 		Quantity:        p.Quantity,
 		ManaValue:       p.ManaValue,
 		Colors:          p.Colors,
@@ -61,6 +63,7 @@ type addPendingCardRequest struct {
 	SetCode         string  `json:"set_code" binding:"required"`
 	CollectorNumber string  `json:"collector_number" binding:"required"`
 	Foil            bool    `json:"foil"`
+	Proxy           bool    `json:"proxy"`
 	Quantity        *int    `json:"quantity" binding:"omitempty,gte=1,lte=100"`
 	ManaValue       float64 `json:"mana_value" binding:"omitempty,gte=0"`
 	Colors          *string `json:"colors"`
@@ -106,6 +109,7 @@ func (r addPendingCardRequest) toDomain() (PendingCard, error) {
 		SetCode:         r.SetCode,
 		CollectorNumber: r.CollectorNumber,
 		Foil:            r.Foil,
+		Proxy:           r.Proxy,
 		Quantity:        quantity,
 		ManaValue:       r.ManaValue,
 		Colors:          colors,

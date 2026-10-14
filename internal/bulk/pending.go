@@ -61,6 +61,7 @@ func (s *Service) CommitPendingCards(ctx context.Context, userID string, deckID 
 				SetCode:         p.SetCode,
 				CollectorNumber: p.CollectorNumber,
 				Foil:            p.Foil,
+				Proxy:           p.Proxy,
 				StorageID:       storageID,
 				ManaValue:       p.ManaValue,
 				Colors:          p.Colors,

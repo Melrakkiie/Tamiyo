@@ -17,6 +17,7 @@ type PendingCard struct {
 	SetCode         string
 	CollectorNumber string
 	Foil            bool
+	Proxy           bool
 	Quantity        int
 	ManaValue       float64
 	Colors          *string
@@ -72,7 +73,7 @@ func mergeTarget(d Deck, existing []PendingCard, p PendingCard, skipID int) (Pen
 		if e.ID == skipID || isPendingCommander(d, e.ID) {
 			continue
 		}
-		if e.Board == p.Board && e.Foil == p.Foil && strings.EqualFold(e.ScryfallID, p.ScryfallID) {
+		if e.Board == p.Board && e.Foil == p.Foil && e.Proxy == p.Proxy && strings.EqualFold(e.ScryfallID, p.ScryfallID) {
 			return e, true
 		}
 	}

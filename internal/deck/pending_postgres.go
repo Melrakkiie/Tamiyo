@@ -16,6 +16,7 @@ type pendingRow struct {
 	SetCode         string    `db:"set_code"`
 	CollectorNumber string    `db:"collector_number"`
 	Foil            bool      `db:"foil"`
+	Proxy           bool      `db:"proxy"`
 	Quantity        int       `db:"quantity"`
 	ManaValue       float64   `db:"mana_value"`
 	Colors          *string   `db:"colors"`
@@ -37,6 +38,7 @@ func (r pendingRow) toDomain() PendingCard {
 		SetCode:         r.SetCode,
 		CollectorNumber: r.CollectorNumber,
 		Foil:            r.Foil,
+		Proxy:           r.Proxy,
 		Quantity:        r.Quantity,
 		ManaValue:       r.ManaValue,
 		Colors:          r.Colors,
@@ -50,7 +52,7 @@ func (r pendingRow) toDomain() PendingCard {
 	}
 }
 
-const pendingColumns = `id, deck_id, name, scryfall_id, set_code, collector_number, foil, quantity, mana_value, colors, card_type, color_identity, board, added`
+const pendingColumns = `id, deck_id, name, scryfall_id, set_code, collector_number, foil, proxy, quantity, mana_value, colors, card_type, color_identity, board, added`
 
 func (r *PostgresRepository) FindPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error) {
 	var rows []pendingRow
@@ -95,6 +97,7 @@ func (r *PostgresRepository) CreatePendingCard(ctx context.Context, userID strin
 		SetCode:         p.SetCode,
 		CollectorNumber: p.CollectorNumber,
 		Foil:            p.Foil,
+		Proxy:           p.Proxy,
 		Quantity:        p.Quantity,
 		ManaValue:       p.ManaValue,
 		Colors:          p.Colors,
@@ -106,8 +109,8 @@ func (r *PostgresRepository) CreatePendingCard(ctx context.Context, userID strin
 		row.Board = BoardMain
 	}
 	query := `
-		INSERT INTO tamiyo.deck_pending_cards (user_id, deck_id, name, scryfall_id, set_code, collector_number, foil, quantity, mana_value, colors, card_type, color_identity, board)
-		VALUES (:user_id, :deck_id, :name, :scryfall_id, :set_code, :collector_number, :foil, :quantity, :mana_value, :colors, :card_type, :color_identity, :board)
+		INSERT INTO tamiyo.deck_pending_cards (user_id, deck_id, name, scryfall_id, set_code, collector_number, foil, proxy, quantity, mana_value, colors, card_type, color_identity, board)
+		VALUES (:user_id, :deck_id, :name, :scryfall_id, :set_code, :collector_number, :foil, :proxy, :quantity, :mana_value, :colors, :card_type, :color_identity, :board)
 		RETURNING ` + pendingColumns
 
 	stmt, err := r.db.PrepareNamedContext(ctx, query)

@@ -21,8 +21,9 @@ type fakeImportService struct {
 	summary Summary
 	err     error
 
-	lastFoilSwitch FoilSwitch
-	lastSplit      PrintingSplit
+	lastFoilSwitch  FoilSwitch
+	lastProxySwitch ProxySwitch
+	lastSplit       PrintingSplit
 
 	lastUserID            string
 	lastMoxfieldStorageID int
@@ -102,6 +103,13 @@ func (f *fakeImportService) SwitchFoil(ctx context.Context, userID string, deckI
 	f.lastUserID = userID
 	f.lastDeckID = deckID
 	f.lastFoilSwitch = req
+	return f.summary, f.err
+}
+
+func (f *fakeImportService) SwitchProxy(ctx context.Context, userID string, deckID string, req ProxySwitch) (Summary, error) {
+	f.lastUserID = userID
+	f.lastDeckID = deckID
+	f.lastProxySwitch = req
 	return f.summary, f.err
 }
 

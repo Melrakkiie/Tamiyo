@@ -549,7 +549,7 @@ A **storage** represents a physical place where cards live — a binder, a deckb
 A storage can be **locked** so that decks stop drawing from it, like a collection binder or a trade box. A locked storage stays open to the decks in its `allowed_deck_ids`, and with none listed it is closed to every deck. A card is **open to a deck** when it is in no storage, in an unlocked storage, or in a locked storage that allows that deck. For a deck, cards closed to it:
 
 - don't count in the `owned_copies` and `owned_same_printing` of its [pending cards](#pending-cards-deckidpending);
-- are never put in it by [`POST /deck/:id/import`](#post-deckidimport), [`POST /deck/:id/bulk-edit`](#post-deckidbulk-edit), [`POST /deck/:id/switch-foil`](#post-deckidswitch-foil), [`POST /deck/:id/split-printings`](#post-deckidsplit-printings) or [`POST /deck/:id/duplicate`](#post-deckidduplicate) (a duplicated deck is a new deck that no storage allows yet), unless the import is sent with `include_locked_storages=true`;
+- are never put in it by [`POST /deck/:id/import`](#post-deckidimport), [`POST /deck/:id/bulk-edit`](#post-deckidbulk-edit), [`POST /deck/:id/switch-foil`](#post-deckidswitch-foil), [`POST /deck/:id/switch-proxy`](#post-deckidswitch-proxy), [`POST /deck/:id/split-printings`](#post-deckidsplit-printings) or [`POST /deck/:id/duplicate`](#post-deckidduplicate) (a duplicated deck is a new deck that no storage allows yet), unless the import is sent with `include_locked_storages=true`;
 - are left out of `GET /cards?open_to_deck=<deck id>`.
 
 Locking only hides: a card of a locked storage can still be put in any deck explicitly, and the cards already in a deck stay there. While a storage is unlocked, its `allowed_deck_ids` are kept but ignored. Deleting a deck removes it from every `allowed_deck_ids`.
@@ -1047,11 +1047,11 @@ Remove a card from a deck. **Idempotent** — always returns success, whether or
 
 ### Pending cards (`/deck/:id/pending`)
 
-Cards wanted in a deck but not in the collection yet (typically picked on Scryfall from the deck page). They are stored per deck until they're added to the collection all at once.
+Cards wanted in a deck but not in the collection yet (typically picked on Scryfall from the deck page). They are stored per deck until they're added to the collection all at once. Each item has a `foil` and a `proxy` flag, and committing it creates cards with both.
 
 - `GET /deck/:id/pending` — the list, sorted by name. Each item also tells what the collection already holds, outside this deck: `owned_copies` counts the cards of the same name (any printing, ` / ` and ` // ` alike, including copies in other decks), and `owned_same_printing` those of this exact printing. Both leave out the cards of [storages locked](#storage) against this deck. A client can tell a card missing from the collection (`0`) from one owned in another printing. Both are `0` in the responses of the routes below.
-- `POST /deck/:id/pending` — add one. Body: `name`, `scryfall_id`, `set_code`, `collector_number` (required), `foil`, `quantity` (1–100, default 1), `mana_value`, `colors`, `card_type`, `color_identity` (same rules as `POST /cards`), `board` (`main` by default, see [Boards](#boards)). Returns `201` with the item. If the deck already has a pending card of the same printing, finish and board (other than its pending commander), its quantity is raised instead and that item is returned.
-- `PATCH /deck/:id/pending/:pending_id` — change how many copies it stands for, its board, or both. Body: `{ "quantity": 12 }` (1–1000) and/or `{ "board": "considering" }`. Returns the item. Moved onto a board that already has a pending card of the same printing and finish, the two are merged and the remaining item is returned. The pending commander can't leave `main` (`409`).
+- `POST /deck/:id/pending` — add one. Body: `name`, `scryfall_id`, `set_code`, `collector_number` (required), `foil`, `proxy` (both `false` by default), `quantity` (1–100, default 1), `mana_value`, `colors`, `card_type`, `color_identity` (same rules as `POST /cards`), `board` (`main` by default, see [Boards](#boards)). Returns `201` with the item. If the deck already has a pending card of the same printing, finish, proxy state and board (other than its pending commander), its quantity is raised instead and that item is returned.
+- `PATCH /deck/:id/pending/:pending_id` — change how many copies it stands for, its board, or both. Body: `{ "quantity": 12 }` (1–1000) and/or `{ "board": "considering" }`. Returns the item. Moved onto a board that already has a pending card of the same printing, finish and proxy state, the two are merged and the remaining item is returned. The pending commander can't leave `main` (`409`).
 - `DELETE /deck/:id/pending/:pending_id` — remove one. `204`, or `404` if it doesn't exist.
 - `POST /deck/:id/pending/commit` — create every pending card in the collection (one card per copy, in `storage_id` if given), put each in the deck on the board it was pending on, and clear the list. Pending cards on the `considering` board are left out, unless given as `pending_id`. Body optional: `{ "storage_id": 4 }`, plus `"pending_id": 12` to only add that one pending card (all its copies), and `"quantity": 5` with it to only add that many copies (the pending card keeps the rest). Returns `{ "cards_created": 7 }`. Items are handled one by one: on a failure, those already handled stay done and the rest stay pending.
 - `POST /deck/:id/import` — add a list of cards to this deck, as `multipart/form-data` with the list in a `file` field and optional `commander_from_first_line` and `include_locked_storages` (both `false` by default). It never creates cards: owned copies go in the deck, missing ones become pending cards. Details, list format and response in [`POST /deck/:id/import`](#post-deckidimport) under Bulk Import.
@@ -1486,11 +1486,21 @@ Replace a deck's content with a list: every card on the list ends up in the deck
 
 Switch cards of a deck to the other finish, without touching the collection. Body: `{ "card_ids": [12, 13], "pending_ids": [4], "foil": true }`: `card_ids` are the deck's owned copies (as in `GET /deck/:id/cards`), `pending_ids` its [pending cards](#pending-cards-deckidpending); either can be left out, not both.
 
-Each listed copy or pending card that isn't already in that finish leaves the deck (an owned copy stays in the collection, as it is) and is replaced, on the same board, by copies of the same printing in that finish: your copies in no deck first, then ones another deck uses, and pending cards for whatever you don't own. Copies in a [storage locked](#storage) against the deck are never used. A pending card of 3 copies thus becomes the owned copies you have, plus a pending card for the rest. The commander stays the commander, owned when a copy was found.
+Each listed copy or pending card that isn't already in that finish leaves the deck (an owned copy stays in the collection, as it is) and is replaced, on the same board, by copies of the same printing in that finish and with the same proxy state: your copies in no deck first, then ones another deck uses, and pending cards for whatever you don't own. Copies in a [storage locked](#storage) against the deck are never used. A pending card of 3 copies thus becomes the owned copies you have, plus a pending card for the rest. The commander stays the commander, owned when a copy was found.
 
 **Response `200 OK`** — the [import summary](#bulk-import): `cards_linked` copies found in the collection, `cards_pending` copies left pending, `cards_removed` copies that left the deck. Cards already in that finish are ignored.
 
 **Errors:** `400` invalid id, `foil` missing, no id at all, or an id that isn't an owned copy or a pending card of this deck · `404` deck not found
+
+### `POST /deck/:id/switch-proxy`
+
+Switch cards of a deck between a real card and a proxy, without touching the collection. Body: `{ "card_ids": [12, 13], "pending_ids": [4], "proxy": true }`, with the same ids as [`switch-foil`](#post-deckidswitch-foil).
+
+It works like `switch-foil`: each listed copy or pending card that isn't already in that proxy state leaves the deck (an owned copy stays in the collection, as it is) and is replaced, on the same board, by copies of the same printing and finish with that proxy state: your copies in no deck first, then ones another deck uses, and pending cards (with that `proxy` flag) for whatever you don't own. Each card keeps its finish, so a foil card switched to proxy looks for a foil proxy. Copies in a [storage locked](#storage) against the deck are never used. The commander stays the commander, owned when a copy was found.
+
+**Response `200 OK`** — the [import summary](#bulk-import): `cards_linked` copies found in the collection, `cards_pending` copies left pending, `cards_removed` copies that left the deck. Cards already in that proxy state are ignored.
+
+**Errors:** `400` invalid id, `proxy` missing, no id at all, or an id that isn't an owned copy or a pending card of this deck · `404` deck not found
 
 ### `POST /deck/:id/split-printings`
 

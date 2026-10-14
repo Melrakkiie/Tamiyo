@@ -951,14 +951,18 @@ func TestPostgresRepository_PendingCards(t *testing.T) {
 	assert.Equal(t, "R", *created.Colors)
 
 	_, err = repo.CreatePendingCard(context.Background(), alice, PendingCard{
-		DeckID: "00000000-0000-0000-0000-000000000001", Name: "Abrade", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1e", SetCode: "dmu", CollectorNumber: "116", Quantity: 1,
+		DeckID: "00000000-0000-0000-0000-000000000001", Name: "Abrade", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1e", SetCode: "dmu", CollectorNumber: "116", Quantity: 1, Foil: true, Proxy: true,
 	})
 	require.NoError(t, err)
+	assert.False(t, created.Proxy)
 
 	found, err := repo.FindPendingCards(context.Background(), alice, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)
 	require.Len(t, found, 2)
 	assert.Equal(t, "Abrade", found[0].Name)
+	assert.True(t, found[0].Foil)
+	assert.True(t, found[0].Proxy)
+	assert.False(t, found[1].Proxy)
 
 	others, err := repo.FindPendingCards(context.Background(), bob, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)

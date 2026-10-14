@@ -895,7 +895,7 @@ func TestHandler_RemoveCardFromDeck_ReturnsErrorOnServiceFailure(t *testing.T) {
 }
 
 func TestHandler_GetPendingCards_ReturnsTheList(t *testing.T) {
-	service := &fakeService{pending: []PendingCard{{ID: 1, DeckID: "00000000-0000-0000-0000-000000000002", Name: "Sol Ring", Quantity: 2, OwnedCopies: 3, OwnedSamePrinting: 1}}}
+	service := &fakeService{pending: []PendingCard{{ID: 1, DeckID: "00000000-0000-0000-0000-000000000002", Name: "Sol Ring", Quantity: 2, Proxy: true, OwnedCopies: 3, OwnedSamePrinting: 1}}}
 	router := setupRouter(service)
 
 	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000002/pending", nil)
@@ -912,6 +912,7 @@ func TestHandler_GetPendingCards_ReturnsTheList(t *testing.T) {
 	assert.Equal(t, 1, response[0].OwnedSamePrinting)
 	assert.Contains(t, w.Body.String(), `"owned_copies":3`)
 	assert.Contains(t, w.Body.String(), `"owned_same_printing":1`)
+	assert.Contains(t, w.Body.String(), `"proxy":true`)
 }
 
 func TestHandler_GetPendingCards_ReturnsNotFoundForAnotherUsersDeck(t *testing.T) {
@@ -928,7 +929,7 @@ func TestHandler_AddPendingCard_NormalizesAndDefaultsQuantity(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)
 
-	body := `{"name": "Lightning Helix", "scryfall_id": "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f", "set_code": "rav", "collector_number": "213", "colors": "rw", "color_identity": "rw", "card_type": "Instant", "mana_value": 2}`
+	body := `{"name": "Lightning Helix", "scryfall_id": "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f", "set_code": "rav", "collector_number": "213", "colors": "rw", "color_identity": "rw", "card_type": "Instant", "mana_value": 2, "proxy": true}`
 	req := httptest.NewRequest(http.MethodPost, "/deck/00000000-0000-0000-0000-000000000002/pending", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -938,6 +939,8 @@ func TestHandler_AddPendingCard_NormalizesAndDefaultsQuantity(t *testing.T) {
 	assert.Equal(t, 1, service.addedPending.Quantity)
 	assert.Equal(t, "00000000-0000-0000-0000-000000000002", service.addedPending.DeckID)
 	assert.Equal(t, "1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f", service.addedPending.ScryfallID)
+	assert.True(t, service.addedPending.Proxy)
+	assert.False(t, service.addedPending.Foil)
 	require.NotNil(t, service.addedPending.Colors)
 	assert.Equal(t, "WR", *service.addedPending.Colors)
 }

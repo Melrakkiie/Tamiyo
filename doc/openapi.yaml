@@ -2095,9 +2095,9 @@ paths:
         Each listed owned copy or pending card not already in that finish
         leaves the deck (an owned copy stays in the collection as it is) and
         is replaced on the same board by copies of the same printing in that
-        finish: ones in no deck first, then ones another deck uses, and
-        pending cards for the rest. The commander stays the commander. The
-        collection itself is never modified.
+        finish and with the same proxy state: ones in no deck first, then ones
+        another deck uses, and pending cards for the rest. The commander stays
+        the commander. The collection itself is never modified.
       requestBody:
         required: true
         content:
@@ -2127,6 +2127,62 @@ paths:
                 $ref: "#/components/schemas/ImportSummary"
         "400":
           description: id is not a UUID, foil missing, no id at all, or an id that isn't an owned copy or a pending card of this deck.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found, or not owned by the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /deck/{id}/switch-proxy:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    post:
+      tags: [deck-cards]
+      summary: Switch cards of a deck between a real card and a proxy
+      description: >
+        Each listed owned copy or pending card not already in that proxy
+        state leaves the deck (an owned copy stays in the collection as it
+        is) and is replaced on the same board by copies of the same printing
+        and finish with that proxy state: ones in no deck first, then ones
+        another deck uses, and pending cards (with that proxy flag) for the
+        rest. The commander stays the commander. The collection itself is
+        never modified.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [proxy]
+              properties:
+                card_ids:
+                  type: array
+                  items:
+                    type: integer
+                  description: Ids of the deck's owned copies.
+                pending_ids:
+                  type: array
+                  items:
+                    type: integer
+                  description: Ids of the deck's pending cards. At least one id overall.
+                proxy:
+                  type: boolean
+      responses:
+        "200":
+          description: cards_linked copies found in the collection, cards_pending copies left pending, cards_removed copies that left the deck.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportSummary"
+        "400":
+          description: id is not a UUID, proxy missing, no id at all, or an id that isn't an owned copy or a pending card of this deck.
           content:
             application/json:
               schema:
@@ -4349,6 +4405,8 @@ components:
           type: string
         foil:
           type: boolean
+        proxy:
+          type: boolean
         quantity:
           type: integer
         mana_value:
@@ -4379,7 +4437,7 @@ components:
           description: >
             Among them, the copies of this exact printing. Only computed by
             GET /deck/{id}/pending, 0 elsewhere.
-      required: [id, deck_id, name, scryfall_id, set_code, collector_number, foil, quantity, mana_value, board, added, owned_copies, owned_same_printing]
+      required: [id, deck_id, name, scryfall_id, set_code, collector_number, foil, proxy, quantity, mana_value, board, added, owned_copies, owned_same_printing]
 
     AddPendingCardRequest:
       type: object
@@ -4394,6 +4452,8 @@ components:
         collector_number:
           type: string
         foil:
+          type: boolean
+        proxy:
           type: boolean
         quantity:
           type: integer

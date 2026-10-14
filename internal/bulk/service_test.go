@@ -1101,7 +1101,7 @@ func TestCommitPendingCards_CreatesEachCopyAndPutsItInTheDeck(t *testing.T) {
 	cards := &fakeCardService{}
 	decks := &fakeDeckService{pending: []deck.PendingCard{
 		{ID: 1, Name: "Lightning Bolt", ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000", SetCode: "2xm", CollectorNumber: "129", Quantity: 2, ManaValue: 1, Colors: &colors},
-		{ID: 2, Name: "Sol Ring", ScryfallID: "bbbbbbbb-0000-0000-0000-000000000000", SetCode: "c21", CollectorNumber: "263", Quantity: 1, Foil: true},
+		{ID: 2, Name: "Sol Ring", ScryfallID: "bbbbbbbb-0000-0000-0000-000000000000", SetCode: "c21", CollectorNumber: "263", Quantity: 1, Foil: true, Proxy: true},
 	}}
 	storages := &fakeStorageService{storages: []storage.Storage{{ID: 4, Name: "Binder"}}}
 	svc := NewService(cards, storages, decks, &fakeResolver{})
@@ -1117,7 +1117,9 @@ func TestCommitPendingCards_CreatesEachCopyAndPutsItInTheDeck(t *testing.T) {
 	assert.Equal(t, "R", *cards.created[0].Colors)
 	require.NotNil(t, cards.created[0].StorageID)
 	assert.Equal(t, 4, *cards.created[0].StorageID)
+	assert.False(t, cards.created[0].Proxy)
 	assert.True(t, cards.created[2].Foil)
+	assert.True(t, cards.created[2].Proxy, "a pending proxy becomes a proxy card")
 	assert.Len(t, decks.linkedCards["00000000-0000-0000-0000-000000000009"], 3)
 	assert.Equal(t, []int{1, 2}, decks.removedPending)
 }

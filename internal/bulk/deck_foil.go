@@ -25,10 +25,10 @@ type SwitchFoilRequest struct {
 	Foil       *bool `json:"foil"`
 }
 
-func (o *ownedCopies) takeFinish(scryfallID string, foil bool) (int, bool) {
+func (o *ownedCopies) takeFinish(scryfallID string, foil bool, proxy bool) (int, bool) {
 	var candidates []card.Card
 	for _, c := range o.byPrinting[strings.ToLower(scryfallID)] {
-		if c.Foil == foil && !o.used[c.ID] {
+		if c.Foil == foil && c.Proxy == proxy && !o.used[c.ID] {
 			candidates = append(candidates, c)
 		}
 	}
@@ -53,6 +53,13 @@ type FoilSwitch struct {
 }
 
 func (s *Service) SwitchFoil(ctx context.Context, userID string, deckID string, req FoilSwitch) (Summary, error) {
+	return s.switchCards(ctx, userID, deckID, req.CardIDs, req.PendingIDs, func(p deck.PendingCard) deck.PendingCard {
+		p.Foil = req.Foil
+		return p
+	})
+}
+
+func (s *Service) switchCards(ctx context.Context, userID string, deckID string, cardIDs []int, pendingIDs []int, apply func(deck.PendingCard) deck.PendingCard) (Summary, error) {
 	d, err := s.decks.GetDeck(ctx, userID, deckID)
 	if err != nil {
 		if errors.Is(err, deck.ErrNotFound) {
@@ -60,15 +67,36 @@ func (s *Service) SwitchFoil(ctx context.Context, userID string, deckID string, 
 		}
 		return Summary{}, err
 	}
-	copies, err := s.copiesToSwitch(ctx, userID, deckID, req)
+	copies, err := s.deckCopies(ctx, userID, deckID, cardIDs)
 	if err != nil {
 		return Summary{}, err
 	}
-	pending, err := s.pendingToSwitch(ctx, userID, deckID, req)
+	pending, err := s.deckPending(ctx, userID, deckID, pendingIDs)
 	if err != nil {
 		return Summary{}, err
 	}
-	if len(copies) == 0 && len(pending) == 0 {
+
+	var switchedCopies []deck.DeckCard
+	var copyTargets []deck.PendingCard
+	for _, c := range copies {
+		from := copyTemplate(c)
+		if to := apply(from); !sameFinish(from, to) {
+			switchedCopies = append(switchedCopies, c)
+			copyTargets = append(copyTargets, to)
+		}
+	}
+	var switchedPending []deck.PendingCard
+	var pendingTargets []deck.PendingCard
+	for _, p := range pending {
+		from := p
+		from.ID = 0
+		from.Board = boardOf(p.Board)
+		if to := apply(from); !sameFinish(from, to) {
+			switchedPending = append(switchedPending, p)
+			pendingTargets = append(pendingTargets, to)
+		}
+	}
+	if len(switchedCopies) == 0 && len(switchedPending) == 0 {
 		return Summary{}, nil
 	}
 
@@ -78,14 +106,9 @@ func (s *Service) SwitchFoil(ctx context.Context, userID string, deckID string, 
 	}
 
 	var summary Summary
-	for _, c := range copies {
+	for i, c := range switchedCopies {
 		commander := d.CommanderID != nil && *d.CommanderID == c.ID
-		replacement := deck.PendingCard{
-			Name: c.Name, ScryfallID: c.ScryfallID, SetCode: c.SetCode, CollectorNumber: c.CollectorNumber,
-			ManaValue: c.ManaValue, Colors: c.Colors, CardType: c.CardType, ColorIdentity: c.ColorIdentity,
-			Quantity: 1, Board: boardOf(c.Board),
-		}
-		if err := s.replaceWithFinish(ctx, userID, deckID, owned, replacement, req.Foil, commander, &summary); err != nil {
+		if err := s.replaceWithFinish(ctx, userID, deckID, owned, copyTargets[i], commander, &summary); err != nil {
 			return summary, err
 		}
 		if err := s.decks.RemoveCardFromDeck(ctx, userID, deckID, c.ID); err != nil {
@@ -93,12 +116,9 @@ func (s *Service) SwitchFoil(ctx context.Context, userID string, deckID string, 
 		}
 		summary.CardsRemoved++
 	}
-	for _, p := range pending {
+	for i, p := range switchedPending {
 		commander := d.CommanderPendingID != nil && *d.CommanderPendingID == p.ID
-		replacement := p
-		replacement.ID = 0
-		replacement.Board = boardOf(p.Board)
-		if err := s.replaceWithFinish(ctx, userID, deckID, owned, replacement, req.Foil, commander, &summary); err != nil {
+		if err := s.replaceWithFinish(ctx, userID, deckID, owned, pendingTargets[i], commander, &summary); err != nil {
 			return summary, err
 		}
 		if err := s.decks.RemovePendingCard(ctx, userID, deckID, p.ID); err != nil {
@@ -109,32 +129,17 @@ func (s *Service) SwitchFoil(ctx context.Context, userID string, deckID string, 
 	return summary, nil
 }
 
-func (s *Service) copiesToSwitch(ctx context.Context, userID string, deckID string, req FoilSwitch) ([]deck.DeckCard, error) {
-	copies, err := s.deckCopies(ctx, userID, deckID, req.CardIDs)
-	if err != nil {
-		return nil, err
+func copyTemplate(c deck.DeckCard) deck.PendingCard {
+	return deck.PendingCard{
+		Name: c.Name, ScryfallID: c.ScryfallID, SetCode: c.SetCode, CollectorNumber: c.CollectorNumber,
+		Foil: c.Foil, Proxy: c.Proxy,
+		ManaValue: c.ManaValue, Colors: c.Colors, CardType: c.CardType, ColorIdentity: c.ColorIdentity,
+		Quantity: 1, Board: boardOf(c.Board),
 	}
-	var toSwitch []deck.DeckCard
-	for _, c := range copies {
-		if c.Foil != req.Foil {
-			toSwitch = append(toSwitch, c)
-		}
-	}
-	return toSwitch, nil
 }
 
-func (s *Service) pendingToSwitch(ctx context.Context, userID string, deckID string, req FoilSwitch) ([]deck.PendingCard, error) {
-	pending, err := s.deckPending(ctx, userID, deckID, req.PendingIDs)
-	if err != nil {
-		return nil, err
-	}
-	var toSwitch []deck.PendingCard
-	for _, p := range pending {
-		if p.Foil != req.Foil {
-			toSwitch = append(toSwitch, p)
-		}
-	}
-	return toSwitch, nil
+func sameFinish(a deck.PendingCard, b deck.PendingCard) bool {
+	return a.Foil == b.Foil && a.Proxy == b.Proxy
 }
 
 func (s *Service) deckCopies(ctx context.Context, userID string, deckID string, ids []int) ([]deck.DeckCard, error) {
@@ -191,16 +196,16 @@ func (s *Service) deckPending(ctx context.Context, userID string, deckID string,
 	return pending, nil
 }
 
-func (s *Service) replaceWithFinish(ctx context.Context, userID string, deckID string, owned *ownedCopies, want deck.PendingCard, foil bool, commander bool, summary *Summary) error {
+func (s *Service) replaceWithFinish(ctx context.Context, userID string, deckID string, owned *ownedCopies, want deck.PendingCard, commander bool, summary *Summary) error {
 	firstCopy := 0
 	linked := 0
 	for linked < want.Quantity {
-		copyID, ok := owned.takeFinish(want.ScryfallID, foil)
+		copyID, ok := owned.takeFinish(want.ScryfallID, want.Foil, want.Proxy)
 		if !ok {
 			break
 		}
 		if err := s.decks.PutCardInDeck(ctx, userID, deckID, copyID, want.Board); err != nil {
-			return fmt.Errorf("linking the %s copy of %q: %w", finishName(foil), want.Name, err)
+			return fmt.Errorf("linking the %s copy of %q: %w", finishName(want), want.Name, err)
 		}
 		if linked == 0 {
 			firstCopy = copyID
@@ -212,11 +217,10 @@ func (s *Service) replaceWithFinish(ctx context.Context, userID string, deckID s
 	var added deck.PendingCard
 	if remaining := want.Quantity - linked; remaining > 0 {
 		want.DeckID = deckID
-		want.Foil = foil
 		want.Quantity = remaining
 		var err error
 		if added, err = s.decks.AddPendingCard(ctx, userID, deckID, want); err != nil {
-			return fmt.Errorf("adding a pending %s %q: %w", finishName(foil), want.Name, err)
+			return fmt.Errorf("adding a pending %s %q: %w", finishName(want), want.Name, err)
 		}
 		summary.CardsPending += remaining
 	}
@@ -236,11 +240,15 @@ func (s *Service) replaceWithFinish(ctx context.Context, userID string, deckID s
 	return nil
 }
 
-func finishName(foil bool) string {
-	if foil {
-		return "foil"
+func finishName(c deck.PendingCard) string {
+	name := "non-foil"
+	if c.Foil {
+		name = "foil"
 	}
-	return "non-foil"
+	if c.Proxy {
+		name += " proxy"
+	}
+	return name
 }
 
 func (h *Handler) switchFoil(ctx *gin.Context) {

@@ -722,6 +722,7 @@ func TestService_AddPendingCard_MergesWithTheSamePrintingAndFinish(t *testing.T)
 		findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000003"},
 		pending: []PendingCard{
 			{ID: 4, ScryfallID: "AAAA", Foil: true, Quantity: 2, Board: BoardMain},
+			{ID: 6, ScryfallID: "aaaa", Proxy: true, Quantity: 1, Board: BoardMain},
 			{ID: 5, ScryfallID: "aaaa", Foil: false, Quantity: 3, Board: BoardMain},
 		},
 	}

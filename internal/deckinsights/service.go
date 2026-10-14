@@ -111,6 +111,7 @@ func withPendingCards(d deck.Deck, cards []deck.DeckCard, pending []deck.Pending
 				SetCode:         p.SetCode,
 				CollectorNumber: p.CollectorNumber,
 				Foil:            p.Foil,
+				Proxy:           p.Proxy,
 				ManaValue:       p.ManaValue,
 				Colors:          p.Colors,
 				CardType:        p.CardType,

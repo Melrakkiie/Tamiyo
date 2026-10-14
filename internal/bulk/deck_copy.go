@@ -178,7 +178,7 @@ func (s *Service) collectEntries(ctx context.Context, ownerID string, deckID str
 			continue
 		}
 		entries = append(entries, collectEntry{pendingID: p.ID, quantity: p.Quantity, card: card.Card{
-			Name: p.Name, ScryfallID: p.ScryfallID, SetCode: p.SetCode, CollectorNumber: p.CollectorNumber, Foil: p.Foil,
+			Name: p.Name, ScryfallID: p.ScryfallID, SetCode: p.SetCode, CollectorNumber: p.CollectorNumber, Foil: p.Foil, Proxy: p.Proxy,
 			ManaValue: p.ManaValue, Colors: p.Colors, CardType: p.CardType, ColorIdentity: p.ColorIdentity,
 		}})
 	}
