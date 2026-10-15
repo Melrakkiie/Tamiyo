@@ -50,6 +50,14 @@ type DeckStats struct {
 	TypeBreakdown    map[string]int    `json:"type_breakdown"`
 	BackFaceLands    []BackFaceCard    `json:"back_face_lands"`
 	Value            Value             `json:"value"`
+	OwnedValue       Value             `json:"owned_value"`
+	PendingValue     Value             `json:"pending_value"`
+	BoardValues      BoardValues       `json:"board_values"`
+}
+
+type BoardValues struct {
+	Sideboard   Value `json:"sideboard"`
+	Considering Value `json:"considering"`
 }
 
 type Value struct {

@@ -190,6 +190,16 @@ func mainBoard(cards []deck.DeckCard) []deck.DeckCard {
 	return main
 }
 
+func inBoard(cards []deck.DeckCard, board string) []deck.DeckCard {
+	var matching []deck.DeckCard
+	for _, c := range cards {
+		if c.Board == board {
+			matching = append(matching, c)
+		}
+	}
+	return matching
+}
+
 func isBasicLand(typeLine string) bool {
 	return strings.Contains(typeLine, "Basic Land")
 }

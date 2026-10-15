@@ -56,7 +56,12 @@ func (s *Service) GetDeckStats(ctx context.Context, userID string, deckID string
 	if err != nil {
 		return DeckStats{}, fmt.Errorf("loading exchange rate: %w", err)
 	}
-	return computeStats(mainBoard(cards), scryfallByID, usdPerEUR), nil
+	stats := computeStats(mainBoard(cards), scryfallByID, usdPerEUR)
+	stats.BoardValues = BoardValues{
+		Sideboard:   cardsValue(inBoard(cards, deck.BoardSideboard), scryfallByID, usdPerEUR),
+		Considering: cardsValue(inBoard(cards, deck.BoardConsidering), scryfallByID, usdPerEUR),
+	}
+	return stats, nil
 }
 
 func (s *Service) loadDeckWithScryfallData(ctx context.Context, userID string, deckID string) (deck.Deck, []deck.DeckCard, map[string]scryfall.Card, error) {

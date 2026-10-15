@@ -594,12 +594,15 @@ func TestGetDeckStats_SumsMainBoardPricesWithoutProxies(t *testing.T) {
 				{ID: 14, Name: "Bolt", ScryfallID: "bolt", Foil: true},
 				{ID: 15, Name: "Mountain", ScryfallID: "mtn"},
 				{ID: 16, Name: "Missing", ScryfallID: "missing"},
+				{ID: 17, Name: "Bolt", ScryfallID: "bolt", Board: deck.BoardConsidering},
 			},
 		},
 		pendingByDeck: map[string][]deck.PendingCard{
 			"00000000-0000-0000-0000-000000000001": {
 				{ID: 5, Name: "Sol Ring", ScryfallID: "ring", Quantity: 2},
 				{ID: 6, Name: "Sol Ring", ScryfallID: "ring", Quantity: 1, Proxy: true},
+				{ID: 7, Name: "Sol Ring", ScryfallID: "ring", Quantity: 1, Board: deck.BoardSideboard},
+				{ID: 8, Name: "Sol Ring", ScryfallID: "ring", Quantity: 1, Board: deck.BoardSideboard, Proxy: true},
 			},
 		},
 	}
@@ -614,6 +617,10 @@ func TestGetDeckStats_SumsMainBoardPricesWithoutProxies(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, Value{EUR: 7.85, USD: 9.4}, stats.Value)
+	assert.Equal(t, Value{EUR: 5.65, USD: 6.8}, stats.OwnedValue)
+	assert.Equal(t, Value{EUR: 2.2, USD: 2.6}, stats.PendingValue)
+	assert.Equal(t, Value{EUR: 2.2, USD: 2.6}, stats.BoardValues.Sideboard)
+	assert.Equal(t, Value{EUR: 0.35, USD: 0.5}, stats.BoardValues.Considering)
 }
 
 func ignoringDeckSize(report LegalityReport) LegalityReport {

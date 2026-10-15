@@ -1262,7 +1262,13 @@ Summarizes the deck's composition: mana curve, color breakdown, and primary card
   "back_face_lands": [
     { "name": "Bala Ged Recovery // Bala Ged Sanctuary", "scryfall_id": "9e2d4ad6-8c4d-4b7e-9e73-6a8f4f9c1f0b", "quantity": 1 }
   ],
-  "value": { "eur": 312.4, "usd": 356.75 }
+  "value": { "eur": 312.4, "usd": 356.75 },
+  "owned_value": { "eur": 280.1, "usd": 320.5 },
+  "pending_value": { "eur": 32.3, "usd": 36.25 },
+  "board_values": {
+    "sideboard": { "eur": 18.6, "usd": 21.4 },
+    "considering": { "eur": 0, "usd": 0 }
+  }
 }
 ```
 
@@ -1270,7 +1276,7 @@ Each `mana_curve` bucket splits its `count` into `permanents` and `non_permanent
 
 A multicolor card counts once per color it has in `color_breakdown`; a dual-typed permanent (e.g. "Artifact Creature") counts once under a single primary type in `type_breakdown` — Creature takes precedence over Artifact/Enchantment, matching how most deckbuilding sites categorize it. A double-faced or split card counts under the type of its front face (a creature with a land on its back is a creature). `back_face_lands` lists those cards with a land on their back face, by name with their number of copies: they aren't in `land_count`, but a client can show them as extra lands.
 
-`value` is the [value](#prices-and-values) of the `main` board, owned and pending cards, proxies left out, from Scryfall's current prices, rounded to the cent.
+`value` is the [value](#prices-and-values) of the `main` board, owned and pending cards, proxies left out, from Scryfall's current prices, rounded to the cent. `owned_value` and `pending_value` split it between the cards the deck holds and its [pending cards](#pending-cards-deckidpending); each is rounded on its own, so their sum can differ from `value` by a cent. `board_values` gives the value of the `sideboard` and `considering` boards the same way, owned and pending cards together, proxies left out.
 
 ---
 

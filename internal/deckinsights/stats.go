@@ -34,8 +34,13 @@ func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card, 
 
 		if !c.Proxy {
 			eur, usd := sc.Prices.For(c.Foil, usdPerEUR)
-			stats.Value.EUR += eur
-			stats.Value.USD += usd
+			if isPending(c) {
+				stats.PendingValue.EUR += eur
+				stats.PendingValue.USD += usd
+			} else {
+				stats.OwnedValue.EUR += eur
+				stats.OwnedValue.USD += usd
+			}
 		}
 
 		t := scryfall.PrimaryType(sc.TypeLine)
@@ -67,7 +72,12 @@ func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card, 
 		}
 	}
 
-	stats.Value = Value{EUR: roundToCents(stats.Value.EUR), USD: roundToCents(stats.Value.USD)}
+	stats.Value = Value{
+		EUR: roundToCents(stats.OwnedValue.EUR + stats.PendingValue.EUR),
+		USD: roundToCents(stats.OwnedValue.USD + stats.PendingValue.USD),
+	}
+	stats.OwnedValue = Value{EUR: roundToCents(stats.OwnedValue.EUR), USD: roundToCents(stats.OwnedValue.USD)}
+	stats.PendingValue = Value{EUR: roundToCents(stats.PendingValue.EUR), USD: roundToCents(stats.PendingValue.USD)}
 	stats.NonlandCount = nonlandCount
 	if nonlandCount > 0 {
 		stats.AverageManaValue = totalManaValue / float64(nonlandCount)
@@ -91,6 +101,24 @@ func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card, 
 	}
 
 	return stats
+}
+
+func cardsValue(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card, usdPerEUR float64) Value {
+	var total Value
+	for _, c := range cards {
+		sc, ok := scryfallByID[c.ScryfallID]
+		if !ok || c.Proxy {
+			continue
+		}
+		eur, usd := sc.Prices.For(c.Foil, usdPerEUR)
+		total.EUR += eur
+		total.USD += usd
+	}
+	return Value{EUR: roundToCents(total.EUR), USD: roundToCents(total.USD)}
+}
+
+func isPending(c deck.DeckCard) bool {
+	return c.ID < 0
 }
 
 func roundToCents(amount float64) float64 {

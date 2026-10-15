@@ -4336,7 +4336,33 @@ components:
           description: >
             Value of the main board, owned and pending cards, proxies left
             out, from Scryfall's current prices, rounded to the cent.
-      required: [card_count, land_count, nonland_count, average_mana_value, mana_curve, color_breakdown, type_breakdown, back_face_lands, value]
+        owned_value:
+          allOf:
+            - $ref: "#/components/schemas/Value"
+          description: >
+            Part of value coming from the cards the deck holds, rounded to
+            the cent on its own.
+        pending_value:
+          allOf:
+            - $ref: "#/components/schemas/Value"
+          description: >
+            Part of value coming from the deck's pending cards, rounded to
+            the cent on its own.
+        board_values:
+          $ref: "#/components/schemas/BoardValues"
+      required: [card_count, land_count, nonland_count, average_mana_value, mana_curve, color_breakdown, type_breakdown, back_face_lands, value, owned_value, pending_value, board_values]
+
+    BoardValues:
+      type: object
+      description: >
+        Value of the side boards, owned and pending cards together, proxies
+        left out, rounded to the cent.
+      properties:
+        sideboard:
+          $ref: "#/components/schemas/Value"
+        considering:
+          $ref: "#/components/schemas/Value"
+      required: [sideboard, considering]
 
     Value:
       type: object
