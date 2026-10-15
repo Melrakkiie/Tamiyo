@@ -176,6 +176,28 @@ func TestPostgresRepository_FindAll_FiltersByStorageID(t *testing.T) {
 	assert.Equal(t, 1, total)
 }
 
+func TestPostgresRepository_FindAll_FiltersByScryfallID(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+
+	seedCards(t, db, userA, []Card{
+		{Name: "Ténèbres descendantes", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "ecl", CollectorNumber: "97"},
+		{Name: "Darkness Descends", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "fdn", CollectorNumber: "12"},
+	})
+	seedCards(t, db, userB, []Card{
+		{Name: "Darkness Descends", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "ecl", CollectorNumber: "97"},
+	})
+
+	result, total, err := repo.FindAll(context.Background(), userA, CardFilter{ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", Page: 1, Limit: 25})
+
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, "Ténèbres descendantes", result[0].Name)
+	assert.Equal(t, 1, total)
+}
+
 func TestPostgresRepository_FindAll_StacksCopiesOfTheSamePrintingInTheSameStorage(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db, "alice@example.com")

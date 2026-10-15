@@ -395,6 +395,7 @@ List cards, with optional filtering, sorting, and pagination.
 | Param | Type | Required | Description |
 |---|---|---|---|
 | `storage_id` | int | No | Only return cards belonging to this storage. |
+| `scryfall_id` | uuid | No | Only copies of this printing, whatever name they were saved with (an imported card can keep a localized name). Case-insensitive. |
 | `name` | string | No | Case-insensitive partial match on the card name. |
 | `color_identity` | string | No | Only cards whose color identity fits inside these WUBRG letters (any order), e.g. a commander's identity. Empty (`color_identity=`) keeps colorless cards only. Cards whose identity isn't known yet are left out. |
 | `page` | int | No | 1-based page number. Defaults to `1`. |
@@ -450,7 +451,7 @@ GET /cards?storage_id=1&sort=-added&page=1&limit=25
 }
 ```
 
-**Errors:** `400` if `storage_id`, `page`, or `limit` is not a valid integer, `stack` is not a boolean, `sort` is not one of the allowed values, a filter has an invalid value, or `open_to_deck` is not a deck id.
+**Errors:** `400` if `storage_id`, `page`, or `limit` is not a valid integer, `stack` is not a boolean, `sort` is not one of the allowed values, a filter has an invalid value, `open_to_deck` is not a deck id, or `scryfall_id` is not a Scryfall card id.
 
 ---
 

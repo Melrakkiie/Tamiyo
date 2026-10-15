@@ -352,6 +352,7 @@ func (h *Handler) getCards(ctx *gin.Context) {
 
 	filter := CardFilter{
 		StorageID:     storageID,
+		ScryfallID:    advanced.ScryfallID,
 		ColorIdentity: colorIdentity,
 		Stack:         stack,
 		Name:          ctx.Query("name"),

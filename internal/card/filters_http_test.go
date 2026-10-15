@@ -15,7 +15,7 @@ func TestHandler_GetCards_PassesAdvancedFilters(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet,
-		"/cards?colors=gw&color_mode=within&mana_value=3&mana_value_op=lte&power=-1&power_op=gte&toughness=.5&toughness_op=lt&type=Creature&subtype=%20Elf%20&legal_in=commander&color_count=2&foil=true&storage_type=deckbox&open_to_deck=0A0A0A0A-0000-0000-0000-000000000001", nil))
+		"/cards?colors=gw&color_mode=within&mana_value=3&mana_value_op=lte&power=-1&power_op=gte&toughness=.5&toughness_op=lt&type=Creature&subtype=%20Elf%20&legal_in=commander&color_count=2&foil=true&storage_type=deckbox&open_to_deck=0A0A0A0A-0000-0000-0000-000000000001&scryfall_id=BD8FA327-DD41-4737-8F19-2CF5EB1F7CDD", nil))
 
 	require.Equal(t, http.StatusOK, w.Code)
 	f := service.lastFilter
@@ -41,6 +41,7 @@ func TestHandler_GetCards_PassesAdvancedFilters(t *testing.T) {
 	assert.Equal(t, "deckbox", f.StorageType)
 	require.NotNil(t, f.OpenToDeck)
 	assert.Equal(t, "0a0a0a0a-0000-0000-0000-000000000001", *f.OpenToDeck)
+	assert.Equal(t, "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", f.ScryfallID)
 }
 
 func TestHandler_GetCards_AdvancedFilterDefaults(t *testing.T) {
@@ -89,6 +90,8 @@ func TestHandler_GetCards_RejectsInvalidAdvancedFilters(t *testing.T) {
 		"color_count=6",
 		"foil=maybe",
 		"open_to_deck=nope",
+		"scryfall_id=nope",
+		"scryfall_id=bd8fa327-dd41-4737-8f19",
 		"subtype=" + "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	} {
 		t.Run(query, func(t *testing.T) {

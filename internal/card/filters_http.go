@@ -2,6 +2,7 @@ package card
 
 import (
 	"errors"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -27,7 +28,10 @@ var (
 	errInvalidSubtype      = errors.New("subtype must have at most 50 characters")
 	errInvalidStorageType  = errors.New("storage_type must have at most 50 characters")
 	errInvalidOpenToDeck   = errors.New("open_to_deck must be a deck id")
+	errInvalidScryfallID   = errors.New("scryfall_id must be a Scryfall card id")
 )
+
+var scryfallIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 func parseAdvancedFilters(ctx *gin.Context) (CardFilter, error) {
 	var filter CardFilter
@@ -109,6 +113,14 @@ func parseAdvancedFilters(ctx *gin.Context) (CardFilter, error) {
 			return filter, errInvalidOpenToDeck
 		}
 		filter.OpenToDeck = &deckID
+	}
+
+	if raw := ctx.Query("scryfall_id"); raw != "" {
+		scryfallID := strings.ToLower(raw)
+		if !scryfallIDPattern.MatchString(scryfallID) {
+			return filter, errInvalidScryfallID
+		}
+		filter.ScryfallID = scryfallID
 	}
 
 	return filter, nil

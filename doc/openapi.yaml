@@ -513,6 +513,15 @@ paths:
           schema:
             type: integer
           description: Only return cards belonging to this storage.
+        - name: scryfall_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: >
+            Only copies of this printing, whatever name they were saved with
+            (case-insensitive).
         - name: name
           in: query
           required: false

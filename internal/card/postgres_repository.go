@@ -86,6 +86,12 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		argPos++
 	}
 
+	if filter.ScryfallID != "" {
+		conditions = append(conditions, fmt.Sprintf("scryfall_id = $%d", argPos))
+		args = append(args, filter.ScryfallID)
+		argPos++
+	}
+
 	if filter.Name != "" {
 		conditions = append(conditions, fmt.Sprintf("name ILIKE $%d", argPos))
 		args = append(args, "%"+filter.Name+"%")

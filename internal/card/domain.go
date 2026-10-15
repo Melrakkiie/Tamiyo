@@ -29,6 +29,7 @@ type Card struct {
 
 type CardFilter struct {
 	StorageID     *int
+	ScryfallID    string
 	Name          string
 	ColorIdentity *string
 	Stack         bool
