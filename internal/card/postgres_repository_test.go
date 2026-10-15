@@ -1151,3 +1151,62 @@ func TestPostgresRepository_MoveToStorage_ReturnsErrStorageNotFound(t *testing.T
 
 	assert.ErrorIs(t, err, ErrStorageNotFound)
 }
+
+func TestPostgresRepository_MoveStorageCards(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userA)
+	ctx := context.Background()
+
+	binder, deckbox := 1, 2
+	scryfallID := "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd"
+	first, err := repo.Create(ctx, userA, Card{Name: "Counterspell", ScryfallID: scryfallID, SetCode: "lea", CollectorNumber: "1", StorageID: &binder})
+	require.NoError(t, err)
+	second, err := repo.Create(ctx, userA, Card{Name: "Island", ScryfallID: scryfallID, SetCode: "lea", CollectorNumber: "1", StorageID: &binder})
+	require.NoError(t, err)
+	stays, err := repo.Create(ctx, userA, Card{Name: "Swamp", ScryfallID: scryfallID, SetCode: "lea", CollectorNumber: "1", StorageID: &deckbox})
+	require.NoError(t, err)
+	loose := createCardWithDetails(t, repo, userA, "Sol Ring", nil, nil)
+	foreign := createCardWithDetails(t, repo, userB, "Other User Card", nil, nil)
+
+	moved, err := repo.MoveStorageCards(ctx, userA, binder, deckbox)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, moved)
+	for _, id := range []int{first.ID, second.ID, stays.ID} {
+		c, err := repo.FindByID(ctx, userA, id)
+		require.NoError(t, err)
+		require.NotNil(t, c.StorageID)
+		assert.Equal(t, deckbox, *c.StorageID)
+	}
+	c, err := repo.FindByID(ctx, userA, loose.ID)
+	require.NoError(t, err)
+	assert.Nil(t, c.StorageID)
+	c, err = repo.FindByID(ctx, userB, foreign.ID)
+	require.NoError(t, err)
+	assert.Nil(t, c.StorageID)
+
+	moved, err = repo.MoveStorageCards(ctx, userB, binder, deckbox)
+	require.NoError(t, err)
+	assert.Zero(t, moved)
+}
+
+func TestPostgresRepository_MoveStorageCards_ReturnsErrStorageNotFound(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userA)
+	seedStorages(t, db, userB)
+	ctx := context.Background()
+
+	aliceStorage, bobStorage := 1, 3
+	_, err := repo.Create(ctx, userB, Card{Name: "Island", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "1", StorageID: &bobStorage})
+	require.NoError(t, err)
+
+	_, err = repo.MoveStorageCards(ctx, userB, bobStorage, aliceStorage)
+
+	assert.ErrorIs(t, err, ErrStorageNotFound)
+}

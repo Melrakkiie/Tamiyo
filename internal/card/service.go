@@ -63,3 +63,7 @@ func (s *Service) MoveCardsToStorage(ctx context.Context, userID string, ids []i
 	}
 	return s.repo.MoveToStorage(ctx, userID, ids, storageID)
 }
+
+func (s *Service) MoveStorageCards(ctx context.Context, userID string, fromStorageID, toStorageID int) (int, error) {
+	return s.repo.MoveStorageCards(ctx, userID, fromStorageID, toStorageID)
+}

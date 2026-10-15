@@ -63,6 +63,14 @@ type fakeImportService struct {
 	storeSummary    StoreSummary
 	lastStoreID     int
 	lastStoreBoards []string
+	lastFromStorage int
+}
+
+func (f *fakeImportService) TransferStorage(ctx context.Context, userID string, fromStorageID, toStorageID int) (StoreSummary, error) {
+	f.lastUserID = userID
+	f.lastFromStorage = fromStorageID
+	f.lastStoreID = toStorageID
+	return f.storeSummary, f.err
 }
 
 func (f *fakeImportService) StoreDeck(ctx context.Context, userID string, deckID string, storageID int, boards []string) (StoreSummary, error) {

@@ -68,6 +68,7 @@ type Repository interface {
 	CountMissingDetails(ctx context.Context, userID string, afterID int) (int, error)
 	SetDetails(ctx context.Context, userID string, id int, details Details) error
 	MoveToStorage(ctx context.Context, userID string, ids []int, storageID int) (int, error)
+	MoveStorageCards(ctx context.Context, userID string, fromStorageID, toStorageID int) (int, error)
 	Value(ctx context.Context, userID string) (Value, error)
 }
 

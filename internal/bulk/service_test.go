@@ -36,6 +36,18 @@ type fakeCardService struct {
 	movedIDs     []int
 	movedStorage int
 	moveErr      error
+	movedFrom    int
+	moveCalled   bool
+}
+
+func (f *fakeCardService) MoveStorageCards(ctx context.Context, userID string, fromStorageID, toStorageID int) (int, error) {
+	f.moveCalled = true
+	if f.moveErr != nil {
+		return 0, f.moveErr
+	}
+	f.movedFrom = fromStorageID
+	f.movedStorage = toStorageID
+	return 7, nil
 }
 
 func (f *fakeCardService) MoveCardsToStorage(ctx context.Context, userID string, ids []int, storageID int) (int, error) {

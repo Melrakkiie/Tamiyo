@@ -41,6 +41,7 @@ type importService interface {
 	SplitPrintings(ctx context.Context, userID string, deckID string, req PrintingSplit) (Summary, error)
 	CollectDeck(ctx context.Context, userID string, deckID string, req CollectRequest) (Summary, error)
 	StoreDeck(ctx context.Context, userID string, deckID string, storageID int, boards []string) (StoreSummary, error)
+	TransferStorage(ctx context.Context, userID string, fromStorageID, toStorageID int) (StoreSummary, error)
 }
 
 type Handler struct {
@@ -72,6 +73,7 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.POST("/deck/:id/duplicate", h.duplicateDeck)
 	router.POST("/deck/:id/collect", h.collectDeck)
 	router.POST("/deck/:id/store", h.storeDeck)
+	router.POST("/storage/:id/transfer", h.transferStorage)
 }
 
 func (h *Handler) RegisterPublicRoutes(router gin.IRoutes) {

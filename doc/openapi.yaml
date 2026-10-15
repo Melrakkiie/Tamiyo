@@ -1058,6 +1058,61 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /storage/{id}/transfer:
+    parameters:
+      - $ref: "#/components/parameters/StorageID"
+    post:
+      tags: [storage]
+      summary: Move every card of a storage into another storage
+      description: >
+        Sets the storage of every card of the source storage to storage_id,
+        in one statement. The source storage is kept, empty. Cards stay in
+        the decks they are in, and the updated timestamp of both storages
+        moves. A locked storage is accepted as target: locking only hides.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [storage_id]
+              properties:
+                storage_id:
+                  type: integer
+                  minimum: 1
+                  description: The target storage, other than the source.
+      responses:
+        "200":
+          description: Cards moved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cards_moved]
+                properties:
+                  cards_moved:
+                    type: integer
+                    description: Cards moved, 0 when the source was empty.
+        "400":
+          description: >
+            Invalid id or body, missing or non-positive storage_id, storage_id
+            equal to the source, or storage_id doesn't reference an existing
+            storage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Source storage not found, or not owned by the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /users/{id}:
     get:
       tags: [users]

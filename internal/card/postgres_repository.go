@@ -490,3 +490,23 @@ func (r *PostgresRepository) MoveToStorage(ctx context.Context, userID string, i
 	}
 	return int(moved), nil
 }
+
+func (r *PostgresRepository) MoveStorageCards(ctx context.Context, userID string, fromStorageID, toStorageID int) (int, error) {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE tamiyo.cards
+		SET storage_id = $3
+		WHERE user_id = $1 AND storage_id = $2
+	`, userID, fromStorageID, toStorageID)
+	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23503" {
+			return 0, ErrStorageNotFound
+		}
+		return 0, err
+	}
+	moved, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return int(moved), nil
+}

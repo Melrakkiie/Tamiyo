@@ -589,7 +589,7 @@ A storage can be **locked** so that decks stop drawing from it, like a collectio
 - are never put in it by [`POST /deck/:id/import`](#post-deckidimport), [`POST /deck/:id/bulk-edit`](#post-deckidbulk-edit), [`POST /deck/:id/switch-foil`](#post-deckidswitch-foil), [`POST /deck/:id/switch-proxy`](#post-deckidswitch-proxy), [`POST /deck/:id/split-printings`](#post-deckidsplit-printings) or [`POST /deck/:id/duplicate`](#post-deckidduplicate) (a duplicated deck is a new deck that no storage allows yet), unless the import is sent with `include_locked_storages=true`;
 - are left out of `GET /cards?open_to_deck=<deck id>`.
 
-Locking only hides: a card of a locked storage can still be put in any deck explicitly, and the cards already in a deck stay there, even when [`POST /deck/:id/store`](#post-deckidstore) moves them into a locked storage. While a storage is unlocked, its `allowed_deck_ids` are kept but ignored. Deleting a deck removes it from every `allowed_deck_ids`.
+Locking only hides: a card of a locked storage can still be put in any deck explicitly, and the cards already in a deck stay there, even when [`POST /deck/:id/store`](#post-deckidstore) or [`POST /storage/:id/transfer`](#post-storageidtransfer) moves them into a locked storage. While a storage is unlocked, its `allowed_deck_ids` are kept but ignored. Deleting a deck removes it from every `allowed_deck_ids`.
 
 > All endpoints below require `Authorization: Bearer <token>` and only ever operate on the authenticated account's own storages.
 
@@ -703,6 +703,27 @@ Delete a storage. Any card currently in this storage has its `storage_id` set to
 **Response `204 No Content`**
 
 **Errors:** `400` invalid id · `404` storage not found
+
+---
+
+### `POST /storage/:id/transfer`
+
+Move every card of a storage into another storage, in one statement. The source storage is kept, empty; deleting it is a separate [`DELETE /storage/:id`](#delete-storageid). Cards stay in the decks they are in, and the `updated` timestamp of both storages moves.
+
+```json
+{ "storage_id": 7 }
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `storage_id` | int | Yes | The target, one of your storages other than the source. A [locked](#storage) storage is accepted: locking only hides, and the cards stay in their decks. |
+
+**Response `200 OK`** — the number of cards moved, `0` when the source was empty.
+```json
+{ "cards_moved": 42 }
+```
+
+**Errors:** `400` invalid id or body, missing or non-positive `storage_id`, `storage_id` equal to the source, unknown `storage_id` (`"storage_id does not reference an existing storage"`) · `404` unknown source storage
 
 ---
 

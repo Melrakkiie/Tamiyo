@@ -12,6 +12,10 @@ var ErrInvalidFile = errors.New("could not parse the uploaded file")
 
 var ErrTargetStorageNotFound = errors.New("target storage does not exist")
 
+var ErrStorageNotFound = errors.New("storage does not exist")
+
+var ErrSameStorage = errors.New("storage_id must differ from the source storage")
+
 var ErrDeckNotFound = errors.New("deck does not exist")
 
 var ErrScryfallUnavailable = errors.New("could not resolve cards against scryfall")

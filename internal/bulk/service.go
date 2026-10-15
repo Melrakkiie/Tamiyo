@@ -41,6 +41,7 @@ type cardService interface {
 	CountCardsMissingDetails(ctx context.Context, userID string, afterID int) (int, error)
 	SetCardDetails(ctx context.Context, userID string, id int, details card.Details) error
 	MoveCardsToStorage(ctx context.Context, userID string, ids []int, storageID int) (int, error)
+	MoveStorageCards(ctx context.Context, userID string, fromStorageID, toStorageID int) (int, error)
 }
 
 type storageService interface {
