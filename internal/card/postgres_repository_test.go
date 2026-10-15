@@ -948,6 +948,75 @@ func TestPostgresRepository_FindAll_DoesNotStackProxiesWithRealCopies(t *testing
 	assert.Equal(t, map[bool]int{false: 1, true: 2}, quantities)
 }
 
+func TestPostgresRepository_FindAll_GroupsBySubtype(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	const wizard = "11111111-1111-1111-1111-111111111111"
+	const flip = "22222222-2222-2222-2222-222222222222"
+	const bolt = "33333333-3333-3333-3333-333333333333"
+	_, err := db.Exec(`
+		INSERT INTO tamiyo.printings (scryfall_id, type_line) VALUES
+			($1, 'Creature — Human Wizard'),
+			($2, 'Legendary Creature — Human Werewolf // Legendary Planeswalker — Tibalt'),
+			($3, 'Instant')
+	`, wizard, flip, bolt)
+	require.NoError(t, err)
+	seedCards(t, db, userID, []Card{
+		{Name: "Snapcaster Mage", ScryfallID: wizard, SetCode: "tst", CollectorNumber: "1"},
+		{Name: "Snapcaster Mage", ScryfallID: wizard, SetCode: "tst", CollectorNumber: "1"},
+		{Name: "Tibalt, Cosmic Impostor", ScryfallID: flip, SetCode: "tst", CollectorNumber: "2"},
+		{Name: "Lightning Bolt", ScryfallID: bolt, SetCode: "tst", CollectorNumber: "3"},
+		{Name: "Unknown", ScryfallID: "44444444-4444-4444-4444-444444444444", SetCode: "tst", CollectorNumber: "4"},
+	})
+
+	groups := func(filter CardFilter) ([]string, int) {
+		t.Helper()
+		filter.GroupBy, filter.SortField = "subtype", "name"
+		if filter.Limit == 0 {
+			filter.Page, filter.Limit = 1, 25
+		}
+		cards, total, err := repo.FindAll(context.Background(), userID, filter)
+		require.NoError(t, err)
+		out := make([]string, 0, len(cards))
+		for _, c := range cards {
+			subtype := "-"
+			if c.Subtype != nil {
+				subtype = *c.Subtype
+			}
+			out = append(out, subtype+": "+c.Name)
+		}
+		return out, total
+	}
+
+	rows, total := groups(CardFilter{})
+	assert.Equal(t, 9, total)
+	assert.Equal(t, []string{
+		"Human: Snapcaster Mage", "Human: Snapcaster Mage", "Human: Tibalt, Cosmic Impostor",
+		"Tibalt: Tibalt, Cosmic Impostor", "Werewolf: Tibalt, Cosmic Impostor",
+		"Wizard: Snapcaster Mage", "Wizard: Snapcaster Mage",
+		"-: Lightning Bolt", "-: Unknown",
+	}, rows)
+
+	rows, total = groups(CardFilter{Stack: true})
+	assert.Equal(t, 7, total)
+	assert.Equal(t, []string{
+		"Human: Snapcaster Mage", "Human: Tibalt, Cosmic Impostor",
+		"Tibalt: Tibalt, Cosmic Impostor", "Werewolf: Tibalt, Cosmic Impostor",
+		"Wizard: Snapcaster Mage",
+		"-: Lightning Bolt", "-: Unknown",
+	}, rows)
+
+	rows, total = groups(CardFilter{Stack: true, Page: 2, Limit: 2})
+	assert.Equal(t, 7, total)
+	assert.Equal(t, []string{"Tibalt: Tibalt, Cosmic Impostor", "Werewolf: Tibalt, Cosmic Impostor"}, rows)
+
+	cards, _, err := repo.FindAll(context.Background(), userID, CardFilter{SortField: "name", Page: 1, Limit: 25})
+	require.NoError(t, err)
+	assert.Len(t, cards, 5)
+	assert.Nil(t, cards[0].Subtype)
+}
+
 func TestPostgresRepository_FindAll_AdvancedFilters(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db, "alice@example.com")

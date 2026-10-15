@@ -39,7 +39,7 @@ const DefaultCollectionSort = "-added"
 var (
 	ErrInvalidCardDisplay        = errors.New("card_display must be one of: text, images, grid, stacks")
 	ErrInvalidCardColumns        = errors.New("card_columns must be between 2 and 12")
-	ErrInvalidCollectionGrouping = errors.New("collection_grouping must be one of: type, color, mana")
+	ErrInvalidCollectionGrouping = errors.New("collection_grouping must be one of: type, color, mana, subtype")
 	ErrInvalidTheme              = errors.New("theme must be one of: day, night, auto")
 	ErrInvalidNightHour          = errors.New("night_starts_at and night_ends_at must be hours between 0 and 23")
 	ErrEmptyNight                = errors.New("night_starts_at and night_ends_at must differ")
@@ -48,7 +48,7 @@ var (
 	ErrInvalidCollectionSort     = errors.New("collection_sort must be one of: name, -name, added, -added, updated, -updated, mana_value, -mana_value, color, -color, type, -type, price, -price")
 )
 
-var collectionGroupings = map[string]bool{"type": true, "color": true, "mana": true}
+var collectionGroupings = map[string]bool{"type": true, "color": true, "mana": true, "subtype": true}
 
 var collectionSorts = map[string]bool{
 	"name": true, "-name": true, "added": true, "-added": true, "updated": true, "-updated": true,

@@ -26,6 +26,7 @@ type cardRow struct {
 	Colors          *string   `db:"colors"`
 	CardType        *string   `db:"card_type"`
 	ColorIdentity   *string   `db:"color_identity"`
+	Subtype         *string   `db:"subtype"`
 	Added           time.Time `db:"added"`
 	Updated         time.Time `db:"updated"`
 }
@@ -44,6 +45,7 @@ func (r cardRow) toDomain() Card {
 		Colors:          r.Colors,
 		CardType:        r.CardType,
 		ColorIdentity:   r.ColorIdentity,
+		Subtype:         r.Subtype,
 		Added:           r.Added,
 		Updated:         r.Updated,
 	}
@@ -171,18 +173,19 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		return r.findStacks(ctx, whereClause, args, argPos, filter)
 	}
 
-	countQuery := `SELECT COUNT(*) FROM tamiyo.cards` + whereClause
+	listed := withSubtypes(`
+	    SELECT id, name, scryfall_id, set_code, collector_number, foil, proxy, storage_id, mana_value, colors, card_type, color_identity, added, updated
+	    FROM tamiyo.cards
+	`+whereClause, filter)
+
 	var total int
-	if err := r.db.GetContext(ctx, &total, countQuery, args...); err != nil {
+	if err := r.db.GetContext(ctx, &total, `SELECT COUNT(*) FROM (`+listed+`) AS listed`, args...); err != nil {
 		return nil, 0, err
 	}
 
 	offset := (filter.Page - 1) * filter.Limit
 
-	query := `
-	    SELECT id, name, scryfall_id, set_code, collector_number, foil, proxy, storage_id, mana_value, colors, card_type, color_identity, added, updated
-	    FROM tamiyo.cards
-	` + whereClause + orderByClause(filter) + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
+	query := `SELECT * FROM (` + listed + `) AS listed` + orderByClause(filter) + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 
 	pagedArgs := append(args, filter.Limit, offset)
 
@@ -207,6 +210,14 @@ func printingStatCondition(column, op string) string {
 		)`
 }
 
+func withSubtypes(source string, filter CardFilter) string {
+	if filter.GroupBy != "subtype" {
+		return source
+	}
+	return `SELECT source.*, subtype FROM (` + source + `) AS source
+	    LEFT JOIN LATERAL unnest(tamiyo.card_subtypes(source.scryfall_id)) AS subtype ON true`
+}
+
 type stackRow struct {
 	cardRow
 	CopyIDs pq.Int64Array `db:"copy_ids"`
@@ -219,6 +230,7 @@ func (r *PostgresRepository) findStacks(ctx context.Context, whereClause string,
 	    FROM tamiyo.cards
 	` + whereClause + `
 	    GROUP BY name, scryfall_id, set_code, collector_number, foil, proxy, storage_id, mana_value, colors, card_type, color_identity`
+	stacks = withSubtypes(stacks, filter)
 
 	var total int
 	if err := r.db.GetContext(ctx, &total, `SELECT COUNT(*) FROM (`+stacks+`) AS stacks`, args...); err != nil {
@@ -275,9 +287,10 @@ const typeGroupSQL = `CASE card_type
 const userPriceCurrencySQL = `COALESCE((SELECT price_currency FROM tamiyo.user_preferences WHERE user_id = $1), 'eur')`
 
 var groupOrderSQL = map[string]string{
-	"type":  typeGroupSQL + " ASC",
-	"color": colorGroupSQL + " ASC, colors ASC",
-	"mana":  "floor(mana_value) ASC",
+	"type":    typeGroupSQL + " ASC",
+	"color":   colorGroupSQL + " ASC, colors ASC",
+	"mana":    "floor(mana_value) ASC",
+	"subtype": "subtype ASC NULLS LAST",
 }
 
 func orderByClause(filter CardFilter) string {

@@ -35,6 +35,7 @@ type cardResponse struct {
 	Colors          *string `json:"colors"`
 	CardType        *string `json:"card_type"`
 	ColorIdentity   *string `json:"color_identity"`
+	Subtype         *string `json:"subtype,omitempty"`
 	Added           string  `json:"added"`
 	Updated         string  `json:"updated"`
 	Quantity        int     `json:"quantity,omitempty"`
@@ -59,6 +60,7 @@ func toResponse(c Card) cardResponse {
 		Colors:          c.Colors,
 		CardType:        c.CardType,
 		ColorIdentity:   c.ColorIdentity,
+		Subtype:         c.Subtype,
 		Added:           c.Added.Format("2006-01-02 15:04:05"),
 		Updated:         c.Updated.Format("2006-01-02 15:04:05"),
 		Quantity:        quantity,
@@ -325,9 +327,9 @@ func (h *Handler) getCards(ctx *gin.Context) {
 
 	groupBy := ctx.Query("group")
 	switch groupBy {
-	case "", "type", "color", "mana":
+	case "", "type", "color", "mana", "subtype":
 	default:
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "group must be one of: type, color, mana"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "group must be one of: type, color, mana, subtype"})
 		return
 	}
 

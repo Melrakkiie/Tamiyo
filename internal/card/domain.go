@@ -22,6 +22,7 @@ type Card struct {
 	Colors          *string
 	CardType        *string
 	ColorIdentity   *string
+	Subtype         *string
 	Added           time.Time
 	Updated         time.Time
 	CopyIDs         []int

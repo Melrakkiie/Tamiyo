@@ -57,6 +57,10 @@ func TestSetView_SavesAValidView(t *testing.T) {
 	require.NotNil(t, repo.savedView)
 	assert.Equal(t, v, *repo.savedView)
 
+	v, err = svc.SetView(context.Background(), testUserID, viewDeckID, displayed(View{Grouping: strPtr("subtype"), Sort: "name", CollapsedBoards: []string{}}))
+	require.NoError(t, err)
+	assert.Equal(t, "subtype", *v.Grouping)
+
 	_, err = svc.SetView(context.Background(), testUserID, viewDeckID, displayed(View{Sort: "-price"}))
 	require.NoError(t, err)
 	assert.Equal(t, "-price", repo.savedView.Sort)

@@ -688,11 +688,16 @@ paths:
           required: false
           schema:
             type: string
-            enum: [type, color, mana]
+            enum: [type, color, mana, subtype]
           description: >
             Order the cards by group first (primary type, color group as
-            for sort=color, or mana value rounded down), then by sort within
-            each group, so a client can show grouped pages sorted its way.
+            for sort=color, mana value rounded down, or subtype), then by sort
+            within each group, so a client can show grouped pages sorted its
+            way. "subtype" returns a card once per subtype of its English type
+            line (every face, after the dash, split on spaces), alphabetically,
+            with the subtype in the card's subtype field, then once with no
+            subtype if it has none or its printing isn't known yet; total,
+            page and limit count those entries.
             "color" groups cards as white, blue, black, red, green, multicolor,
             colorless, lands, then cards whose colors aren't known yet; "type"
             by primary type (creature, planeswalker, battle, instant, sorcery,
@@ -4031,7 +4036,7 @@ components:
         collection_grouping:
           type: string
           nullable: true
-          enum: [type, color, mana]
+          enum: [type, color, mana, subtype]
           description: How the collection and the storages group cards; null for no grouping.
         collection_sort:
           type: string
@@ -4091,7 +4096,7 @@ components:
           type: boolean
         collection_grouping:
           type: string
-          enum: [type, color, mana]
+          enum: [type, color, mana, subtype]
         clear_collection_grouping:
           type: boolean
           description: Set collection_grouping back to null (no grouping).
@@ -4753,6 +4758,11 @@ components:
           items:
             type: integer
           description: Only with GET /cards?stack=true, the ids of the stack's copies, lowest first.
+        subtype:
+          type: string
+          description: >
+            Only with GET /cards?group=subtype, the subtype this entry is
+            listed under; absent for the cards without a subtype.
       required:
         - id
         - name
@@ -5388,8 +5398,8 @@ components:
         grouping:
           type: string
           nullable: true
-          enum: [type, color, mana, storage, tag]
-          description: null for no grouping.
+          enum: [type, color, mana, storage, tag, subtype]
+          description: null for no grouping. "subtype" lists a card under each of its subtypes.
         sort:
           type: string
           enum: [name, -name, added, -added, updated, -updated, mana_value, -mana_value, price, -price]

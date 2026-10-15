@@ -101,7 +101,7 @@ func TestPostgresRepository_Preferences(t *testing.T) {
 
 	require.NoError(t, repo.Save(ctx, alice, Defaults()))
 	require.NoError(t, repo.Save(ctx, alice, Preferences{ShowCollectionInDecks: true, CardDisplay: CardDisplayText, CardColumns: 12, ShowManaCost: false, ShowCardDetails: false, CollectionGrouping: strPtr("mana"), CollectionSort: "name", Theme: ThemeNight, NightStartsAt: 20, NightEndsAt: 8, ShowPrices: true, PriceCurrency: CurrencyUSD, PlaytestZoom: 150}))
-	require.NoError(t, repo.Save(ctx, bob, Preferences{ShowCollectionInDecks: false, CardDisplay: CardDisplayStacks, CardColumns: 2, ShowManaCost: true, ShowCardDetails: true, CollectionSort: "-price", Theme: ThemeAuto, NightStartsAt: 22, NightEndsAt: 6, PriceCurrency: CurrencyEUR, PlaytestZoom: DefaultPlaytestZoom}))
+	require.NoError(t, repo.Save(ctx, bob, Preferences{ShowCollectionInDecks: false, CardDisplay: CardDisplayStacks, CardColumns: 2, ShowManaCost: true, ShowCardDetails: true, CollectionGrouping: strPtr("subtype"), CollectionSort: "-price", Theme: ThemeAuto, NightStartsAt: 22, NightEndsAt: 6, PriceCurrency: CurrencyEUR, PlaytestZoom: DefaultPlaytestZoom}))
 	assert.Error(t, repo.Save(ctx, bob, Preferences{CardDisplay: "mosaic", CardColumns: 6, CollectionSort: "-added", Theme: ThemeAuto, NightStartsAt: 22, NightEndsAt: 6, PriceCurrency: CurrencyEUR, PlaytestZoom: DefaultPlaytestZoom}))
 	assert.Error(t, repo.Save(ctx, bob, Preferences{CardDisplay: CardDisplayText, CardColumns: 6, CollectionSort: "-added", Theme: "dusk", NightStartsAt: 22, NightEndsAt: 6, PriceCurrency: CurrencyEUR, PlaytestZoom: DefaultPlaytestZoom}))
 	assert.Error(t, repo.Save(ctx, bob, Preferences{CardDisplay: CardDisplayText, CardColumns: 6, CollectionSort: "-added", Theme: ThemeAuto, NightStartsAt: 6, NightEndsAt: 6, PriceCurrency: CurrencyEUR, PlaytestZoom: DefaultPlaytestZoom}))
@@ -113,7 +113,7 @@ func TestPostgresRepository_Preferences(t *testing.T) {
 	assert.Equal(t, Preferences{ShowCollectionInDecks: true, CardDisplay: CardDisplayText, CardColumns: 12, ShowManaCost: false, ShowCardDetails: false, CollectionGrouping: strPtr("mana"), CollectionSort: "name", Theme: ThemeNight, NightStartsAt: 20, NightEndsAt: 8, ShowPrices: true, PriceCurrency: CurrencyUSD, PlaytestZoom: 150}, p)
 	p, _, err = repo.Find(ctx, bob)
 	require.NoError(t, err)
-	assert.Equal(t, Preferences{ShowCollectionInDecks: false, CardDisplay: CardDisplayStacks, CardColumns: 2, ShowManaCost: true, ShowCardDetails: true, CollectionSort: "-price", Theme: ThemeAuto, NightStartsAt: 22, NightEndsAt: 6, PriceCurrency: CurrencyEUR, PlaytestZoom: DefaultPlaytestZoom}, p)
+	assert.Equal(t, Preferences{ShowCollectionInDecks: false, CardDisplay: CardDisplayStacks, CardColumns: 2, ShowManaCost: true, ShowCardDetails: true, CollectionGrouping: strPtr("subtype"), CollectionSort: "-price", Theme: ThemeAuto, NightStartsAt: 22, NightEndsAt: 6, PriceCurrency: CurrencyEUR, PlaytestZoom: DefaultPlaytestZoom}, p)
 
 	_, err = db.Exec(`DELETE FROM tamiyo.users WHERE id = $1`, bob)
 	require.NoError(t, err)

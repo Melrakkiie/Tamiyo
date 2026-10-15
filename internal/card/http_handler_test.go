@@ -176,8 +176,14 @@ func TestHandler_GetCards_PassesTheGroupingToService(t *testing.T) {
 	assert.True(t, service.lastFilter.SortDesc)
 
 	w = httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards?group=subtype", nil))
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "subtype", service.lastFilter.GroupBy)
+
+	w = httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards?group=storage", nil))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "subtype")
 }
 
 func TestHandler_GetCards_PassesManaValueSortToService(t *testing.T) {

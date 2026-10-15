@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	ErrInvalidViewGrouping = errors.New("grouping must be one of: type, color, mana, storage, tag, or null")
+	ErrInvalidViewGrouping = errors.New("grouping must be one of: type, color, mana, storage, tag, subtype, or null")
 	ErrInvalidViewSort     = errors.New("sort must be one of: name, -name, added, -added, updated, -updated, mana_value, -mana_value, price, -price")
 	ErrInvalidViewBoards   = errors.New("collapsed_boards may only contain sideboard and considering")
 	ErrInvalidViewDisplay  = errors.New("card_display must be one of: text, images, grid, stacks")
@@ -19,7 +19,7 @@ const defaultViewSort = "mana_value"
 
 var defaultViewGrouping = "type"
 
-var viewGroupings = map[string]bool{"type": true, "color": true, "mana": true, "storage": true, "tag": true}
+var viewGroupings = map[string]bool{"type": true, "color": true, "mana": true, "storage": true, "tag": true, "subtype": true}
 
 var viewSorts = map[string]bool{
 	"name": true, "-name": true,

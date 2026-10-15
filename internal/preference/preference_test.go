@@ -104,6 +104,11 @@ func TestService_SavesTheCollectionGroupingAndSort(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "-price", updated.CollectionSort)
 
+	subtype := "subtype"
+	updated, err = svc.Update(context.Background(), testUserID, Changes{CollectionGrouping: &subtype})
+	require.NoError(t, err)
+	assert.Equal(t, &subtype, updated.CollectionGrouping)
+
 	_, err = svc.Update(context.Background(), testUserID, Changes{CollectionGrouping: &unknown})
 	assert.ErrorIs(t, err, ErrInvalidCollectionGrouping)
 	_, err = svc.Update(context.Background(), testUserID, Changes{CollectionSort: &unknown})
