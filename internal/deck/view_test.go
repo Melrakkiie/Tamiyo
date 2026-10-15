@@ -25,7 +25,10 @@ func TestGetView_DefaultsToTypeGroupingAndManaValueSort(t *testing.T) {
 	v, err := svc.GetView(context.Background(), testUserID, viewDeckID)
 
 	require.NoError(t, err)
-	assert.Equal(t, displayed(View{Grouping: strPtr("type"), Sort: "mana_value", CollapsedBoards: []string{"considering"}}), v)
+	expected := displayed(View{Grouping: strPtr("type"), Sort: "mana_value", CollapsedBoards: []string{"considering"}})
+	expected.ShowCardDetails = false
+	assert.Equal(t, expected, v)
+	assert.False(t, DefaultView().ShowCardDetails)
 }
 
 func TestGetView_ReturnsTheSavedView(t *testing.T) {

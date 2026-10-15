@@ -247,7 +247,7 @@ The account's display preferences, saved so they follow the user from one device
 | `price_currency` | string | `eur` | Which prices the app shows: `eur` (Cardmarket, from Scryfall) or `usd` (TCGplayer, from Scryfall). The API always sends both currencies in its [values](#prices-and-values); the client picks the one to show. |
 | `playtest_zoom` | int | `100` | The card size a deck playtest opens with, as a percentage of the normal size, `50` to `200`. The front saves it whenever the player zooms in or out. |
 
-The display fields (`card_display` to `show_card_details`) are those of the collection and the storages, and of other people's decks; each of your decks keeps its own in its [display settings](#display-settings-deckidview).
+The display fields (`card_display` to `show_card_details`) are those of the collection and the storages, and of other people's decks, except `show_card_details`: other people's decks, shared decks and the deck comparison always open with the details hidden. Each of your decks keeps its own display fields in its [display settings](#display-settings-deckidview).
 
 `GET` returns them (the defaults until something is saved); `PATCH` changes the fields present in the body and returns them all.
 
@@ -1186,7 +1186,7 @@ Tagging changes the deck's `updated` date. Shared decks and the deck comparison 
 
 How the owner last displayed the deck's cards, so the deck page opens the same way next time. It's the owner's own setting: shared decks don't use it. Changing it doesn't change the deck's `updated` date.
 
-- `GET /deck/:id/view` — `{ "grouping": "type", "sort": "mana_value", "collapsed_boards": ["considering"], "card_display": "images", "card_columns": 6, "show_mana_cost": true, "show_card_details": true }`. Those are also the values before anything is saved.
+- `GET /deck/:id/view` — `{ "grouping": "type", "sort": "mana_value", "collapsed_boards": ["considering"], "card_display": "images", "card_columns": 6, "show_mana_cost": true, "show_card_details": false }`. Those are also the values before anything is saved: unlike the collection, a deck hides the details under its card images by default.
 - `PUT /deck/:id/view` — save them. Body: `grouping` (`type`, `color`, `mana`, `storage`, `tag`, `subtype`, or `null` for no grouping), `sort` (required, same values as the `sort` of `GET /deck/:id/cards`), `collapsed_boards`, the [boards](#boards) folded on the deck page (`sideboard`, `considering`, or neither; `["considering"]` when left out), and how the cards are displayed, with the same meaning as in the [preferences](#get-authmepreferences--patch-authmepreferences): `card_display`, `card_columns`, `show_mana_cost`, `show_card_details` (each keeps its saved value when left out). Returns the saved settings.
 
 **Errors:** `400` invalid id, missing `sort`, unknown `grouping`, `sort` or `card_display`, `card_columns` outside `2..12` · `404` deck not found

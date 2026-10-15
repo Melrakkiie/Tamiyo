@@ -5424,6 +5424,7 @@ components:
           type: boolean
         show_card_details:
           type: boolean
+          description: Whether card images show the card's details below them. False until the deck's settings are saved, unlike the collection, which shows them by default.
       required: [grouping, sort]
 
     TaggedCard:

@@ -56,7 +56,7 @@ func DefaultView() View {
 		CardDisplay:     display.CardDisplay,
 		CardColumns:     display.CardColumns,
 		ShowManaCost:    display.ShowManaCost,
-		ShowCardDetails: display.ShowCardDetails,
+		ShowCardDetails: false,
 	}
 }
 
