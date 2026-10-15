@@ -266,6 +266,8 @@ const typeGroupSQL = `CASE card_type
 		ELSE 10
 	END`
 
+const userPriceCurrencySQL = `COALESCE((SELECT price_currency FROM tamiyo.user_preferences WHERE user_id = $1), 'eur')`
+
 var groupOrderSQL = map[string]string{
 	"type":  typeGroupSQL + " ASC",
 	"color": colorGroupSQL + " ASC, colors ASC",
@@ -292,6 +294,8 @@ func orderByClause(filter CardFilter) string {
 		sortTerms = fmt.Sprintf("%s %s, colors %s, name ASC, id ASC", colorGroupSQL, dir, dir)
 	case "type":
 		sortTerms = fmt.Sprintf("%s %s, name ASC, id ASC", typeGroupSQL, dir)
+	case "price":
+		sortTerms = fmt.Sprintf("tamiyo.card_price(scryfall_id, foil, %s) %s NULLS LAST, name ASC, id ASC", userPriceCurrencySQL, dir)
 	default:
 		sortTerms = "updated DESC, id DESC"
 	}

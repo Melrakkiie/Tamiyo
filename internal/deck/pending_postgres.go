@@ -23,6 +23,7 @@ type pendingRow struct {
 	CardType        *string   `db:"card_type"`
 	ColorIdentity   *string   `db:"color_identity"`
 	Board           string    `db:"board"`
+	Price           *float64  `db:"price"`
 	Added           time.Time `db:"added"`
 
 	OwnedCopies       int `db:"owned_copies"`
@@ -45,6 +46,7 @@ func (r pendingRow) toDomain() PendingCard {
 		CardType:        r.CardType,
 		ColorIdentity:   r.ColorIdentity,
 		Board:           r.Board,
+		Price:           r.Price,
 		Added:           r.Added,
 
 		OwnedCopies:       r.OwnedCopies,
@@ -52,7 +54,9 @@ func (r pendingRow) toDomain() PendingCard {
 	}
 }
 
-const pendingColumns = `id, deck_id, name, scryfall_id, set_code, collector_number, foil, proxy, quantity, mana_value, colors, card_type, color_identity, board, added`
+func pendingColumns(table string) string {
+	return `id, deck_id, name, scryfall_id, set_code, collector_number, foil, proxy, quantity, mana_value, colors, card_type, color_identity, board, added, ` + priceColumn(table)
+}
 
 func (r *PostgresRepository) FindPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error) {
 	var rows []pendingRow
@@ -68,7 +72,7 @@ func (r *PostgresRepository) FindPendingCards(ctx context.Context, userID string
 			        AND NOT EXISTS (SELECT 1 FROM tamiyo.storage_allowed_deck a WHERE a.storage_id = s.id AND a.deck_id = $2)
 			  ))
 		)
-		SELECT ` + pendingColumns + `,
+		SELECT ` + pendingColumns("p") + `,
 			(SELECT count(*) FROM available a WHERE a.name_key = ` + normalizedNameSQL("p.name") + `) AS owned_copies,
 			(SELECT count(*) FROM available a WHERE a.scryfall_id = p.scryfall_id) AS owned_same_printing
 		FROM tamiyo.deck_pending_cards p
@@ -111,7 +115,7 @@ func (r *PostgresRepository) CreatePendingCard(ctx context.Context, userID strin
 	query := `
 		INSERT INTO tamiyo.deck_pending_cards (user_id, deck_id, name, scryfall_id, set_code, collector_number, foil, proxy, quantity, mana_value, colors, card_type, color_identity, board)
 		VALUES (:user_id, :deck_id, :name, :scryfall_id, :set_code, :collector_number, :foil, :proxy, :quantity, :mana_value, :colors, :card_type, :color_identity, :board)
-		RETURNING ` + pendingColumns
+		RETURNING ` + pendingColumns("deck_pending_cards")
 
 	stmt, err := r.db.PrepareNamedContext(ctx, query)
 	if err != nil {
@@ -130,7 +134,7 @@ func (r *PostgresRepository) CreatePendingCard(ctx context.Context, userID strin
 
 func (r *PostgresRepository) UpdatePendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (PendingCard, error) {
 	var row pendingRow
-	query := `UPDATE tamiyo.deck_pending_cards SET quantity = $1 WHERE id = $2 AND deck_id = $3 AND user_id = $4 RETURNING ` + pendingColumns
+	query := `UPDATE tamiyo.deck_pending_cards SET quantity = $1 WHERE id = $2 AND deck_id = $3 AND user_id = $4 RETURNING ` + pendingColumns("deck_pending_cards")
 	if err := r.db.GetContext(ctx, &row, query, quantity, id, deckID, userID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return PendingCard{}, ErrPendingCardNotFound
@@ -142,7 +146,7 @@ func (r *PostgresRepository) UpdatePendingQuantity(ctx context.Context, userID s
 
 func (r *PostgresRepository) UpdatePendingBoard(ctx context.Context, userID string, deckID string, id int, board string) (PendingCard, error) {
 	var row pendingRow
-	query := `UPDATE tamiyo.deck_pending_cards SET board = $1 WHERE id = $2 AND deck_id = $3 AND user_id = $4 RETURNING ` + pendingColumns
+	query := `UPDATE tamiyo.deck_pending_cards SET board = $1 WHERE id = $2 AND deck_id = $3 AND user_id = $4 RETURNING ` + pendingColumns("deck_pending_cards")
 	if err := r.db.GetContext(ctx, &row, query, board, id, deckID, userID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return PendingCard{}, ErrPendingCardNotFound

@@ -552,11 +552,13 @@ paths:
           required: false
           schema:
             type: string
-            enum: [name, -name, added, -added, updated, -updated, mana_value, -mana_value, color, -color, type, -type]
+            enum: [name, -name, added, -added, updated, -updated, mana_value, -mana_value, color, -color, type, -type, price, -price]
             default: -updated
           description: >
             Sort field, with an optional "-" prefix for descending order.
             id is always used as a secondary tie-breaker for a stable order.
+            price uses the price_currency preference, and cards without a
+            known price come last in both directions.
         - name: colors
           in: query
           required: false
@@ -1725,11 +1727,13 @@ paths:
           required: false
           schema:
             type: string
-            enum: [name, -name, added, -added, updated, -updated, mana_value, -mana_value]
+            enum: [name, -name, added, -added, updated, -updated, mana_value, -mana_value, price, -price]
             default: -updated
           description: >
             Sort field, with an optional "-" prefix for descending order.
             id is always used as a secondary tie-breaker for a stable order.
+            price uses the price_currency preference, and cards without a
+            known price come last in both directions.
       responses:
         "200":
           description: OK (empty array if the deck has no cards). Every board is returned.
@@ -4022,7 +4026,7 @@ components:
           description: How the collection and the storages group cards; null for no grouping.
         collection_sort:
           type: string
-          enum: [name, -name, added, -added, updated, -updated, mana_value, -mana_value, color, -color, type, -type]
+          enum: [name, -name, added, -added, updated, -updated, mana_value, -mana_value, color, -color, type, -type, price, -price]
           default: -added
           description: How the collection and the storages sort cards.
         theme:
@@ -4084,7 +4088,7 @@ components:
           description: Set collection_grouping back to null (no grouping).
         collection_sort:
           type: string
-          enum: [name, -name, added, -added, updated, -updated, mana_value, -mana_value, color, -color, type, -type]
+          enum: [name, -name, added, -added, updated, -updated, mana_value, -mana_value, color, -color, type, -type, price, -price]
         theme:
           type: string
           enum: [day, night, auto]
@@ -4212,7 +4216,13 @@ components:
           properties:
             board:
               $ref: "#/components/schemas/DeckBoard"
-          required: [board]
+            price:
+              type: number
+              nullable: true
+              description: >
+                Price of one copy in the price_currency preference, with the
+                same fallbacks as the collection value. null when unknown.
+          required: [board, price]
 
     LegalityIssue:
       type: object
@@ -4782,6 +4792,12 @@ components:
           nullable: true
         board:
           $ref: "#/components/schemas/DeckBoard"
+        price:
+          type: number
+          nullable: true
+          description: >
+            Price of one copy in the price_currency preference, with the same
+            fallbacks as the collection value. null when unknown.
         added:
           type: string
         owned_copies:
@@ -4796,7 +4812,7 @@ components:
           description: >
             Among them, the copies of this exact printing. Only computed by
             GET /deck/{id}/pending, 0 elsewhere.
-      required: [id, deck_id, name, scryfall_id, set_code, collector_number, foil, proxy, quantity, mana_value, board, added, owned_copies, owned_same_printing]
+      required: [id, deck_id, name, scryfall_id, set_code, collector_number, foil, proxy, quantity, mana_value, board, price, added, owned_copies, owned_same_printing]
 
     AddPendingCardRequest:
       type: object
@@ -5367,7 +5383,7 @@ components:
           description: null for no grouping.
         sort:
           type: string
-          enum: [name, -name, added, -added, updated, -updated, mana_value, -mana_value]
+          enum: [name, -name, added, -added, updated, -updated, mana_value, -mana_value, price, -price]
         collapsed_boards:
           type: array
           description: >

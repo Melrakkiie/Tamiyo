@@ -145,21 +145,22 @@ func (r updateDeckRequest) applyTo(d Deck) Deck {
 }
 
 type deckCardResponse struct {
-	ID              int     `json:"id"`
-	Name            string  `json:"name"`
-	ScryfallID      string  `json:"scryfall_id"`
-	SetCode         string  `json:"set_code"`
-	CollectorNumber string  `json:"collector_number"`
-	Foil            bool    `json:"foil"`
-	Proxy           bool    `json:"proxy"`
-	StorageID       *int    `json:"storage_id"`
-	ManaValue       float64 `json:"mana_value"`
-	Colors          *string `json:"colors"`
-	CardType        *string `json:"card_type"`
-	ColorIdentity   *string `json:"color_identity"`
-	Board           string  `json:"board"`
-	Added           string  `json:"added"`
-	Updated         string  `json:"updated"`
+	ID              int      `json:"id"`
+	Name            string   `json:"name"`
+	ScryfallID      string   `json:"scryfall_id"`
+	SetCode         string   `json:"set_code"`
+	CollectorNumber string   `json:"collector_number"`
+	Foil            bool     `json:"foil"`
+	Proxy           bool     `json:"proxy"`
+	StorageID       *int     `json:"storage_id"`
+	ManaValue       float64  `json:"mana_value"`
+	Colors          *string  `json:"colors"`
+	CardType        *string  `json:"card_type"`
+	ColorIdentity   *string  `json:"color_identity"`
+	Board           string   `json:"board"`
+	Price           *float64 `json:"price"`
+	Added           string   `json:"added"`
+	Updated         string   `json:"updated"`
 }
 
 func toDeckCardResponse(dc DeckCard) deckCardResponse {
@@ -177,6 +178,7 @@ func toDeckCardResponse(dc DeckCard) deckCardResponse {
 		CardType:        dc.CardType,
 		ColorIdentity:   dc.ColorIdentity,
 		Board:           dc.Board,
+		Price:           dc.Price,
 		Added:           dc.Added.Format("2006-01-02 15:04:05"),
 		Updated:         dc.Updated.Format("2006-01-02 15:04:05"),
 	}
@@ -464,11 +466,11 @@ func (h *Handler) getDeckCards(ctx *gin.Context) {
 			field = raw[1:]
 		}
 		switch field {
-		case "name", "added", "updated", "mana_value":
+		case "name", "added", "updated", "mana_value", "price":
 			sortField = field
 			sortDesc = desc
 		default:
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "sort must be one of: name, -name, added, -added, updated, -updated, mana_value, -mana_value"})
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "sort must be one of: name, -name, added, -added, updated, -updated, mana_value, -mana_value, price, -price"})
 			return
 		}
 	}

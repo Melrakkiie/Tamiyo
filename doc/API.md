@@ -363,6 +363,8 @@ The value of the collection ([`GET /cards/value`](#get-cardsvalue)), of a storag
 
 Each card counts its printing's price: its foil price when it is foil, its regular price otherwise, and the other one when that price is missing. The foil dollar price falls back to Scryfall's etched price (`usd_etched`), the only price of etched-only printings. A card with no euro price counts its dollar price converted to euros, with the dollar price of its own finish tried before the euro price of the other. A card with no price at all counts `0`. Proxies never count. The collection and storage values use the prices stored with the printings, refreshed in the background once a day; deck values use Scryfall's current prices.
 
+The `price` sort of the [cards](#get-cards) and of a [deck's cards](#get-deckidcards), and the `price` of deck and pending cards, use the same stored prices and fallbacks for one copy, in the `price_currency` preference only: in dollars, a card with no dollar price has no price (`null`), and proxies have their printing's price.
+
 #### `GET /exchange-rate`
 
 The exchange rate used to convert dollars to euros: the European Central Bank's reference rate, in US dollars per euro, refreshed in the background every 6 hours (the bank publishes it once a working day). It is read from the ECB's daily feed, or from [Frankfurter](https://frankfurter.dev), which republishes the same rates, when the ECB cannot be reached. A failed refresh keeps the last rate and is retried after 5 minutes. Works without authentication, so that a client can convert the prices it reads from Scryfall the same way. Until a first rate has been fetched, both fields are `null` and dollar prices are not converted.
@@ -398,7 +400,7 @@ List cards, with optional filtering, sorting, and pagination.
 | `page` | int | No | 1-based page number. Defaults to `1`. |
 | `limit` | int | No | Cards per page, max `100`. Defaults to `25`. |
 | `stack` | bool | No | `true` returns one entry per stack of identical copies (same printing, foil, proxy and storage) instead of one per card: the stack's lowest-id copy, plus `quantity` and `copy_ids` (lowest first). `total`, `page` and `limit` then count stacks; `added` is the oldest copy's and `updated` the most recent one's. Defaults to `false`. |
-| `sort` | string | No | One of `name`, `-name`, `added`, `-added`, `updated`, `-updated`, `mana_value`, `-mana_value`, `color`, `-color`, `type`, `-type`. Defaults to `-updated`. A `-` prefix means descending. `color` groups white, blue, black, red, green, multicolor, colorless, lands, then unknown; `type` groups by primary type (creature, planeswalker, battle, instant, sorcery, artifact, enchantment, land, other, unknown); both sort by name within a group. `id` is always used as a stable secondary tie-breaker. |
+| `sort` | string | No | One of `name`, `-name`, `added`, `-added`, `updated`, `-updated`, `mana_value`, `-mana_value`, `color`, `-color`, `type`, `-type`, `price`, `-price`. Defaults to `-updated`. A `-` prefix means descending. `color` groups white, blue, black, red, green, multicolor, colorless, lands, then unknown; `type` groups by primary type (creature, planeswalker, battle, instant, sorcery, artifact, enchantment, land, other, unknown); both sort by name within a group. `price` sorts by the price of one copy in the `price_currency` [preference](#get-authmepreferences--patch-authmepreferences), with the fallbacks of the [collection value](#prices-and-values) (proxies included); cards without a known price come last in both directions, then ties go by name. `id` is always used as a stable secondary tie-breaker. |
 | `group` | string | No | One of `type`, `color`, `mana`. Orders the cards by that group first (primary type and color groups in the same order as `sort=type` / `sort=color`, mana value rounded down), then by `sort` within each group, so a grouped display keeps the chosen sort. |
 | `colors` | string | No | WUBRG letters, read with `color_mode`. Cards whose colors aren't known yet are left out. |
 | `color_mode` | string | No | How `colors` is matched: `exact` (default, exactly these colors; an empty `colors=` keeps colorless cards), `include` (at least these colors), `within` (only colors among these, colorless included). |
@@ -1085,7 +1087,7 @@ List every card currently in a deck.
 
 | Param | Type | Required | Description |
 |---|---|---|---|
-| `sort` | string | No | One of `name`, `-name`, `added`, `-added`, `updated`, `-updated`, `mana_value`, `-mana_value`. Defaults to `-updated`. A `-` prefix means descending. `id` is always used as a stable secondary tie-breaker. |
+| `sort` | string | No | One of `name`, `-name`, `added`, `-added`, `updated`, `-updated`, `mana_value`, `-mana_value`, `price`, `-price`. Defaults to `-updated`. A `-` prefix means descending. `price` works as in [`GET /cards`](#get-cards): the card's `price`, unknown prices last in both directions, then ties by name. `id` is always used as a stable secondary tie-breaker. |
 
 **Example**
 ```
@@ -1105,13 +1107,14 @@ GET /deck/6f0d3c5e-8a51-4c0b-9b1e-2d7c4a3f9e10/cards?sort=mana_value
     "storage_id": 2,
     "mana_value": 1,
     "board": "main",
+    "price": 2.15,
     "added": "2026-01-15 10:30:00",
     "updated": "2026-01-15 10:30:00"
   }
 ]
 ```
 
-Every board is returned; each card tells its own `board`. Returns an empty array `[]` if the deck has no cards.
+Every board is returned; each card tells its own `board`. `price` is the price of one copy in the `price_currency` [preference](#get-authmepreferences--patch-authmepreferences), with the fallbacks of the [collection value](#prices-and-values), or `null` when no price is known. Returns an empty array `[]` if the deck has no cards.
 
 **Errors:** `400` invalid id, or `sort` is not one of the allowed values · `404` deck not found
 
@@ -1152,7 +1155,7 @@ Remove a card from a deck. **Idempotent** — always returns success, whether or
 
 Cards wanted in a deck but not in the collection yet (typically picked on Scryfall from the deck page). They are stored per deck until they're added to the collection all at once. Each item has a `foil` and a `proxy` flag, and committing it creates cards with both.
 
-- `GET /deck/:id/pending` — the list, sorted by name. Each item also tells what the collection already holds, outside this deck: `owned_copies` counts the cards of the same name (any printing, ` / ` and ` // ` alike, including copies in other decks), and `owned_same_printing` those of this exact printing. Both leave out the cards of [storages locked](#storage) against this deck. A client can tell a card missing from the collection (`0`) from one owned in another printing. Both are `0` in the responses of the routes below.
+- `GET /deck/:id/pending` — the list, sorted by name. Each item also tells what the collection already holds, outside this deck: `owned_copies` counts the cards of the same name (any printing, ` / ` and ` // ` alike, including copies in other decks), and `owned_same_printing` those of this exact printing. Both leave out the cards of [storages locked](#storage) against this deck. A client can tell a card missing from the collection (`0`) from one owned in another printing. Both are `0` in the responses of the routes below. Every item, here and in the responses below, has a `price` like the [deck's cards](#get-deckidcards) (`null` when unknown).
 - `POST /deck/:id/pending` — add one. Body: `name`, `scryfall_id`, `set_code`, `collector_number` (required), `foil`, `proxy` (both `false` by default), `quantity` (1–100, default 1), `mana_value`, `colors`, `card_type`, `color_identity` (same rules as `POST /cards`), `board` (`main` by default, see [Boards](#boards)). Returns `201` with the item. If the deck already has a pending card of the same printing, finish, proxy state and board (other than its pending commander), its quantity is raised instead and that item is returned.
 - `PATCH /deck/:id/pending/:pending_id` — change how many copies it stands for, its board, or both. Body: `{ "quantity": 12 }` (1–1000) and/or `{ "board": "considering" }`. Returns the item. Moved onto a board that already has a pending card of the same printing, finish and proxy state, the two are merged and the remaining item is returned. The pending commander can't leave `main` (`409`).
 - `DELETE /deck/:id/pending/:pending_id` — remove one. `204`, or `404` if it doesn't exist.

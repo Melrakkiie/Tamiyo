@@ -14,21 +14,22 @@ import (
 )
 
 type pendingCardResponse struct {
-	ID              int     `json:"id"`
-	DeckID          string  `json:"deck_id"`
-	Name            string  `json:"name"`
-	ScryfallID      string  `json:"scryfall_id"`
-	SetCode         string  `json:"set_code"`
-	CollectorNumber string  `json:"collector_number"`
-	Foil            bool    `json:"foil"`
-	Proxy           bool    `json:"proxy"`
-	Quantity        int     `json:"quantity"`
-	ManaValue       float64 `json:"mana_value"`
-	Colors          *string `json:"colors"`
-	CardType        *string `json:"card_type"`
-	ColorIdentity   *string `json:"color_identity"`
-	Board           string  `json:"board"`
-	Added           string  `json:"added"`
+	ID              int      `json:"id"`
+	DeckID          string   `json:"deck_id"`
+	Name            string   `json:"name"`
+	ScryfallID      string   `json:"scryfall_id"`
+	SetCode         string   `json:"set_code"`
+	CollectorNumber string   `json:"collector_number"`
+	Foil            bool     `json:"foil"`
+	Proxy           bool     `json:"proxy"`
+	Quantity        int      `json:"quantity"`
+	ManaValue       float64  `json:"mana_value"`
+	Colors          *string  `json:"colors"`
+	CardType        *string  `json:"card_type"`
+	ColorIdentity   *string  `json:"color_identity"`
+	Board           string   `json:"board"`
+	Price           *float64 `json:"price"`
+	Added           string   `json:"added"`
 
 	OwnedCopies       int `json:"owned_copies"`
 	OwnedSamePrinting int `json:"owned_same_printing"`
@@ -50,6 +51,7 @@ func toPendingResponse(p PendingCard) pendingCardResponse {
 		CardType:        p.CardType,
 		ColorIdentity:   p.ColorIdentity,
 		Board:           p.Board,
+		Price:           p.Price,
 		Added:           p.Added.Format("2006-01-02 15:04:05"),
 
 		OwnedCopies:       p.OwnedCopies,

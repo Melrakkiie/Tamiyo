@@ -243,7 +243,7 @@ func TestHandler_GetCards_ReturnsBadRequestOnInvalidSort(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodGet, "/cards?sort=price", nil)
+	req := httptest.NewRequest(http.MethodGet, "/cards?sort=rarity", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -775,8 +775,8 @@ func TestHandler_DeleteAllCards_ReturnsErrorOnServiceFailure(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
-func TestHandler_GetCards_AcceptsColorAndTypeSorts(t *testing.T) {
-	for _, sort := range []string{"color", "-color", "type", "-type"} {
+func TestHandler_GetCards_AcceptsColorTypeAndPriceSorts(t *testing.T) {
+	for _, sort := range []string{"color", "-color", "type", "-type", "price", "-price"} {
 		service := &fakeService{}
 		router := setupRouter(service)
 

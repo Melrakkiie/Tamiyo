@@ -73,7 +73,7 @@ func getTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
 
 	_, err := testDB.Exec(`
-		TRUNCATE TABLE tamiyo.card_deck, tamiyo.deck, tamiyo.cards, tamiyo.storage, tamiyo.users
+		TRUNCATE TABLE tamiyo.card_deck, tamiyo.deck, tamiyo.cards, tamiyo.storage, tamiyo.users, tamiyo.printings, tamiyo.exchange_rates
 		RESTART IDENTITY CASCADE
 	`)
 	require.NoError(t, err)
@@ -630,6 +630,51 @@ func TestPostgresRepository_FindCardsByDeckID_SortsByManaValue(t *testing.T) {
 	assert.Equal(t, []string{"Counterspell", "Lightning Bolt", "Black Lotus"}, []string{descending[0].Name, descending[1].Name, descending[2].Name})
 }
 
+func TestPostgresRepository_FindCardsByDeckID_SortsByPrice(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedDecks(t, db, userID)
+	seedCardsWithoutStorage(t, db, userID)
+	_, err := db.Exec(`
+		INSERT INTO tamiyo.printings (scryfall_id, type_line, eur, eur_foil, usd, usd_foil) VALUES
+			('bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd', 'Artifact', 30000.00, NULL, 20000.00, NULL),
+			('9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d', 'Instant', 0.50, 2.00, 50000.00, 3.00)
+	`)
+	require.NoError(t, err)
+
+	linkCardToDeck(t, db, 1, "00000000-0000-0000-0000-000000000001") // Black Lotus
+	linkCardToDeck(t, db, 2, "00000000-0000-0000-0000-000000000001") // Lightning Bolt, foil
+	linkCardToDeck(t, db, 3, "00000000-0000-0000-0000-000000000001") // Counterspell, no printing
+
+	names := func(cards []DeckCard) []string {
+		out := make([]string, 0, len(cards))
+		for _, c := range cards {
+			out = append(out, c.Name)
+		}
+		return out
+	}
+
+	ascending, err := repo.FindCardsByDeckID(context.Background(), userID, "00000000-0000-0000-0000-000000000001", "price", false)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Lightning Bolt", "Black Lotus", "Counterspell"}, names(ascending))
+	require.NotNil(t, ascending[0].Price)
+	assert.InDelta(t, 2, *ascending[0].Price, 0.001)
+	assert.Nil(t, ascending[2].Price)
+
+	descending, err := repo.FindCardsByDeckID(context.Background(), userID, "00000000-0000-0000-0000-000000000001", "price", true)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Black Lotus", "Lightning Bolt", "Counterspell"}, names(descending))
+
+	_, err = db.Exec(`INSERT INTO tamiyo.user_preferences (user_id, price_currency) VALUES ($1, 'usd')`, userID)
+	require.NoError(t, err)
+	inDollars, err := repo.FindCardsByDeckID(context.Background(), userID, "00000000-0000-0000-0000-000000000001", "price", false)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Lightning Bolt", "Black Lotus", "Counterspell"}, names(inDollars))
+	require.NotNil(t, inDollars[0].Price)
+	assert.InDelta(t, 3, *inDollars[0].Price, 0.001)
+}
+
 func TestPostgresRepository_LinkCardToDeck_CreatesLink(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db, "alice@example.com")
@@ -939,6 +984,9 @@ func TestPostgresRepository_PendingCards(t *testing.T) {
 	repo := NewPostgresRepository(db)
 	seedDecks(t, db, alice)
 
+	_, err := db.Exec(`INSERT INTO tamiyo.printings (scryfall_id, type_line, eur, eur_foil) VALUES ('9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d', 'Instant', 0.50, 2.00)`)
+	require.NoError(t, err)
+
 	colors := "R"
 	created, err := repo.CreatePendingCard(context.Background(), alice, PendingCard{
 		DeckID: "00000000-0000-0000-0000-000000000001", Name: "Lightning Bolt", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d",
@@ -949,6 +997,8 @@ func TestPostgresRepository_PendingCards(t *testing.T) {
 	assert.Equal(t, 2, created.Quantity)
 	require.NotNil(t, created.Colors)
 	assert.Equal(t, "R", *created.Colors)
+	require.NotNil(t, created.Price)
+	assert.InDelta(t, 0.5, *created.Price, 0.001)
 
 	_, err = repo.CreatePendingCard(context.Background(), alice, PendingCard{
 		DeckID: "00000000-0000-0000-0000-000000000001", Name: "Abrade", ScryfallID: "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1e", SetCode: "dmu", CollectorNumber: "116", Quantity: 1, Foil: true, Proxy: true,
@@ -962,7 +1012,15 @@ func TestPostgresRepository_PendingCards(t *testing.T) {
 	assert.Equal(t, "Abrade", found[0].Name)
 	assert.True(t, found[0].Foil)
 	assert.True(t, found[0].Proxy)
+	assert.Nil(t, found[0].Price)
 	assert.False(t, found[1].Proxy)
+	require.NotNil(t, found[1].Price)
+	assert.InDelta(t, 0.5, *found[1].Price, 0.001)
+
+	updated, err := repo.UpdatePendingQuantity(context.Background(), alice, "00000000-0000-0000-0000-000000000001", created.ID, 3)
+	require.NoError(t, err)
+	require.NotNil(t, updated.Price)
+	assert.InDelta(t, 0.5, *updated.Price, 0.001)
 
 	others, err := repo.FindPendingCards(context.Background(), bob, "00000000-0000-0000-0000-000000000001")
 	require.NoError(t, err)

@@ -717,11 +717,24 @@ func TestHandler_GetDeckCards_PassesManaValueSortToService(t *testing.T) {
 	assert.True(t, service.lastDeckCardsSortDesc)
 }
 
+func TestHandler_GetDeckCards_PassesPriceSortToService(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/cards?sort=-price", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "price", service.lastDeckCardsSort)
+	assert.True(t, service.lastDeckCardsSortDesc)
+}
+
 func TestHandler_GetDeckCards_ReturnsBadRequestOnInvalidSort(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/cards?sort=price", nil)
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/cards?sort=rarity", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 

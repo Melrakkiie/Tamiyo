@@ -308,11 +308,11 @@ func (h *Handler) getCards(ctx *gin.Context) {
 			field = raw[1:]
 		}
 		switch field {
-		case "name", "added", "updated", "mana_value", "color", "type":
+		case "name", "added", "updated", "mana_value", "color", "type", "price":
 			sortField = field
 			sortDesc = desc
 		default:
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "sort must be one of: name, -name, added, -added, updated, -updated, mana_value, -mana_value, color, -color, type, -type"})
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "sort must be one of: name, -name, added, -added, updated, -updated, mana_value, -mana_value, color, -color, type, -type, price, -price"})
 			return
 		}
 	}

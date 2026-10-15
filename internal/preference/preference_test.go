@@ -99,6 +99,11 @@ func TestService_SavesTheCollectionGroupingAndSort(t *testing.T) {
 	assert.Nil(t, updated.CollectionGrouping)
 	assert.Equal(t, "-mana_value", updated.CollectionSort)
 
+	price := "-price"
+	updated, err = svc.Update(context.Background(), testUserID, Changes{CollectionSort: &price})
+	require.NoError(t, err)
+	assert.Equal(t, "-price", updated.CollectionSort)
+
 	_, err = svc.Update(context.Background(), testUserID, Changes{CollectionGrouping: &unknown})
 	assert.ErrorIs(t, err, ErrInvalidCollectionGrouping)
 	_, err = svc.Update(context.Background(), testUserID, Changes{CollectionSort: &unknown})

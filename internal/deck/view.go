@@ -9,7 +9,7 @@ import (
 
 var (
 	ErrInvalidViewGrouping = errors.New("grouping must be one of: type, color, mana, storage, tag, or null")
-	ErrInvalidViewSort     = errors.New("sort must be one of: name, -name, added, -added, updated, -updated, mana_value, -mana_value")
+	ErrInvalidViewSort     = errors.New("sort must be one of: name, -name, added, -added, updated, -updated, mana_value, -mana_value, price, -price")
 	ErrInvalidViewBoards   = errors.New("collapsed_boards may only contain sideboard and considering")
 	ErrInvalidViewDisplay  = errors.New("card_display must be one of: text, images, grid, stacks")
 	ErrInvalidViewColumns  = errors.New("card_columns must be between 2 and 12")
@@ -26,6 +26,7 @@ var viewSorts = map[string]bool{
 	"added": true, "-added": true,
 	"updated": true, "-updated": true,
 	"mana_value": true, "-mana_value": true,
+	"price": true, "-price": true,
 }
 
 var collapsibleBoards = []string{BoardSideboard, BoardConsidering}

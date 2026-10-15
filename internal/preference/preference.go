@@ -45,7 +45,7 @@ var (
 	ErrEmptyNight                = errors.New("night_starts_at and night_ends_at must differ")
 	ErrInvalidPriceCurrency      = errors.New("price_currency must be one of: eur, usd")
 	ErrInvalidPlaytestZoom       = errors.New("playtest_zoom must be between 50 and 200")
-	ErrInvalidCollectionSort     = errors.New("collection_sort must be one of: name, -name, added, -added, updated, -updated, mana_value, -mana_value, color, -color, type, -type")
+	ErrInvalidCollectionSort     = errors.New("collection_sort must be one of: name, -name, added, -added, updated, -updated, mana_value, -mana_value, color, -color, type, -type, price, -price")
 )
 
 var collectionGroupings = map[string]bool{"type": true, "color": true, "mana": true}
@@ -53,6 +53,7 @@ var collectionGroupings = map[string]bool{"type": true, "color": true, "mana": t
 var collectionSorts = map[string]bool{
 	"name": true, "-name": true, "added": true, "-added": true, "updated": true, "-updated": true,
 	"mana_value": true, "-mana_value": true, "color": true, "-color": true, "type": true, "-type": true,
+	"price": true, "-price": true,
 }
 
 func ValidCardDisplay(display string) bool {

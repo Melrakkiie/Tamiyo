@@ -24,6 +24,7 @@ type PendingCard struct {
 	CardType        *string
 	ColorIdentity   *string
 	Board           string
+	Price           *float64
 	Added           time.Time
 
 	OwnedCopies       int

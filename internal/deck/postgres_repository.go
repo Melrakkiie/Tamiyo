@@ -94,6 +94,7 @@ type cardRow struct {
 	CardType        *string   `db:"card_type"`
 	ColorIdentity   *string   `db:"color_identity"`
 	Board           string    `db:"board"`
+	Price           *float64  `db:"price"`
 	Added           time.Time `db:"added"`
 	Updated         time.Time `db:"updated"`
 }
@@ -213,9 +214,17 @@ func deckCardOrderByClause(sortField string, sortDesc bool) string {
 		return fmt.Sprintf(" ORDER BY c.updated %s, c.id %s", dir, dir)
 	case "mana_value":
 		return fmt.Sprintf(" ORDER BY c.mana_value %s, c.id %s", dir, dir)
+	case "price":
+		return fmt.Sprintf(" ORDER BY price %s NULLS LAST, c.name ASC, c.id ASC", dir)
 	default:
 		return " ORDER BY c.updated DESC, c.id DESC"
 	}
+}
+
+func priceColumn(table string) string {
+	return `CAST(tamiyo.card_price(` + table + `.scryfall_id, ` + table + `.foil, COALESCE((
+		SELECT pr.price_currency FROM tamiyo.user_preferences pr WHERE pr.user_id = ` + table + `.user_id
+	), 'eur')) AS float8) AS price`
 }
 
 func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id string) (Deck, error) {
@@ -390,7 +399,8 @@ func (r *PostgresRepository) Delete(ctx context.Context, userID string, id strin
 
 func (r *PostgresRepository) FindCardsByDeckID(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]DeckCard, error) {
 	query := `
-		SELECT c.id, c.name, c.scryfall_id, c.set_code, c.collector_number, c.foil, c.proxy, c.storage_id, c.mana_value, c.colors, c.card_type, c.color_identity, cd.board, c.added, c.updated
+		SELECT c.id, c.name, c.scryfall_id, c.set_code, c.collector_number, c.foil, c.proxy, c.storage_id, c.mana_value, c.colors, c.card_type, c.color_identity, cd.board, c.added, c.updated,
+		    ` + priceColumn("c") + `
 		FROM tamiyo.cards c
 		JOIN tamiyo.card_deck cd ON c.id = cd.card_id
 		WHERE cd.deck_id = $1 AND c.user_id = $2

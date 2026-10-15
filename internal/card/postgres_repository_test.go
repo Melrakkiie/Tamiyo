@@ -1104,6 +1104,51 @@ func TestPostgresRepository_Value_SumsPricesOfOwnedNonProxyCards(t *testing.T) {
 	assert.Equal(t, Value{}, empty)
 }
 
+func TestPostgresRepository_FindAll_SortsByPriceInThePreferredCurrency(t *testing.T) {
+	db := getTestDB(t)
+	alice := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	const cheapEuros = "11111111-1111-1111-1111-111111111111"
+	const dollarsOnly = "22222222-2222-2222-2222-222222222222"
+	const unpriced = "33333333-3333-3333-3333-333333333333"
+	_, err := db.Exec(`
+		INSERT INTO tamiyo.printings (scryfall_id, type_line, eur, eur_foil, usd, usd_foil, usd_etched) VALUES
+			($1, 'Instant', 1.00, 8.00, 9.00, 20.00, NULL),
+			($2, 'Instant', NULL, NULL, 5.00, NULL, NULL),
+			($3, 'Instant', NULL, NULL, NULL, NULL, NULL)
+	`, cheapEuros, dollarsOnly, unpriced)
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO tamiyo.exchange_rates (currency, per_eur, rate_date) VALUES ('usd', 1.25, '2026-10-13')`)
+	require.NoError(t, err)
+	seedCards(t, db, alice, []Card{
+		{Name: "Cheap", ScryfallID: cheapEuros, SetCode: "tst", CollectorNumber: "1"},
+		{Name: "Cheap Foil", ScryfallID: cheapEuros, SetCode: "tst", CollectorNumber: "1", Foil: true},
+		{Name: "Dollars", ScryfallID: dollarsOnly, SetCode: "tst", CollectorNumber: "2"},
+		{Name: "Unpriced", ScryfallID: unpriced, SetCode: "tst", CollectorNumber: "3"},
+		{Name: "Unknown", ScryfallID: "44444444-4444-4444-4444-444444444444", SetCode: "tst", CollectorNumber: "4"},
+	})
+
+	names := func(filter CardFilter) []string {
+		filter.Page, filter.Limit, filter.SortField = 1, 25, "price"
+		cards, _, err := repo.FindAll(context.Background(), alice, filter)
+		require.NoError(t, err)
+		out := make([]string, 0, len(cards))
+		for _, c := range cards {
+			out = append(out, c.Name)
+		}
+		return out
+	}
+
+	assert.Equal(t, []string{"Cheap", "Dollars", "Cheap Foil", "Unknown", "Unpriced"}, names(CardFilter{}))
+	assert.Equal(t, []string{"Cheap Foil", "Dollars", "Cheap", "Unknown", "Unpriced"}, names(CardFilter{SortDesc: true}))
+	assert.Equal(t, []string{"Cheap Foil", "Dollars", "Cheap", "Unknown", "Unpriced"}, names(CardFilter{SortDesc: true, Stack: true}))
+
+	_, err = db.Exec(`INSERT INTO tamiyo.user_preferences (user_id, price_currency) VALUES ($1, 'usd')`, alice)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Dollars", "Cheap", "Cheap Foil", "Unknown", "Unpriced"}, names(CardFilter{}))
+	assert.Equal(t, []string{"Cheap Foil", "Cheap", "Dollars", "Unknown", "Unpriced"}, names(CardFilter{SortDesc: true, Stack: true}))
+}
+
 func TestPostgresRepository_MoveToStorage(t *testing.T) {
 	db := getTestDB(t)
 	userA := seedUser(t, db, "alice@example.com")
