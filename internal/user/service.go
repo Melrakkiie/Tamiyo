@@ -70,6 +70,19 @@ func (s *Service) ChangePassword(ctx context.Context, userID, currentPassword, n
 	return s.repo.UpdatePassword(ctx, userID, string(hash))
 }
 
+func (s *Service) DeleteAccount(ctx context.Context, userID, password string) error {
+	u, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
+		return ErrIncorrectPassword
+	}
+
+	return s.repo.Delete(ctx, userID)
+}
+
 func (s *Service) FindIDByEmail(ctx context.Context, email string) (string, error) {
 	u, err := s.repo.FindByEmail(ctx, email)
 	if err != nil {

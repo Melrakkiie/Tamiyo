@@ -374,3 +374,77 @@ func TestPostgresRepository_UpdateAvatar_ReturnsErrNotFoundWhenMissing(t *testin
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
+
+func TestPostgresRepository_Delete_RemovesTheUserAndEverythingTheyOwn(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+
+	alice, err := repo.Create(ctx, User{Email: "alice@example.com", PasswordHash: "hash"})
+	require.NoError(t, err)
+	bob, err := repo.Create(ctx, User{Email: "bob@example.com", PasswordHash: "hash"})
+	require.NoError(t, err)
+
+	var storageID int
+	require.NoError(t, db.Get(&storageID, `INSERT INTO tamiyo.storage (user_id, name, type) VALUES ($1, 'Binder', 'binder') RETURNING id`, alice.ID))
+	var cardID int
+	require.NoError(t, db.Get(&cardID, `
+		INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id)
+		VALUES ($1, 'Sol Ring', '0000579f-7b35-4ed3-b44c-db2a538066fe', 'cmd', '1', false, $2)
+		RETURNING id
+	`, alice.ID, storageID))
+	var aliceDeckID string
+	require.NoError(t, db.Get(&aliceDeckID, `INSERT INTO tamiyo.deck (user_id, name, format) VALUES ($1, 'Alice deck', 'commander') RETURNING id`, alice.ID))
+	_, err = db.Exec(`INSERT INTO tamiyo.card_deck (card_id, deck_id) VALUES ($1, $2)`, cardID, aliceDeckID)
+	require.NoError(t, err)
+	var bobDeckID string
+	require.NoError(t, db.Get(&bobDeckID, `INSERT INTO tamiyo.deck (user_id, name, format) VALUES ($1, 'Bob deck', 'commander') RETURNING id`, bob.ID))
+	_, err = db.Exec(`INSERT INTO tamiyo.user_preferences (user_id) VALUES ($1)`, alice.ID)
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO tamiyo.user_follows (follower_id, followed_id) VALUES ($1, $2), ($2, $1)`, alice.ID, bob.ID)
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO tamiyo.deck_likes (user_id, deck_id) VALUES ($1, $2), ($3, $4)`, alice.ID, bobDeckID, bob.ID, aliceDeckID)
+	require.NoError(t, err)
+
+	require.NoError(t, repo.Delete(ctx, alice.ID))
+
+	_, err = repo.FindByID(ctx, alice.ID)
+	assert.ErrorIs(t, err, ErrNotFound)
+
+	for _, query := range []string{
+		`SELECT count(*) FROM tamiyo.storage WHERE user_id = $1`,
+		`SELECT count(*) FROM tamiyo.cards WHERE user_id = $1`,
+		`SELECT count(*) FROM tamiyo.deck WHERE user_id = $1`,
+		`SELECT count(*) FROM tamiyo.deck_pending_cards WHERE user_id = $1`,
+		`SELECT count(*) FROM tamiyo.user_preferences WHERE user_id = $1`,
+		`SELECT count(*) FROM tamiyo.user_follows WHERE follower_id = $1 OR followed_id = $1`,
+		`SELECT count(*) FROM tamiyo.deck_likes WHERE user_id = $1`,
+	} {
+		var count int
+		require.NoError(t, db.Get(&count, query, alice.ID))
+		assert.Zero(t, count, query)
+	}
+
+	var cardDeckCount int
+	require.NoError(t, db.Get(&cardDeckCount, `SELECT count(*) FROM tamiyo.card_deck WHERE deck_id = $1`, aliceDeckID))
+	assert.Zero(t, cardDeckCount)
+	var bobDeckLikes int
+	require.NoError(t, db.Get(&bobDeckLikes, `SELECT count(*) FROM tamiyo.deck_likes WHERE deck_id = $1`, bobDeckID))
+	assert.Zero(t, bobDeckLikes)
+
+	foundBob, err := repo.FindByID(ctx, bob.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "bob@example.com", foundBob.Email)
+	var bobDecks int
+	require.NoError(t, db.Get(&bobDecks, `SELECT count(*) FROM tamiyo.deck WHERE user_id = $1`, bob.ID))
+	assert.Equal(t, 1, bobDecks)
+}
+
+func TestPostgresRepository_Delete_ReturnsErrNotFoundWhenMissing(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	err := repo.Delete(context.Background(), "00000000-0000-0000-0000-000000000000")
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}

@@ -376,6 +376,43 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+    delete:
+      tags: [auth]
+      summary: Delete the authenticated account
+      description: >
+        Requires the current password. Deletes the account and everything it
+        owns: collection, storages, decks (with their pending cards, tags,
+        folders and share links), likes, follows in both directions,
+        preferences and every refresh token. Clears the refresh cookie. This
+        can't be undone. An access token issued before the deletion keeps
+        passing authentication until it expires, but finds no data.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteAccountRequest"
+      responses:
+        "204":
+          description: No Content, the account is deleted
+        "400":
+          description: Missing body or password.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing/invalid access token, or password is incorrect.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: User no longer exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /auth/email:
     post:
@@ -4392,6 +4429,13 @@ components:
           type: string
           minLength: 8
       required: [current_password, new_password]
+
+    DeleteAccountRequest:
+      type: object
+      properties:
+        password:
+          type: string
+      required: [password]
 
     Me:
       type: object

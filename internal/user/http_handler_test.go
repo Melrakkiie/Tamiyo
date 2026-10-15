@@ -47,6 +47,16 @@ type fakeService struct {
 	setAvatarErr    error
 	setAvatarCalled bool
 	setAvatarValue  *string
+
+	deleteAccountErr              error
+	deleteAccountCalledWithUserID string
+	deleteAccountCalledWithPass   string
+}
+
+func (f *fakeService) DeleteAccount(ctx context.Context, userID, password string) error {
+	f.deleteAccountCalledWithUserID = userID
+	f.deleteAccountCalledWithPass = password
+	return f.deleteAccountErr
 }
 
 func (f *fakeService) SetAvatar(ctx context.Context, userID string, avatarScryfallID *string) (User, error) {
@@ -486,6 +496,72 @@ func TestHandler_ChangePassword_ReturnsUnauthorizedWithoutToken(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestHandler_DeleteMe_ReturnsNoContentAndClearsCookieOnSuccess(t *testing.T) {
+	service := &fakeService{}
+	router := setupProtectedRouter(service, &fakeTokenService{})
+
+	req := authenticatedRequest(http.MethodDelete, "/auth/me", `{"password": "password"}`, "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Equal(t, "11111111-1111-1111-1111-111111111111", service.deleteAccountCalledWithUserID)
+	assert.Equal(t, "password", service.deleteAccountCalledWithPass)
+	cookie := findCookie(w, authcookie.DefaultName)
+	require.NotNil(t, cookie)
+	assert.Empty(t, cookie.Value)
+	assert.Less(t, cookie.MaxAge, 0)
+}
+
+func TestHandler_DeleteMe_ReturnsUnauthorizedOnIncorrectPassword(t *testing.T) {
+	service := &fakeService{deleteAccountErr: ErrIncorrectPassword}
+	router := setupProtectedRouter(service, &fakeTokenService{})
+
+	req := authenticatedRequest(http.MethodDelete, "/auth/me", `{"password": "wrongpassword"}`, "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Contains(t, w.Body.String(), "incorrect password")
+	assert.Nil(t, findCookie(w, authcookie.DefaultName))
+}
+
+func TestHandler_DeleteMe_ReturnsBadRequestWithoutPassword(t *testing.T) {
+	service := &fakeService{}
+	router := setupProtectedRouter(service, &fakeTokenService{})
+
+	req := authenticatedRequest(http.MethodDelete, "/auth/me", `{}`, "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Empty(t, service.deleteAccountCalledWithUserID)
+}
+
+func TestHandler_DeleteMe_ReturnsNotFoundWhenUserNoLongerExists(t *testing.T) {
+	service := &fakeService{deleteAccountErr: ErrNotFound}
+	router := setupProtectedRouter(service, &fakeTokenService{})
+
+	req := authenticatedRequest(http.MethodDelete, "/auth/me", `{"password": "password"}`, "11111111-1111-1111-1111-111111111111")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestHandler_DeleteMe_ReturnsUnauthorizedWithoutToken(t *testing.T) {
+	service := &fakeService{}
+	router := setupProtectedRouter(service, &fakeTokenService{})
+
+	req := httptest.NewRequest(http.MethodDelete, "/auth/me", bytes.NewBufferString(`{"password": "password"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Empty(t, service.deleteAccountCalledWithUserID)
 }
 
 var assertAnError = errAnError{}

@@ -34,6 +34,17 @@ type fakeRepository struct {
 
 	updateAvatarID    string
 	updateAvatarValue *string
+
+	deleteID  string
+	deleteErr error
+}
+
+func (f *fakeRepository) Delete(ctx context.Context, id string) error {
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
+	f.deleteID = id
+	return nil
 }
 
 func (f *fakeRepository) UpdateAvatar(ctx context.Context, id string, avatarScryfallID *string) (User, error) {
@@ -194,6 +205,51 @@ func TestService_ChangePassword_PropagatesUpdatePasswordError(t *testing.T) {
 	service := NewService(repo)
 
 	err := service.ChangePassword(context.Background(), "fake-id", "oldpassword", "newpassword")
+
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestService_DeleteAccount_DeletesWhenPasswordIsCorrect(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+	repo := &fakeRepository{findByIDUser: User{ID: "fake-id", PasswordHash: string(hash)}}
+	service := NewService(repo)
+
+	err := service.DeleteAccount(context.Background(), "fake-id", "password")
+
+	require.NoError(t, err)
+	assert.Equal(t, "fake-id", repo.deleteID)
+}
+
+func TestService_DeleteAccount_FailsWithIncorrectPassword(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+	repo := &fakeRepository{findByIDUser: User{ID: "fake-id", PasswordHash: string(hash)}}
+	service := NewService(repo)
+
+	err := service.DeleteAccount(context.Background(), "fake-id", "wrongpassword")
+
+	assert.ErrorIs(t, err, ErrIncorrectPassword)
+	assert.Empty(t, repo.deleteID, "the account must not be deleted when the password is wrong")
+}
+
+func TestService_DeleteAccount_PropagatesFindByIDError(t *testing.T) {
+	repo := &fakeRepository{findByIDErr: ErrNotFound}
+	service := NewService(repo)
+
+	err := service.DeleteAccount(context.Background(), "unknown-id", "password")
+
+	assert.ErrorIs(t, err, ErrNotFound)
+	assert.Empty(t, repo.deleteID)
+}
+
+func TestService_DeleteAccount_PropagatesDeleteError(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+	repo := &fakeRepository{
+		findByIDUser: User{ID: "fake-id", PasswordHash: string(hash)},
+		deleteErr:    ErrNotFound,
+	}
+	service := NewService(repo)
+
+	err := service.DeleteAccount(context.Background(), "fake-id", "password")
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }

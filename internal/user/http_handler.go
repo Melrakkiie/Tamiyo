@@ -31,6 +31,10 @@ type changePasswordRequest struct {
 	NewPassword     string `json:"new_password" binding:"required,min=8"`
 }
 
+type deleteAccountRequest struct {
+	Password string `json:"password" binding:"required"`
+}
+
 type meResponse struct {
 	ID               string  `json:"id"`
 	Email            string  `json:"email"`
@@ -86,6 +90,7 @@ type userService interface {
 	GetUser(ctx context.Context, userID string) (User, error)
 	SetDisplayName(ctx context.Context, userID string, displayName *string) (User, error)
 	SetAvatar(ctx context.Context, userID string, avatarScryfallID *string) (User, error)
+	DeleteAccount(ctx context.Context, userID, password string) error
 }
 
 type refreshTokenService interface {
@@ -123,6 +128,7 @@ func (h *Handler) RegisterProtectedRoutes(router gin.IRoutes) {
 	router.POST("/auth/password", h.changePassword)
 	router.GET("/auth/me", h.me)
 	router.PATCH("/auth/me", h.updateMe)
+	router.DELETE("/auth/me", h.deleteMe)
 	router.GET("/users/:id", h.profile)
 }
 
@@ -203,6 +209,31 @@ func (h *Handler) updateMe(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, toMeResponse(u))
+}
+
+func (h *Handler) deleteMe(ctx *gin.Context) {
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "missing or malformed Authorization header"})
+		return
+	}
+
+	var req deleteAccountRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.service.DeleteAccount(ctx.Request.Context(), userID, req.Password); err != nil {
+		apierr.Respond(ctx, err,
+			apierr.Mapping{Err: ErrIncorrectPassword, Status: http.StatusUnauthorized, Message: "incorrect password"},
+			apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "user not found"},
+		)
+		return
+	}
+
+	h.cookie.Clear(ctx.Writer)
+	ctx.Status(http.StatusNoContent)
 }
 
 func (h *Handler) register(ctx *gin.Context) {

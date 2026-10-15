@@ -106,6 +106,8 @@ Tamiyo is multi-tenant: every account has its own cards, storages, and decks, co
 
 `/health`, `/auth/register`, and `/auth/login` are the only public routes — everything else (`/cards`, `/storage`, `/deck`) requires a valid Bearer token and only ever returns or modifies that account's own data.
 
+An account can change its password (`POST /auth/password`) and email (`POST /auth/email`), and delete itself with everything it owns (`DELETE /auth/me`, password required).
+
 ## CORS and security headers
 
 Every response carries a baseline set of HTTP security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, a strict `Content-Security-Policy`) — see [`internal/security`](./internal/security).

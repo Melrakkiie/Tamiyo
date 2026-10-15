@@ -33,4 +33,5 @@ type Repository interface {
 	UpdateEmail(ctx context.Context, id string, email string) error
 	UpdateDisplayName(ctx context.Context, id string, displayName *string) (User, error)
 	UpdateAvatar(ctx context.Context, id string, avatarScryfallID *string) (User, error)
+	Delete(ctx context.Context, id string) error
 }

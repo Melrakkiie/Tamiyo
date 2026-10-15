@@ -180,3 +180,21 @@ func (r *PostgresRepository) UpdateAvatar(ctx context.Context, id string, avatar
 
 	return row.toDomain(), nil
 }
+
+func (r *PostgresRepository) Delete(ctx context.Context, id string) error {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM tamiyo.users WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}

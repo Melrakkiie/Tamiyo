@@ -205,6 +205,24 @@ Set or clear the account's profile: its display name, a purely cosmetic name the
 
 ---
 
+### `DELETE /auth/me`
+
+Delete the authenticated account and everything it owns. **Requires `Authorization: Bearer <token>`.** The password is asked again so a stolen access token isn't enough.
+
+**Body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `password` | string | Yes | Must match the account's current password. |
+
+**Response `204 No Content`** — the refresh cookie is cleared.
+
+**Errors:** `400` missing body or `password` · `401` missing/invalid token, or `password` is incorrect · `404` account no longer exists
+
+> This can't be undone. The collection, storages, decks (with their pending cards, tags, folders and share links), likes given and received on those decks, follows in both directions, preferences and every session are deleted. Export what you want to keep first (see [Bulk Export](#bulk-export)). An access token issued before the deletion keeps passing authentication until it expires, but finds no data: `GET /auth/me` returns `404`.
+
+---
+
 ### `GET /auth/me/preferences` · `PATCH /auth/me/preferences`
 
 The account's display preferences, saved so they follow the user from one device to another. **Requires `Authorization: Bearer <token>`.**
