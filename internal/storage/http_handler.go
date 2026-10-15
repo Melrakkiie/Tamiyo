@@ -139,7 +139,7 @@ type storageService interface {
 	GetStorage(ctx context.Context, userID string, id int) (Storage, error)
 	CreateStorage(ctx context.Context, userID string, storage Storage) (Storage, error)
 	UpdateStorage(ctx context.Context, userID string, id int, req updateStorageRequest) (Storage, error)
-	DeleteStorage(ctx context.Context, userID string, id int) error
+	DeleteStorage(ctx context.Context, userID string, id int, withCards bool) error
 }
 
 type Handler struct {
@@ -335,7 +335,16 @@ func (h *Handler) deleteStorage(ctx *gin.Context) {
 		return
 	}
 
-	if err := h.service.DeleteStorage(ctx.Request.Context(), userID, id); err != nil {
+	withCards := false
+	if raw := ctx.Query("with_cards"); raw != "" {
+		withCards, err = strconv.ParseBool(raw)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid with_cards"})
+			return
+		}
+	}
+
+	if err := h.service.DeleteStorage(ctx.Request.Context(), userID, id, withCards); err != nil {
 		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "storage not found"})
 		return
 	}

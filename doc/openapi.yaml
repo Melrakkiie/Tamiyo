@@ -1042,13 +1042,28 @@ paths:
       tags: [storage]
       summary: Delete a storage
       description: >
-        Any card currently in this storage has its storage_id set to null.
-        Cards are never deleted as a side effect.
+        By default, any card currently in this storage has its storage_id set
+        to null and stays in the collection. With with_cards=true, the
+        storage's cards are deleted in the same transaction: the decks they
+        were in get them in their pending list, and a deck whose commander
+        one was keeps it as its pending commander (commander_pending_id).
+      parameters:
+        - name: with_cards
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Also delete the cards of the storage.
       responses:
         "204":
           description: No Content
         "400":
-          $ref: "#/components/responses/InvalidID"
+          description: Invalid id or invalid with_cards
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":

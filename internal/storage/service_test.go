@@ -19,6 +19,8 @@ type fakeRepository struct {
 	lastUserID   string
 	lastFilter   Filter
 
+	lastWithCards bool
+
 	findByIDStorage Storage
 	findByIDErr     error
 
@@ -64,8 +66,9 @@ func (f *fakeRepository) Update(ctx context.Context, userID string, storage Stor
 	return storage, nil
 }
 
-func (f *fakeRepository) Delete(ctx context.Context, userID string, id int) error {
+func (f *fakeRepository) Delete(ctx context.Context, userID string, id int, withCards bool) error {
 	f.lastUserID = userID
+	f.lastWithCards = withCards
 	return f.deleteErr
 }
 
@@ -201,17 +204,18 @@ func TestService_DeleteStorage_PassesUserIDToRepository(t *testing.T) {
 	repo := &fakeRepository{}
 	service := NewService(repo)
 
-	err := service.DeleteStorage(context.Background(), testUserID, 1)
+	err := service.DeleteStorage(context.Background(), testUserID, 1, true)
 
 	require.NoError(t, err)
 	assert.Equal(t, testUserID, repo.lastUserID)
+	assert.True(t, repo.lastWithCards)
 }
 
 func TestService_DeleteStorage_PropagatesNotFoundError(t *testing.T) {
 	repo := &fakeRepository{deleteErr: ErrNotFound}
 	service := NewService(repo)
 
-	err := service.DeleteStorage(context.Background(), testUserID, 999)
+	err := service.DeleteStorage(context.Background(), testUserID, 999, false)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }

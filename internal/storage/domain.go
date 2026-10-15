@@ -49,5 +49,5 @@ type Repository interface {
 	FindByID(ctx context.Context, userID string, id int) (Storage, error)
 	Create(ctx context.Context, userID string, storage Storage) (Storage, error)
 	Update(ctx context.Context, userID string, storage Storage) (Storage, error)
-	Delete(ctx context.Context, userID string, id int) error
+	Delete(ctx context.Context, userID string, id int, withCards bool) error
 }

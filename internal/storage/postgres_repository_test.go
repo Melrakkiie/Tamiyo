@@ -481,7 +481,7 @@ func TestPostgresRepository_Delete_RemovesStorage(t *testing.T) {
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db, userID)
 
-	err := repo.Delete(context.Background(), userID, 1)
+	err := repo.Delete(context.Background(), userID, 1, false)
 
 	require.NoError(t, err)
 
@@ -494,7 +494,7 @@ func TestPostgresRepository_Delete_ReturnsErrNotFoundWhenStorageDoesNotExist(t *
 	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
 
-	err := repo.Delete(context.Background(), userID, 999)
+	err := repo.Delete(context.Background(), userID, 999, false)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
@@ -505,7 +505,7 @@ func TestPostgresRepository_Delete_DoesNotAffectOtherStorages(t *testing.T) {
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db, userID)
 
-	err := repo.Delete(context.Background(), userID, 1)
+	err := repo.Delete(context.Background(), userID, 1, false)
 	require.NoError(t, err)
 
 	remaining, _, err := repo.FindAll(context.Background(), userID, defaultFilter())
@@ -521,13 +521,86 @@ func TestPostgresRepository_Delete_DoesNotAffectAnotherUsersStorage(t *testing.T
 	repo := NewPostgresRepository(db)
 	seedStorages(t, db, userA)
 
-	err := repo.Delete(context.Background(), userB, 1)
+	err := repo.Delete(context.Background(), userB, 1, false)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 
 	result, err := repo.FindByID(context.Background(), userA, 1)
 	require.NoError(t, err)
 	assert.Equal(t, "Vintage Collection", result.Name)
+}
+
+func seedStorageCard(t *testing.T, db *sqlx.DB, userID string, storageID int, name string) int {
+	t.Helper()
+
+	var cardID int
+	require.NoError(t, db.Get(&cardID, `
+		INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, storage_id, mana_value)
+		VALUES ($1, $2, 'bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd', 'c21', '263', false, $3, 1)
+		RETURNING id
+	`, userID, name, storageID))
+	return cardID
+}
+
+func countCards(t *testing.T, db *sqlx.DB, userID string) int {
+	t.Helper()
+
+	var count int
+	require.NoError(t, db.Get(&count, `SELECT count(*) FROM tamiyo.cards WHERE user_id = $1`, userID))
+	return count
+}
+
+func TestPostgresRepository_Delete_WithCardsDeletesOnlyThatStoragesCards(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userID)
+	inDeck := seedStorageCard(t, db, userID, 1, "Sol Ring")
+	seedStorageCard(t, db, userID, 1, "Arcane Signet")
+	kept := seedStorageCard(t, db, userID, 2, "Lightning Bolt")
+	deckID := seedDeck(t, db, userID, "Kess")
+	_, err := db.Exec(`INSERT INTO tamiyo.card_deck (card_id, deck_id) VALUES ($1, $2)`, inDeck, deckID)
+	require.NoError(t, err)
+
+	require.NoError(t, repo.Delete(context.Background(), userID, 1, true))
+
+	var remaining []int
+	require.NoError(t, db.Select(&remaining, `SELECT id FROM tamiyo.cards WHERE user_id = $1`, userID))
+	assert.Equal(t, []int{kept}, remaining)
+
+	var pending []string
+	require.NoError(t, db.Select(&pending, `SELECT name FROM tamiyo.deck_pending_cards WHERE deck_id = $1`, deckID))
+	assert.Equal(t, []string{"Sol Ring"}, pending)
+}
+
+func TestPostgresRepository_Delete_WithoutCardsKeepsCardsWithoutStorage(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userID)
+	cardID := seedStorageCard(t, db, userID, 1, "Sol Ring")
+
+	require.NoError(t, repo.Delete(context.Background(), userID, 1, false))
+
+	var storageID *int
+	require.NoError(t, db.Get(&storageID, `SELECT storage_id FROM tamiyo.cards WHERE id = $1`, cardID))
+	assert.Nil(t, storageID)
+}
+
+func TestPostgresRepository_Delete_WithCardsLeavesAnotherUsersStorageUntouched(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userA)
+	seedStorageCard(t, db, userA, 1, "Sol Ring")
+
+	err := repo.Delete(context.Background(), userB, 1, true)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+	assert.Equal(t, 1, countCards(t, db, userA))
+	_, err = repo.FindByID(context.Background(), userA, 1)
+	require.NoError(t, err)
 }
 
 func TestPostgresRepository_CardActivity_RefreshesUpdatedTimestamp(t *testing.T) {

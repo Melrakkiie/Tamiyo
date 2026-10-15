@@ -21,6 +21,8 @@ type fakeService struct {
 	lastUserID  string
 	lastFilter  Filter
 
+	lastWithCards bool
+
 	getStorage    Storage
 	getStorageErr error
 
@@ -65,8 +67,9 @@ func (f *fakeService) UpdateStorage(ctx context.Context, userID string, id int, 
 	return f.updateStorage, nil
 }
 
-func (f *fakeService) DeleteStorage(ctx context.Context, userID string, id int) error {
+func (f *fakeService) DeleteStorage(ctx context.Context, userID string, id int, withCards bool) error {
 	f.lastUserID = userID
+	f.lastWithCards = withCards
 	return f.deleteErr
 }
 
@@ -341,6 +344,31 @@ func TestHandler_DeleteStorage_ReturnsNoContent(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.False(t, service.lastWithCards)
+}
+
+func TestHandler_DeleteStorage_PassesWithCards(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/storage/1?with_cards=true", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.True(t, service.lastWithCards)
+}
+
+func TestHandler_DeleteStorage_ReturnsBadRequestOnInvalidWithCards(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodDelete, "/storage/1?with_cards=maybe", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Empty(t, service.lastUserID)
 }
 
 func TestHandler_DeleteStorage_ReturnsNotFoundWhenStorageDoesNotBelongToUser(t *testing.T) {

@@ -265,10 +265,22 @@ func replaceAllowedDecks(ctx context.Context, tx *sqlx.Tx, userID string, storag
 	return allowed, nil
 }
 
-func (r *PostgresRepository) Delete(ctx context.Context, userID string, id int) error {
-	query := `DELETE FROM tamiyo.storage WHERE id = $1 AND user_id = $2`
+func (r *PostgresRepository) Delete(ctx context.Context, userID string, id int, withCards bool) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
 
-	result, err := r.db.ExecContext(ctx, query, id, userID)
+	if withCards {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM tamiyo.cards WHERE user_id = $1 AND storage_id = $2`, userID, id); err != nil {
+			return err
+		}
+	}
+
+	result, err := tx.ExecContext(ctx, `DELETE FROM tamiyo.storage WHERE id = $1 AND user_id = $2`, id, userID)
 	if err != nil {
 		return err
 	}
@@ -282,5 +294,5 @@ func (r *PostgresRepository) Delete(ctx context.Context, userID string, id int) 
 		return ErrNotFound
 	}
 
-	return nil
+	return tx.Commit()
 }

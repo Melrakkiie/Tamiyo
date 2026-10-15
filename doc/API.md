@@ -698,11 +698,15 @@ Partially update a storage.
 
 ### `DELETE /storage/:id`
 
-Delete a storage. Any card currently in this storage has its `storage_id` set to `null` — cards are never deleted as a side effect.
+Delete a storage. By default, any card currently in this storage has its `storage_id` set to `null` and stays in the collection.
+
+| Query param | Description |
+|---|---|
+| `with_cards` | Optional, default `false`. When `true`, the storage's cards are deleted from the collection in the same transaction, with the same clean-up as [`DELETE /cards/:id`](#delete-cardsid): the decks they were in get them in their [pending list](#pending-cards-deckidpending), and a deck whose commander one was keeps it as its pending commander (`commander_pending_id`). |
 
 **Response `204 No Content`**
 
-**Errors:** `400` invalid id · `404` storage not found
+**Errors:** `400` invalid id / invalid `with_cards` · `404` storage not found (no card is deleted)
 
 ---
 
