@@ -19,6 +19,26 @@ type DeckExportOptions struct {
 	OnlyPending bool
 	Printings   bool
 	Boards      []string
+	BasicLands  bool
+}
+
+var basicLandNames = map[string]bool{
+	"Plains":                true,
+	"Island":                true,
+	"Swamp":                 true,
+	"Mountain":              true,
+	"Forest":                true,
+	"Wastes":                true,
+	"Snow-Covered Plains":   true,
+	"Snow-Covered Island":   true,
+	"Snow-Covered Swamp":    true,
+	"Snow-Covered Mountain": true,
+	"Snow-Covered Forest":   true,
+	"Snow-Covered Wastes":   true,
+}
+
+func isBasicLand(name string) bool {
+	return basicLandNames[name]
 }
 
 var defaultCardmarketBoards = []string{deck.BoardMain, deck.BoardSideboard}
@@ -57,6 +77,9 @@ func (s *Service) ExportCardmarketDeck(ctx context.Context, userID string, deckI
 	var lines []string
 	for _, e := range entries {
 		if opts.OnlyPending && e.pendingID == 0 {
+			continue
+		}
+		if !opts.BasicLands && isBasicLand(e.card.Name) {
 			continue
 		}
 		line := arenaName(e.card.Name)

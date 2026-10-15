@@ -406,6 +406,12 @@ func (h *Handler) respondDeckExport(ctx *gin.Context, invalidIDStatus int, expor
 	if opts.Printings, valid = queryBool(ctx, "printings"); !valid {
 		return
 	}
+	opts.BasicLands = true
+	if ctx.Query("basic_lands") != "" {
+		if opts.BasicLands, valid = queryBool(ctx, "basic_lands"); !valid {
+			return
+		}
+	}
 	if raw := ctx.Query("boards"); raw != "" {
 		opts.Boards = strings.Split(raw, ",")
 	}

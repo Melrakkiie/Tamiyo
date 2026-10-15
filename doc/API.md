@@ -1367,9 +1367,9 @@ Same statistics as [`GET /deck/:id/stats`](#get-deckidstats).
 
 ### `GET /shared/decks/:id/export`
 
-The deck exported as [`GET /deck/:id/export`](#get-deckidexport) does, with the same `format`, `tags`, `boards`, `pending` and `printings` parameters, response and download names.
+The deck exported as [`GET /deck/:id/export`](#get-deckidexport) does, with the same `format`, `tags`, `boards`, `pending`, `printings` and `basic_lands` parameters, response and download names.
 
-**Errors:** `400` unknown `format`, `tags`, `pending` or `printings` isn't a boolean, or `boards` lists an unknown board · `404` as above · `429` rate limit exceeded · `502` Scryfall unreachable, with `format=cardmarket&printings=true` only
+**Errors:** `400` unknown `format`, `tags`, `pending`, `printings` or `basic_lands` isn't a boolean, or `boards` lists an unknown board · `404` as above · `429` rate limit exceeded · `502` Scryfall unreachable, with `format=cardmarket&printings=true` only
 
 ### `GET /shared/decks/:id/compare/:other_id`
 
@@ -1687,13 +1687,14 @@ The sideboard follows the deck in a section of its own in every format: `SIDEBOA
 
 If the deck has a commander, it comes **first** in every format — in `moxfield`, that printing's line with its full quantity in the deck, not just the one physical card marked as commander — so importing the file back (which treats the first line as the commander when asked) reconstructs the same commander. Everything else is sorted alphabetically. Pending cards are included in every format, a pending commander first like an owned one. All three formats can be imported back with `POST /deck/:id/import`.
 
-`cardmarket` lists the cards of the chosen [boards](#boards), owned and pending, one line per card name, `4 Dark Ritual`, sorted by name, with no sections and split cards written with ` // ` (copies of a card on several boards are added up). Three more parameters only apply to it:
+`cardmarket` lists the cards of the chosen [boards](#boards), owned and pending, one line per card name, `4 Dark Ritual`, sorted by name, with no sections and split cards written with ` // ` (copies of a card on several boards are added up). Four more parameters only apply to it:
 
 - `boards`, a comma-separated list of `main`, `sideboard` and `considering` (default `main,sideboard`).
 - `pending=true` (default `false`) only lists the pending cards, the ones still missing from the collection.
 - `printings=true` (default `false`) adds the expansion's name, `2 Dark Confidant (Modern Masters)`, one line per card and expansion. Expansion names are [Scryfall](https://scryfall.com/sets)'s, fetched once a day, and Cardmarket may name some expansions differently: it skips the lines it can't match. A card whose set Scryfall doesn't know is written without one. Finishes and Cardmarket's versions (`V.1`) aren't written.
+- `basic_lands=false` (default `true`) leaves out the basic lands: the five basics, Wastes and their snow-covered versions.
 
-**Errors:** `400` `:id` is not a UUID, `format` is unknown, `tags`, `pending` or `printings` isn't a boolean, or `boards` lists an unknown board · `401` unauthenticated · `404` deck not found · `502` Scryfall unreachable, with `format=cardmarket&printings=true` only
+**Errors:** `400` `:id` is not a UUID, `format` is unknown, `tags`, `pending`, `printings` or `basic_lands` isn't a boolean, or `boards` lists an unknown board · `401` unauthenticated · `404` deck not found · `502` Scryfall unreachable, with `format=cardmarket&printings=true` only
 
 ---
 

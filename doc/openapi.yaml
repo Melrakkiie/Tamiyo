@@ -2994,6 +2994,15 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: basic_lands
+          in: query
+          required: false
+          description: >
+            With format=cardmarket, list the basic lands (the five basics,
+            Wastes and their snow-covered versions); false leaves them out.
+          schema:
+            type: boolean
+            default: true
       responses:
         "200":
           description: The deck as text, served as a download (Deck_moxfield.txt, Deck_list.txt, Deck_arena.txt, Deck_cardmarket.txt, or Deck_tamiyo.json as application/json).
@@ -3011,7 +3020,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/TamiyoFile"
         "400":
-          description: format is unknown, tags, pending or printings isn't a boolean, or boards lists an unknown board
+          description: format is unknown, tags, pending, printings or basic_lands isn't a boolean, or boards lists an unknown board
           content:
             application/json:
               schema:
@@ -3668,7 +3677,7 @@ paths:
         the pending ones with pending=true), one
         line per card name, "4 Dark Ritual", or per card and expansion with
         printings=true, "2 Dark Confidant (Modern Masters)", expansion names
-        being Scryfall's.
+        being Scryfall's, without the basic lands with basic_lands=false.
         moxfield: one line per printing, "1 Sol Ring (SLD) 1011 *F*", the
         commander's line first with its full quantity, the rest sorted
         alphabetically, so importing the file back reconstructs the same
@@ -3721,6 +3730,15 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: basic_lands
+          in: query
+          required: false
+          description: >
+            With format=cardmarket, list the basic lands (the five basics,
+            Wastes and their snow-covered versions); false leaves them out.
+          schema:
+            type: boolean
+            default: true
       responses:
         "200":
           description: The deck as text, served as a download (Deck_moxfield.txt, Deck_list.txt, Deck_arena.txt, Deck_cardmarket.txt, or Deck_tamiyo.json as application/json).
@@ -3738,7 +3756,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/TamiyoFile"
         "400":
-          description: id is not a UUID, format is unknown, tags, pending or printings isn't a boolean, or boards lists an unknown board
+          description: id is not a UUID, format is unknown, tags, pending, printings or basic_lands isn't a boolean, or boards lists an unknown board
           content:
             application/json:
               schema:
