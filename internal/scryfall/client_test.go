@@ -91,7 +91,7 @@ func TestClient_FetchByID(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(collectionResponse{
 			Data: []wireCard{{
 				ID: "11111111-1111-1111-1111-111111111111", Name: "Sol Ring",
-				ManaCost: "{1}", CMC: 1, TypeLine: "Artifact",
+				ManaCost: "{1}", CMC: new(1.0), TypeLine: "Artifact",
 				Colors: []string{}, ColorIdentity: []string{},
 				Legalities: map[string]string{"commander": "legal"},
 			}},
@@ -247,6 +247,70 @@ func TestClient_TakesColorsFromFacesForDoubleFacedCards(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, cards, 1)
 	assert.Equal(t, []string{"U"}, cards[0].Colors)
+}
+
+func TestClient_TakesManaValueAndTypeFromFacesForReversibleCards(t *testing.T) {
+	withFakeScryfall(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(collectionResponse{
+			Data: []wireCard{{
+				ID: "22222222-2222-2222-2222-222222222222", Name: "Marang River Regent // Coil and Catch // Marang River Regent", Layout: "reversible_card",
+				CardFaces: []wireCardFace{
+					{ManaCost: "{4}{U}{U}", CMC: new(6.0), TypeLine: "Creature — Dragon"},
+					{ManaCost: "{3}{U}", CMC: new(6.0), TypeLine: "Instant — Omen"},
+				},
+			}},
+		})
+	})
+
+	cards, err := NewClient().Fetch(context.Background(), []Identifier{{ID: "22222222-2222-2222-2222-222222222222"}})
+
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	assert.Equal(t, "Marang River Regent // Coil and Catch", cards[0].Name)
+	assert.Equal(t, 6.0, cards[0].CMC)
+	assert.Equal(t, "{4}{U}{U}", cards[0].ManaCost)
+	assert.Equal(t, "Creature — Dragon // Instant — Omen", cards[0].TypeLine)
+}
+
+func TestClient_NamesReversibleCardsOnce(t *testing.T) {
+	withFakeScryfall(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(collectionResponse{
+			Data: []wireCard{
+				{ID: "22222222-2222-2222-2222-222222222222", Name: "Clarion Conqueror // Clarion Conqueror", Layout: "reversible_card"},
+				{ID: "33333333-3333-3333-3333-333333333333", Name: "Fire // Ice", Layout: "split"},
+			},
+		})
+	})
+
+	cards, err := NewClient().Fetch(context.Background(), []Identifier{
+		{ID: "22222222-2222-2222-2222-222222222222"}, {ID: "33333333-3333-3333-3333-333333333333"},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, cards, 2)
+	assert.Equal(t, "Clarion Conqueror", cards[0].Name)
+	assert.Equal(t, "Fire // Ice", cards[1].Name)
+}
+
+func TestClient_KeepsTopLevelZeroManaValueOverFaces(t *testing.T) {
+	withFakeScryfall(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(collectionResponse{
+			Data: []wireCard{{
+				ID: "22222222-2222-2222-2222-222222222222", CMC: new(0.0), TypeLine: "Land // Land",
+				CardFaces: []wireCardFace{{CMC: new(3.0)}, {}},
+			}},
+		})
+	})
+
+	cards, err := NewClient().Fetch(context.Background(), []Identifier{{ID: "22222222-2222-2222-2222-222222222222"}})
+
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	assert.Equal(t, 0.0, cards[0].CMC)
+	assert.Equal(t, "Land // Land", cards[0].TypeLine)
 }
 
 func TestClient_GathersPowersAndToughnessesFromEveryFace(t *testing.T) {

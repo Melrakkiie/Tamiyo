@@ -111,10 +111,11 @@ type collectionRequest struct {
 type wireCard struct {
 	ID              string            `json:"id"`
 	Name            string            `json:"name"`
+	Layout          string            `json:"layout"`
 	Set             string            `json:"set"`
 	CollectorNumber string            `json:"collector_number"`
 	ManaCost        string            `json:"mana_cost"`
-	CMC             float64           `json:"cmc"`
+	CMC             *float64          `json:"cmc"`
 	TypeLine        string            `json:"type_line"`
 	Power           string            `json:"power"`
 	Toughness       string            `json:"toughness"`
@@ -149,6 +150,9 @@ func parsePrice(raw *string) *float64 {
 }
 
 type wireCardFace struct {
+	ManaCost  string   `json:"mana_cost"`
+	CMC       *float64 `json:"cmc"`
+	TypeLine  string   `json:"type_line"`
 	Colors    []string `json:"colors"`
 	Power     string   `json:"power"`
 	Toughness string   `json:"toughness"`
@@ -172,12 +176,12 @@ func (w wireCard) toCard() Card {
 
 	return Card{
 		ID:              w.ID,
-		Name:            w.Name,
+		Name:            w.name(),
 		Set:             w.Set,
 		CollectorNumber: w.CollectorNumber,
-		ManaCost:        w.ManaCost,
-		CMC:             w.CMC,
-		TypeLine:        w.TypeLine,
+		ManaCost:        w.manaCost(),
+		CMC:             w.cmc(),
+		TypeLine:        w.typeLine(),
 		Colors:          colors,
 		ColorIdentity:   w.ColorIdentity,
 		Legalities:      w.Legalities,
@@ -185,6 +189,43 @@ func (w wireCard) toCard() Card {
 		Toughnesses:     dedupe(toughnesses),
 		Prices:          w.Prices.toPrices(),
 	}
+}
+
+func (w wireCard) name() string {
+	if w.Layout != "reversible_card" {
+		return w.Name
+	}
+	return strings.Join(dedupe(strings.Split(w.Name, " // ")), " // ")
+}
+
+func (w wireCard) manaCost() string {
+	if w.ManaCost == "" && len(w.CardFaces) > 0 {
+		return w.CardFaces[0].ManaCost
+	}
+	return w.ManaCost
+}
+
+func (w wireCard) cmc() float64 {
+	if w.CMC != nil {
+		return *w.CMC
+	}
+	if len(w.CardFaces) > 0 && w.CardFaces[0].CMC != nil {
+		return *w.CardFaces[0].CMC
+	}
+	return 0
+}
+
+func (w wireCard) typeLine() string {
+	if w.TypeLine != "" {
+		return w.TypeLine
+	}
+	lines := make([]string, 0, len(w.CardFaces))
+	for _, face := range w.CardFaces {
+		if face.TypeLine != "" {
+			lines = append(lines, face.TypeLine)
+		}
+	}
+	return strings.Join(lines, " // ")
 }
 
 func nonEmpty(value string) []string {

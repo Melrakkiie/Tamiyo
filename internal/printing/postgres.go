@@ -65,8 +65,19 @@ func (r *PostgresRepository) Upsert(ctx context.Context, printings []Printing) e
 		if err := renameCards(ctx, tx, p.ScryfallID, p.Name); err != nil {
 			return err
 		}
+		if err := setManaValue(ctx, tx, p.ScryfallID, p.ManaValue); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
+}
+
+func setManaValue(ctx context.Context, tx *sqlx.Tx, scryfallID string, manaValue float64) error {
+	if _, err := tx.ExecContext(ctx, `UPDATE tamiyo.cards SET mana_value = $2 WHERE scryfall_id = $1 AND mana_value <> $2`, scryfallID, manaValue); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE tamiyo.deck_pending_cards SET mana_value = $2 WHERE scryfall_id = $1 AND mana_value <> $2`, scryfallID, manaValue)
+	return err
 }
 
 type deckName struct {

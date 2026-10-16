@@ -20,6 +20,7 @@ const (
 type Printing struct {
 	ScryfallID   string
 	Name         string
+	ManaValue    float64
 	TypeLine     string
 	LegalFormats []string
 	Powers       []string
@@ -55,7 +56,7 @@ func FromScryfall(card scryfall.Card) Printing {
 		}
 	}
 	sort.Strings(formats)
-	return Printing{ScryfallID: card.ID, Name: card.Name, TypeLine: card.TypeLine, LegalFormats: formats, Powers: card.Powers, Toughnesses: card.Toughnesses, Prices: card.Prices}
+	return Printing{ScryfallID: card.ID, Name: card.Name, ManaValue: card.CMC, TypeLine: card.TypeLine, LegalFormats: formats, Powers: card.Powers, Toughnesses: card.Toughnesses, Prices: card.Prices}
 }
 
 func (r *Refresher) RefreshBatch(ctx context.Context) (int, error) {

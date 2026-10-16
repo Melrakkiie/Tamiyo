@@ -1478,7 +1478,7 @@ Five routes import cards in bulk, instead of one `POST /cards` call per card: a 
 
 A bulk import never fails outright just because some rows couldn't be resolved: a request that parses successfully always returns `200 OK` with a summary of what happened, including a `warnings` list for any row that was skipped (card not found on Scryfall, a duplicate, a transient error). The import only fails as a whole (non-`200`) when the file itself can't be parsed, a referenced `storage_id` doesn't exist, or Scryfall couldn't be reached at all.
 
-Cards and pending cards are stored under their English Scryfall name, whatever the language of the file: a ManaBox row named `Anneau solaire` creates a `Sol Ring`, and Moxfield tags on that line go to `Sol Ring` too. Only a ManaBox import made while Scryfall is unreachable keeps the file's name; the background printing refresher, which renames every card and pending card to its printing's English name (moving the deck tags along), fixes it within minutes. That refresh also replaces a name changed by hand with `PATCH /cards/:id`.
+Cards and pending cards are stored under their English Scryfall name, whatever the language of the file: a ManaBox row named `Anneau solaire` creates a `Sol Ring`, and Moxfield tags on that line go to `Sol Ring` too. Only a ManaBox import made while Scryfall is unreachable keeps the file's name; the background printing refresher, which renames every card and pending card to its printing's English name (moving the deck tags along), fixes it within minutes. That refresh also replaces a name changed by hand with `PATCH /cards/:id`, and sets each card's and pending card's `mana_value` to its printing's.
 
 **Response shape (all five routes)**
 ```json

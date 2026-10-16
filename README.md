@@ -24,7 +24,7 @@ tamiyo/
 │   ├── deckinsights/     # deck legality + stats routes
 │   ├── deckshare/        # public, read-only shared deck routes
 │   ├── scryfall/         # shared Scryfall API client (used by bulk and deckinsights)
-│   ├── printing/         # background refresh of printings' type lines, legalities, power and toughness
+│   ├── printing/         # background refresh of printings' names, mana values, type lines, legalities, power and toughness
 │   ├── follow/           # users following each other
 │   └── config/           # environment configuration
 ├── _devops/database/     # goose SQL migrations (embedded, applied on API boot)

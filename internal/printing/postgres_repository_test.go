@@ -299,3 +299,30 @@ func TestPostgresRepository_UpsertRenamesCardsAndMovesTheirTags(t *testing.T) {
 	require.NoError(t, db.Get(&stored, `SELECT name FROM tamiyo.printings WHERE scryfall_id = $1`, solRing))
 	assert.Equal(t, "Sol Ring", stored)
 }
+
+func TestPostgresRepository_UpsertSetsTheManaValueOfFoundPrintings(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+	alice := seedUser(t, db, "alice@example.com")
+	const regent = "11111111-1111-1111-1111-111111111111"
+	const unknown = "22222222-2222-2222-2222-222222222222"
+
+	seedNamedCard(t, db, alice, regent, "Marang River Regent // Coil and Catch")
+	seedPendingCard(t, db, alice, seedDeck(t, db, alice), regent, "Marang River Regent // Coil and Catch")
+	_, err := db.Exec(`INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, mana_value) VALUES ($1, 'Lost', $2, 'tst', '1', false, 3)`, alice, unknown)
+	require.NoError(t, err)
+
+	require.NoError(t, repo.Upsert(ctx, []Printing{
+		{ScryfallID: regent, Name: "Marang River Regent // Coil and Catch", ManaValue: 6, LegalFormats: []string{}},
+		{ScryfallID: unknown, LegalFormats: []string{}},
+	}))
+
+	var values []float64
+	require.NoError(t, db.Select(&values, `SELECT mana_value FROM tamiyo.cards WHERE scryfall_id = $1`, regent))
+	assert.Equal(t, []float64{6}, values)
+	require.NoError(t, db.Select(&values, `SELECT mana_value FROM tamiyo.deck_pending_cards WHERE scryfall_id = $1`, regent))
+	assert.Equal(t, []float64{6}, values)
+	require.NoError(t, db.Select(&values, `SELECT mana_value FROM tamiyo.cards WHERE scryfall_id = $1`, unknown))
+	assert.Equal(t, []float64{3}, values, "a printing Scryfall no longer knows keeps its mana value")
+}
