@@ -107,6 +107,7 @@ func Defaults() Preferences {
 		Theme:                 ThemeAuto,
 		NightStartsAt:         22,
 		NightEndsAt:           6,
+		ShowPrices:            true,
 		PriceCurrency:         CurrencyEUR,
 		PlaytestZoom:          DefaultPlaytestZoom,
 	}

@@ -42,7 +42,7 @@ func TestService_DefaultsBeforeAnythingIsSaved(t *testing.T) {
 	p, err := NewService(&fakeRepository{}).Get(context.Background(), testUserID)
 
 	require.NoError(t, err)
-	assert.Equal(t, Preferences{ShowCollectionInDecks: true, CardDisplay: "images", CardColumns: 6, ShowManaCost: true, ShowCardDetails: true, CollectionSort: "-added", Theme: "auto", NightStartsAt: 22, NightEndsAt: 6, PriceCurrency: "eur", PlaytestZoom: 100}, p)
+	assert.Equal(t, Preferences{ShowCollectionInDecks: true, CardDisplay: "images", CardColumns: 6, ShowManaCost: true, ShowCardDetails: true, CollectionSort: "-added", Theme: "auto", NightStartsAt: 22, NightEndsAt: 6, ShowPrices: true, PriceCurrency: "eur", PlaytestZoom: 100}, p)
 }
 
 func TestService_UpdateOnlyChangesWhatIsGiven(t *testing.T) {
@@ -69,7 +69,7 @@ func TestService_ValidatesCardDisplay(t *testing.T) {
 
 	updated, err := svc.Update(context.Background(), testUserID, Changes{CardDisplay: &text, CardColumns: &columns, ShowManaCost: &off})
 	require.NoError(t, err)
-	assert.Equal(t, Preferences{ShowCollectionInDecks: true, CardDisplay: "text", CardColumns: 9, ShowManaCost: false, ShowCardDetails: true, CollectionSort: "-added", Theme: "auto", NightStartsAt: 22, NightEndsAt: 6, PriceCurrency: "eur", PlaytestZoom: 100}, updated)
+	assert.Equal(t, Preferences{ShowCollectionInDecks: true, CardDisplay: "text", CardColumns: 9, ShowManaCost: false, ShowCardDetails: true, CollectionSort: "-added", Theme: "auto", NightStartsAt: 22, NightEndsAt: 6, ShowPrices: true, PriceCurrency: "eur", PlaytestZoom: 100}, updated)
 
 	for _, display := range []string{"images", "grid", "stacks"} {
 		_, err = svc.Update(context.Background(), testUserID, Changes{CardDisplay: &display})
@@ -147,17 +147,17 @@ func TestService_SavesTheThemeAndNightHours(t *testing.T) {
 func TestService_SavesThePricePreferences(t *testing.T) {
 	repo := &fakeRepository{}
 	svc := NewService(repo)
-	on := true
+	off := false
 	usd, unknown := "usd", "gbp"
 
-	updated, err := svc.Update(context.Background(), testUserID, Changes{ShowPrices: &on})
+	updated, err := svc.Update(context.Background(), testUserID, Changes{ShowPrices: &off})
 	require.NoError(t, err)
-	assert.True(t, updated.ShowPrices)
+	assert.False(t, updated.ShowPrices)
 	assert.Equal(t, "eur", updated.PriceCurrency)
 
 	updated, err = svc.Update(context.Background(), testUserID, Changes{PriceCurrency: &usd})
 	require.NoError(t, err)
-	assert.True(t, updated.ShowPrices)
+	assert.False(t, updated.ShowPrices)
 	assert.Equal(t, "usd", updated.PriceCurrency)
 
 	_, err = svc.Update(context.Background(), testUserID, Changes{PriceCurrency: &unknown})
@@ -211,14 +211,14 @@ func TestHandler_GetAndUpdate(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/auth/me/preferences", nil))
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.JSONEq(t, `{"show_collection_in_decks":true,"card_display":"images","card_columns":6,"show_mana_cost":true,"show_card_details":true,"collection_grouping":null,"collection_sort":"-added","theme":"auto","night_starts_at":22,"night_ends_at":6,"show_prices":false,"price_currency":"eur","playtest_zoom":100}`, w.Body.String())
+	assert.JSONEq(t, `{"show_collection_in_decks":true,"card_display":"images","card_columns":6,"show_mana_cost":true,"show_card_details":true,"collection_grouping":null,"collection_sort":"-added","theme":"auto","night_starts_at":22,"night_ends_at":6,"show_prices":true,"price_currency":"eur","playtest_zoom":100}`, w.Body.String())
 
 	req := httptest.NewRequest(http.MethodPatch, "/auth/me/preferences", bytes.NewBufferString(`{"show_collection_in_decks":false}`))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.JSONEq(t, `{"show_collection_in_decks":false,"card_display":"images","card_columns":6,"show_mana_cost":true,"show_card_details":true,"collection_grouping":null,"collection_sort":"-added","theme":"auto","night_starts_at":22,"night_ends_at":6,"show_prices":false,"price_currency":"eur","playtest_zoom":100}`, w.Body.String())
+	assert.JSONEq(t, `{"show_collection_in_decks":false,"card_display":"images","card_columns":6,"show_mana_cost":true,"show_card_details":true,"collection_grouping":null,"collection_sort":"-added","theme":"auto","night_starts_at":22,"night_ends_at":6,"show_prices":true,"price_currency":"eur","playtest_zoom":100}`, w.Body.String())
 	assert.False(t, repo.stored[testUserID].ShowCollectionInDecks)
 
 	req = httptest.NewRequest(http.MethodPatch, "/auth/me/preferences", bytes.NewBufferString(`{"show_prices":true,"price_currency":"usd"}`))

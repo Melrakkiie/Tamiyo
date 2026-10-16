@@ -228,7 +228,7 @@ Delete the authenticated account and everything it owns. **Requires `Authorizati
 The account's display preferences, saved so they follow the user from one device to another. **Requires `Authorization: Bearer <token>`.**
 
 ```json
-{ "show_collection_in_decks": true, "card_display": "images", "card_columns": 6, "show_mana_cost": true, "show_card_details": true, "collection_grouping": null, "collection_sort": "-added", "theme": "auto", "night_starts_at": 22, "night_ends_at": 6, "show_prices": false, "price_currency": "eur", "playtest_zoom": 100 }
+{ "show_collection_in_decks": true, "card_display": "images", "card_columns": 6, "show_mana_cost": true, "show_card_details": true, "collection_grouping": null, "collection_sort": "-added", "theme": "auto", "night_starts_at": 22, "night_ends_at": 6, "show_prices": true, "price_currency": "eur", "playtest_zoom": 100 }
 ```
 
 | Field | Type | Default | Notes |
@@ -243,7 +243,7 @@ The account's display preferences, saved so they follow the user from one device
 | `theme` | string | `auto` | Whether the app shows its day or its night colors: `day`, `night`, or `auto` to follow the time of day. |
 | `night_starts_at` | int | `22` | With `theme` `auto`, the hour night starts, `0` to `23`, in the user's own time zone. |
 | `night_ends_at` | int | `6` | With `theme` `auto`, the hour night ends, `0` to `23`; it must differ from `night_starts_at`. Night may run past midnight (`22` to `6`) or not (`1` to `5`). |
-| `show_prices` | bool | `false` | Whether the app shows card prices and the value of the collection, of each storage and of each deck. |
+| `show_prices` | bool | `true` | Whether the app shows card prices and the value of the collection, of each storage and of each deck. |
 | `price_currency` | string | `eur` | Which prices the app shows: `eur` (Cardmarket, from Scryfall) or `usd` (TCGplayer, from Scryfall). The API always sends both currencies in its [values](#prices-and-values); the client picks the one to show. |
 | `playtest_zoom` | int | `100` | The card size a deck playtest opens with, as a percentage of the normal size, `50` to `200`. The front saves it whenever the player zooms in or out. |
 

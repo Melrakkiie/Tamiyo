@@ -4071,7 +4071,7 @@ components:
           description: With theme auto, the hour night ends; must differ from night_starts_at.
         show_prices:
           type: boolean
-          default: false
+          default: true
           description: Whether the app shows card prices and the value of the collection, storages and decks.
         price_currency:
           type: string
