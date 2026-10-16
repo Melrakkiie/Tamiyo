@@ -55,6 +55,7 @@ type fakeImportService struct {
 	commitCalled          bool
 
 	duplicateResult DuplicateSummary
+	lastDuplicate   DuplicateRequest
 	lastSharedTags  bool
 
 	lastExportOptions DeckExportOptions
@@ -133,9 +134,10 @@ func (f *fakeImportService) SwitchProxy(ctx context.Context, userID string, deck
 	return f.summary, f.err
 }
 
-func (f *fakeImportService) DuplicateDeck(ctx context.Context, userID string, deckID string) (DuplicateSummary, error) {
+func (f *fakeImportService) DuplicateDeck(ctx context.Context, userID string, deckID string, req DuplicateRequest) (DuplicateSummary, error) {
 	f.lastUserID = userID
 	f.lastDeckID = deckID
+	f.lastDuplicate = req
 	return f.duplicateResult, f.err
 }
 

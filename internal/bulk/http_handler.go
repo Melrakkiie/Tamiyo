@@ -34,7 +34,7 @@ type importService interface {
 
 	RefreshCardDetails(ctx context.Context, userID string, afterID int) (DetailsRefreshSummary, error)
 	CommitPendingCards(ctx context.Context, userID string, deckID string, storageID, pendingID, quantity *int) (PendingCommitSummary, error)
-	DuplicateDeck(ctx context.Context, userID string, deckID string) (DuplicateSummary, error)
+	DuplicateDeck(ctx context.Context, userID string, deckID string, req DuplicateRequest) (DuplicateSummary, error)
 	BulkEditDeck(ctx context.Context, userID string, deckID string, r io.Reader) (Summary, error)
 	SwitchFoil(ctx context.Context, userID string, deckID string, req FoilSwitch) (Summary, error)
 	SwitchProxy(ctx context.Context, userID string, deckID string, req ProxySwitch) (Summary, error)

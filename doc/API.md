@@ -887,7 +887,19 @@ Delete a deck and all of its card associations (`card_deck` rows are removed via
 
 ### `POST /deck/:id/duplicate`
 
-Copy a deck into your decks: one of yours, or someone else's `public` or `unlisted` deck. The copy is a new **private** deck named `<name> (copie)`, with the same `format` and `background_scryfall_id`. Its cards are added the way [`POST /deck/:id/import`](#post-deckidimport) adds a Tamiyo deck file, so the copy keeps boards, commander and tags: your owned copies of each printing go in it, missing ones become pending cards. No body.
+Copy a deck into your decks: one of yours, or someone else's `public` or `unlisted` deck. The copy is a new deck, **private** unless the body says otherwise, with the same `format` and `background_scryfall_id`. Its cards are added the way [`POST /deck/:id/import`](#post-deckidimport) adds a Tamiyo deck file, so the copy keeps boards, commander and tags: your owned copies of each printing go in it, missing ones become pending cards.
+
+Optional body:
+
+```json
+{ "name": "Tamiyo tempo v2", "folder_id": 3, "visibility": "unlisted" }
+```
+
+| Field | Description |
+|---|---|
+| `name` | Name of the copy, trimmed. `<name> (copie)` when absent or blank. |
+| `folder_id` | One of your [folders](#deck-folders) to put the copy in. At the root when absent, whatever folder the source deck sits in. |
+| `visibility` | `private`, `unlisted` or `public`. `private` when absent, whatever the source deck's visibility. |
 
 **Response `201 Created`**
 ```json
@@ -896,7 +908,7 @@ Copy a deck into your decks: one of yours, or someone else's `public` or `unlist
 
 If adding the cards fails (Scryfall unreachable, say), the copy is removed and the error returned.
 
-**Errors:** `400` invalid id · `404` unknown deck, or someone else's private deck · `502` Scryfall unavailable
+**Errors:** `400` invalid id, invalid body, unknown `visibility`, `folder_id` not a positive integer or not one of your folders · `404` unknown deck, or someone else's private deck · `502` Scryfall unavailable
 
 ---
 

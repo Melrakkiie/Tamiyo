@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -55,12 +56,18 @@ func (s *Service) visibleDeck(ctx context.Context, userID string, deckID string)
 	return visibleDeck{ownerID: ownerID, deck: shared}, nil
 }
 
+type DuplicateRequest struct {
+	Name       string `json:"name"`
+	FolderID   *int   `json:"folder_id"`
+	Visibility string `json:"visibility"`
+}
+
 type DuplicateSummary struct {
 	DeckID  string  `json:"deck_id"`
 	Summary Summary `json:"summary"`
 }
 
-func (s *Service) DuplicateDeck(ctx context.Context, userID string, deckID string) (DuplicateSummary, error) {
+func (s *Service) DuplicateDeck(ctx context.Context, userID string, deckID string, req DuplicateRequest) (DuplicateSummary, error) {
 	source, err := s.visibleDeck(ctx, userID, deckID)
 	if err != nil {
 		return DuplicateSummary{}, err
@@ -76,15 +83,19 @@ func (s *Service) DuplicateDeck(ctx context.Context, userID string, deckID strin
 		return DuplicateSummary{}, err
 	}
 
-	var folderID *int
-	if source.mine {
-		folderID = source.deck.FolderID
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		name = source.deck.Name + copySuffix
+	}
+	visibility := req.Visibility
+	if visibility == "" {
+		visibility = deck.VisibilityPrivate
 	}
 	created, err := s.decks.CreateDeck(ctx, userID, deck.Deck{
-		FolderID:             folderID,
-		Name:                 source.deck.Name + copySuffix,
+		FolderID:             req.FolderID,
+		Name:                 name,
 		Format:               source.deck.Format,
-		Visibility:           deck.VisibilityPrivate,
+		Visibility:           visibility,
 		Bracket:              source.deck.Bracket,
 		BackgroundScryfallID: source.deck.BackgroundScryfallID,
 	})
@@ -293,10 +304,29 @@ func (h *Handler) duplicateDeck(ctx *gin.Context) {
 		return
 	}
 
-	result, err := h.service.DuplicateDeck(ctx.Request.Context(), userID, deckID)
+	var req DuplicateRequest
+	if ctx.Request.ContentLength != 0 {
+		if err := json.NewDecoder(ctx.Request.Body).Decode(&req); err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+			return
+		}
+		if req.FolderID != nil && *req.FolderID <= 0 {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "folder_id must be a positive integer"})
+			return
+		}
+		switch req.Visibility {
+		case "", deck.VisibilityPublic, deck.VisibilityUnlisted, deck.VisibilityPrivate:
+		default:
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "visibility must be one of: public, unlisted, private"})
+			return
+		}
+	}
+
+	result, err := h.service.DuplicateDeck(ctx.Request.Context(), userID, deckID, req)
 	if err != nil {
 		apierr.Respond(ctx, err,
 			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
+			apierr.Mapping{Err: deck.ErrTargetFolderNotFound, Status: http.StatusBadRequest, Message: deck.ErrTargetFolderNotFound.Error()},
 			apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway},
 		)
 		return
