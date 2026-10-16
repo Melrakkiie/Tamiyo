@@ -1171,12 +1171,15 @@ Each item has a `board` field, like the deck's own cards.
 
 Tags the owner puts on a deck's cards to help deckbuilding (`Ramp`, `Pioche`, `Removal`…). A tag belongs to a **card name within a deck**, not to a physical card: every copy of that card in the deck shares it, pending ones included, whatever the printing, and it stays when a copy is swapped for another printing. A card can have several tags. Each deck has its own tags.
 
-Tags are trimmed (inner spaces collapsed) and must have 1 to 40 characters; a card has at most 20. They're matched case-insensitively within the deck: tagging a card `ramp` when the deck already uses `Ramp` stores `Ramp`. Tags of a card that has left the deck are kept (they come back if the card does) but aren't returned.
+Tags are trimmed (inner spaces collapsed) and must have 1 to 40 characters; a card has at most 20. They're matched case-insensitively within the deck: tagging a card `ramp` when the deck already has `Ramp` stores `Ramp`. Tags of a card that has left the deck are kept (they come back if the card does) but aren't returned.
 
-- `GET /deck/:id/tags` — `{ "tags": ["Pioche", "Ramp"], "cards": [{ "name": "Sol Ring", "tags": ["Ramp"] }] }`: every tag used in the deck, and the tagged cards (untagged ones are left out). Sorted alphabetically, ignoring case.
+A tag can also be created before any card has it, to set up the deck's list first. Such a tag stays in the list with no card until it is deleted. A tag that was only ever set on cards disappears when no card has it any more.
+
+- `GET /deck/:id/tags` — `{ "tags": ["Pioche", "Ramp"], "cards": [{ "name": "Sol Ring", "tags": ["Ramp"] }] }`: every tag of the deck (the tags of its cards plus the ones created with `POST`, even when no card has them), and the tagged cards (untagged ones are left out). Sorted alphabetically, ignoring case.
+- `POST /deck/:id/tags` — create a tag no card has yet. Body: `{ "tag": "Ramp" }`. `201` `{ "tag": "Ramp" }`, the tag's spelling in the deck: creating a tag the deck already has (`ramp` when it has `Ramp`) changes nothing and returns `Ramp`.
 - `PUT /deck/:id/tags/cards` — replace a card's tags. Body: `{ "name": "Sol Ring", "tags": ["Ramp", "Artefact"] }` (`[]` removes them all). `name` is matched like the deck comparison does (case, ` / ` or ` // `). Returns the card's tags in the same shape as an entry of `cards`.
-- `PATCH /deck/:id/tags` — rename a tag on every card. Body: `{ "from": "Ramp", "to": "Accélération" }`. Renaming into a tag the deck already uses merges them. `204`.
-- `DELETE /deck/:id/tags?tag=Ramp` — remove a tag from every card. `204`.
+- `PATCH /deck/:id/tags` — rename a tag on every card. Body: `{ "from": "Ramp", "to": "Accélération" }`. Renaming into a tag the deck already has merges them. Works on a tag no card has too. `204`.
+- `DELETE /deck/:id/tags?tag=Ramp` — remove a tag from every card, and from the deck's list when it was created with `POST`. `204`.
 
 Tagging changes the deck's `updated` date. Shared decks and the deck comparison show tags too (see [Shared decks](#shared-decks)).
 

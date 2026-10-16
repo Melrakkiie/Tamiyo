@@ -1907,11 +1907,12 @@ paths:
       tags: [deck-cards]
       summary: List the deck's card tags
       description: >
-        Every tag used in the deck and the tagged cards (untagged ones are
-        left out), sorted alphabetically ignoring case. A tag belongs to a
-        card name within the deck: every copy shares it, pending ones
-        included, whatever the printing. Tags of cards no longer in the
-        deck are kept but not returned.
+        Every tag of the deck (the tags of its cards plus the tags created
+        with POST, even those no card has) and the tagged cards (untagged
+        ones are left out), sorted alphabetically ignoring case. A tag
+        belongs to a card name within the deck: every copy shares it,
+        pending ones included, whatever the printing. Tags of cards no
+        longer in the deck are kept but not returned.
       responses:
         "200":
           description: OK
@@ -1935,12 +1936,48 @@ paths:
                 $ref: "#/components/schemas/Error"
         "500":
           $ref: "#/components/responses/InternalError"
+    post:
+      tags: [deck-cards]
+      summary: Create a tag no card has yet
+      description: >
+        Adds the tag to the deck's list, where it stays with no card until
+        it is deleted. Creating a tag the deck already has (ignoring case)
+        changes nothing and returns its existing spelling.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagRequest"
+      responses:
+        "201":
+          description: Created, or already there. Returns the tag's spelling in the deck.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagRequest"
+        "400":
+          description: Invalid id, no tag, or a tag that's blank or over 40 characters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found (or not owned by the authenticated user).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
     patch:
       tags: [deck-cards]
       summary: Rename a tag on every card of the deck
       description: >
-        Renaming into a tag the deck already uses (ignoring case) merges
-        the two.
+        Renaming into a tag the deck already has (ignoring case) merges
+        the two. Works on a tag no card has too.
       requestBody:
         required: true
         content:
@@ -1959,7 +1996,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
-          description: Deck not found, or the deck doesn't use this tag.
+          description: Deck not found, or the deck doesn't have this tag.
           content:
             application/json:
               schema:
@@ -1969,6 +2006,8 @@ paths:
     delete:
       tags: [deck-cards]
       summary: Remove a tag from every card of the deck
+      description: >
+        Also removes it from the deck's list when it was created with POST.
       parameters:
         - name: tag
           in: query
@@ -1987,7 +2026,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
-          description: Deck not found, or the deck doesn't use this tag.
+          description: Deck not found, or the deck doesn't have this tag.
           content:
             application/json:
               schema:
@@ -5478,7 +5517,7 @@ components:
       properties:
         tags:
           type: array
-          description: Every tag used in the deck.
+          description: Every tag of the deck, including the ones no card has.
           items:
             type: string
         cards:
@@ -5499,6 +5538,14 @@ components:
             type: string
             maxLength: 40
       required: [name, tags]
+
+    TagRequest:
+      type: object
+      properties:
+        tag:
+          type: string
+          maxLength: 40
+      required: [tag]
 
     RenameTagRequest:
       type: object

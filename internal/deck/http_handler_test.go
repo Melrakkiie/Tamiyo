@@ -93,6 +93,14 @@ func (f *fakeService) SetCardTags(ctx context.Context, userID string, deckID str
 	return TaggedCard{Name: cardName, Tags: tags}, nil
 }
 
+func (f *fakeService) CreateTag(ctx context.Context, userID string, deckID string, tag string) (string, error) {
+	f.lastTag = tag
+	if f.tagErr != nil {
+		return "", f.tagErr
+	}
+	return tag, nil
+}
+
 func (f *fakeService) RenameTag(ctx context.Context, userID string, deckID string, from string, to string) error {
 	f.lastTag = from
 	f.lastRenameTo = to

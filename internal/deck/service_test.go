@@ -58,6 +58,8 @@ type fakeRepository struct {
 	ownedByName      map[string]int
 
 	cardTags     []CardTag
+	deckTags     []string
+	createdTag   string
 	replacedName string
 	replacedTags []string
 	renamedFrom  string
@@ -84,6 +86,17 @@ func (f *fakeRepository) SaveView(ctx context.Context, userID string, deckID str
 func (f *fakeRepository) FindCardTags(ctx context.Context, userID string, deckID string) ([]CardTag, error) {
 	f.lastUserID = userID
 	return f.cardTags, nil
+}
+
+func (f *fakeRepository) FindDeckTags(ctx context.Context, userID string, deckID string) ([]string, error) {
+	f.lastUserID = userID
+	return f.deckTags, nil
+}
+
+func (f *fakeRepository) CreateTag(ctx context.Context, userID string, deckID string, tag string) error {
+	f.tagRepoCalls++
+	f.createdTag = tag
+	return nil
 }
 
 func (f *fakeRepository) ReplaceCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) error {

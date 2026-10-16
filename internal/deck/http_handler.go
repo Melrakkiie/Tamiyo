@@ -204,6 +204,7 @@ type deckService interface {
 
 	GetCardTags(ctx context.Context, userID string, deckID string) (DeckTags, error)
 	SetCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) (TaggedCard, error)
+	CreateTag(ctx context.Context, userID string, deckID string, tag string) (string, error)
 	RenameTag(ctx context.Context, userID string, deckID string, from string, to string) error
 	DeleteTag(ctx context.Context, userID string, deckID string, tag string) error
 

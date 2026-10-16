@@ -27,6 +27,8 @@ type CardTag struct {
 
 type TagRepository interface {
 	FindCardTags(ctx context.Context, userID string, deckID string) ([]CardTag, error)
+	FindDeckTags(ctx context.Context, userID string, deckID string) ([]string, error)
+	CreateTag(ctx context.Context, userID string, deckID string, tag string) error
 	ReplaceCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) error
 	RenameTag(ctx context.Context, userID string, deckID string, from string, to string) error
 	DeleteTag(ctx context.Context, userID string, deckID string, tag string) error
@@ -107,6 +109,13 @@ func (s *Service) GetCardTags(ctx context.Context, userID string, deckID string)
 		byName[row.CardName] = append(byName[row.CardName], row.Tag)
 		distinct[row.Tag] = true
 	}
+	declared, err := s.repo.FindDeckTags(ctx, userID, deckID)
+	if err != nil {
+		return DeckTags{}, err
+	}
+	for _, tag := range declared {
+		distinct[tag] = true
+	}
 
 	result := DeckTags{Tags: sortedTags(distinct), Cards: make([]TaggedCard, 0, len(byName))}
 	for key, tags := range byName {
@@ -166,6 +175,27 @@ func (s *Service) SetCardTags(ctx context.Context, userID string, deckID string,
 	return TaggedCard{Name: displayName, Tags: sorted}, nil
 }
 
+func (s *Service) CreateTag(ctx context.Context, userID string, deckID string, raw string) (string, error) {
+	if _, err := s.repo.FindByID(ctx, userID, deckID); err != nil {
+		return "", err
+	}
+	tag, err := cleanTag(raw)
+	if err != nil {
+		return "", err
+	}
+	existing, err := s.existingTags(ctx, userID, deckID)
+	if err != nil {
+		return "", err
+	}
+	if canonical, ok := existing[strings.ToLower(tag)]; ok {
+		return canonical, nil
+	}
+	if err := s.repo.CreateTag(ctx, userID, deckID, tag); err != nil {
+		return "", err
+	}
+	return tag, nil
+}
+
 func (s *Service) RenameTag(ctx context.Context, userID string, deckID string, from string, rawTo string) error {
 	if _, err := s.repo.FindByID(ctx, userID, deckID); err != nil {
 		return err
@@ -211,7 +241,14 @@ func (s *Service) existingTags(ctx context.Context, userID string, deckID string
 	if err != nil {
 		return nil, err
 	}
+	declared, err := s.repo.FindDeckTags(ctx, userID, deckID)
+	if err != nil {
+		return nil, err
+	}
 	existing := make(map[string]string)
+	for _, tag := range declared {
+		existing[strings.ToLower(tag)] = tag
+	}
 	for _, row := range rows {
 		if _, ok := existing[strings.ToLower(row.Tag)]; !ok {
 			existing[strings.ToLower(row.Tag)] = row.Tag

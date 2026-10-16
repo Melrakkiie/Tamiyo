@@ -169,6 +169,88 @@ func TestDeleteTag(t *testing.T) {
 	assert.ErrorIs(t, svc.DeleteTag(context.Background(), testUserID, tagDeckID, "Nope"), ErrTagNotFound)
 }
 
+func TestCreateTag_ListsTheTagWithNoCards(t *testing.T) {
+	repo := taggedRepo()
+	svc := NewService(repo)
+
+	tag, err := svc.CreateTag(context.Background(), testUserID, tagDeckID, "  Pioche   rapide ")
+
+	require.NoError(t, err)
+	assert.Equal(t, "Pioche rapide", tag)
+	assert.Equal(t, "Pioche rapide", repo.createdTag)
+
+	repo.deckTags = []string{"Pioche rapide"}
+	tags, err := svc.GetCardTags(context.Background(), testUserID, tagDeckID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"artefact", "Contresort", "Pioche rapide", "Ramp", "Removal"}, tags.Tags)
+	require.Len(t, tags.Cards, 3)
+}
+
+func TestCreateTag_ReusesTheExistingSpelling(t *testing.T) {
+	repo := taggedRepo()
+	repo.deckTags = []string{"Pioche"}
+	svc := NewService(repo)
+
+	ramp, err := svc.CreateTag(context.Background(), testUserID, tagDeckID, "RAMP")
+	require.NoError(t, err)
+	pioche, err := svc.CreateTag(context.Background(), testUserID, tagDeckID, "pioche")
+	require.NoError(t, err)
+
+	assert.Equal(t, "Ramp", ramp)
+	assert.Equal(t, "Pioche", pioche)
+	assert.Zero(t, repo.tagRepoCalls)
+}
+
+func TestCreateTag_Errors(t *testing.T) {
+	repo := taggedRepo()
+	svc := NewService(repo)
+
+	_, err := svc.CreateTag(context.Background(), testUserID, tagDeckID, "   ")
+	assert.ErrorIs(t, err, ErrInvalidTag)
+	_, err = svc.CreateTag(context.Background(), testUserID, tagDeckID, strings.Repeat("x", maxTagLength+1))
+	assert.ErrorIs(t, err, ErrInvalidTag)
+	assert.Zero(t, repo.tagRepoCalls)
+
+	_, err = NewService(&fakeRepository{findByIDErr: ErrNotFound}).CreateTag(context.Background(), testUserID, tagDeckID, "Ramp")
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestSetCardTags_ReusesADeclaredTagsSpelling(t *testing.T) {
+	repo := taggedRepo()
+	repo.deckTags = []string{"Pioche"}
+	svc := NewService(repo)
+
+	_, err := svc.SetCardTags(context.Background(), testUserID, tagDeckID, "Sol Ring", []string{"pioche"})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Pioche"}, repo.replacedTags)
+}
+
+func TestRenameAndDeleteTag_WorkOnADeclaredTag(t *testing.T) {
+	repo := taggedRepo()
+	repo.deckTags = []string{"Pioche"}
+	svc := NewService(repo)
+
+	require.NoError(t, svc.RenameTag(context.Background(), testUserID, tagDeckID, "pioche", "Card draw"))
+	assert.Equal(t, "Pioche", repo.renamedFrom)
+	assert.Equal(t, "Card draw", repo.renamedTo)
+
+	require.NoError(t, svc.DeleteTag(context.Background(), testUserID, tagDeckID, "PIOCHE"))
+	assert.Equal(t, "Pioche", repo.deletedTag)
+}
+
+func TestHandler_CreateTag(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, jsonRequest(http.MethodPost, "/deck/"+tagDeckID+"/tags", `{"tag":"Ramp"}`))
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	assert.JSONEq(t, `{"tag":"Ramp"}`, w.Body.String())
+	assert.Equal(t, "Ramp", service.lastTag)
+}
+
 func TestHandler_GetDeckTags(t *testing.T) {
 	service := &fakeService{deckTags: DeckTags{
 		Tags:  []string{"Ramp"},
@@ -244,16 +326,19 @@ func TestHandler_TagErrors(t *testing.T) {
 		err    error
 		want   int
 	}{
-		"invalid deck id":    {http.MethodGet, "/deck/nope/tags", "", nil, http.StatusBadRequest},
-		"unknown deck":       {http.MethodGet, "/deck/" + tagDeckID + "/tags", "", ErrNotFound, http.StatusNotFound},
-		"missing tags":       {http.MethodPut, "/deck/" + tagDeckID + "/tags/cards", `{"name":"Sol Ring"}`, nil, http.StatusBadRequest},
-		"card not in deck":   {http.MethodPut, "/deck/" + tagDeckID + "/tags/cards", `{"name":"X","tags":["A"]}`, ErrCardNotInDeck, http.StatusNotFound},
-		"invalid tag":        {http.MethodPut, "/deck/" + tagDeckID + "/tags/cards", `{"name":"X","tags":[""]}`, ErrInvalidTag, http.StatusBadRequest},
-		"too many tags":      {http.MethodPut, "/deck/" + tagDeckID + "/tags/cards", `{"name":"X","tags":["A"]}`, ErrTooManyTags, http.StatusBadRequest},
-		"rename without to":  {http.MethodPatch, "/deck/" + tagDeckID + "/tags", `{"from":"Ramp"}`, nil, http.StatusBadRequest},
-		"rename unknown tag": {http.MethodPatch, "/deck/" + tagDeckID + "/tags", `{"from":"A","to":"B"}`, ErrTagNotFound, http.StatusNotFound},
-		"delete without tag": {http.MethodDelete, "/deck/" + tagDeckID + "/tags", "", nil, http.StatusBadRequest},
-		"delete unknown tag": {http.MethodDelete, "/deck/" + tagDeckID + "/tags?tag=A", "", ErrTagNotFound, http.StatusNotFound},
+		"invalid deck id":     {http.MethodGet, "/deck/nope/tags", "", nil, http.StatusBadRequest},
+		"unknown deck":        {http.MethodGet, "/deck/" + tagDeckID + "/tags", "", ErrNotFound, http.StatusNotFound},
+		"create without tag":  {http.MethodPost, "/deck/" + tagDeckID + "/tags", `{}`, nil, http.StatusBadRequest},
+		"create invalid tag":  {http.MethodPost, "/deck/" + tagDeckID + "/tags", `{"tag":" "}`, ErrInvalidTag, http.StatusBadRequest},
+		"create unknown deck": {http.MethodPost, "/deck/" + tagDeckID + "/tags", `{"tag":"A"}`, ErrNotFound, http.StatusNotFound},
+		"missing tags":        {http.MethodPut, "/deck/" + tagDeckID + "/tags/cards", `{"name":"Sol Ring"}`, nil, http.StatusBadRequest},
+		"card not in deck":    {http.MethodPut, "/deck/" + tagDeckID + "/tags/cards", `{"name":"X","tags":["A"]}`, ErrCardNotInDeck, http.StatusNotFound},
+		"invalid tag":         {http.MethodPut, "/deck/" + tagDeckID + "/tags/cards", `{"name":"X","tags":[""]}`, ErrInvalidTag, http.StatusBadRequest},
+		"too many tags":       {http.MethodPut, "/deck/" + tagDeckID + "/tags/cards", `{"name":"X","tags":["A"]}`, ErrTooManyTags, http.StatusBadRequest},
+		"rename without to":   {http.MethodPatch, "/deck/" + tagDeckID + "/tags", `{"from":"Ramp"}`, nil, http.StatusBadRequest},
+		"rename unknown tag":  {http.MethodPatch, "/deck/" + tagDeckID + "/tags", `{"from":"A","to":"B"}`, ErrTagNotFound, http.StatusNotFound},
+		"delete without tag":  {http.MethodDelete, "/deck/" + tagDeckID + "/tags", "", nil, http.StatusBadRequest},
+		"delete unknown tag":  {http.MethodDelete, "/deck/" + tagDeckID + "/tags?tag=A", "", ErrTagNotFound, http.StatusNotFound},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

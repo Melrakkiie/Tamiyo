@@ -27,6 +27,47 @@ func (r *PostgresRepository) FindCardTags(ctx context.Context, userID string, de
 	return tags, nil
 }
 
+func (r *PostgresRepository) FindDeckTags(ctx context.Context, userID string, deckID string) ([]string, error) {
+	tags := []string{}
+	query := `
+		SELECT t.tag
+		FROM tamiyo.deck_tags t
+		JOIN tamiyo.deck d ON d.id = t.deck_id
+		WHERE d.user_id = $1 AND t.deck_id = $2
+		ORDER BY t.tag
+	`
+	if err := r.db.SelectContext(ctx, &tags, query, userID, deckID); err != nil {
+		return nil, err
+	}
+	return tags, nil
+}
+
+func (r *PostgresRepository) CreateTag(ctx context.Context, userID string, deckID string, tag string) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	var owned bool
+	if err := tx.GetContext(ctx, &owned, `SELECT EXISTS (SELECT 1 FROM tamiyo.deck WHERE id = $1 AND user_id = $2)`, deckID, userID); err != nil {
+		return err
+	}
+	if !owned {
+		return ErrNotFound
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO tamiyo.deck_tags (deck_id, tag) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+		deckID, tag,
+	); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (r *PostgresRepository) ReplaceCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -77,6 +118,16 @@ func (r *PostgresRepository) RenameTag(ctx context.Context, userID string, deckI
 	`, userID, deckID, from, to); err != nil {
 		return err
 	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO tamiyo.deck_tags (deck_id, tag)
+		SELECT t.deck_id, $4
+		FROM tamiyo.deck_tags t
+		JOIN tamiyo.deck d ON d.id = t.deck_id
+		WHERE d.user_id = $1 AND t.deck_id = $2 AND t.tag = $3
+		ON CONFLICT DO NOTHING
+	`, userID, deckID, from, to); err != nil {
+		return err
+	}
 	if err := deleteTag(ctx, tx, userID, deckID, from); err != nil {
 		return err
 	}
@@ -84,7 +135,18 @@ func (r *PostgresRepository) RenameTag(ctx context.Context, userID string, deckI
 }
 
 func (r *PostgresRepository) DeleteTag(ctx context.Context, userID string, deckID string, tag string) error {
-	return deleteTag(ctx, r.db, userID, deckID, tag)
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	if err := deleteTag(ctx, tx, userID, deckID, tag); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 type execer interface {
@@ -92,8 +154,15 @@ type execer interface {
 }
 
 func deleteTag(ctx context.Context, db execer, userID string, deckID string, tag string) error {
-	_, err := db.ExecContext(ctx, `
+	if _, err := db.ExecContext(ctx, `
 		DELETE FROM tamiyo.deck_card_tags t
+		USING tamiyo.deck d
+		WHERE d.id = t.deck_id AND d.user_id = $1 AND t.deck_id = $2 AND t.tag = $3
+	`, userID, deckID, tag); err != nil {
+		return err
+	}
+	_, err := db.ExecContext(ctx, `
+		DELETE FROM tamiyo.deck_tags t
 		USING tamiyo.deck d
 		WHERE d.id = t.deck_id AND d.user_id = $1 AND t.deck_id = $2 AND t.tag = $3
 	`, userID, deckID, tag)

@@ -24,6 +24,14 @@ type setCardTagsRequest struct {
 	Tags []string `json:"tags" binding:"required"`
 }
 
+type tagRequest struct {
+	Tag string `json:"tag" binding:"required"`
+}
+
+type tagResponse struct {
+	Tag string `json:"tag"`
+}
+
 type renameTagRequest struct {
 	From string `json:"from" binding:"required"`
 	To   string `json:"to" binding:"required"`
@@ -31,6 +39,7 @@ type renameTagRequest struct {
 
 func (h *Handler) registerTagRoutes(router gin.IRoutes) {
 	router.GET("/deck/:id/tags", h.getDeckTags)
+	router.POST("/deck/:id/tags", h.createTag)
 	router.PUT("/deck/:id/tags/cards", h.setCardTags)
 	router.PATCH("/deck/:id/tags", h.renameTag)
 	router.DELETE("/deck/:id/tags", h.deleteTag)
@@ -108,6 +117,26 @@ func (h *Handler) setCardTags(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(http.StatusOK, toTaggedCardResponse(tagged))
+}
+
+func (h *Handler) createTag(ctx *gin.Context) {
+	userID, deckID, ok := h.deckRequestContext(ctx)
+	if !ok {
+		return
+	}
+
+	var req tagRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "tag is required"})
+		return
+	}
+
+	tag, err := h.service.CreateTag(ctx.Request.Context(), userID, deckID, req.Tag)
+	if err != nil {
+		respondTagError(ctx, err)
+		return
+	}
+	ctx.JSON(http.StatusCreated, tagResponse{Tag: tag})
 }
 
 func (h *Handler) renameTag(ctx *gin.Context) {

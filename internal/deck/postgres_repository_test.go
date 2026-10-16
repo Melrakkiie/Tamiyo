@@ -1295,6 +1295,61 @@ func TestPostgresRepository_CardTags(t *testing.T) {
 	assert.Zero(t, remaining)
 }
 
+func TestPostgresRepository_DeckTags(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	otherID := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+	d, err := repo.Create(ctx, userID, Deck{Name: "Kess", Format: "commander"})
+	require.NoError(t, err)
+
+	require.NoError(t, repo.CreateTag(ctx, userID, d.ID, "Ramp"))
+	require.NoError(t, repo.CreateTag(ctx, userID, d.ID, "Ramp"))
+	require.NoError(t, repo.CreateTag(ctx, userID, d.ID, "Pioche"))
+	tags, err := repo.FindDeckTags(ctx, userID, d.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Pioche", "Ramp"}, tags)
+
+	assert.ErrorIs(t, repo.CreateTag(ctx, otherID, d.ID, "Stolen"), ErrNotFound)
+	tags, err = repo.FindDeckTags(ctx, otherID, d.ID)
+	require.NoError(t, err)
+	assert.Empty(t, tags)
+
+	require.NoError(t, repo.ReplaceCardTags(ctx, userID, d.ID, "sol ring", []string{"Ramp"}))
+	require.NoError(t, repo.RenameTag(ctx, userID, d.ID, "Ramp", "Mana"))
+	tags, err = repo.FindDeckTags(ctx, userID, d.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Mana", "Pioche"}, tags)
+	cardTags, err := repo.FindCardTags(ctx, userID, d.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []CardTag{{CardName: "sol ring", Tag: "Mana"}}, cardTags)
+
+	require.NoError(t, repo.RenameTag(ctx, userID, d.ID, "Pioche", "Mana"))
+	tags, err = repo.FindDeckTags(ctx, userID, d.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Mana"}, tags)
+
+	require.NoError(t, repo.DeleteTag(ctx, otherID, d.ID, "Mana"))
+	tags, err = repo.FindDeckTags(ctx, userID, d.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Mana"}, tags)
+
+	require.NoError(t, repo.DeleteTag(ctx, userID, d.ID, "Mana"))
+	tags, err = repo.FindDeckTags(ctx, userID, d.ID)
+	require.NoError(t, err)
+	assert.Empty(t, tags)
+	cardTags, err = repo.FindCardTags(ctx, userID, d.ID)
+	require.NoError(t, err)
+	assert.Empty(t, cardTags)
+
+	require.NoError(t, repo.CreateTag(ctx, userID, d.ID, "Ramp"))
+	require.NoError(t, repo.Delete(ctx, userID, d.ID))
+	var remaining int
+	require.NoError(t, db.Get(&remaining, `SELECT count(*) FROM tamiyo.deck_tags`))
+	assert.Zero(t, remaining)
+}
+
 func TestPostgresRepository_FindPendingCards_CountsOwnedCopiesOutsideTheDeck(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db, "alice@example.com")
