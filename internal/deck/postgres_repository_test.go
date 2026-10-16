@@ -1869,3 +1869,185 @@ func TestPostgresRepository_Bracket(t *testing.T) {
 	_, err = db.Exec(`UPDATE tamiyo.deck SET bracket = 6 WHERE id = $1`, created.ID)
 	assert.Error(t, err)
 }
+
+func seedPartnerDeck(t *testing.T, db *sqlx.DB, repo *PostgresRepository, userID string) Deck {
+	t.Helper()
+	seedDecks(t, db, userID)
+	seedCardsWithoutStorage(t, db, userID)
+	_, err := db.Exec(`UPDATE tamiyo.cards SET color_identity = CASE id WHEN 1 THEN 'G' WHEN 2 THEN 'R' ELSE 'U' END`)
+	require.NoError(t, err)
+	linkCardToDeck(t, db, 1, "00000000-0000-0000-0000-000000000001")
+	linkCardToDeck(t, db, 2, "00000000-0000-0000-0000-000000000001")
+
+	deck, err := repo.FindByID(context.Background(), userID, "00000000-0000-0000-0000-000000000001")
+	require.NoError(t, err)
+	commanderID, partnerID := 1, 2
+	deck.CommanderID = &commanderID
+	deck.PartnerID = &partnerID
+	updated, err := repo.Update(context.Background(), userID, deck)
+	require.NoError(t, err)
+	return updated
+}
+
+func TestPostgresRepository_Partner(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+
+	updated := seedPartnerDeck(t, db, repo, userID)
+	require.NotNil(t, updated.PartnerID)
+	assert.Equal(t, 2, *updated.PartnerID)
+	require.NotNil(t, updated.PartnerScryfallID)
+	assert.Equal(t, "9d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", *updated.PartnerScryfallID)
+	require.NotNil(t, updated.ColorIdentity)
+	assert.Equal(t, "RG", *updated.ColorIdentity)
+
+	found, err := repo.FindByID(ctx, userID, updated.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 2, *found.PartnerID)
+	assert.Equal(t, "RG", *found.ColorIdentity)
+
+	all, _, err := repo.FindAll(ctx, userID, defaultFilter())
+	require.NoError(t, err)
+	for _, d := range all {
+		if d.ID == updated.ID {
+			require.NotNil(t, d.PartnerScryfallID)
+			assert.Equal(t, "RG", *d.ColorIdentity)
+		}
+	}
+
+	_, err = db.Exec(`UPDATE tamiyo.deck SET visibility = 'unlisted' WHERE id = $1`, updated.ID)
+	require.NoError(t, err)
+	_, shared, err := repo.FindShared(ctx, updated.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 2, *shared.PartnerID)
+
+	found.PartnerID = nil
+	cleared, err := repo.Update(ctx, userID, found)
+	require.NoError(t, err)
+	assert.Nil(t, cleared.PartnerID)
+	assert.Nil(t, cleared.PartnerScryfallID)
+	assert.Equal(t, "G", *cleared.ColorIdentity)
+
+	pending, err := repo.CreatePendingCard(ctx, userID, PendingCard{
+		DeckID: updated.ID, Name: "Tymna", ScryfallID: "8d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "c16", CollectorNumber: "45", Quantity: 1,
+	})
+	require.NoError(t, err)
+	cleared.PartnerPendingID = &pending.ID
+	withPending, err := repo.Update(ctx, userID, cleared)
+	require.NoError(t, err)
+	require.NotNil(t, withPending.PartnerPendingID)
+	assert.Equal(t, "8d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", *withPending.PartnerScryfallID)
+}
+
+func TestPostgresRepository_PartnerConstraints(t *testing.T) {
+	db := getTestDB(t)
+	alice := seedUser(t, db, "alice@example.com")
+	bob := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	deck := seedPartnerDeck(t, db, repo, alice)
+
+	_, err := db.Exec(`UPDATE tamiyo.deck SET partner_id = commander_id WHERE id = $1`, deck.ID)
+	assert.ErrorContains(t, err, "deck_distinct_commanders")
+
+	_, err = db.Exec(`INSERT INTO tamiyo.deck (user_id, name, format, partner_id) VALUES ($1, 'Alone', 'commander', 2)`, alice)
+	assert.ErrorContains(t, err, "deck_partner_needs_commander")
+
+	pending, err := repo.CreatePendingCard(context.Background(), alice, PendingCard{
+		DeckID: deck.ID, Name: "Tymna", ScryfallID: "8d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "c16", CollectorNumber: "45", Quantity: 1,
+	})
+	require.NoError(t, err)
+	_, err = db.Exec(`UPDATE tamiyo.deck SET partner_pending_id = $2 WHERE id = $1`, deck.ID, pending.ID)
+	assert.ErrorContains(t, err, "deck_single_partner")
+
+	_, err = db.Exec(`INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, mana_value) VALUES ($1, 'Thrasios', '7d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d', 'c16', '46', false, 2)`, bob)
+	require.NoError(t, err)
+	bobCard := 4
+	deck.PartnerID = &bobCard
+	_, err = repo.Update(context.Background(), alice, deck)
+	assert.ErrorIs(t, err, ErrCommanderNotFound)
+}
+
+func TestPostgresRepository_DeletingThePartnerCardKeepsItAsPendingPartner(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	deck := seedPartnerDeck(t, db, repo, userID)
+
+	_, err := db.Exec(`DELETE FROM tamiyo.cards WHERE id = 2`)
+	require.NoError(t, err)
+
+	found, err := repo.FindByID(context.Background(), userID, deck.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, *found.CommanderID)
+	assert.Nil(t, found.PartnerID)
+	require.NotNil(t, found.PartnerPendingID)
+	pending, err := repo.FindPendingCards(context.Background(), userID, deck.ID)
+	require.NoError(t, err)
+	require.Len(t, pending, 1)
+	assert.Equal(t, pending[0].ID, *found.PartnerPendingID)
+	assert.Equal(t, "Lightning Bolt", pending[0].Name)
+	assert.Equal(t, "RG", *found.ColorIdentity)
+}
+
+func TestPostgresRepository_LosingTheCommanderPromotesThePartner(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+	deck := seedPartnerDeck(t, db, repo, userID)
+
+	_, err := db.Exec(`DELETE FROM tamiyo.card_deck WHERE card_id = 1`)
+	require.NoError(t, err)
+	_, err = db.Exec(`DELETE FROM tamiyo.cards WHERE id = 1`)
+	require.NoError(t, err)
+
+	found, err := repo.FindByID(ctx, userID, deck.ID)
+	require.NoError(t, err)
+	require.NotNil(t, found.CommanderID)
+	assert.Equal(t, 2, *found.CommanderID)
+	assert.Nil(t, found.PartnerID)
+	assert.Nil(t, found.PartnerPendingID)
+
+	pending, err := repo.CreatePendingCard(ctx, userID, PendingCard{
+		DeckID: deck.ID, Name: "Tymna", ScryfallID: "8d5e9a7b-3f4c-4a2e-8b1d-6c7f8a9b0c1d", SetCode: "c16", CollectorNumber: "45", Quantity: 1,
+	})
+	require.NoError(t, err)
+	commanderPending := pending.ID
+	found.CommanderID = nil
+	found.CommanderPendingID = &commanderPending
+	partnerID := 2
+	found.PartnerID = &partnerID
+	_, err = repo.Update(ctx, userID, found)
+	require.NoError(t, err)
+
+	require.NoError(t, repo.DeletePendingCard(ctx, userID, deck.ID, pending.ID))
+	found, err = repo.FindByID(ctx, userID, deck.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 2, *found.CommanderID)
+	assert.Nil(t, found.CommanderPendingID)
+	assert.Nil(t, found.PartnerID)
+}
+
+func TestPostgresRepository_FindPublic_ShowsAndFiltersByThePartner(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	deck := seedPartnerDeck(t, db, repo, userID)
+	_, err := db.Exec(`UPDATE tamiyo.deck SET visibility = 'public' WHERE id = $1`, deck.ID)
+	require.NoError(t, err)
+
+	decks, total, err := repo.FindPublic(context.Background(), PublicFilter{Commander: "bolt", Page: 1, Limit: 25})
+	require.NoError(t, err)
+	require.Equal(t, 1, total)
+	require.NotNil(t, decks[0].PartnerName)
+	assert.Equal(t, "Lightning Bolt", *decks[0].PartnerName)
+	assert.Equal(t, "Black Lotus", *decks[0].CommanderName)
+	require.NotNil(t, decks[0].PartnerScryfallID)
+	assert.Equal(t, "RG", decks[0].ColorIdentity)
+
+	decks, _, err = repo.FindPublic(context.Background(), PublicFilter{Colors: []string{"R", "G"}, ColorMode: ColorModeExact, Page: 1, Limit: 25})
+	require.NoError(t, err)
+	assert.Len(t, decks, 1)
+}

@@ -107,8 +107,7 @@ func (s *Service) switchCards(ctx context.Context, userID string, deckID string,
 
 	var summary Summary
 	for i, c := range switchedCopies {
-		commander := d.CommanderID != nil && *d.CommanderID == c.ID
-		if err := s.replaceWithFinish(ctx, userID, deckID, owned, copyTargets[i], commander, &summary); err != nil {
+		if err := s.replaceWithFinish(ctx, userID, deckID, owned, copyTargets[i], commanderSlot(d.CardSlot(c.ID)), &summary); err != nil {
 			return summary, err
 		}
 		if err := s.decks.RemoveCardFromDeck(ctx, userID, deckID, c.ID); err != nil {
@@ -117,8 +116,7 @@ func (s *Service) switchCards(ctx context.Context, userID string, deckID string,
 		summary.CardsRemoved++
 	}
 	for i, p := range switchedPending {
-		commander := d.CommanderPendingID != nil && *d.CommanderPendingID == p.ID
-		if err := s.replaceWithFinish(ctx, userID, deckID, owned, pendingTargets[i], commander, &summary); err != nil {
+		if err := s.replaceWithFinish(ctx, userID, deckID, owned, pendingTargets[i], commanderSlot(d.PendingSlot(p.ID)), &summary); err != nil {
 			return summary, err
 		}
 		if err := s.decks.RemovePendingCard(ctx, userID, deckID, p.ID); err != nil {
@@ -196,7 +194,14 @@ func (s *Service) deckPending(ctx context.Context, userID string, deckID string,
 	return pending, nil
 }
 
-func (s *Service) replaceWithFinish(ctx context.Context, userID string, deckID string, owned *ownedCopies, want deck.PendingCard, commander bool, summary *Summary) error {
+func commanderSlot(slot deck.CommanderSlot, ok bool) *deck.CommanderSlot {
+	if !ok {
+		return nil
+	}
+	return &slot
+}
+
+func (s *Service) replaceWithFinish(ctx context.Context, userID string, deckID string, owned *ownedCopies, want deck.PendingCard, commander *deck.CommanderSlot, summary *Summary) error {
 	firstCopy := 0
 	linked := 0
 	for linked < want.Quantity {
@@ -225,16 +230,16 @@ func (s *Service) replaceWithFinish(ctx context.Context, userID string, deckID s
 		summary.CardsPending += remaining
 	}
 
-	if !commander {
+	if commander == nil {
 		return nil
 	}
 	if firstCopy != 0 {
-		if err := s.decks.SetCardCommander(ctx, userID, deckID, firstCopy); err != nil {
+		if err := s.decks.SetCardCommander(ctx, userID, deckID, *commander, firstCopy); err != nil {
 			return fmt.Errorf("moving the commander: %w", err)
 		}
 		return nil
 	}
-	if err := s.decks.SetPendingCommander(ctx, userID, deckID, added.ID); err != nil {
+	if err := s.decks.SetPendingCommander(ctx, userID, deckID, *commander, added.ID); err != nil {
 		return fmt.Errorf("moving the commander: %w", err)
 	}
 	return nil

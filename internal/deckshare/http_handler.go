@@ -33,6 +33,7 @@ type deckResponse struct {
 	Bracket              *int    `json:"bracket"`
 	BackgroundScryfallID *string `json:"background_scryfall_id"`
 	CommanderScryfallID  *string `json:"commander_scryfall_id"`
+	PartnerScryfallID    *string `json:"partner_scryfall_id"`
 	CardCount            int     `json:"card_count"`
 	LikesCount           int     `json:"likes_count"`
 	Added                string  `json:"added"`
@@ -88,6 +89,7 @@ func toResponse(shared SharedDeck) sharedDeckResponse {
 			Bracket:              d.Bracket,
 			BackgroundScryfallID: d.BackgroundScryfallID,
 			CommanderScryfallID:  d.CommanderScryfallID,
+			PartnerScryfallID:    d.PartnerScryfallID,
 			CardCount:            total,
 			LikesCount:           d.LikesCount,
 			Added:                d.Added.Format("2006-01-02 15:04:05"),

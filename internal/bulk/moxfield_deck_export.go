@@ -99,12 +99,12 @@ func (s *Service) deckExportEntries(ctx context.Context, userID string, d deck.D
 		return deckExportBoards{}, fmt.Errorf("loading pending cards: %w", err)
 	}
 
-	var commanderKey *boardKey
+	commanderKeys := make(map[boardKey]bool)
 	quantities := make(map[boardKey]int)
 	var order []boardKey
 	add := func(key boardKey, quantity int, commander bool) {
 		if commander {
-			commanderKey = &key
+			commanderKeys[key] = true
 		}
 		if _, ok := quantities[key]; !ok {
 			order = append(order, key)
@@ -113,11 +113,11 @@ func (s *Service) deckExportEntries(ctx context.Context, userID string, d deck.D
 	}
 	for _, c := range cards {
 		key := boardKey{moxfieldGroupKey{Name: c.Name, SetCode: c.SetCode, CollectorNumber: c.CollectorNumber, Foil: c.Foil}, c.Board}
-		add(key, 1, d.CommanderID != nil && *d.CommanderID == c.ID)
+		add(key, 1, d.IsCommanderCard(c.ID))
 	}
 	for _, p := range pending {
 		key := boardKey{moxfieldGroupKey{Name: p.Name, SetCode: p.SetCode, CollectorNumber: p.CollectorNumber, Foil: p.Foil}, p.Board}
-		add(key, p.Quantity, d.CommanderPendingID != nil && *d.CommanderPendingID == p.ID)
+		add(key, p.Quantity, d.IsCommanderPending(p.ID))
 	}
 
 	entries := make([]deckExportEntry, 0, len(order))
@@ -126,7 +126,7 @@ func (s *Service) deckExportEntries(ctx context.Context, userID string, d deck.D
 			key:       key.card,
 			board:     key.board,
 			quantity:  quantities[key],
-			commander: commanderKey != nil && key == *commanderKey,
+			commander: commanderKeys[key],
 		})
 	}
 	sort.SliceStable(entries, func(i, j int) bool {

@@ -28,8 +28,11 @@ type deckResponse struct {
 	Format               string  `json:"format"`
 	CommanderID          *int    `json:"commander_id"`
 	CommanderPendingID   *int    `json:"commander_pending_id"`
+	PartnerID            *int    `json:"partner_id"`
+	PartnerPendingID     *int    `json:"partner_pending_id"`
 	BackgroundScryfallID *string `json:"background_scryfall_id"`
 	CommanderScryfallID  *string `json:"commander_scryfall_id"`
+	PartnerScryfallID    *string `json:"partner_scryfall_id"`
 	ColorIdentity        *string `json:"color_identity"`
 	Visibility           string  `json:"visibility"`
 	Bracket              *int    `json:"bracket"`
@@ -49,8 +52,11 @@ func toResponse(d Deck) deckResponse {
 		Format:               d.Format,
 		CommanderID:          d.CommanderID,
 		CommanderPendingID:   d.CommanderPendingID,
+		PartnerID:            d.PartnerID,
+		PartnerPendingID:     d.PartnerPendingID,
 		BackgroundScryfallID: d.BackgroundScryfallID,
 		CommanderScryfallID:  d.CommanderScryfallID,
+		PartnerScryfallID:    d.PartnerScryfallID,
 		ColorIdentity:        d.ColorIdentity,
 		Visibility:           d.Visibility,
 		Bracket:              d.Bracket,
@@ -104,6 +110,9 @@ type updateDeckRequest struct {
 	CommanderID          *int    `json:"commander_id" binding:"omitempty,gt=0"`
 	CommanderPendingID   *int    `json:"commander_pending_id" binding:"omitempty,gt=0"`
 	ClearCommanderID     bool    `json:"clear_commander_id"`
+	PartnerID            *int    `json:"partner_id" binding:"omitempty,gt=0"`
+	PartnerPendingID     *int    `json:"partner_pending_id" binding:"omitempty,gt=0"`
+	ClearPartnerID       bool    `json:"clear_partner_id"`
 	BackgroundScryfallID *string `json:"background_scryfall_id" binding:"omitempty,uuid"`
 	ClearBackground      bool    `json:"clear_background_scryfall_id"`
 	Visibility           *string `json:"visibility" binding:"omitempty,oneof=public unlisted private"`
@@ -118,15 +127,19 @@ func (r updateDeckRequest) applyTo(d Deck) Deck {
 	if r.Format != nil {
 		d.Format = *r.Format
 	}
+	if r.ClearPartnerID {
+		d.setSlot(SlotPartner, nil, nil)
+	} else if r.PartnerID != nil {
+		d.setSlot(SlotPartner, r.PartnerID, nil)
+	} else if r.PartnerPendingID != nil {
+		d.setSlot(SlotPartner, nil, r.PartnerPendingID)
+	}
 	if r.ClearCommanderID {
-		d.CommanderID = nil
-		d.CommanderPendingID = nil
+		d.clearSlot(SlotCommander)
 	} else if r.CommanderID != nil {
-		d.CommanderID = r.CommanderID
-		d.CommanderPendingID = nil
+		d.setSlot(SlotCommander, r.CommanderID, nil)
 	} else if r.CommanderPendingID != nil {
-		d.CommanderPendingID = r.CommanderPendingID
-		d.CommanderID = nil
+		d.setSlot(SlotCommander, nil, r.CommanderPendingID)
 	}
 	if r.ClearBackground {
 		d.BackgroundScryfallID = nil
@@ -142,6 +155,17 @@ func (r updateDeckRequest) applyTo(d Deck) Deck {
 		d.Bracket = r.Bracket
 	}
 	return d
+}
+
+func (r updateDeckRequest) pendingIDs() []int {
+	var ids []int
+	if r.CommanderPendingID != nil && !r.ClearCommanderID && r.CommanderID == nil {
+		ids = append(ids, *r.CommanderPendingID)
+	}
+	if r.PartnerPendingID != nil && !r.ClearPartnerID && r.PartnerID == nil {
+		ids = append(ids, *r.PartnerPendingID)
+	}
+	return ids
 }
 
 type deckCardResponse struct {
@@ -416,6 +440,8 @@ func (h *Handler) updateDeck(ctx *gin.Context) {
 		apierr.Respond(ctx, err,
 			apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: ErrCommanderNotFound, Status: http.StatusBadRequest, Message: "commander_id does not reference an existing card"},
+			apierr.Mapping{Err: ErrPartnerWithoutCommander, Status: http.StatusBadRequest},
+			apierr.Mapping{Err: ErrSameCommanders, Status: http.StatusBadRequest},
 		)
 		return
 	}

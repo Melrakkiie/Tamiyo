@@ -143,7 +143,7 @@ func (s *Service) ExportTamiyoDeck(ctx context.Context, userID string, deckID st
 	for _, c := range cards {
 		add(tamiyoDeckKey{
 			name: c.Name, scryfallID: c.ScryfallID, setCode: c.SetCode, collectorNumber: c.CollectorNumber,
-			foil: c.Foil, board: c.Board, commander: d.CommanderID != nil && *d.CommanderID == c.ID,
+			foil: c.Foil, board: c.Board, commander: d.IsCommanderCard(c.ID),
 		}, 1)
 	}
 	for _, p := range pending {
@@ -152,7 +152,7 @@ func (s *Service) ExportTamiyoDeck(ctx context.Context, userID string, deckID st
 			foil: p.Foil, board: p.Board,
 		}
 		quantity := p.Quantity
-		if d.CommanderPendingID != nil && *d.CommanderPendingID == p.ID {
+		if d.IsCommanderPending(p.ID) {
 			commander := key
 			commander.commander = true
 			add(commander, 1)

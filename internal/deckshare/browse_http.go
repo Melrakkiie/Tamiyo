@@ -27,6 +27,8 @@ type publicDeckResponse struct {
 	BackgroundScryfallID *string       `json:"background_scryfall_id"`
 	CommanderScryfallID  *string       `json:"commander_scryfall_id"`
 	CommanderName        *string       `json:"commander_name"`
+	PartnerScryfallID    *string       `json:"partner_scryfall_id"`
+	PartnerName          *string       `json:"partner_name"`
 	ColorIdentity        string        `json:"color_identity"`
 	CardCount            int           `json:"card_count"`
 	LikesCount           int           `json:"likes_count"`
@@ -52,6 +54,8 @@ func toPublicDeckResponse(d deck.PublicDeck) publicDeckResponse {
 		BackgroundScryfallID: d.BackgroundScryfallID,
 		CommanderScryfallID:  d.CommanderScryfallID,
 		CommanderName:        d.CommanderName,
+		PartnerScryfallID:    d.PartnerScryfallID,
+		PartnerName:          d.PartnerName,
 		ColorIdentity:        d.ColorIdentity,
 		CardCount:            d.CardCount,
 		LikesCount:           d.LikesCount,

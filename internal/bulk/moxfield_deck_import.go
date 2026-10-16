@@ -168,7 +168,7 @@ type deckLinePlacement struct {
 	commander bool
 }
 
-func (s *Service) placeResolvedLines(ctx context.Context, userID string, lines []moxfieldDeckLine, resolved map[string]ResolvedCard, commanderFromFirstLine bool, targetDeckID string, includeLocked bool) ([]deckLinePlacement, Summary, error) {
+func (s *Service) placeResolvedLines(ctx context.Context, userID string, lines []moxfieldDeckLine, resolved map[string]ResolvedCard, commanders int, targetDeckID string, includeLocked bool) ([]deckLinePlacement, Summary, error) {
 	owned, err := s.loadOwnedCopies(ctx, userID, targetDeckID, includeLocked)
 	if err != nil {
 		return nil, Summary{}, err
@@ -176,11 +176,10 @@ func (s *Service) placeResolvedLines(ctx context.Context, userID string, lines [
 
 	var summary Summary
 	placements := make([]deckLinePlacement, 0, len(lines))
-	commanderPending := commanderFromFirstLine
 	for _, line := range lines {
-		commander := commanderPending && deck.InMainBoard(line.Board)
+		commander := commanders > 0 && line.Commander && deck.InMainBoard(line.Board)
 		if commander {
-			commanderPending = false
+			commanders--
 		}
 		resolvedCard, ok := resolved[deckLineKey(line)]
 		if !ok {
@@ -210,6 +209,7 @@ func (s *Service) placeResolvedLines(ctx context.Context, userID string, lines [
 }
 
 func (s *Service) fillDeck(ctx context.Context, userID string, deckID string, placements []deckLinePlacement, summary *Summary) {
+	slot := deck.SlotCommander
 	for _, p := range placements {
 		linked := 0
 		for _, cardID := range p.ownedIDs {
@@ -218,8 +218,10 @@ func (s *Service) fillDeck(ctx context.Context, userID string, deckID string, pl
 				continue
 			}
 			if linked == 0 && p.commander {
-				if err := s.decks.SetCardCommander(ctx, userID, deckID, cardID); err != nil {
+				if err := s.decks.SetCardCommander(ctx, userID, deckID, slot, cardID); err != nil {
 					summary.Warnings = append(summary.Warnings, fmt.Sprintf("could not make %q the commander: %v", p.line.CardName, err))
+				} else {
+					slot = deck.SlotPartner
 				}
 			}
 			linked++
@@ -252,8 +254,10 @@ func (s *Service) fillDeck(ctx context.Context, userID string, deckID string, pl
 		summary.CardsPending += p.missing
 
 		if p.commander && linked == 0 {
-			if err := s.decks.SetPendingCommander(ctx, userID, deckID, pending.ID); err != nil {
+			if err := s.decks.SetPendingCommander(ctx, userID, deckID, slot, pending.ID); err != nil {
 				summary.Warnings = append(summary.Warnings, fmt.Sprintf("could not make %q the commander: %v", p.line.CardName, err))
+			} else {
+				slot = deck.SlotPartner
 			}
 		}
 	}
@@ -300,7 +304,6 @@ func (s *Service) ImportIntoDeck(ctx context.Context, userID string, deckID stri
 		return Summary{}, err
 	}
 
-	commanderFromFirstLine := opts.CommanderFromFirstLine
 	var lines []moxfieldDeckLine
 	var tags []tamiyoCardTags
 	tamiyoFile := looksLikeJSON(data)
@@ -315,11 +318,14 @@ func (s *Service) ImportIntoDeck(ctx context.Context, userID string, deckID stri
 		if len(file.deckCards) == 0 {
 			return Summary{}, invalidTamiyo("the deck has no cards")
 		}
-		lines, commanderFromFirstLine = tamiyoDeckLines(file)
+		lines = tamiyoDeckLines(file)
 		tags = file.Tags
 	} else {
 		if lines, err = parseMoxfieldDeckList(bytes.NewReader(data)); err != nil {
 			return Summary{}, err
+		}
+		if opts.CommanderFromFirstLine {
+			markFirstLineCommander(lines)
 		}
 	}
 
@@ -331,8 +337,11 @@ func (s *Service) ImportIntoDeck(ctx context.Context, userID string, deckID stri
 		tags = lineTags(lines, resolved)
 	}
 
-	hasCommander := d.CommanderID != nil || d.CommanderPendingID != nil
-	placements, summary, err := s.placeResolvedLines(ctx, userID, lines, resolved, commanderFromFirstLine && !hasCommander, d.ID, opts.IncludeLockedStorages)
+	commanders := maxCommanders
+	if d.HasCommander() {
+		commanders = 0
+	}
+	placements, summary, err := s.placeResolvedLines(ctx, userID, lines, resolved, commanders, d.ID, opts.IncludeLockedStorages)
 	if err != nil {
 		return Summary{}, err
 	}
@@ -342,4 +351,18 @@ func (s *Service) ImportIntoDeck(ctx context.Context, userID string, deckID stri
 		return summary, err
 	}
 	return summary, nil
+}
+
+func markFirstLineCommander(lines []moxfieldDeckLine) {
+	for _, line := range lines {
+		if line.Commander {
+			return
+		}
+	}
+	for i := range lines {
+		if deck.InMainBoard(lines[i].Board) {
+			lines[i].Commander = true
+			return
+		}
+	}
 }

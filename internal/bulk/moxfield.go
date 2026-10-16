@@ -76,8 +76,11 @@ type moxfieldDeckLine struct {
 	CollectorNumber string
 	Foil            bool
 	Board           string
+	Commander       bool
 	Tags            []string
 }
+
+const maxCommanders = 2
 
 func splitLineTags(text string) (string, []string) {
 	start := strings.Index(text, " #")
@@ -114,14 +117,18 @@ func parseMoxfieldDeckList(r io.Reader) ([]moxfieldDeckLine, error) {
 	var lines []moxfieldDeckLine
 	lineNo := 0
 	board := deck.BoardMain
+	commanderSection := false
+	commanders := 0
 	for scanner.Scan() {
 		lineNo++
 		text := strings.TrimSpace(scanner.Text())
 		if text == "" {
 			continue
 		}
-		if section, ok := deckSectionHeaders[strings.ToLower(strings.TrimSpace(strings.TrimSuffix(text, ":")))]; ok {
+		header := strings.ToLower(strings.TrimSpace(strings.TrimSuffix(text, ":")))
+		if section, ok := deckSectionHeaders[header]; ok {
 			board = section
+			commanderSection = header == "commander"
 			continue
 		}
 
@@ -140,6 +147,10 @@ func parseMoxfieldDeckList(r io.Reader) ([]moxfieldDeckLine, error) {
 			return nil, fmt.Errorf("%w: line %d: invalid quantity %q", ErrInvalidFile, lineNo, matches[1])
 		}
 
+		commander := commanderSection && commanders < maxCommanders
+		if commander {
+			commanders++
+		}
 		lines = append(lines, moxfieldDeckLine{
 			LineNo:          lineNo,
 			Quantity:        quantity,
@@ -148,6 +159,7 @@ func parseMoxfieldDeckList(r io.Reader) ([]moxfieldDeckLine, error) {
 			CollectorNumber: matches[4],
 			Foil:            matches[5] != "",
 			Board:           board,
+			Commander:       commander,
 			Tags:            tags,
 		})
 	}

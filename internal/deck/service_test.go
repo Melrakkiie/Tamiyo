@@ -700,7 +700,7 @@ func TestService_SetPendingCommander_ReplacesTheCommander(t *testing.T) {
 	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", CommanderID: &commanderID}}
 	service := NewService(repo)
 
-	err := service.SetPendingCommander(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 7)
+	err := service.SetPendingCommander(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", SlotCommander, 7)
 
 	require.NoError(t, err)
 	assert.Nil(t, repo.updatedDeck.CommanderID)
@@ -712,7 +712,7 @@ func TestService_SetPendingCommander_ReturnsNotFoundForAnUnknownDeck(t *testing.
 	repo := &fakeRepository{findByIDErr: ErrNotFound}
 	service := NewService(repo)
 
-	err := service.SetPendingCommander(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 7)
+	err := service.SetPendingCommander(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", SlotCommander, 7)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
@@ -722,7 +722,7 @@ func TestService_SetCardCommander_ReplacesAPendingCommander(t *testing.T) {
 	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", CommanderPendingID: &pendingID}}
 	service := NewService(repo)
 
-	err := service.SetCardCommander(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 12)
+	err := service.SetCardCommander(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", SlotCommander, 12)
 
 	require.NoError(t, err)
 	assert.Nil(t, repo.updatedDeck.CommanderPendingID)
@@ -995,4 +995,172 @@ func TestService_Likes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, total)
 	assert.Equal(t, deckID, liked[0].ID)
+}
+
+const partnerDeckID = "00000000-0000-0000-0000-000000000001"
+
+func TestService_UpdateDeck_SetsThePartner(t *testing.T) {
+	commander := 4
+	repo := &fakeRepository{findByIDDeck: Deck{ID: partnerDeckID, CommanderID: &commander}}
+	service := NewService(repo)
+
+	partner := 9
+	result, err := service.UpdateDeck(context.Background(), testUserID, partnerDeckID, updateDeckRequest{PartnerID: &partner})
+
+	require.NoError(t, err)
+	require.NotNil(t, result.PartnerID)
+	assert.Equal(t, 9, *result.PartnerID)
+	assert.Equal(t, 4, *result.CommanderID)
+}
+
+func TestService_UpdateDeck_SetsAPendingPartnerOfTheDeck(t *testing.T) {
+	commander := 4
+	repo := &fakeRepository{
+		findByIDDeck: Deck{ID: partnerDeckID, CommanderID: &commander},
+		pending:      []PendingCard{{ID: 7, Quantity: 1, Board: BoardMain}},
+	}
+	service := NewService(repo)
+
+	partner := 7
+	result, err := service.UpdateDeck(context.Background(), testUserID, partnerDeckID, updateDeckRequest{PartnerPendingID: &partner})
+
+	require.NoError(t, err)
+	assert.Nil(t, result.PartnerID)
+	require.NotNil(t, result.PartnerPendingID)
+	assert.Equal(t, 7, *result.PartnerPendingID)
+}
+
+func TestService_UpdateDeck_RejectsAPendingPartnerOfAnotherDeck(t *testing.T) {
+	commander := 4
+	repo := &fakeRepository{findByIDDeck: Deck{ID: partnerDeckID, CommanderID: &commander}}
+	service := NewService(repo)
+
+	partner := 7
+	_, err := service.UpdateDeck(context.Background(), testUserID, partnerDeckID, updateDeckRequest{PartnerPendingID: &partner})
+
+	assert.ErrorIs(t, err, ErrCommanderNotFound)
+	assert.Zero(t, repo.updatedDeck.ID)
+}
+
+func TestService_UpdateDeck_RejectsAPartnerWithoutCommander(t *testing.T) {
+	repo := &fakeRepository{findByIDDeck: Deck{ID: partnerDeckID}}
+	service := NewService(repo)
+
+	partner := 9
+	_, err := service.UpdateDeck(context.Background(), testUserID, partnerDeckID, updateDeckRequest{PartnerID: &partner})
+
+	assert.ErrorIs(t, err, ErrPartnerWithoutCommander)
+	assert.Zero(t, repo.updatedDeck.ID)
+}
+
+func TestService_UpdateDeck_RejectsTheCommanderAsPartner(t *testing.T) {
+	commander := 4
+	repo := &fakeRepository{findByIDDeck: Deck{ID: partnerDeckID, CommanderID: &commander}}
+	service := NewService(repo)
+
+	_, err := service.UpdateDeck(context.Background(), testUserID, partnerDeckID, updateDeckRequest{PartnerID: &commander})
+
+	assert.ErrorIs(t, err, ErrSameCommanders)
+}
+
+func TestService_UpdateDeck_ClearingTheCommanderPromotesThePartner(t *testing.T) {
+	commander, partner := 4, 7
+	repo := &fakeRepository{findByIDDeck: Deck{ID: partnerDeckID, CommanderID: &commander, PartnerPendingID: &partner}}
+	service := NewService(repo)
+
+	result, err := service.UpdateDeck(context.Background(), testUserID, partnerDeckID, updateDeckRequest{ClearCommanderID: true})
+
+	require.NoError(t, err)
+	assert.Nil(t, result.CommanderID)
+	require.NotNil(t, result.CommanderPendingID)
+	assert.Equal(t, 7, *result.CommanderPendingID)
+	assert.False(t, result.HasPartner())
+}
+
+func TestService_UpdateDeck_ClearsBothCommanders(t *testing.T) {
+	commander, partner := 4, 9
+	repo := &fakeRepository{findByIDDeck: Deck{ID: partnerDeckID, CommanderID: &commander, PartnerID: &partner}}
+	service := NewService(repo)
+
+	result, err := service.UpdateDeck(context.Background(), testUserID, partnerDeckID, updateDeckRequest{ClearCommanderID: true, ClearPartnerID: true})
+
+	require.NoError(t, err)
+	assert.False(t, result.HasCommander())
+	assert.False(t, result.HasPartner())
+}
+
+func TestService_UpdateDeck_ClearsOnlyThePartner(t *testing.T) {
+	commander, partner := 4, 9
+	repo := &fakeRepository{findByIDDeck: Deck{ID: partnerDeckID, CommanderID: &commander, PartnerID: &partner}}
+	service := NewService(repo)
+
+	result, err := service.UpdateDeck(context.Background(), testUserID, partnerDeckID, updateDeckRequest{ClearPartnerID: true})
+
+	require.NoError(t, err)
+	assert.Equal(t, 4, *result.CommanderID)
+	assert.False(t, result.HasPartner())
+}
+
+func TestService_PromotePendingCommander_PromotesThePendingPartner(t *testing.T) {
+	commander, partner := 4, 7
+	repo := &fakeRepository{findByIDDeck: Deck{ID: partnerDeckID, CommanderID: &commander, PartnerPendingID: &partner}}
+	service := NewService(repo)
+
+	require.NoError(t, service.PromotePendingCommander(context.Background(), testUserID, partnerDeckID, 7, 42))
+
+	assert.Equal(t, 4, *repo.updatedDeck.CommanderID)
+	require.NotNil(t, repo.updatedDeck.PartnerID)
+	assert.Equal(t, 42, *repo.updatedDeck.PartnerID)
+	assert.Nil(t, repo.updatedDeck.PartnerPendingID)
+}
+
+func TestService_SetCardCommander_SetsThePartnerSlot(t *testing.T) {
+	commander := 4
+	repo := &fakeRepository{findByIDDeck: Deck{ID: partnerDeckID, CommanderID: &commander}}
+	service := NewService(repo)
+
+	require.NoError(t, service.SetCardCommander(context.Background(), testUserID, partnerDeckID, SlotPartner, 12))
+
+	assert.Equal(t, 4, *repo.updatedDeck.CommanderID)
+	require.NotNil(t, repo.updatedDeck.PartnerID)
+	assert.Equal(t, 12, *repo.updatedDeck.PartnerID)
+}
+
+func TestService_SetPendingCommander_RejectsAPartnerWithoutCommander(t *testing.T) {
+	repo := &fakeRepository{findByIDDeck: Deck{ID: partnerDeckID}}
+	service := NewService(repo)
+
+	err := service.SetPendingCommander(context.Background(), testUserID, partnerDeckID, SlotPartner, 7)
+
+	assert.ErrorIs(t, err, ErrPartnerWithoutCommander)
+}
+
+func TestService_ClearCommander_ClearsOneSlot(t *testing.T) {
+	commander, partner := 4, 9
+	repo := &fakeRepository{findByIDDeck: Deck{ID: partnerDeckID, CommanderID: &commander, PartnerID: &partner}}
+	service := NewService(repo)
+
+	require.NoError(t, service.ClearCommander(context.Background(), testUserID, partnerDeckID, SlotPartner))
+	assert.Equal(t, 4, *repo.updatedDeck.CommanderID)
+	assert.Nil(t, repo.updatedDeck.PartnerID)
+
+	require.NoError(t, service.ClearCommander(context.Background(), testUserID, partnerDeckID, SlotCommander))
+	assert.Equal(t, 9, *repo.updatedDeck.CommanderID)
+	assert.Nil(t, repo.updatedDeck.PartnerID)
+}
+
+func TestService_PartnerStaysInTheMainBoard(t *testing.T) {
+	commander, partner, pendingPartner := 4, 9, 5
+	repo := &fakeRepository{
+		findByIDDeck: Deck{ID: partnerDeckID, CommanderID: &commander, PartnerID: &partner},
+		pending:      []PendingCard{{ID: 5, ScryfallID: "aaaa", Quantity: 1, Board: BoardMain}},
+	}
+	service := NewService(repo)
+
+	assert.ErrorIs(t, service.PutCardInDeck(context.Background(), testUserID, partnerDeckID, 9, BoardSideboard), ErrCommanderBoard)
+
+	repo.findByIDDeck = Deck{ID: partnerDeckID, CommanderID: &commander, PartnerPendingID: &pendingPartner}
+	board := BoardSideboard
+	_, err := service.UpdatePendingCard(context.Background(), testUserID, partnerDeckID, 5, nil, &board)
+	assert.ErrorIs(t, err, ErrCommanderBoard)
 }

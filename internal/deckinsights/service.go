@@ -139,5 +139,9 @@ func withPendingCards(d deck.Deck, cards []deck.DeckCard, pending []deck.Pending
 		commanderID := pendingCopyID(*d.CommanderPendingID, 0)
 		d.CommanderID = &commanderID
 	}
+	if d.PartnerID == nil && d.PartnerPendingID != nil {
+		partnerID := pendingCopyID(*d.PartnerPendingID, 0)
+		d.PartnerID = &partnerID
+	}
 	return d, all
 }

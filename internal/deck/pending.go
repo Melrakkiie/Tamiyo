@@ -65,13 +65,9 @@ func (s *Service) AddPendingCard(ctx context.Context, userID string, deckID stri
 	return s.repo.CreatePendingCard(ctx, userID, p)
 }
 
-func isPendingCommander(d Deck, id int) bool {
-	return d.CommanderPendingID != nil && *d.CommanderPendingID == id
-}
-
 func mergeTarget(d Deck, existing []PendingCard, p PendingCard, skipID int) (PendingCard, bool) {
 	for _, e := range existing {
-		if e.ID == skipID || isPendingCommander(d, e.ID) {
+		if e.ID == skipID || d.IsCommanderPending(e.ID) {
 			continue
 		}
 		if e.Board == p.Board && e.Foil == p.Foil && e.Proxy == p.Proxy && strings.EqualFold(e.ScryfallID, p.ScryfallID) {
@@ -94,7 +90,7 @@ func (s *Service) UpdatePendingCard(ctx context.Context, userID string, deckID s
 	if !found {
 		return PendingCard{}, ErrPendingCardNotFound
 	}
-	if board != nil && *board != current.Board && isPendingCommander(d, id) {
+	if board != nil && *board != current.Board && d.IsCommanderPending(id) {
 		return PendingCard{}, ErrCommanderBoard
 	}
 	if quantity != nil {

@@ -112,9 +112,9 @@ func (s *Service) ImportTamiyoCollection(ctx context.Context, userID string, tar
 	return summary, nil
 }
 
-func tamiyoDeckLines(file tamiyoFile) ([]moxfieldDeckLine, bool) {
+func tamiyoDeckLines(file tamiyoFile) []moxfieldDeckLine {
 	lines := make([]moxfieldDeckLine, 0, len(file.deckCards))
-	hasCommander := false
+	commanders := 0
 	for i, c := range file.deckCards {
 		line := moxfieldDeckLine{
 			LineNo:          i + 1,
@@ -125,14 +125,15 @@ func tamiyoDeckLines(file tamiyoFile) ([]moxfieldDeckLine, bool) {
 			Foil:            c.Foil,
 			Board:           c.Board,
 		}
-		if c.Commander && !hasCommander && deck.InMainBoard(c.Board) {
-			hasCommander = true
-			lines = append([]moxfieldDeckLine{line}, lines...)
+		if c.Commander && commanders < maxCommanders && deck.InMainBoard(c.Board) {
+			line.Commander = true
+			lines = append(lines[:commanders], append([]moxfieldDeckLine{line}, lines[commanders:]...)...)
+			commanders++
 			continue
 		}
 		lines = append(lines, line)
 	}
-	return lines, hasCommander
+	return lines
 }
 
 func (s *Service) applyTamiyoTags(ctx context.Context, userID string, deckID string, tags []tamiyoCardTags, summary *Summary) error {

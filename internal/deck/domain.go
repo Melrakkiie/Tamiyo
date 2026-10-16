@@ -9,6 +9,8 @@ import (
 )
 
 var ErrCommanderNotFound = errors.New("referenced commander does not exist")
+var ErrPartnerWithoutCommander = errors.New("a deck needs a commander before a second commander")
+var ErrSameCommanders = errors.New("the commander and the second commander must be different cards")
 var ErrCardNotFound = errors.New("referenced card does not exist")
 var ErrNotFound = errors.New("deck not found")
 
@@ -18,8 +20,11 @@ type Deck struct {
 	Format               string
 	CommanderID          *int
 	CommanderPendingID   *int
+	PartnerID            *int
+	PartnerPendingID     *int
 	BackgroundScryfallID *string
 	CommanderScryfallID  *string
+	PartnerScryfallID    *string
 	ColorIdentity        *string
 	Visibility           string
 	Bracket              *int
@@ -30,6 +35,81 @@ type Deck struct {
 	Favorite             bool
 	Added                time.Time
 	Updated              time.Time
+}
+
+type CommanderSlot int
+
+const (
+	SlotCommander CommanderSlot = iota
+	SlotPartner
+)
+
+func sameID(a *int, id int) bool {
+	return a != nil && *a == id
+}
+
+func (d Deck) CardSlot(cardID int) (CommanderSlot, bool) {
+	switch {
+	case sameID(d.CommanderID, cardID):
+		return SlotCommander, true
+	case sameID(d.PartnerID, cardID):
+		return SlotPartner, true
+	}
+	return 0, false
+}
+
+func (d Deck) PendingSlot(pendingID int) (CommanderSlot, bool) {
+	switch {
+	case sameID(d.CommanderPendingID, pendingID):
+		return SlotCommander, true
+	case sameID(d.PartnerPendingID, pendingID):
+		return SlotPartner, true
+	}
+	return 0, false
+}
+
+func (d Deck) IsCommanderCard(cardID int) bool {
+	_, ok := d.CardSlot(cardID)
+	return ok
+}
+
+func (d Deck) IsCommanderPending(pendingID int) bool {
+	_, ok := d.PendingSlot(pendingID)
+	return ok
+}
+
+func (d Deck) HasCommander() bool {
+	return d.CommanderID != nil || d.CommanderPendingID != nil
+}
+
+func (d Deck) HasPartner() bool {
+	return d.PartnerID != nil || d.PartnerPendingID != nil
+}
+
+func (d *Deck) setSlot(slot CommanderSlot, cardID, pendingID *int) {
+	if slot == SlotPartner {
+		d.PartnerID, d.PartnerPendingID = cardID, pendingID
+		return
+	}
+	d.CommanderID, d.CommanderPendingID = cardID, pendingID
+}
+
+func (d *Deck) clearSlot(slot CommanderSlot) {
+	d.setSlot(slot, nil, nil)
+	if !d.HasCommander() {
+		d.setSlot(SlotCommander, d.PartnerID, d.PartnerPendingID)
+		d.setSlot(SlotPartner, nil, nil)
+	}
+}
+
+func (d Deck) checkCommanders() error {
+	if d.HasPartner() && !d.HasCommander() {
+		return ErrPartnerWithoutCommander
+	}
+	if d.PartnerID != nil && sameID(d.CommanderID, *d.PartnerID) || d.PartnerPendingID != nil && sameID(d.CommanderPendingID, *d.PartnerPendingID) {
+		return ErrSameCommanders
+	}
+	return nil
 }
 
 const (

@@ -39,6 +39,8 @@ type PublicDeck struct {
 	BackgroundScryfallID *string
 	CommanderScryfallID  *string
 	CommanderName        *string
+	PartnerScryfallID    *string
+	PartnerName          *string
 	ColorIdentity        string
 	CardCount            int
 	LikesCount           int

@@ -964,7 +964,8 @@ paths:
       description: >
         Removes the card from the collection. Each deck it was in gets it back
         in its pending list (to add to the collection again later); a deck
-        whose commander it was keeps it as commander_pending_id.
+        whose commander it was keeps it as commander_pending_id, one whose
+        second commander it was as partner_pending_id.
       responses:
         "204":
           description: No Content
@@ -1120,7 +1121,8 @@ paths:
         to null and stays in the collection. With with_cards=true, the
         storage's cards are deleted in the same transaction: the decks they
         were in get them in their pending list, and a deck whose commander
-        one was keeps it as its pending commander (commander_pending_id).
+        one was keeps it as its pending commander (commander_pending_id, or
+        partner_pending_id for a second commander).
       parameters:
         - name: with_cards
           in: query
@@ -1717,7 +1719,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/Deck"
         "400":
-          description: Invalid id, invalid body, or invalid commander_id.
+          description: >
+            Invalid id, invalid body, invalid commander_id or partner_id, a
+            second commander without a commander, or the same card as
+            commander and second commander.
           content:
             application/json:
               schema:
@@ -1799,7 +1804,7 @@ paths:
       description: >
         Idempotent: calling this again with the same id/card_id and board
         succeeds silently. A card already in the deck is moved to the given
-        board. The deck's commander can't leave the main board.
+        board. The deck's commanders can't leave the main board.
       requestBody:
         required: false
         content:
@@ -1827,7 +1832,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "409":
-          description: The card is the deck's commander and board isn't main
+          description: The card is one of the deck's commanders and board isn't main
           content:
             application/json:
               schema:
@@ -2131,7 +2136,7 @@ paths:
       summary: Add a card to the deck's pending list
       description: >
         When the deck already has a pending card of the same printing,
-        finish and board (other than its pending commander), its quantity
+        finish and board (other than its pending commanders), its quantity
         is raised instead, and that item is returned.
       requestBody:
         required: true
@@ -2213,7 +2218,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "409":
-          description: The pending card is the deck's commander and board isn't main
+          description: The pending card is one of the deck's commanders and board isn't main
           content:
             application/json:
               schema:
@@ -2549,13 +2554,15 @@ paths:
         include_locked_storages is true; missing copies become pending cards (cards_pending). Section
         headers choose the board of the lines below them: Sideboard for
         sideboard, Maybeboard or Considering for considering, main
-        otherwise. With commander_from_first_line, the first card line of
-        the main board becomes the commander only if the deck has none
-        yet: an owned one becomes commander_id, a missing one the pending
-        commander. Moxfield tags at the end of a line ("#ramp #food
+        otherwise. The lines under a Commander header (two at most) become
+        the commander and the second commander, only if the deck has none
+        yet; without that header, commander_from_first_line makes the
+        first card line of the main board the commander. An owned one
+        becomes commander_id (partner_id), a missing one the pending
+        commander (commander_pending_id, partner_pending_id). Moxfield tags at the end of a line ("#ramp #food
         generator") are added to that card's tags. Pending cards and tags
         use the English Scryfall name, whatever the list's language. A file starting with "{" is read as a Tamiyo deck file
-        (see TamiyoFile): cards go on their boards, its commander becomes
+        (see TamiyoFile): cards go on their boards, its commanders become
         the deck's when it has none, and its tags are added to the deck's.
       requestBody:
         required: true
@@ -2797,8 +2804,11 @@ paths:
         Checks every card in the deck against the deck's own format field,
         using each card's Scryfall legalities. For the "commander" format
         specifically, also checks singleton (one copy of each card by
-        name, basic lands excepted) and color identity (every card within
-        the commander's color identity). Nothing is persisted — computed
+        name, basic lands excepted), color identity (every card within
+        the union of the commanders' color identities) and, with a second
+        commander, that the two can be paired (Partner, Partner with,
+        Partner—quality, Friends forever, Choose a Background with a
+        Background, Doctor's companion with a Time Lord Doctor). Nothing is persisted — computed
         fresh from Scryfall data on every call.
       responses:
         "200":
@@ -2874,7 +2884,7 @@ paths:
       description: >
         Works without authentication. Lists every public deck, of every
         user; unlisted and private decks are never listed. A deck's color
-        identity is its commander's, or the union of its main board's
+        identity is the union of its commanders', or the union of its main board's
         cards' identities without one.
       security: []
       parameters:
@@ -2894,7 +2904,7 @@ paths:
           schema:
             type: string
             maxLength: 100
-          description: Part of the commander's name.
+          description: Part of the name of the commander or of the second commander.
         - name: card
           in: query
           schema:
@@ -3814,10 +3824,10 @@ paths:
         printings=true, "2 Dark Confidant (Modern Masters)", expansion names
         being Scryfall's, without the basic lands with basic_lands=false.
         moxfield: one line per printing, "1 Sol Ring (SLD) 1011 *F*", the
-        commander's line first with its full quantity, the rest sorted
+        commanders' lines first with their full quantity, the rest sorted
         alphabetically, so importing the file back reconstructs the same
         commander. plain: one line per card name, "4 Lightning Bolt",
-        the commander first. arena: MTG Arena's format, a "Commander"
+        the commanders first. arena: MTG Arena's format, a "Commander"
         section (when the deck has one) then a "Deck" section, one line per
         card name, split cards written with " // ". The sideboard follows in
         a section of its own ("SIDEBOARD:" in moxfield, "Sideboard"
@@ -4615,6 +4625,15 @@ components:
         commander_name:
           type: string
           nullable: true
+        partner_scryfall_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: The second commander's, null without one.
+        partner_name:
+          type: string
+          nullable: true
+          description: The second commander's, null without one.
         color_identity:
           type: string
           description: In WUBRG order, empty for a colorless deck.
@@ -4630,7 +4649,7 @@ components:
           type: string
         updated:
           type: string
-      required: [id, name, format, background_scryfall_id, commander_scryfall_id, commander_name, color_identity, card_count, likes_count, owner, added, updated]
+      required: [id, name, format, background_scryfall_id, commander_scryfall_id, commander_name, partner_scryfall_id, partner_name, color_identity, card_count, likes_count, owner, added, updated]
 
     LikedDeck:
       allOf:
@@ -5233,6 +5252,19 @@ components:
             The commander when it's one of the deck's pending cards (not in
             the collection yet). At most one of commander_id and
             commander_pending_id is set.
+        partner_id:
+          type: integer
+          nullable: true
+          description: >
+            The second commander (Partner, Friends forever, Choose a
+            Background...), an owned card. Only set when the deck has a
+            commander, and never the same card.
+        partner_pending_id:
+          type: integer
+          nullable: true
+          description: >
+            The second commander when it's one of the deck's pending cards.
+            At most one of partner_id and partner_pending_id is set.
         background_scryfall_id:
           type: string
           format: uuid
@@ -5246,14 +5278,20 @@ components:
           nullable: true
           readOnly: true
           description: Scryfall id of the commander card, null without a commander.
+        partner_scryfall_id:
+          type: string
+          format: uuid
+          nullable: true
+          readOnly: true
+          description: Scryfall id of the second commander card, null without one.
         color_identity:
           type: string
           nullable: true
           readOnly: true
           example: UBR
           description: >
-            Colors of the deck in WUBRG order: the commander's color identity
-            when the deck has one, otherwise every color in the color identity
+            Colors of the deck in WUBRG order: the union of its commanders'
+            color identities when the deck has a commander, otherwise every color in the color identity
             of the main board's cards, owned or pending. Empty when colorless,
             null for a deck without commander nor cards.
         visibility:
@@ -5347,6 +5385,11 @@ components:
           type: string
           format: uuid
           nullable: true
+        partner_scryfall_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: The second commander's, null without one.
         card_count:
           type: integer
           description: Every card of the main board, owned or pending.
@@ -5357,7 +5400,7 @@ components:
           type: string
         updated:
           type: string
-      required: [id, name, format, visibility, background_scryfall_id, commander_scryfall_id, card_count, likes_count, added, updated]
+      required: [id, name, format, visibility, background_scryfall_id, commander_scryfall_id, partner_scryfall_id, card_count, likes_count, added, updated]
 
     SharedDeckCard:
       type: object
@@ -5656,7 +5699,27 @@ components:
             commander_id). Setting commander_id clears it in turn.
         clear_commander_id:
           type: boolean
-          description: Set to true to explicitly clear commander_id (set it to null).
+          description: >
+            Set to true to clear the commander (commander_id and
+            commander_pending_id). A second commander then becomes the
+            commander.
+        partner_id:
+          type: integer
+          minimum: 1
+          description: >
+            Make an owned card the second commander (clears
+            partner_pending_id). The deck must have a commander, and it must
+            be another card. Any pair is accepted; GET /deck/{id}/legality
+            tells whether they can be paired.
+        partner_pending_id:
+          type: integer
+          minimum: 1
+          description: >
+            Make one of the deck's pending cards the second commander
+            (clears partner_id). Setting partner_id clears it in turn.
+        clear_partner_id:
+          type: boolean
+          description: Set to true to clear the second commander (partner_id and partner_pending_id).
         background_scryfall_id:
           type: string
           format: uuid

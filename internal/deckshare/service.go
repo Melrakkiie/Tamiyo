@@ -189,7 +189,7 @@ func mergeCards(d deck.Deck, owned []deck.DeckCard, pending []deck.PendingCard) 
 	}
 
 	for _, c := range owned {
-		commander := d.CommanderID != nil && *d.CommanderID == c.ID
+		commander := d.IsCommanderCard(c.ID)
 		add(cardKey{c.ScryfallID, c.Foil, commander, c.Board}, Card{
 			Name:            c.Name,
 			ScryfallID:      c.ScryfallID,
@@ -211,7 +211,7 @@ func mergeCards(d deck.Deck, owned []deck.DeckCard, pending []deck.PendingCard) 
 		if quantity < 1 {
 			quantity = 1
 		}
-		commander := d.CommanderPendingID != nil && *d.CommanderPendingID == p.ID
+		commander := d.IsCommanderPending(p.ID)
 		if commander {
 			add(cardKey{p.ScryfallID, p.Foil, true, p.Board}, pendingCard(p, 1, true))
 			quantity--

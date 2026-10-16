@@ -2,6 +2,7 @@ package deckinsights
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"Melrakkiie/Tamiyo/internal/deck"
@@ -107,6 +108,7 @@ func checkLegality(d deck.Deck, cards []deck.DeckCard, scryfallByID map[string]s
 	if format == commanderFormat {
 		checkSingleton(&report, main, scryfallByID)
 		checkColorIdentity(&report, d, cards, scryfallByID)
+		checkPartnerPair(&report, d, cards, scryfallByID)
 	}
 
 	checkDeckSize(&report, format, len(main))
@@ -134,19 +136,21 @@ func checkSingleton(report *LegalityReport, cards []deck.DeckCard, scryfallByID 
 	}
 }
 
-func checkColorIdentity(report *LegalityReport, d deck.Deck, cards []deck.DeckCard, scryfallByID map[string]scryfall.Card) {
-	if d.CommanderID == nil {
-		return
+func findCard(cards []deck.DeckCard, id *int) (deck.DeckCard, bool) {
+	if id == nil {
+		return deck.DeckCard{}, false
 	}
-
-	var commanderCard *deck.DeckCard
-	for i := range cards {
-		if cards[i].ID == *d.CommanderID {
-			commanderCard = &cards[i]
-			break
+	for _, c := range cards {
+		if c.ID == *id {
+			return c, true
 		}
 	}
-	if commanderCard == nil {
+	return deck.DeckCard{}, false
+}
+
+func checkColorIdentity(report *LegalityReport, d deck.Deck, cards []deck.DeckCard, scryfallByID map[string]scryfall.Card) {
+	commanderCard, ok := findCard(cards, d.CommanderID)
+	if !ok {
 		return
 	}
 	commanderScryfall, ok := scryfallByID[commanderCard.ScryfallID]
@@ -154,10 +158,15 @@ func checkColorIdentity(report *LegalityReport, d deck.Deck, cards []deck.DeckCa
 		return
 	}
 
-	allowed := make(map[string]bool, len(commanderScryfall.ColorIdentity))
-	for _, color := range commanderScryfall.ColorIdentity {
+	identity := append([]string(nil), commanderScryfall.ColorIdentity...)
+	if partnerCard, ok := findCard(cards, d.PartnerID); ok {
+		identity = append(identity, scryfallByID[partnerCard.ScryfallID].ColorIdentity...)
+	}
+	allowed := make(map[string]bool, len(identity))
+	for _, color := range identity {
 		allowed[color] = true
 	}
+	commanderIdentity := scryfall.ColorCode(identity)
 
 	for _, c := range cards {
 		sc, ok := scryfallByID[c.ScryfallID]
@@ -170,7 +179,7 @@ func checkColorIdentity(report *LegalityReport, d deck.Deck, cards []deck.DeckCa
 					CardID: c.ID, CardName: c.Name, Board: c.Board,
 					Reason: fmt.Sprintf(
 						"outside commander's color identity (card: %s, commander: %s)",
-						strings.Join(sc.ColorIdentity, ""), strings.Join(commanderScryfall.ColorIdentity, ""),
+						strings.Join(sc.ColorIdentity, ""), commanderIdentity,
 					),
 				})
 				report.Legal = false
@@ -178,6 +187,108 @@ func checkColorIdentity(report *LegalityReport, d deck.Deck, cards []deck.DeckCa
 			}
 		}
 	}
+}
+
+func checkPartnerPair(report *LegalityReport, d deck.Deck, cards []deck.DeckCard, scryfallByID map[string]scryfall.Card) {
+	commanderCard, ok := findCard(cards, d.CommanderID)
+	if !ok {
+		return
+	}
+	partnerCard, ok := findCard(cards, d.PartnerID)
+	if !ok {
+		return
+	}
+	commander, ok := scryfallByID[commanderCard.ScryfallID]
+	if !ok {
+		return
+	}
+	partner, ok := scryfallByID[partnerCard.ScryfallID]
+	if !ok {
+		return
+	}
+	if canPair(commander, partner) {
+		return
+	}
+	report.Issues = append(report.Issues, LegalityIssue{
+		CardID: partnerCard.ID, CardName: partnerCard.Name, Board: partnerCard.Board,
+		Reason: "these two commanders can't be paired",
+	})
+	report.Legal = false
+}
+
+type pairingAbilities struct {
+	partner          bool
+	partnerWith      string
+	partnerQuality   string
+	friendsForever   bool
+	chooseBackground bool
+	doctorsCompanion bool
+	background       bool
+	timeLordDoctor   bool
+	frontFaceName    string
+}
+
+var reminderText = regexp.MustCompile(`\s*\([^)]*\)`)
+
+func frontFace(text string, separator string) string {
+	front, _, _ := strings.Cut(text, separator)
+	return strings.TrimSpace(front)
+}
+
+func abilitiesOf(c scryfall.Card) pairingAbilities {
+	abilities := pairingAbilities{frontFaceName: frontFace(c.Name, "//")}
+
+	typeLine := frontFace(c.TypeLine, "//")
+	types, subtypes, _ := strings.Cut(typeLine, "—")
+	legendary := strings.Contains(types, "Legendary")
+	abilities.background = legendary && strings.Contains(subtypes, "Background")
+	abilities.timeLordDoctor = legendary && strings.Contains(types, "Creature") &&
+		strings.Contains(subtypes, "Time Lord") && strings.Contains(subtypes, "Doctor")
+
+	oracle := strings.ReplaceAll(frontFace(c.OracleText, "\n//\n"), "’", "'")
+	for _, line := range strings.Split(oracle, "\n") {
+		line = strings.TrimSpace(reminderText.ReplaceAllString(line, ""))
+		lower := strings.ToLower(line)
+		if strings.HasPrefix(lower, "partner with ") {
+			abilities.partnerWith = strings.TrimSpace(line[len("partner with "):])
+			continue
+		}
+		for _, keyword := range strings.Split(lower, ",") {
+			keyword = strings.TrimSpace(keyword)
+			switch {
+			case keyword == "partner":
+				abilities.partner = true
+			case strings.HasPrefix(keyword, "partner—"):
+				abilities.partnerQuality = strings.TrimSpace(strings.TrimPrefix(keyword, "partner—"))
+			case keyword == "friends forever":
+				abilities.friendsForever = true
+			case keyword == "choose a background":
+				abilities.chooseBackground = true
+			case keyword == "doctor's companion":
+				abilities.doctorsCompanion = true
+			}
+		}
+	}
+	return abilities
+}
+
+func canPair(first, second scryfall.Card) bool {
+	a, b := abilitiesOf(first), abilitiesOf(second)
+	switch {
+	case a.partner && b.partner:
+		return true
+	case a.partnerWith != "" && strings.EqualFold(a.partnerWith, b.frontFaceName) && strings.EqualFold(b.partnerWith, a.frontFaceName):
+		return true
+	case a.partnerQuality != "" && a.partnerQuality == b.partnerQuality:
+		return true
+	case a.friendsForever && b.friendsForever:
+		return true
+	case a.chooseBackground && b.background, b.chooseBackground && a.background:
+		return true
+	case a.doctorsCompanion && b.timeLordDoctor, b.doctorsCompanion && a.timeLordDoctor:
+		return true
+	}
+	return false
 }
 
 func mainBoard(cards []deck.DeckCard) []deck.DeckCard {

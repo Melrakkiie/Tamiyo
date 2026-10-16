@@ -175,6 +175,8 @@ type fakeDeckService struct {
 	addPendingErr      error
 	pendingCommanderID int
 	cardCommanderID    int
+	pendingPartnerID   int
+	cardPartnerID      int
 	pendingQuantities  map[int]int
 	linkedBoards       map[int]string
 
@@ -184,6 +186,7 @@ type fakeDeckService struct {
 
 	unlinkedCards    []int
 	commanderCleared bool
+	clearedSlot      deck.CommanderSlot
 }
 
 func (f *fakeDeckService) RemoveCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error {
@@ -191,8 +194,9 @@ func (f *fakeDeckService) RemoveCardFromDeck(ctx context.Context, userID string,
 	return nil
 }
 
-func (f *fakeDeckService) ClearCommander(ctx context.Context, userID string, deckID string) error {
+func (f *fakeDeckService) ClearCommander(ctx context.Context, userID string, deckID string, slot deck.CommanderSlot) error {
 	f.commanderCleared = true
+	f.clearedSlot = slot
 	return nil
 }
 
@@ -243,7 +247,11 @@ func (f *fakeDeckService) SetCardTags(ctx context.Context, userID string, deckID
 	return deck.TaggedCard{Name: cardName, Tags: tags}, nil
 }
 
-func (f *fakeDeckService) SetCardCommander(ctx context.Context, userID string, deckID string, cardID int) error {
+func (f *fakeDeckService) SetCardCommander(ctx context.Context, userID string, deckID string, slot deck.CommanderSlot, cardID int) error {
+	if slot == deck.SlotPartner {
+		f.cardPartnerID = cardID
+		return nil
+	}
 	f.cardCommanderID = cardID
 	return nil
 }
@@ -258,7 +266,11 @@ func (f *fakeDeckService) AddPendingCard(ctx context.Context, userID string, dec
 	return p, nil
 }
 
-func (f *fakeDeckService) SetPendingCommander(ctx context.Context, userID string, deckID string, pendingID int) error {
+func (f *fakeDeckService) SetPendingCommander(ctx context.Context, userID string, deckID string, slot deck.CommanderSlot, pendingID int) error {
+	if slot == deck.SlotPartner {
+		f.pendingPartnerID = pendingID
+		return nil
+	}
 	f.pendingCommanderID = pendingID
 	return nil
 }

@@ -80,7 +80,7 @@ func (s *Service) BulkEditDeck(ctx context.Context, userID string, deckID string
 		copies = append(copies, &deckCopyMatch{card: c})
 	}
 	sort.SliceStable(copies, func(i, j int) bool {
-		return d.CommanderID != nil && copies[i].card.ID == *d.CommanderID && copies[j].card.ID != *d.CommanderID
+		return d.IsCommanderCard(copies[i].card.ID) && !d.IsCommanderCard(copies[j].card.ID)
 	})
 	pendings := make([]*pendingMatch, 0, len(pending))
 	for _, p := range pending {
@@ -130,7 +130,7 @@ func (s *Service) BulkEditDeck(ctx context.Context, userID string, deckID string
 	}
 
 	if len(toAdd) > 0 {
-		placements, placed, err := s.placeResolvedLines(ctx, userID, toAdd, resolved, false, d.ID, false)
+		placements, placed, err := s.placeResolvedLines(ctx, userID, toAdd, resolved, 0, d.ID, false)
 		if err != nil {
 			return summary, err
 		}
@@ -148,8 +148,8 @@ func (s *Service) removeUnlisted(ctx context.Context, userID string, d deck.Deck
 		if c.matched {
 			continue
 		}
-		if d.CommanderID != nil && *d.CommanderID == c.card.ID {
-			if err := s.decks.ClearCommander(ctx, userID, d.ID); err != nil {
+		if slot, ok := d.CardSlot(c.card.ID); ok {
+			if err := s.decks.ClearCommander(ctx, userID, d.ID, slot); err != nil {
 				return fmt.Errorf("clearing the commander: %w", err)
 			}
 		}

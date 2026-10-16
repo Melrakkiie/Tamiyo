@@ -19,6 +19,8 @@ type publicDeckRow struct {
 	BackgroundScryfallID *string        `db:"background_scryfall_id"`
 	CommanderScryfallID  *string        `db:"commander_scryfall_id"`
 	CommanderName        *string        `db:"commander_name"`
+	PartnerScryfallID    *string        `db:"partner_scryfall_id"`
+	PartnerName          *string        `db:"partner_name"`
 	Identity             pq.StringArray `db:"identity"`
 	CardCount            int            `db:"card_count"`
 	OwnerID              string         `db:"user_id"`
@@ -38,7 +40,11 @@ const publicDecksSQL = `
 			u.display_name, u.avatar_scryfall_id,
 			coalesce(cc.scryfall_id, cp.scryfall_id) AS commander_scryfall_id,
 			coalesce(cc.name, cp.name) AS commander_name,
-			coalesce(cc.color_identity, cp.color_identity) AS commander_identity,
+			coalesce(pc.scryfall_id, pp.scryfall_id) AS partner_scryfall_id,
+			coalesce(pc.name, pp.name) AS partner_name,
+			CASE WHEN cc.id IS NOT NULL OR cp.id IS NOT NULL
+				THEN coalesce(cc.color_identity, cp.color_identity, '') || coalesce(pc.color_identity, pp.color_identity, '')
+			END AS commander_identity,
 			(SELECT count(*) FROM tamiyo.card_deck cd WHERE cd.deck_id = d.id AND cd.board = 'main')
 				+ (SELECT coalesce(sum(p.quantity), 0) FROM tamiyo.deck_pending_cards p WHERE p.deck_id = d.id AND p.board = 'main') AS card_count,
 			(SELECT count(*) FROM tamiyo.deck_likes l WHERE l.deck_id = d.id) AS likes_count,
@@ -55,6 +61,8 @@ const publicDecksSQL = `
 		JOIN tamiyo.users u ON u.id = d.user_id
 		LEFT JOIN tamiyo.cards cc ON cc.id = d.commander_id
 		LEFT JOIN tamiyo.deck_pending_cards cp ON cp.id = d.commander_pending_id
+		LEFT JOIN tamiyo.cards pc ON pc.id = d.partner_id
+		LEFT JOIN tamiyo.deck_pending_cards pp ON pp.id = d.partner_pending_id
 		WHERE %[2]s
 	), decks AS (
 		SELECT base.*,
@@ -65,7 +73,7 @@ const publicDecksSQL = `
 		FROM base
 	)
 	SELECT id, user_id, name, format, bracket, background_scryfall_id, added, updated, display_name, avatar_scryfall_id,
-		commander_scryfall_id, commander_name, card_count, likes_count, liked_at, identity
+		commander_scryfall_id, commander_name, partner_scryfall_id, partner_name, card_count, likes_count, liked_at, identity
 	FROM decks
 `
 
@@ -85,6 +93,8 @@ func toPublicDeck(row publicDeckRow) PublicDeck {
 		BackgroundScryfallID: row.BackgroundScryfallID,
 		CommanderScryfallID:  row.CommanderScryfallID,
 		CommanderName:        row.CommanderName,
+		PartnerScryfallID:    row.PartnerScryfallID,
+		PartnerName:          row.PartnerName,
 		ColorIdentity:        scryfall.ColorCode(row.Identity),
 		CardCount:            row.CardCount,
 		LikesCount:           row.LikesCount,
@@ -135,7 +145,9 @@ func (r *PostgresRepository) FindPublic(ctx context.Context, filter PublicFilter
 		add(func(pos int) string { return fmt.Sprintf("lower(format) = lower($%d)", pos) }, filter.Format)
 	}
 	if filter.Commander != "" {
-		add(func(pos int) string { return containsSQL("commander_name", pos) }, filter.Commander)
+		add(func(pos int) string {
+			return fmt.Sprintf("(%s OR %s)", containsSQL("commander_name", pos), containsSQL("partner_name", pos))
+		}, filter.Commander)
 	}
 	if filter.Owner != "" {
 		add(func(pos int) string { return containsSQL("display_name", pos) }, filter.Owner)

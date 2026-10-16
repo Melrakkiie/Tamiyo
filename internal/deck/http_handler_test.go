@@ -1310,3 +1310,58 @@ func TestHandler_PutCardInDeck_RefusesToMoveTheCommander(t *testing.T) {
 
 	assert.Equal(t, http.StatusConflict, w.Code)
 }
+
+func patchDeck(router *gin.Engine, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPatch, "/deck/00000000-0000-0000-0000-000000000001", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	return w
+}
+
+func TestHandler_UpdateDeck_AcceptsAndReturnsThePartner(t *testing.T) {
+	commanderID, partnerID := 4, 9
+	partnerScryfallID := "436d6a84-4cea-4ca7-94aa-9d08280652af"
+	service := &fakeService{updateDeck: Deck{
+		ID: "00000000-0000-0000-0000-000000000001", Name: "Deck", Format: "commander",
+		CommanderID: &commanderID, PartnerID: &partnerID, PartnerScryfallID: &partnerScryfallID,
+	}}
+	router := setupRouter(service)
+
+	w := patchDeck(router, `{"partner_id": 9, "partner_pending_id": 3, "clear_partner_id": true}`)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, service.lastUpdateRequest.PartnerID)
+	assert.Equal(t, 9, *service.lastUpdateRequest.PartnerID)
+	require.NotNil(t, service.lastUpdateRequest.PartnerPendingID)
+	assert.Equal(t, 3, *service.lastUpdateRequest.PartnerPendingID)
+	assert.True(t, service.lastUpdateRequest.ClearPartnerID)
+
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	assert.EqualValues(t, 9, response["partner_id"])
+	assert.Nil(t, response["partner_pending_id"])
+	assert.Equal(t, partnerScryfallID, response["partner_scryfall_id"])
+}
+
+func TestHandler_UpdateDeck_RejectsAnInvalidPartnerID(t *testing.T) {
+	router := setupRouter(&fakeService{})
+
+	assert.Equal(t, http.StatusBadRequest, patchDeck(router, `{"partner_id": 0}`).Code)
+	assert.Equal(t, http.StatusBadRequest, patchDeck(router, `{"partner_pending_id": -1}`).Code)
+}
+
+func TestHandler_UpdateDeck_ReturnsBadRequestForAPartnerWithoutCommander(t *testing.T) {
+	router := setupRouter(&fakeService{updateErr: ErrPartnerWithoutCommander})
+
+	w := patchDeck(router, `{"partner_id": 9}`)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), ErrPartnerWithoutCommander.Error())
+}
+
+func TestHandler_UpdateDeck_ReturnsBadRequestWhenThePartnerIsTheCommander(t *testing.T) {
+	router := setupRouter(&fakeService{updateErr: ErrSameCommanders})
+
+	assert.Equal(t, http.StatusBadRequest, patchDeck(router, `{"partner_id": 4}`).Code)
+}
