@@ -61,6 +61,12 @@ func TestFromScryfall_KeepsLegalAndRestrictedFormatsSorted(t *testing.T) {
 	assert.Equal(t, Printing{ScryfallID: "a", TypeLine: "Artifact", LegalFormats: []string{"commander", "vintage"}}, p)
 }
 
+func TestFromScryfall_KeepsTheEnglishName(t *testing.T) {
+	p := FromScryfall(scryfall.Card{ID: "a", Name: "Sol Ring"})
+
+	assert.Equal(t, "Sol Ring", p.Name)
+}
+
 func TestFromScryfall_KeepsPrices(t *testing.T) {
 	eur, usdFoil := 2.5, 9.99
 	prices := scryfall.Prices{EUR: &eur, USDFoil: &usdFoil}

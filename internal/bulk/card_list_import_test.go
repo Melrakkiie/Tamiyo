@@ -20,6 +20,17 @@ func cardListResolver() *fakeResolver {
 	return resolver
 }
 
+func TestImportCardList_StoresTheEnglishScryfallName(t *testing.T) {
+	cards := &fakeCardService{}
+	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, cardListResolver())
+
+	_, err := svc.ImportCardList(context.Background(), testUserID, nil, strings.NewReader("1 Anneau solaire (SLD) 1011\n"))
+
+	require.NoError(t, err)
+	require.Len(t, cards.created, 1)
+	assert.Equal(t, "Sol Ring", cards.created[0].Name)
+}
+
 func TestImportCardList_CreatesOneCardPerCopyInTheStorage(t *testing.T) {
 	cards := &fakeCardService{}
 	storages := &fakeStorageService{storages: []storage.Storage{{ID: 4, Name: "Box", Type: "box"}}}

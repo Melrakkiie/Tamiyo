@@ -157,7 +157,7 @@ func (line moxfieldDeckLine) printing(resolved ResolvedCard) (name, setCode, col
 	if line.SetCode == "" {
 		return resolved.Name, resolved.SetCode, resolved.CollectorNumber
 	}
-	return line.CardName, line.SetCode, line.CollectorNumber
+	return resolved.Name, line.SetCode, line.CollectorNumber
 }
 
 type deckLinePlacement struct {
@@ -166,14 +166,6 @@ type deckLinePlacement struct {
 	ownedIDs  []int
 	missing   int
 	commander bool
-}
-
-func (s *Service) placeDeckLines(ctx context.Context, userID string, lines []moxfieldDeckLine, commanderFromFirstLine bool, targetDeckID string, includeLocked bool) ([]deckLinePlacement, Summary, error) {
-	resolved, err := s.resolveDeckLines(ctx, lines)
-	if err != nil {
-		return nil, Summary{}, err
-	}
-	return s.placeResolvedLines(ctx, userID, lines, resolved, commanderFromFirstLine, targetDeckID, includeLocked)
 }
 
 func (s *Service) placeResolvedLines(ctx context.Context, userID string, lines []moxfieldDeckLine, resolved map[string]ResolvedCard, commanderFromFirstLine bool, targetDeckID string, includeLocked bool) ([]deckLinePlacement, Summary, error) {
@@ -267,19 +259,23 @@ func (s *Service) fillDeck(ctx context.Context, userID string, deckID string, pl
 	}
 }
 
-func lineTags(lines []moxfieldDeckLine) []tamiyoCardTags {
+func lineTags(lines []moxfieldDeckLine, resolved map[string]ResolvedCard) []tamiyoCardTags {
 	var tags []tamiyoCardTags
 	index := make(map[string]int)
 	for _, line := range lines {
 		if len(line.Tags) == 0 {
 			continue
 		}
-		key := deck.CardNameKey(line.CardName)
+		name := line.CardName
+		if rc, ok := resolved[deckLineKey(line)]; ok {
+			name = rc.Name
+		}
+		key := deck.CardNameKey(name)
 		i, seen := index[key]
 		if !seen {
 			i = len(tags)
 			index[key] = i
-			tags = append(tags, tamiyoCardTags{Name: line.CardName})
+			tags = append(tags, tamiyoCardTags{Name: name})
 		}
 		for _, tag := range line.Tags {
 			if !containsFold(tags[i].Tags, tag) {
@@ -307,7 +303,8 @@ func (s *Service) ImportIntoDeck(ctx context.Context, userID string, deckID stri
 	commanderFromFirstLine := opts.CommanderFromFirstLine
 	var lines []moxfieldDeckLine
 	var tags []tamiyoCardTags
-	if looksLikeJSON(data) {
+	tamiyoFile := looksLikeJSON(data)
+	if tamiyoFile {
 		file, err := parseTamiyoFile(data)
 		if err != nil {
 			return Summary{}, err
@@ -324,11 +321,18 @@ func (s *Service) ImportIntoDeck(ctx context.Context, userID string, deckID stri
 		if lines, err = parseMoxfieldDeckList(bytes.NewReader(data)); err != nil {
 			return Summary{}, err
 		}
-		tags = lineTags(lines)
+	}
+
+	resolved, err := s.resolveDeckLines(ctx, lines)
+	if err != nil {
+		return Summary{}, err
+	}
+	if !tamiyoFile {
+		tags = lineTags(lines, resolved)
 	}
 
 	hasCommander := d.CommanderID != nil || d.CommanderPendingID != nil
-	placements, summary, err := s.placeDeckLines(ctx, userID, lines, commanderFromFirstLine && !hasCommander, d.ID, opts.IncludeLockedStorages)
+	placements, summary, err := s.placeResolvedLines(ctx, userID, lines, resolved, commanderFromFirstLine && !hasCommander, d.ID, opts.IncludeLockedStorages)
 	if err != nil {
 		return Summary{}, err
 	}

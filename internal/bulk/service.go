@@ -152,14 +152,16 @@ func (s *Service) ImportManaBox(ctx context.Context, userID string, targetStorag
 		}
 
 		rc, resolvedOK := resolvedByScryfallID[row.ScryfallID]
+		name := row.CardName
 		var colors, cardType, identity *string
 		if resolvedOK {
+			name = rc.Name
 			colors, cardType, identity = rc.details()
 		}
 
 		for i := 0; i < row.Quantity; i++ {
 			created, err := s.cards.CreateCard(ctx, userID, card.Card{
-				Name:            row.CardName,
+				Name:            name,
 				ScryfallID:      row.ScryfallID,
 				SetCode:         row.SetCode,
 				CollectorNumber: row.CollectorNumber,
@@ -221,7 +223,7 @@ func (s *Service) ImportMoxfieldCollection(ctx context.Context, userID string, s
 		colors, cardType, identity := resolvedCard.details()
 		for i := 0; i < row.Quantity; i++ {
 			if _, err := s.cards.CreateCard(ctx, userID, card.Card{
-				Name:            row.CardName,
+				Name:            resolvedCard.Name,
 				ScryfallID:      resolvedCard.ScryfallID,
 				SetCode:         row.SetCode,
 				CollectorNumber: row.CollectorNumber,

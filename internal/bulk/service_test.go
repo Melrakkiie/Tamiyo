@@ -449,6 +449,23 @@ Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
 	assert.Equal(t, 1.0, cards.created[0].ManaValue)
 }
 
+func TestImportManaBox_StoresTheEnglishScryfallName(t *testing.T) {
+	csv := `Binder Name,Binder Type,Name,Set code,Scryfall ID,Collector number,Foil,Quantity
+Main Binder,binder,Anneau solaire,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
+`
+	cards := &fakeCardService{}
+	resolver := &fakeResolver{resolved: map[string]ResolvedCard{
+		resolveKeyByID("aaaaaaaa-0000-0000-0000-000000000000"): {ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000", Name: "Sol Ring", ManaValue: 1},
+	}}
+	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, resolver)
+
+	_, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
+
+	require.NoError(t, err)
+	require.Len(t, cards.created, 1)
+	assert.Equal(t, "Sol Ring", cards.created[0].Name)
+}
+
 func TestImportManaBox_DefaultsManaValueToZeroWhenScryfallUnavailable(t *testing.T) {
 	csv := `Binder Name,Binder Type,Name,Set code,Scryfall ID,Collector number,Foil,Quantity
 Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
@@ -465,6 +482,7 @@ Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
 	require.Len(t, cards.created, 1)
 	assert.Equal(t, 1, summary.CardsCreated)
 	assert.Equal(t, 0.0, cards.created[0].ManaValue)
+	assert.Equal(t, "Sol Ring", cards.created[0].Name)
 	require.Len(t, summary.Warnings, 1)
 	assert.Contains(t, summary.Warnings[0], "mana value")
 }
@@ -586,6 +604,22 @@ func TestImportMoxfieldCollection_ResolvesAndCreatesCards(t *testing.T) {
 	assert.Equal(t, 1.0, cards.created[0].ManaValue)
 }
 
+func TestImportMoxfieldCollection_StoresTheEnglishScryfallName(t *testing.T) {
+	csv := `Count,Name,Edition,Foil,Collector Number
+1,Anneau solaire,sld,,1011
+`
+	cards := &fakeCardService{}
+	storages := &fakeStorageService{storages: []storage.Storage{{ID: 7, Name: "Binder", Type: "binder"}}}
+	resolver := &fakeResolver{resolved: map[string]ResolvedCard{resolveKey("sld", "1011"): {ScryfallID: solRingID, Name: "Sol Ring", ManaValue: 1}}}
+	svc := NewService(cards, storages, &fakeDeckService{}, resolver)
+
+	_, err := svc.ImportMoxfieldCollection(context.Background(), testUserID, 7, strings.NewReader(csv))
+
+	require.NoError(t, err)
+	require.Len(t, cards.created, 1)
+	assert.Equal(t, "Sol Ring", cards.created[0].Name)
+}
+
 func TestImportMoxfieldCollection_SkipsUnresolvedCards(t *testing.T) {
 	csv := `Count,Name,Edition,Foil,Collector Number
 1,Mystery Card,xxx,,999
@@ -634,8 +668,8 @@ const (
 
 func deckImportResolver() *fakeResolver {
 	return &fakeResolver{resolved: map[string]ResolvedCard{
-		resolveKey("CMR", "1"):    {ScryfallID: atraxaID, ManaValue: 4, Colors: "WUBG", CardType: "Creature", ColorIdentity: "WUBG"},
-		resolveKey("SLD", "1011"): {ScryfallID: solRingID, ManaValue: 1, CardType: "Artifact"},
+		resolveKey("CMR", "1"):    {ScryfallID: atraxaID, Name: "Atraxa, Praetors' Voice", ManaValue: 4, Colors: "WUBG", CardType: "Creature", ColorIdentity: "WUBG"},
+		resolveKey("SLD", "1011"): {ScryfallID: solRingID, Name: "Sol Ring", ManaValue: 1, CardType: "Artifact"},
 	}}
 }
 
@@ -765,6 +799,17 @@ func TestImportIntoDeck_AddsMoxfieldTags(t *testing.T) {
 	importDeck(t, cards, decks, "1 Sol Ring (SLD) 1011 #ramp #mana\nSideboard\n2 Sol Ring (SLD) 1011 #artifact\n1 Atraxa, Praetors' Voice (CMR) 1\n", false)
 
 	assert.Equal(t, map[string][]string{"Sol Ring": {"Mana", "ramp", "artifact"}}, decks.setTags)
+}
+
+func TestImportIntoDeck_StoresAndTagsTheEnglishScryfallName(t *testing.T) {
+	cards := &fakeCardService{}
+	decks := &fakeDeckService{}
+
+	importDeck(t, cards, decks, "2 Anneau solaire (SLD) 1011 #ramp\n", false)
+
+	require.Len(t, decks.addedPending, 1)
+	assert.Equal(t, "Sol Ring", decks.addedPending[0].Name)
+	assert.Equal(t, map[string][]string{"Sol Ring": {"ramp"}}, decks.setTags)
 }
 
 func TestImportIntoDeck_OnlyUsesTheExactPrinting(t *testing.T) {

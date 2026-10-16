@@ -539,7 +539,7 @@ Partially update a card. Any subset of the fields below can be sent.
 
 | Field | Type | Notes |
 |---|---|---|
-| `name` | string | |
+| `name` | string | Replaced by the English Scryfall name of the card's printing at the next background refresh (within a day). |
 | `set_code` | string | |
 | `collector_number` | int | Must be > 0 if provided. |
 | `foil` | bool | |
@@ -1478,6 +1478,8 @@ Five routes import cards in bulk, instead of one `POST /cards` call per card: a 
 
 A bulk import never fails outright just because some rows couldn't be resolved: a request that parses successfully always returns `200 OK` with a summary of what happened, including a `warnings` list for any row that was skipped (card not found on Scryfall, a duplicate, a transient error). The import only fails as a whole (non-`200`) when the file itself can't be parsed, a referenced `storage_id` doesn't exist, or Scryfall couldn't be reached at all.
 
+Cards and pending cards are stored under their English Scryfall name, whatever the language of the file: a ManaBox row named `Anneau solaire` creates a `Sol Ring`, and Moxfield tags on that line go to `Sol Ring` too. Only a ManaBox import made while Scryfall is unreachable keeps the file's name; the background printing refresher, which renames every card and pending card to its printing's English name (moving the deck tags along), fixes it within minutes. That refresh also replaces a name changed by hand with `PATCH /cards/:id`.
+
 **Response shape (all five routes)**
 ```json
 {
@@ -1504,7 +1506,7 @@ A bulk import never fails outright just because some rows couldn't be resolved: 
 
 ### `POST /import/manabox`
 
-Import a [ManaBox](https://manabox.app/) collection export (`ManaBox_Collection.csv`). For each row: gets or creates the storage matching `Binder Name` (type = `Binder Type`, except that a `deck` binder becomes a `deckbox` storage, so it isn't mistaken for a deck); if `Binder Type` is `deck`, also gets or creates a deck with the same name (format defaults to `commander` — the export has no format column, so correct it afterwards with `PATCH /deck/:id` if needed); creates one card per physical copy (`Quantity`); links each card to the deck if applicable. ManaBox's export already carries the Scryfall ID directly, so cards are created even when Scryfall is unreachable: the route only looks them up to store their colors and primary type, and leaves those unknown (to fill in later with `POST /cards/refresh-details`) rather than failing — it never returns `502`. Scryfall allows one lookup of 75 cards every 500 ms, so a collection of several thousand cards takes about a minute.
+Import a [ManaBox](https://manabox.app/) collection export (`ManaBox_Collection.csv`). For each row: gets or creates the storage matching `Binder Name` (type = `Binder Type`, except that a `deck` binder becomes a `deckbox` storage, so it isn't mistaken for a deck); if `Binder Type` is `deck`, also gets or creates a deck with the same name (format defaults to `commander` — the export has no format column, so correct it afterwards with `PATCH /deck/:id` if needed); creates one card per physical copy (`Quantity`); links each card to the deck if applicable. ManaBox's export already carries the Scryfall ID directly, so cards are created even when Scryfall is unreachable: the route only looks them up to store their English name, colors and primary type, and keeps the file's name and leaves the rest unknown (to fill in later with `POST /cards/refresh-details`) rather than failing — it never returns `502`. Scryfall allows one lookup of 75 cards every 500 ms, so a collection of several thousand cards takes about a minute.
 
 **Form fields**
 

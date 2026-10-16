@@ -2493,7 +2493,8 @@ paths:
         the main board becomes the commander only if the deck has none
         yet: an owned one becomes commander_id, a missing one the pending
         commander. Moxfield tags at the end of a line ("#ramp #food
-        generator") are added to that card's tags. A file starting with "{" is read as a Tamiyo deck file
+        generator") are added to that card's tags. Pending cards and tags
+        use the English Scryfall name, whatever the list's language. A file starting with "{" is read as a Tamiyo deck file
         (see TamiyoFile): cards go on their boards, its commander becomes
         the deck's when it has none, and its tags are added to the deck's.
       requestBody:
@@ -3375,7 +3376,11 @@ paths:
         "commander" — correct it afterwards with PATCH /deck/:id if
         needed), creates one card per physical copy (Quantity), and links
         deck cards accordingly. The export already carries the Scryfall ID
-        directly, so this route never calls Scryfall and never returns 502.
+        directly, so cards are created even when Scryfall is unreachable and
+        this route never returns 502. Cards are stored under their English
+        Scryfall name, whatever the export's language; while Scryfall is
+        unreachable the file's name is kept until the background printing
+        refresher renames them.
       requestBody:
         required: true
         content:
@@ -3430,6 +3435,8 @@ paths:
         existing storage given by storage_id. It also has no Scryfall ID,
         so each row is resolved by (set, collector number) against the
         Scryfall API (https://scryfall.com/docs/api/cards/collection).
+        Cards are stored under their English Scryfall name, whatever the
+        export's language.
       requestBody:
         required: true
         content:
@@ -3484,7 +3491,9 @@ paths:
         printing (resolved by set and collector number against Scryfall),
         "4 Lightning Bolt" creates the printing Scryfall returns by default
         for that name; section headers are skipped. Lines that can't be
-        resolved are skipped and reported in ImportSummary.warnings.
+        resolved are skipped and reported in ImportSummary.warnings. Cards
+        are stored under their English Scryfall name, whatever the list's
+        language.
       requestBody:
         required: true
         content:

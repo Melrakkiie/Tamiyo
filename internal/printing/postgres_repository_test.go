@@ -97,11 +97,58 @@ func seedUser(t *testing.T, db *sqlx.DB, email string) string {
 
 func seedCard(t *testing.T, db *sqlx.DB, userID, scryfallID string) {
 	t.Helper()
-	_, err := db.Exec(`
+	seedNamedCard(t, db, userID, scryfallID, "Card")
+}
+
+func seedNamedCard(t *testing.T, db *sqlx.DB, userID, scryfallID, name string) int {
+	t.Helper()
+	var id int
+	require.NoError(t, db.Get(&id, `
 		INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, mana_value)
-		VALUES ($1, 'Card', $2, 'tst', '1', false, 0)
-	`, userID, scryfallID)
+		VALUES ($1, $2, $3, 'tst', '1', false, 0)
+		RETURNING id
+	`, userID, name, scryfallID))
+	return id
+}
+
+func seedDeck(t *testing.T, db *sqlx.DB, userID string, cardIDs ...int) string {
+	t.Helper()
+	var deckID string
+	require.NoError(t, db.Get(&deckID, `INSERT INTO tamiyo.deck (user_id, name, format) VALUES ($1, 'Deck', 'commander') RETURNING id`, userID))
+	for _, cardID := range cardIDs {
+		_, err := db.Exec(`INSERT INTO tamiyo.card_deck (card_id, deck_id) VALUES ($1, $2)`, cardID, deckID)
+		require.NoError(t, err)
+	}
+	return deckID
+}
+
+func seedPendingCard(t *testing.T, db *sqlx.DB, userID, deckID, scryfallID, name string) {
+	t.Helper()
+	_, err := db.Exec(`
+		INSERT INTO tamiyo.deck_pending_cards (user_id, deck_id, name, scryfall_id, set_code, collector_number)
+		VALUES ($1, $2, $3, $4, 'tst', '1')
+	`, userID, deckID, name, scryfallID)
 	require.NoError(t, err)
+}
+
+func seedTag(t *testing.T, db *sqlx.DB, deckID, cardName, tag string) {
+	t.Helper()
+	_, err := db.Exec(`INSERT INTO tamiyo.deck_card_tags (deck_id, card_name, tag) VALUES ($1, $2, $3)`, deckID, cardName, tag)
+	require.NoError(t, err)
+}
+
+func deckTags(t *testing.T, db *sqlx.DB, deckID string) map[string][]string {
+	t.Helper()
+	var rows []struct {
+		CardName string `db:"card_name"`
+		Tag      string `db:"tag"`
+	}
+	require.NoError(t, db.Select(&rows, `SELECT card_name, tag FROM tamiyo.deck_card_tags WHERE deck_id = $1 ORDER BY card_name, tag`, deckID))
+	tags := make(map[string][]string)
+	for _, row := range rows {
+		tags[row.CardName] = append(tags[row.CardName], row.Tag)
+	}
+	return tags
 }
 
 func TestPostgresRepository_IDsToRefreshAndUpsert(t *testing.T) {
@@ -188,4 +235,67 @@ func TestPostgresRepository_UpsertStoresPowersAndToughnesses(t *testing.T) {
 	require.NoError(t, db.QueryRow(`SELECT powers, toughnesses FROM tamiyo.printings WHERE scryfall_id = $1`, a).Scan(pq.Array(&powers), pq.Array(&toughnesses)))
 	assert.Empty(t, powers)
 	assert.Empty(t, toughnesses)
+}
+
+func TestPostgresRepository_IDsToRefreshIncludesPendingOnlyPrintings(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	alice := seedUser(t, db, "alice@example.com")
+	const a = "11111111-1111-1111-1111-111111111111"
+	const b = "22222222-2222-2222-2222-222222222222"
+	deckID := seedDeck(t, db, alice, seedNamedCard(t, db, alice, a, "Sol Ring"))
+	seedPendingCard(t, db, alice, deckID, b, "Arcane Signet")
+
+	ids, err := repo.IDsToRefresh(context.Background(), time.Now().Add(-24*time.Hour), 10)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{a, b}, ids)
+}
+
+func TestPostgresRepository_UpsertRenamesCardsAndMovesTheirTags(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+	alice := seedUser(t, db, "alice@example.com")
+	bob := seedUser(t, db, "bob@example.com")
+	const solRing = "11111111-1111-1111-1111-111111111111"
+	const otherSolRing = "22222222-2222-2222-2222-222222222222"
+	const island = "33333333-3333-3333-3333-333333333333"
+
+	owned := seedDeck(t, db, alice, seedNamedCard(t, db, alice, solRing, "Anneau  solaire"))
+	seedTag(t, db, owned, "anneau solaire", "ramp")
+
+	pending := seedDeck(t, db, alice)
+	seedPendingCard(t, db, alice, pending, solRing, "Anneau solaire")
+	seedTag(t, db, pending, "anneau solaire", "mana")
+	seedTag(t, db, pending, "anneau solaire", "ramp")
+	seedTag(t, db, pending, "sol ring", "mana")
+
+	shared := seedDeck(t, db, bob, seedNamedCard(t, db, bob, solRing, "Anneau solaire"), seedNamedCard(t, db, bob, otherSolRing, "Anneau solaire"))
+	seedTag(t, db, shared, "anneau solaire", "ramp")
+
+	seedNamedCard(t, db, bob, island, "Île")
+
+	require.NoError(t, repo.Upsert(ctx, []Printing{
+		{ScryfallID: solRing, Name: "Sol Ring", LegalFormats: []string{}},
+		{ScryfallID: island, LegalFormats: []string{}},
+	}))
+
+	var names []string
+	require.NoError(t, db.Select(&names, `SELECT name FROM tamiyo.cards WHERE scryfall_id = $1`, solRing))
+	assert.Equal(t, []string{"Sol Ring", "Sol Ring"}, names)
+	require.NoError(t, db.Select(&names, `SELECT name FROM tamiyo.deck_pending_cards WHERE scryfall_id = $1`, solRing))
+	assert.Equal(t, []string{"Sol Ring"}, names)
+	require.NoError(t, db.Select(&names, `SELECT name FROM tamiyo.cards WHERE scryfall_id = $1`, otherSolRing))
+	assert.Equal(t, []string{"Anneau solaire"}, names)
+	require.NoError(t, db.Select(&names, `SELECT name FROM tamiyo.cards WHERE scryfall_id = $1`, island))
+	assert.Equal(t, []string{"Île"}, names)
+
+	assert.Equal(t, map[string][]string{"sol ring": {"ramp"}}, deckTags(t, db, owned))
+	assert.Equal(t, map[string][]string{"sol ring": {"mana", "ramp"}}, deckTags(t, db, pending))
+	assert.Equal(t, map[string][]string{"anneau solaire": {"ramp"}, "sol ring": {"ramp"}}, deckTags(t, db, shared), "another card still has the old name")
+
+	var stored string
+	require.NoError(t, db.Get(&stored, `SELECT name FROM tamiyo.printings WHERE scryfall_id = $1`, solRing))
+	assert.Equal(t, "Sol Ring", stored)
 }
