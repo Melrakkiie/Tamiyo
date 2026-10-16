@@ -44,6 +44,9 @@ type Card struct {
 	ManaCost        string
 	CMC             float64
 	TypeLine        string
+	OracleText      string
+	Rarity          string
+	Keywords        []string
 	Colors          []string
 	ColorIdentity   []string
 	Legalities      map[string]string
@@ -117,6 +120,9 @@ type wireCard struct {
 	ManaCost        string            `json:"mana_cost"`
 	CMC             *float64          `json:"cmc"`
 	TypeLine        string            `json:"type_line"`
+	OracleText      string            `json:"oracle_text"`
+	Rarity          string            `json:"rarity"`
+	Keywords        []string          `json:"keywords"`
 	Power           string            `json:"power"`
 	Toughness       string            `json:"toughness"`
 	Colors          []string          `json:"colors"`
@@ -150,12 +156,13 @@ func parsePrice(raw *string) *float64 {
 }
 
 type wireCardFace struct {
-	ManaCost  string   `json:"mana_cost"`
-	CMC       *float64 `json:"cmc"`
-	TypeLine  string   `json:"type_line"`
-	Colors    []string `json:"colors"`
-	Power     string   `json:"power"`
-	Toughness string   `json:"toughness"`
+	ManaCost   string   `json:"mana_cost"`
+	CMC        *float64 `json:"cmc"`
+	TypeLine   string   `json:"type_line"`
+	OracleText string   `json:"oracle_text"`
+	Colors     []string `json:"colors"`
+	Power      string   `json:"power"`
+	Toughness  string   `json:"toughness"`
 }
 
 func (w wireCard) toCard() Card {
@@ -182,6 +189,9 @@ func (w wireCard) toCard() Card {
 		ManaCost:        w.manaCost(),
 		CMC:             w.cmc(),
 		TypeLine:        w.typeLine(),
+		OracleText:      w.oracleText(),
+		Rarity:          w.Rarity,
+		Keywords:        w.Keywords,
 		Colors:          colors,
 		ColorIdentity:   w.ColorIdentity,
 		Legalities:      w.Legalities,
@@ -226,6 +236,17 @@ func (w wireCard) typeLine() string {
 		}
 	}
 	return strings.Join(lines, " // ")
+}
+
+func (w wireCard) oracleText() string {
+	if w.OracleText != "" || len(w.CardFaces) == 0 {
+		return w.OracleText
+	}
+	texts := make([]string, 0, len(w.CardFaces))
+	for _, face := range w.CardFaces {
+		texts = append(texts, face.OracleText)
+	}
+	return strings.Join(texts, "\n//\n")
 }
 
 func nonEmpty(value string) []string {

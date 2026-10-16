@@ -397,6 +397,7 @@ List cards, with optional filtering, sorting, and pagination.
 | `storage_id` | int | No | Only return cards belonging to this storage. |
 | `scryfall_id` | uuid | No | Only copies of this printing, whatever name they were saved with (an imported card can keep a localized name). Case-insensitive. |
 | `name` | string | No | Case-insensitive partial match on the card name. |
+| `q` | string | No | A search in [Scryfall syntax](#search-syntax-q), evaluated on your own cards. At most 500 characters and 50 terms. |
 | `color_identity` | string | No | Only cards whose color identity fits inside these WUBRG letters (any order), e.g. a commander's identity. Empty (`color_identity=`) keeps colorless cards only. Cards whose identity isn't known yet are left out. |
 | `page` | int | No | 1-based page number. Defaults to `1`. |
 | `limit` | int | No | Cards per page, max `100`. Defaults to `25`. |
@@ -421,9 +422,40 @@ List cards, with optional filtering, sorting, and pagination.
 
 `type` (beyond the primary type), `subtype`, `legal_in`, `power` and `toughness` rely on each printing's type line, legalities, power and toughness, which the API fetches from Scryfall in the background: a newly added printing becomes searchable by them within a few minutes, and legalities are refreshed every day so bans show up.
 
+#### Search syntax (`q`)
+
+`q` accepts the common [Scryfall search syntax](https://scryfall.com/docs/syntax), evaluated in the database against the user's cards rather than sent to Scryfall:
+
+- Terms separated by spaces must all match. `or` (or `OR`) matches either side, `-` negates a term or a group, parentheses group terms: `(t:elf or t:goblin) -c:r`.
+- A bare word matches the card name, each word on its own: `llanowar elves` finds names containing both words. Quotes keep spaces in a value (`o:"draw a card"`), and `!"Sol Ring"` matches that exact name (case-insensitive).
+- Operators are `:`, `=`, `!=`, `<`, `<=`, `>`, `>=`, where they make sense for the key. `!=` is the negation of `=`.
+
+| Key (aliases) | Matches | Operators |
+|---|---|---|
+| `name` | Part of the name. | `:` `=` `!=` |
+| `t` `type` | Part of the type line (`t:elf`, `t:"legendary creature"`). Cards whose printing isn't known yet match on their primary type. | `:` `=` `!=` |
+| `o` `oracle` | Part of the oracle text (every face, case-insensitive). `~` stands for the card's own name: `o:"~ deals"`. | `:` `=` `!=` |
+| `c` `color` | The card's colors. Values: WUBRG letters in any order, `c`/`colorless`, `m`/`multicolor`, a color name (`green`), a guild, shard or wedge name (`boros`, `esper`, `abzan`…), or a number of colors (`c>=2`). `:` means "at least these colors" (`c:c` means colorless). | all |
+| `id` `identity` `ci` | The card's color identity, same values as `c`. `:` means "within these colors", so `id:esper` finds what an Esper commander can play. | all |
+| `mv` `cmc` `manavalue` | Mana value, or `even` / `odd`. | all (`:` and `=` for even/odd) |
+| `pow` `power`, `tou` `toughness` | Numeric power or toughness of any face, like the `power` and `toughness` parameters. | all |
+| `m` `mana` | The mana cost. `2WW` reads as `{2}{W}{W}`; braces allow hybrid and Phyrexian symbols (`{W/U}`). `:` and `>=` mean every symbol appears at least that many times, `=` the exact cost, `>` at least those symbols and something more. | `:` `=` `!=` `>` `>=` |
+| `r` `rarity` | `common` (`c`), `uncommon` (`u`), `rare` (`r`), `mythic` (`m`), compared in that order: `r>=rare`. | all |
+| `s` `set` `e` `edition` | The set code, case-insensitive. | `:` `=` `!=` |
+| `cn` `number` | The collector number; with `<`, `<=`, `>`, `>=`, only numeric collector numbers are compared. | all |
+| `f` `format` `legal` | Legal or restricted in this Scryfall format, as `legal_in`. | `:` `=` `!=` |
+| `kw` `keyword` | Has this keyword ability (`kw:flying`, `kw:"first strike"`), case-insensitive. | `:` `=` `!=` |
+| `is` / `not` | The owned copy is `foil`, `nonfoil` or a `proxy`. | `:` |
+| `usd` `eur` | The price of one copy in that currency, with the fallbacks of the [collection value](#prices-and-values). | all |
+
+Type lines, oracle texts, mana costs, rarities, keywords, legalities, power and toughness come from each printing's Scryfall data, fetched in the background: a newly added printing matches the keys that rely on them (`t` beyond the primary type, `o`, `m`, `r`, `f`, `kw`, `pow`, `tou`) within a few minutes. Cards whose colors aren't known yet only match negated color terms.
+
+An unknown key, a value the key doesn't accept, a missing quote or unbalanced parentheses is a `400` whose `error` says what is wrong, prefixed with `q:`, for example `q: unknown keyword "foo"`, `q: "x" is not a color` or `q: missing closing parenthesis`.
+
 **Example**
 ```
 GET /cards?storage_id=1&sort=-added&page=1&limit=25
+GET /cards?q=t%3Acreature%20c%3Ag%20mv%3C%3D3&stack=true
 ```
 
 **Response `200 OK`**
@@ -451,7 +483,7 @@ GET /cards?storage_id=1&sort=-added&page=1&limit=25
 }
 ```
 
-**Errors:** `400` if `storage_id`, `page`, or `limit` is not a valid integer, `stack` is not a boolean, `sort` is not one of the allowed values, a filter has an invalid value, `open_to_deck` is not a deck id, or `scryfall_id` is not a Scryfall card id.
+**Errors:** `400` if `storage_id`, `page`, or `limit` is not a valid integer, `stack` is not a boolean, `sort` is not one of the allowed values, a filter has an invalid value, `q` is not a valid search (see [Search syntax](#search-syntax-q)), `open_to_deck` is not a deck id, or `scryfall_id` is not a Scryfall card id.
 
 ---
 

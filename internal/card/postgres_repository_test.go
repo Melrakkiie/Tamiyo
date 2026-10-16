@@ -1151,6 +1151,118 @@ func TestPostgresRepository_FindAll_FiltersByPowerAndToughness(t *testing.T) {
 	assert.Equal(t, []string{"Delver of Secrets"}, names(CardFilter{Power: num(3), PowerOp: "eq", Toughness: num(1), ToughnessOp: "eq", Stack: true}))
 }
 
+func TestPostgresRepository_FindAll_SearchQuery(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+
+	type seed struct {
+		name, scryfallID, colors, cardType, set, number string
+		manaValue                                      float64
+		foil                                           bool
+		typeLine, oracle, manaCost, rarity             string
+		legal, keywords, powers                        []string
+		usd                                            float64
+	}
+	seeds := []seed{
+		{"Llanowar Elves", "11111111-1111-1111-1111-111111111111", "G", "Creature", "dom", "168", 1, false,
+			"Creature — Elf Druid", "{T}: Add {G}.", "{G}", "common", []string{"modern", "commander"}, []string{}, []string{"1"}, 0.5},
+		{"Lightning Helix", "22222222-2222-2222-2222-222222222222", "WR", "Instant", "rav", "213", 2, true,
+			"Instant", "Lightning Helix deals 3 damage to any target and you gain 3 life.", "{R}{W}", "uncommon", []string{"modern", "commander"}, []string{}, []string{}, 4},
+		{"Sol Ring", "33333333-3333-3333-3333-333333333333", "", "Artifact", "c21", "263", 1, false,
+			"Artifact", "{T}: Add {C}{C}.", "{1}", "uncommon", []string{"commander"}, []string{}, []string{}, 2},
+		{"Questing Beast", "44444444-4444-4444-4444-444444444444", "G", "Creature", "eld", "171", 4, false,
+			"Legendary Creature — Beast", "Vigilance, deathtouch, haste\nQuesting Beast can't be blocked by creatures with power 2 or less.", "{2}{G}{G}", "mythic",
+			[]string{"modern", "commander"}, []string{"Vigilance", "Deathtouch", "Haste"}, []string{"4"}, 10},
+		{"Forest", "55555555-5555-5555-5555-555555555555", "", "Land", "dom", "280", 0, false,
+			"Basic Land — Forest", "({T}: Add {G}.)", "", "common", []string{"modern", "commander"}, []string{}, []string{}, 0.1},
+		{"Mystery Elf", "66666666-6666-6666-6666-666666666666", "U", "Creature", "tst", "1", 7, false,
+			"", "", "", "", nil, nil, nil, 0},
+	}
+	for _, s := range seeds {
+		colors, cardType := s.colors, s.cardType
+		_, err := repo.Create(ctx, userID, Card{
+			Name: s.name, ScryfallID: s.scryfallID, SetCode: s.set, CollectorNumber: s.number, Foil: s.foil, ManaValue: s.manaValue,
+			Colors: &colors, CardType: &cardType, ColorIdentity: &colors,
+		})
+		require.NoError(t, err)
+		if s.typeLine == "" {
+			continue
+		}
+		var usd, usdFoil *float64
+		if s.foil {
+			usdFoil = &s.usd
+		} else {
+			usd = &s.usd
+		}
+		_, err = db.Exec(`
+			INSERT INTO tamiyo.printings (scryfall_id, type_line, oracle_text, mana_cost, rarity, legal_formats, keywords, powers, usd, usd_foil)
+			VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6, $7, $8, $9, $10)
+		`, s.scryfallID, s.typeLine, s.oracle, s.manaCost, s.rarity, pq.Array(s.legal), pq.Array(s.keywords), pq.Array(s.powers), usd, usdFoil)
+		require.NoError(t, err)
+	}
+
+	names := func(query string, stack bool) []string {
+		t.Helper()
+		node, err := parseSearchQuery(query)
+		require.NoError(t, err)
+		result, _, err := repo.FindAll(ctx, userID, CardFilter{Query: node, Stack: stack, Page: 1, Limit: 25, SortField: "name"})
+		require.NoError(t, err)
+		out := make([]string, len(result))
+		for i, c := range result {
+			out[i] = c.Name
+		}
+		return out
+	}
+
+	for _, tc := range []struct {
+		query string
+		want  []string
+	}{
+		{"t:creature c:g mv<=3", []string{"Llanowar Elves"}},
+		{"t:creature", []string{"Llanowar Elves", "Mystery Elf", "Questing Beast"}},
+		{"t:elf", []string{"Llanowar Elves"}},
+		{`o:"add {g}"`, []string{"Forest", "Llanowar Elves"}},
+		{`o:"~ deals"`, []string{"Lightning Helix"}},
+		{`o:"~ can't be blocked"`, []string{"Questing Beast"}},
+		{"c:g", []string{"Llanowar Elves", "Questing Beast"}},
+		{"c=rw", []string{"Lightning Helix"}},
+		{"c<=boros", []string{"Forest", "Lightning Helix", "Sol Ring"}},
+		{"c:c", []string{"Forest", "Sol Ring"}},
+		{"c:m", []string{"Lightning Helix"}},
+		{"c>=1", []string{"Lightning Helix", "Llanowar Elves", "Mystery Elf", "Questing Beast"}},
+		{"id:g", []string{"Forest", "Llanowar Elves", "Questing Beast", "Sol Ring"}},
+		{"m:G", []string{"Llanowar Elves", "Questing Beast"}},
+		{"m:GG", []string{"Questing Beast"}},
+		{"m=G", []string{"Llanowar Elves"}},
+		{"m>G", []string{"Questing Beast"}},
+		{"r:mythic", []string{"Questing Beast"}},
+		{"r>=uncommon", []string{"Lightning Helix", "Questing Beast", "Sol Ring"}},
+		{"r<rare", []string{"Forest", "Lightning Helix", "Llanowar Elves", "Sol Ring"}},
+		{"-f:modern", []string{"Mystery Elf", "Sol Ring"}},
+		{"kw:deathtouch", []string{"Questing Beast"}},
+		{"pow>=4", []string{"Questing Beast"}},
+		{"usd>=2", []string{"Lightning Helix", "Questing Beast", "Sol Ring"}},
+		{"is:foil", []string{"Lightning Helix"}},
+		{"not:foil mv>3", []string{"Mystery Elf", "Questing Beast"}},
+		{"t:creature or is:foil", []string{"Lightning Helix", "Llanowar Elves", "Mystery Elf", "Questing Beast"}},
+		{"-(t:creature or t:land) mv<2", []string{"Sol Ring"}},
+		{"s:DOM cn:168", []string{"Llanowar Elves"}},
+		{"cn>200", []string{"Forest", "Lightning Helix", "Sol Ring"}},
+		{"mv:even", []string{"Forest", "Lightning Helix", "Questing Beast"}},
+		{`!"sol ring"`, []string{"Sol Ring"}},
+		{"elf", []string{"Mystery Elf"}},
+		{"100%", []string{}},
+	} {
+		t.Run(tc.query, func(t *testing.T) {
+			assert.Equal(t, tc.want, names(tc.query, false))
+		})
+	}
+
+	assert.Equal(t, []string{"Llanowar Elves", "Questing Beast"}, names("t:creature c:g", true))
+}
+
 func TestPostgresRepository_Value_SumsPricesOfOwnedNonProxyCards(t *testing.T) {
 	db := getTestDB(t)
 	alice := seedUser(t, db, "alice@example.com")

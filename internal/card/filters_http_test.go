@@ -93,6 +93,8 @@ func TestHandler_GetCards_RejectsInvalidAdvancedFilters(t *testing.T) {
 		"scryfall_id=nope",
 		"scryfall_id=bd8fa327-dd41-4737-8f19",
 		"subtype=" + "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"q=foo:bar",
+		"q=(t:elf",
 	} {
 		t.Run(query, func(t *testing.T) {
 			router := setupRouter(&fakeService{})
@@ -103,4 +105,31 @@ func TestHandler_GetCards_RejectsInvalidAdvancedFilters(t *testing.T) {
 			assert.Equal(t, http.StatusBadRequest, w.Code)
 		})
 	}
+}
+
+func TestHandler_GetCards_ParsesTheSearchQuery(t *testing.T) {
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards?q=t%3Aelf%20c%3Ag", nil))
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, service.lastFilter.Query)
+	assert.Equal(t, `(type="elf" and color>="G")`, describe(service.lastFilter.Query))
+
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards?q=%20", nil))
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Nil(t, service.lastFilter.Query)
+}
+
+func TestHandler_GetCards_ExplainsAnInvalidSearchQuery(t *testing.T) {
+	router := setupRouter(&fakeService{})
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards?q=foo%3Abar", nil))
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	assert.JSONEq(t, `{"error": "q: unknown keyword \"foo\""}`, w.Body.String())
 }

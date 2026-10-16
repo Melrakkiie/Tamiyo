@@ -92,6 +92,7 @@ func TestClient_FetchByID(t *testing.T) {
 			Data: []wireCard{{
 				ID: "11111111-1111-1111-1111-111111111111", Name: "Sol Ring",
 				ManaCost: "{1}", CMC: new(1.0), TypeLine: "Artifact",
+				OracleText: "{T}: Add {C}{C}.", Rarity: "uncommon", Keywords: []string{},
 				Colors: []string{}, ColorIdentity: []string{},
 				Legalities: map[string]string{"commander": "legal"},
 			}},
@@ -107,6 +108,28 @@ func TestClient_FetchByID(t *testing.T) {
 	assert.Equal(t, "Artifact", cards[0].TypeLine)
 	assert.Equal(t, 1.0, cards[0].CMC)
 	assert.Equal(t, "legal", cards[0].Legalities["commander"])
+	assert.Equal(t, "{T}: Add {C}{C}.", cards[0].OracleText)
+	assert.Equal(t, "uncommon", cards[0].Rarity)
+	assert.Equal(t, []string{}, cards[0].Keywords)
+}
+
+func TestClient_JoinsTheOracleTextsOfFaces(t *testing.T) {
+	withFakeScryfall(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(collectionResponse{
+			Data: []wireCard{{
+				ID: "22222222-2222-2222-2222-222222222222", Name: "Fire // Ice", Keywords: []string{"Flash"},
+				CardFaces: []wireCardFace{{OracleText: "Fire deals 2 damage."}, {OracleText: "Tap target permanent."}},
+			}},
+		})
+	})
+
+	cards, err := NewClient().Fetch(context.Background(), []Identifier{{ID: "22222222-2222-2222-2222-222222222222"}})
+
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	assert.Equal(t, "Fire deals 2 damage.\n//\nTap target permanent.", cards[0].OracleText)
+	assert.Equal(t, []string{"Flash"}, cards[0].Keywords)
 }
 
 func TestClient_OmitsNotFoundIdentifiers(t *testing.T) {

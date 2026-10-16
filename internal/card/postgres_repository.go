@@ -130,10 +130,10 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		add("mana_value "+comparisonOperators[filter.ManaValueOp]+" $%d", *filter.ManaValue)
 	}
 	if filter.Power != nil {
-		add(printingStatCondition("powers", filter.PowerOp), *filter.Power)
+		add(printingStatCondition("powers", comparisonOperators[filter.PowerOp], "$%d"), *filter.Power)
 	}
 	if filter.Toughness != nil {
-		add(printingStatCondition("toughnesses", filter.ToughnessOp), *filter.Toughness)
+		add(printingStatCondition("toughnesses", comparisonOperators[filter.ToughnessOp], "$%d"), *filter.Toughness)
 	}
 	if filter.Type != "" {
 		add(`(card_type = $%d OR EXISTS (
@@ -165,6 +165,15 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 			WHERE s.id = cards.storage_id AND s.locked
 			  AND NOT EXISTS (SELECT 1 FROM tamiyo.storage_allowed_deck a WHERE a.storage_id = s.id AND a.deck_id = $%d)
 		))`, *filter.OpenToDeck)
+	}
+
+	if filter.Query != nil {
+		bind := func(value any) string {
+			args = append(args, value)
+			argPos++
+			return fmt.Sprintf("$%d", argPos-1)
+		}
+		conditions = append(conditions, searchCondition(filter.Query, bind))
 	}
 
 	whereClause := " WHERE " + strings.Join(conditions, " AND ")
@@ -202,11 +211,11 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 	return cards, total, nil
 }
 
-func printingStatCondition(column, op string) string {
+func printingStatCondition(column, op, value string) string {
 	return `EXISTS (
 			SELECT 1 FROM tamiyo.printings p, unnest(p.` + column + `) v
 			WHERE p.scryfall_id = cards.scryfall_id
-			  AND (CASE WHEN v ~ '^-?[0-9]*\.?[0-9]+$' THEN v::numeric END) ` + comparisonOperators[op] + ` $%d
+			  AND (CASE WHEN v ~ '^-?[0-9]*\.?[0-9]+$' THEN v::numeric END) ` + op + ` ` + value + `
 		)`
 }
 

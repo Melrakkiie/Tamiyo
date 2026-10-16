@@ -21,7 +21,11 @@ type Printing struct {
 	ScryfallID   string
 	Name         string
 	ManaValue    float64
+	ManaCost     string
 	TypeLine     string
+	OracleText   string
+	Rarity       string
+	Keywords     []string
 	LegalFormats []string
 	Powers       []string
 	Toughnesses  []string
@@ -56,7 +60,11 @@ func FromScryfall(card scryfall.Card) Printing {
 		}
 	}
 	sort.Strings(formats)
-	return Printing{ScryfallID: card.ID, Name: card.Name, ManaValue: card.CMC, TypeLine: card.TypeLine, LegalFormats: formats, Powers: card.Powers, Toughnesses: card.Toughnesses, Prices: card.Prices}
+	return Printing{
+		ScryfallID: card.ID, Name: card.Name, ManaValue: card.CMC, ManaCost: card.ManaCost, TypeLine: card.TypeLine,
+		OracleText: card.OracleText, Rarity: card.Rarity, Keywords: card.Keywords,
+		LegalFormats: formats, Powers: card.Powers, Toughnesses: card.Toughnesses, Prices: card.Prices,
+	}
 }
 
 func (r *Refresher) RefreshBatch(ctx context.Context) (int, error) {
@@ -82,7 +90,7 @@ func (r *Refresher) RefreshBatch(ctx context.Context) (int, error) {
 	for _, id := range ids {
 		p, ok := found[strings.ToLower(id)]
 		if !ok {
-			p = Printing{ScryfallID: id, LegalFormats: []string{}, Powers: []string{}, Toughnesses: []string{}}
+			p = Printing{ScryfallID: id, LegalFormats: []string{}, Powers: []string{}, Toughnesses: []string{}, Keywords: []string{}}
 		}
 		p.ScryfallID = id
 		printings = append(printings, p)

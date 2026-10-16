@@ -237,6 +237,32 @@ func TestPostgresRepository_UpsertStoresPowersAndToughnesses(t *testing.T) {
 	assert.Empty(t, toughnesses)
 }
 
+func TestPostgresRepository_UpsertStoresSearchFields(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+	const a = "11111111-1111-1111-1111-111111111111"
+	var oracleText, manaCost, rarity *string
+	var keywords []string
+
+	require.NoError(t, repo.Upsert(ctx, []Printing{{ScryfallID: a, TypeLine: "Creature", LegalFormats: []string{}, ManaCost: "{G}", OracleText: "Trample", Rarity: "rare", Keywords: []string{"Trample"}}}))
+	require.NoError(t, db.QueryRow(`SELECT oracle_text, mana_cost, rarity, keywords FROM tamiyo.printings WHERE scryfall_id = $1`, a).Scan(&oracleText, &manaCost, &rarity, pq.Array(&keywords)))
+	require.NotNil(t, oracleText)
+	require.NotNil(t, manaCost)
+	require.NotNil(t, rarity)
+	assert.Equal(t, "Trample", *oracleText)
+	assert.Equal(t, "{G}", *manaCost)
+	assert.Equal(t, "rare", *rarity)
+	assert.Equal(t, []string{"Trample"}, keywords)
+
+	require.NoError(t, repo.Upsert(ctx, []Printing{{ScryfallID: a, TypeLine: "Land", LegalFormats: []string{}}}))
+	require.NoError(t, db.QueryRow(`SELECT oracle_text, mana_cost, rarity, keywords FROM tamiyo.printings WHERE scryfall_id = $1`, a).Scan(&oracleText, &manaCost, &rarity, pq.Array(&keywords)))
+	assert.Nil(t, oracleText)
+	assert.Nil(t, manaCost)
+	assert.Nil(t, rarity)
+	assert.Empty(t, keywords)
+}
+
 func TestPostgresRepository_IDsToRefreshIncludesPendingOnlyPrintings(t *testing.T) {
 	db := getTestDB(t)
 	repo := NewPostgresRepository(db)

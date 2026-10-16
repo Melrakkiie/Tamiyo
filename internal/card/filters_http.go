@@ -115,6 +115,10 @@ func parseAdvancedFilters(ctx *gin.Context) (CardFilter, error) {
 		filter.OpenToDeck = &deckID
 	}
 
+	if filter.Query, err = parseSearchQuery(ctx.Query("q")); err != nil {
+		return filter, err
+	}
+
 	if raw := ctx.Query("scryfall_id"); raw != "" {
 		scryfallID := strings.ToLower(raw)
 		if !scryfallIDPattern.MatchString(scryfallID) {

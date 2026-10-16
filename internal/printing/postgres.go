@@ -47,16 +47,20 @@ func (r *PostgresRepository) Upsert(ctx context.Context, printings []Printing) e
 	}()
 	for _, p := range printings {
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO tamiyo.printings (scryfall_id, name, type_line, legal_formats, powers, toughnesses, eur, eur_foil, usd, usd_foil, usd_etched, refreshed_at)
-			VALUES ($1, $2, $3, $4, COALESCE($5::text[], '{}'), COALESCE($6::text[], '{}'), $7, $8, $9, $10, $11, now())
+			INSERT INTO tamiyo.printings (scryfall_id, name, type_line, legal_formats, powers, toughnesses, eur, eur_foil, usd, usd_foil, usd_etched,
+				oracle_text, mana_cost, rarity, keywords, refreshed_at)
+			VALUES ($1, $2, $3, $4, COALESCE($5::text[], '{}'), COALESCE($6::text[], '{}'), $7, $8, $9, $10, $11,
+				NULLIF($12, ''), NULLIF($13, ''), NULLIF($14, ''), COALESCE($15::text[], '{}'), now())
 			ON CONFLICT (scryfall_id) DO UPDATE
 			SET name = EXCLUDED.name, type_line = EXCLUDED.type_line, legal_formats = EXCLUDED.legal_formats,
 				powers = EXCLUDED.powers, toughnesses = EXCLUDED.toughnesses,
 				eur = EXCLUDED.eur, eur_foil = EXCLUDED.eur_foil, usd = EXCLUDED.usd, usd_foil = EXCLUDED.usd_foil,
 				usd_etched = EXCLUDED.usd_etched,
+				oracle_text = EXCLUDED.oracle_text, mana_cost = EXCLUDED.mana_cost, rarity = EXCLUDED.rarity, keywords = EXCLUDED.keywords,
 				refreshed_at = now()
 		`, p.ScryfallID, p.Name, p.TypeLine, pq.Array(p.LegalFormats), pq.Array(p.Powers), pq.Array(p.Toughnesses),
-			p.Prices.EUR, p.Prices.EURFoil, p.Prices.USD, p.Prices.USDFoil, p.Prices.USDEtched); err != nil {
+			p.Prices.EUR, p.Prices.EURFoil, p.Prices.USD, p.Prices.USDFoil, p.Prices.USDEtched,
+			p.OracleText, p.ManaCost, p.Rarity, pq.Array(p.Keywords)); err != nil {
 			return err
 		}
 		if p.Name == "" {
