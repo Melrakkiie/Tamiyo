@@ -1181,7 +1181,7 @@ A tag can also be created before any card has it, to set up the deck's list firs
 - `PATCH /deck/:id/tags` — rename a tag on every card. Body: `{ "from": "Ramp", "to": "Accélération" }`. Renaming into a tag the deck already has merges them. Works on a tag no card has too. `204`.
 - `DELETE /deck/:id/tags?tag=Ramp` — remove a tag from every card, and from the deck's list when it was created with `POST`. `204`.
 
-Tagging changes the deck's `updated` date. Shared decks and the deck comparison show tags too (see [Shared decks](#shared-decks)).
+Tagging changes the deck's `updated` date. Shared decks show tags too (see [Shared decks](#shared-decks)).
 
 **Errors:** `400` invalid id, a missing field, a tag that's blank or over 40 characters, more than 20 tags · `404` deck not found, card not in the deck, unknown tag
 
@@ -1428,10 +1428,10 @@ Cards are matched **by name only**: printings and finishes are ignored, and a sp
   },
   "other": { "id": "…", "name": "Kess Spellslinger", "format": "commander", "visibility": "unlisted", "owner": { "id": "…", "display_name": "Alice", "avatar_scryfall_id": null }, "mine": false, "card_count": 100 },
   "common": [
-    { "name": "Island", "scryfall_id": "fc3f6a8f-0b5e-4b5f-9a1a-1d4b0e3c4c2f", "mana_value": 0, "colors": "", "card_type": "Land", "color_identity": "U", "quantity": 12, "other_quantity": 9, "commander": false, "other_commander": false, "tags": ["Terrain"], "other_tags": [] }
+    { "name": "Island", "scryfall_id": "fc3f6a8f-0b5e-4b5f-9a1a-1d4b0e3c4c2f", "mana_value": 0, "colors": "", "card_type": "Land", "color_identity": "U", "quantity": 12, "other_quantity": 9, "commander": false, "other_commander": false }
   ],
   "only_in_deck": [
-    { "name": "Kess, Dissident Mage", "scryfall_id": "…", "mana_value": 4, "colors": "UBR", "card_type": "Creature", "color_identity": "UBR", "quantity": 1, "other_quantity": 0, "commander": true, "other_commander": false, "tags": ["Commandant"], "other_tags": [] }
+    { "name": "Kess, Dissident Mage", "scryfall_id": "…", "mana_value": 4, "colors": "UBR", "card_type": "Creature", "color_identity": "UBR", "quantity": 1, "other_quantity": 0, "commander": true, "other_commander": false }
   ],
   "only_in_other": []
 }
@@ -1439,7 +1439,7 @@ Cards are matched **by name only**: printings and finishes are ignored, and a sp
 
 - `common`: names in both decks, with how many copies each one has (`quantity` for `:id`, `other_quantity` for `:other_id`) — they can differ.
 - `only_in_deck` / `only_in_other`: names in only one of them (the other quantity is `0`).
-- Every list is sorted by name and always present, possibly empty. `scryfall_id`, `mana_value`, `colors`, `card_type` and `color_identity` come from one of the matching printings, preferring `:id`'s. `commander` / `other_commander` tell whether the card is that deck's commander, and `tags` / `other_tags` are its [tags](#card-tags-deckidtags) in each deck. `mine` tells whether the deck belongs to the caller.
+- Every list is sorted by name and always present, possibly empty. `scryfall_id`, `mana_value`, `colors`, `card_type` and `color_identity` come from one of the matching printings, preferring `:id`'s. `commander` / `other_commander` tell whether the card is that deck's commander. `mine` tells whether the deck belongs to the caller.
 
 **Errors:** `400` an id isn't a UUID · `401` unauthenticated · `404` a deck doesn't exist, or is someone else's private deck
 

@@ -27,8 +27,6 @@ type ComparedCard struct {
 	OtherQuantity  int
 	Commander      bool
 	OtherCommander bool
-	Tags           []string
-	OtherTags      []string
 }
 
 type Comparison struct {
@@ -70,11 +68,9 @@ func (s *Service) CompareDecks(ctx context.Context, userID string, deckID string
 			if other {
 				entry.OtherQuantity += c.Quantity
 				entry.OtherCommander = entry.OtherCommander || c.Commander
-				entry.OtherTags = c.Tags
 			} else {
 				entry.Quantity += c.Quantity
 				entry.Commander = entry.Commander || c.Commander
-				entry.Tags = c.Tags
 			}
 		}
 	}

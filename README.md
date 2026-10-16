@@ -221,7 +221,7 @@ Each card of a deck, owned or pending, sits on a board: `main` (the deck itself)
 
 ### Card tags
 
-A deck's owner can tag its cards (`Ramp`, `Pioche`, `Removal`…) to organize deckbuilding. A tag belongs to a card name within a deck: every copy shares it, pending ones included, whatever the printing. A card can have several tags, and each deck has its own. `GET /deck/:id/tags` lists them, `POST /deck/:id/tags` creates one before any card has it (it stays in the list until deleted), `PUT /deck/:id/tags/cards` sets a card's tags, `PATCH` / `DELETE /deck/:id/tags` rename or remove a tag on every card. Shared decks and deck comparisons include each card's tags. See [`doc/API.md`](./doc/API.md#card-tags-deckidtags).
+A deck's owner can tag its cards (`Ramp`, `Pioche`, `Removal`…) to organize deckbuilding. A tag belongs to a card name within a deck: every copy shares it, pending ones included, whatever the printing. A card can have several tags, and each deck has its own. `GET /deck/:id/tags` lists them, `POST /deck/:id/tags` creates one before any card has it (it stays in the list until deleted), `PUT /deck/:id/tags/cards` sets a card's tags, `PATCH` / `DELETE /deck/:id/tags` rename or remove a tag on every card. Shared decks include each card's tags. See [`doc/API.md`](./doc/API.md#card-tags-deckidtags).
 
 ### Deck folders and favorites
 

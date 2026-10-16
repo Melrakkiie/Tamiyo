@@ -5433,17 +5433,7 @@ components:
           type: boolean
         other_commander:
           type: boolean
-        tags:
-          type: array
-          description: The card's tags in the first deck.
-          items:
-            type: string
-        other_tags:
-          type: array
-          description: The card's tags in the other deck.
-          items:
-            type: string
-      required: [name, scryfall_id, mana_value, colors, card_type, color_identity, quantity, other_quantity, commander, other_commander, tags, other_tags]
+      required: [name, scryfall_id, mana_value, colors, card_type, color_identity, quantity, other_quantity, commander, other_commander]
 
     DeckComparison:
       type: object
