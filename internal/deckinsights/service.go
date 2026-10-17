@@ -10,9 +10,7 @@ import (
 )
 
 type deckService interface {
-	GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error)
-	GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error)
-	GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error)
+	GetDeckContent(ctx context.Context, userID string, deckID string) (deck.DeckContent, error)
 }
 
 type scryfallFetcher interface {
@@ -34,21 +32,15 @@ func NewService(decks deckService, scryfall scryfallFetcher, rates exchangeRates
 }
 
 func (s *Service) GetDeckLegality(ctx context.Context, userID string, deckID string) (LegalityReport, error) {
-	d, cards, scryfallByID, err := s.loadDeckWithScryfallData(ctx, userID, deckID)
+	content, scryfallByID, err := s.loadDeckWithScryfallData(ctx, userID, deckID)
 	if err != nil {
 		return LegalityReport{}, err
 	}
-	report, err := checkLegality(d, cards, scryfallByID)
-	for i := range report.Issues {
-		if report.Issues[i].CardID < 0 {
-			report.Issues[i].CardID = 0
-		}
-	}
-	return report, err
+	return checkLegality(content.Deck, content.Entries, scryfallByID)
 }
 
 func (s *Service) GetDeckStats(ctx context.Context, userID string, deckID string) (DeckStats, error) {
-	_, cards, scryfallByID, err := s.loadDeckWithScryfallData(ctx, userID, deckID)
+	content, scryfallByID, err := s.loadDeckWithScryfallData(ctx, userID, deckID)
 	if err != nil {
 		return DeckStats{}, err
 	}
@@ -56,47 +48,37 @@ func (s *Service) GetDeckStats(ctx context.Context, userID string, deckID string
 	if err != nil {
 		return DeckStats{}, fmt.Errorf("loading exchange rate: %w", err)
 	}
-	stats := computeStats(mainBoard(cards), scryfallByID, usdPerEUR)
+	entries := content.Entries
+	stats := computeStats(mainBoard(entries), scryfallByID, usdPerEUR)
 	stats.BoardValues = BoardValues{
-		Sideboard:   cardsValue(inBoard(cards, deck.BoardSideboard), scryfallByID, usdPerEUR),
-		Considering: cardsValue(inBoard(cards, deck.BoardConsidering), scryfallByID, usdPerEUR),
+		Sideboard:   entriesValue(inBoard(entries, deck.BoardSideboard), scryfallByID, usdPerEUR),
+		Considering: entriesValue(inBoard(entries, deck.BoardConsidering), scryfallByID, usdPerEUR),
 	}
 	return stats, nil
 }
 
-func (s *Service) loadDeckWithScryfallData(ctx context.Context, userID string, deckID string) (deck.Deck, []deck.DeckCard, map[string]scryfall.Card, error) {
-	d, err := s.decks.GetDeck(ctx, userID, deckID)
+func (s *Service) loadDeckWithScryfallData(ctx context.Context, userID string, deckID string) (deck.DeckContent, map[string]scryfall.Card, error) {
+	content, err := s.decks.GetDeckContent(ctx, userID, deckID)
 	if err != nil {
 		if errors.Is(err, deck.ErrNotFound) {
-			return deck.Deck{}, nil, nil, ErrDeckNotFound
+			return deck.DeckContent{}, nil, ErrDeckNotFound
 		}
-		return deck.Deck{}, nil, nil, err
+		return deck.DeckContent{}, nil, fmt.Errorf("loading deck content: %w", err)
 	}
 
-	cards, err := s.decks.GetDeckCards(ctx, userID, deckID, "updated", true)
-	if err != nil {
-		return deck.Deck{}, nil, nil, fmt.Errorf("loading deck cards: %w", err)
-	}
-
-	pending, err := s.decks.GetPendingCards(ctx, userID, deckID)
-	if err != nil {
-		return deck.Deck{}, nil, nil, fmt.Errorf("loading pending cards: %w", err)
-	}
-	d, cards = withPendingCards(d, cards, pending)
-
-	seen := make(map[string]bool, len(cards))
+	seen := make(map[string]bool, len(content.Entries))
 	var identifiers []scryfall.Identifier
-	for _, c := range cards {
-		if c.ScryfallID == "" || seen[c.ScryfallID] {
+	for _, e := range content.Entries {
+		if e.ScryfallID == "" || seen[e.ScryfallID] {
 			continue
 		}
-		seen[c.ScryfallID] = true
-		identifiers = append(identifiers, scryfall.Identifier{ID: c.ScryfallID})
+		seen[e.ScryfallID] = true
+		identifiers = append(identifiers, scryfall.Identifier{ID: e.ScryfallID})
 	}
 
 	found, err := s.scryfall.Fetch(ctx, identifiers)
 	if err != nil {
-		return deck.Deck{}, nil, nil, fmt.Errorf("%w: %v", ErrScryfallUnavailable, err)
+		return deck.DeckContent{}, nil, fmt.Errorf("%w: %v", ErrScryfallUnavailable, err)
 	}
 
 	byID := make(map[string]scryfall.Card, len(found))
@@ -104,44 +86,5 @@ func (s *Service) loadDeckWithScryfallData(ctx context.Context, userID string, d
 		byID[c.ID] = c
 	}
 
-	return d, cards, byID, nil
-}
-
-const copiesPerPendingCard = 1000
-
-func pendingCopyID(pendingID, copyIndex int) int {
-	return -(pendingID*copiesPerPendingCard + copyIndex + 1)
-}
-
-func withPendingCards(d deck.Deck, cards []deck.DeckCard, pending []deck.PendingCard) (deck.Deck, []deck.DeckCard) {
-	all := make([]deck.DeckCard, 0, len(cards)+len(pending))
-	all = append(all, cards...)
-	for _, p := range pending {
-		for copyIndex := 0; copyIndex < p.Quantity; copyIndex++ {
-			all = append(all, deck.DeckCard{
-				ID:              pendingCopyID(p.ID, copyIndex),
-				Name:            p.Name,
-				ScryfallID:      p.ScryfallID,
-				SetCode:         p.SetCode,
-				CollectorNumber: p.CollectorNumber,
-				Foil:            p.Foil,
-				Proxy:           p.Proxy,
-				ManaValue:       p.ManaValue,
-				Colors:          p.Colors,
-				CardType:        p.CardType,
-				ColorIdentity:   p.ColorIdentity,
-				Board:           p.Board,
-			})
-		}
-	}
-
-	if d.CommanderID == nil && d.CommanderPendingID != nil {
-		commanderID := pendingCopyID(*d.CommanderPendingID, 0)
-		d.CommanderID = &commanderID
-	}
-	if d.PartnerID == nil && d.PartnerPendingID != nil {
-		partnerID := pendingCopyID(*d.PartnerPendingID, 0)
-		d.PartnerID = &partnerID
-	}
-	return d, all
+	return content, byID, nil
 }

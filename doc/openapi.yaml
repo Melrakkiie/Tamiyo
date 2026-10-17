@@ -4344,6 +4344,7 @@ components:
       properties:
         card_id:
           type: integer
+          description: One of the card's owned copies in the deck. Absent when the card is only pending, or for an issue about the whole deck.
         card_name:
           type: string
           description: Empty for an issue about the whole deck, such as its size.

@@ -1271,7 +1271,7 @@ For the `commander` format specifically, two deck-construction rules Scryfall's 
 
 Every board is checked card by card (see [Boards](#boards)), and each issue about a card tells its `board`, but the singleton rule and the deck size only look at `main`. The deck size is checked counting every copy of `main` (the commander and pending cards included): exactly 100 cards for `commander`, `brawl`, `duel`, `paupercommander`, `predh` and `gladiator`, exactly 60 for `oathbreaker` and `standardbrawl`, at least 60 for the other constructed formats (`standard`, `pioneer`, `modern`, `legacy`, `vintage`, `pauper`, `premodern`, `explorer`, `historic`, `timeless`, `alchemy`, `oldschool`, `penny`, `future`). Other formats get no size check. A wrong size is reported first, as an issue with an empty `card_name` and a reason like `deck size: 87 cards, commander requires exactly 100`.
 
-Pending cards (see `GET /deck/:id/pending-cards`) are checked like the deck's own cards, one entry per copy, so a pending copy counts toward the singleton rule too. An issue about a pending card has no `card_id`.
+Pending cards (see `GET /deck/:id/pending-cards`) are checked like the deck's own cards, the commander and second commander included, and each of their copies counts toward the singleton rule and the deck size. A card is reported once for all its copies of one printing, finish, proxy status and board, owned and pending together. An issue about a card the deck only has as pending copies has no `card_id`; an issue about a card with owned copies carries the id of one of them.
 
 **Known limitations:** only `commander` itself gets these extra checks (not singleton siblings like `oathbreaker` or `brawl`); named singleton exceptions (e.g. Shadowborn Apostle, Relentless Rats) aren't recognized, only the basic-land exemption.
 
@@ -1291,7 +1291,7 @@ Pending cards (see `GET /deck/:id/pending-cards`) are checked like the deck's ow
 
 ### `GET /deck/:id/stats`
 
-Summarizes the deck's composition: mana curve, color breakdown, and primary card types — all computed from Scryfall data, nothing stored by Tamiyo itself. Lands are excluded from the mana curve, color breakdown, and average mana value (a land's mana value is always 0 and it has no casting colors, so including it would just dilute what the deck actually casts) but are still counted in `card_count`, `land_count`, and `type_breakdown`. Pending cards are included, once per copy, as if they were already in the deck.
+Summarizes the deck's composition: mana curve, color breakdown, and primary card types — all computed from Scryfall data, nothing stored by Tamiyo itself. Lands are excluded from the mana curve, color breakdown, and average mana value (a land's mana value is always 0 and it has no casting colors, so including it would just dilute what the deck actually casts) but are still counted in `card_count`, `land_count`, and `type_breakdown`. Pending cards are included with all their copies, as if they were already in the deck.
 
 **Response `200 OK`**
 ```json

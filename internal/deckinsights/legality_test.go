@@ -174,11 +174,14 @@ func TestCanPair_ReadsTheFrontFace(t *testing.T) {
 }
 
 func partnerDeckFixture(commander, partner scryfall.Card, extra ...scryfall.Card) (*fakeDeckService, *fakeScryfallFetcher) {
-	cards := []deck.DeckCard{{ID: 10, Name: commander.Name, ScryfallID: "commander"}}
+	entries := []deck.DeckEntry{
+		inSlot(deck.SlotCommander, owned(commander.Name, "commander", 10)),
+		inSlot(deck.SlotPartner, pending(partner.Name, "partner", 5, 1)),
+	}
 	scryfallCards := map[string]scryfall.Card{"commander": commander, "partner": partner}
-	for i, c := range append([]scryfall.Card{}, extra...) {
+	for i, c := range extra {
 		id := c.Name
-		cards = append(cards, deck.DeckCard{ID: 20 + i, Name: c.Name, ScryfallID: id})
+		entries = append(entries, owned(c.Name, id, 20+i))
 		scryfallCards[id] = c
 	}
 	for id, c := range scryfallCards {
@@ -186,15 +189,7 @@ func partnerDeckFixture(commander, partner scryfall.Card, extra ...scryfall.Card
 		c.Legalities = map[string]string{"commander": "legal"}
 		scryfallCards[id] = c
 	}
-	decks := &fakeDeckService{
-		decks: map[string]deck.Deck{"00000000-0000-0000-0000-000000000001": {
-			ID: "00000000-0000-0000-0000-000000000001", Format: "commander", CommanderID: ptr(10), PartnerPendingID: ptr(5),
-		}},
-		cardsByDeck: map[string][]deck.DeckCard{"00000000-0000-0000-0000-000000000001": cards},
-		pendingByDeck: map[string][]deck.PendingCard{"00000000-0000-0000-0000-000000000001": {
-			{ID: 5, Name: partner.Name, ScryfallID: "partner", Quantity: 1},
-		}},
-	}
+	decks := deckWith(deck.Deck{Format: "commander", CommanderID: ptr(10), PartnerPendingID: ptr(5)}, entries...)
 	return decks, &fakeScryfallFetcher{cards: scryfallCards}
 }
 
