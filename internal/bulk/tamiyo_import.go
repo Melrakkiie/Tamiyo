@@ -123,7 +123,7 @@ func tamiyoDeckLines(file tamiyoFile) []moxfieldDeckLine {
 			SetCode:         c.SetCode,
 			CollectorNumber: c.CollectorNumber,
 			Foil:            c.Foil,
-			Proxy:           &c.Proxy,
+			Proxy:           proxyMarkOf(c.Proxy),
 			Board:           c.Board,
 		}
 		if c.Commander && commanders < maxCommanders && deck.InMainBoard(c.Board) {

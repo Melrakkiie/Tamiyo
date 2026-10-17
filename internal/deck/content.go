@@ -11,6 +11,8 @@ type DeckContent struct {
 	Entries []DeckEntry
 }
 
+// DeckEntry is one line of a deck: the owned and pending copies sharing a
+// printing, finish, proxy flag, board and commander slot.
 type DeckEntry struct {
 	Name            string
 	ScryfallID      string
@@ -66,6 +68,10 @@ func (e DeckEntry) IsCommander() bool {
 	return e.Slot != SlotNone
 }
 
+// GetDeckContent returns the deck's owned and pending cards merged into
+// entries ordered commanders first (by slot), then by board (main, sideboard,
+// considering), name, set code, collector number, non-foil before foil and
+// real before proxy. Callers rely on this order.
 func (s *Service) GetDeckContent(ctx context.Context, userID string, deckID string) (DeckContent, error) {
 	d, err := s.repo.FindByID(ctx, userID, deckID)
 	if err != nil {
@@ -193,6 +199,29 @@ func pendingEntry(p PendingCard, quantity int) DeckEntry {
 		Price:           p.Price,
 		Pending:         []PendingPart{{ID: p.ID, Quantity: quantity}},
 	}
+}
+
+type PendingTotal struct {
+	ID       int
+	Name     string
+	Quantity int
+}
+
+func PendingTotals(entries []DeckEntry) []PendingTotal {
+	var totals []PendingTotal
+	index := make(map[int]int)
+	for _, e := range entries {
+		for _, part := range e.Pending {
+			i, ok := index[part.ID]
+			if !ok {
+				index[part.ID] = len(totals)
+				totals = append(totals, PendingTotal{ID: part.ID, Name: e.Name})
+				i = len(totals) - 1
+			}
+			totals[i].Quantity += part.Quantity
+		}
+	}
+	return totals
 }
 
 type EntryGroup []DeckEntry

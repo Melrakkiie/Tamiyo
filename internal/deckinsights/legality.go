@@ -104,7 +104,7 @@ func checkLegality(d deck.Deck, entries []deck.DeckEntry, scryfallByID map[strin
 		checkPartnerPair(&report, entries, scryfallByID)
 	}
 
-	checkDeckSize(&report, format, copies(main))
+	checkDeckSize(&report, format, deck.EntryGroup(main).Quantity())
 
 	return report, nil
 }
@@ -116,14 +116,6 @@ func (r *LegalityReport) addIssue(e deck.DeckEntry, reason string) {
 	}
 	r.Issues = append(r.Issues, issue)
 	r.Legal = false
-}
-
-func copies(entries []deck.DeckEntry) int {
-	total := 0
-	for _, e := range entries {
-		total += e.Quantity()
-	}
-	return total
 }
 
 func checkSingleton(report *LegalityReport, entries []deck.DeckEntry, scryfallByID map[string]scryfall.Card) {

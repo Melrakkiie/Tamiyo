@@ -52,3 +52,20 @@ func TestGroupByCardName_MergesEveryPrintingFinishBoardAndSlotOfANormalizedName(
 func TestGroupByCardName_OfNoEntriesIsEmpty(t *testing.T) {
 	assert.Empty(t, GroupByCardName(nil))
 }
+
+func TestPendingTotals_SumsEachPendingCardAcrossItsEntriesInEntryOrder(t *testing.T) {
+	entries := []DeckEntry{
+		{Name: "Atraxa", Slot: SlotCommander, Pending: []PendingPart{{ID: 7, Quantity: 1}}},
+		{Name: "Atraxa", OwnedCardIDs: []int{1}, Pending: []PendingPart{{ID: 9, Quantity: 2}, {ID: 7, Quantity: 3}}},
+		{Name: "Sol Ring", OwnedCardIDs: []int{2}},
+	}
+
+	assert.Equal(t, []PendingTotal{
+		{ID: 7, Name: "Atraxa", Quantity: 4},
+		{ID: 9, Name: "Atraxa", Quantity: 2},
+	}, PendingTotals(entries))
+}
+
+func TestPendingTotals_OfEntriesWithoutPendingCardsIsEmpty(t *testing.T) {
+	assert.Empty(t, PendingTotals([]DeckEntry{{Name: "Sol Ring", OwnedCardIDs: []int{2}}}))
+}

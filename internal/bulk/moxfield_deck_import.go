@@ -21,15 +21,15 @@ type ownedCopies struct {
 	locked     map[int]bool
 }
 
-func (o *ownedCopies) takePrinting(scryfallID string, foil bool, proxy *bool, quantity int) []int {
+func (o *ownedCopies) takePrinting(scryfallID string, foil bool, proxy proxyMark, quantity int) []int {
 	return o.take(o.byPrinting[strings.ToLower(scryfallID)], foil, proxy, quantity)
 }
 
-func (o *ownedCopies) takeName(name string, foil bool, proxy *bool, quantity int) []int {
+func (o *ownedCopies) takeName(name string, foil bool, proxy proxyMark, quantity int) []int {
 	return o.take(o.byName[deck.CardNameKey(name)], foil, proxy, quantity)
 }
 
-func (o *ownedCopies) take(copies []card.Card, foil bool, proxy *bool, quantity int) []int {
+func (o *ownedCopies) take(copies []card.Card, foil bool, proxy proxyMark, quantity int) []int {
 	candidates := append([]card.Card(nil), copies...)
 	sort.SliceStable(candidates, func(i, j int) bool {
 		a, b := candidates[i], candidates[j]
@@ -49,7 +49,7 @@ func (o *ownedCopies) take(copies []card.Card, foil bool, proxy *bool, quantity 
 		if len(ids) == quantity {
 			break
 		}
-		if o.used[c.ID] || (proxy != nil && c.Proxy != *proxy) {
+		if o.used[c.ID] || !proxy.accepts(c.Proxy) {
 			continue
 		}
 		o.used[c.ID] = true
@@ -239,7 +239,7 @@ func (s *Service) fillDeck(ctx context.Context, userID string, deckID string, pl
 			SetCode:         setCode,
 			CollectorNumber: collectorNumber,
 			Foil:            p.line.Foil,
-			Proxy:           p.line.Proxy != nil && *p.line.Proxy,
+			Proxy:           p.line.Proxy.isProxy(),
 			Quantity:        p.missing,
 			ManaValue:       p.resolved.ManaValue,
 			Colors:          colors,

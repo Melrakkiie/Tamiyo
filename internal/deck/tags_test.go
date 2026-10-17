@@ -17,8 +17,8 @@ const tagDeckID = "00000000-0000-0000-0000-000000000042"
 func taggedRepo() *fakeRepository {
 	return &fakeRepository{
 		findByIDDeck: Deck{ID: tagDeckID, Name: "Kess"},
-		getDeckCards: []DeckCard{{ID: 1, Name: "Sol Ring"}, {ID: 2, Name: "Fire // Ice"}, {ID: 3, Name: "Sol Ring"}},
-		pending:      []PendingCard{{ID: 9, Name: "Counterspell"}},
+		getDeckCards: []DeckCard{{ID: 1, Name: "Sol Ring", ScryfallID: "sol"}, {ID: 2, Name: "Fire // Ice", ScryfallID: "fire"}, {ID: 3, Name: "Sol Ring", ScryfallID: "sol"}},
+		pending:      []PendingCard{{ID: 9, Name: "Counterspell", ScryfallID: "counter", Quantity: 1}},
 		cardTags: []CardTag{
 			{CardName: "sol ring", Tag: "Ramp"},
 			{CardName: "sol ring", Tag: "artefact"},

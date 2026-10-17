@@ -121,7 +121,7 @@ func (s *Service) BulkEditDeck(ctx context.Context, userID string, deckID string
 	}
 
 	var summary Summary
-	if err := s.removeUnlisted(ctx, userID, d.ID, copies, pendings, &summary); err != nil {
+	if err := s.removeUnlisted(ctx, userID, d.ID, content.Entries, copies, pendings, &summary); err != nil {
 		return summary, err
 	}
 
@@ -139,7 +139,7 @@ func (s *Service) BulkEditDeck(ctx context.Context, userID string, deckID string
 	return summary, nil
 }
 
-func (s *Service) removeUnlisted(ctx context.Context, userID string, deckID string, copies []*ownedMatch, pendings []*pendingMatch, summary *Summary) error {
+func (s *Service) removeUnlisted(ctx context.Context, userID string, deckID string, entries []deck.DeckEntry, copies []*ownedMatch, pendings []*pendingMatch, summary *Summary) error {
 	for _, c := range copies {
 		if c.matched {
 			continue
@@ -155,35 +155,21 @@ func (s *Service) removeUnlisted(ctx context.Context, userID string, deckID stri
 		summary.CardsRemoved++
 	}
 
-	type pendingTotal struct {
-		name     string
-		quantity int
-		kept     int
-	}
-	var order []int
-	totals := make(map[int]*pendingTotal)
+	kept := make(map[int]int)
 	for _, p := range pendings {
-		t, ok := totals[p.part.ID]
-		if !ok {
-			t = &pendingTotal{name: p.entry.Name}
-			totals[p.part.ID] = t
-			order = append(order, p.part.ID)
-		}
-		t.quantity += p.part.Quantity
-		t.kept += p.kept
+		kept[p.part.ID] += p.kept
 	}
-	for _, id := range order {
-		t := totals[id]
-		removed := t.quantity - t.kept
+	for _, p := range deck.PendingTotals(entries) {
+		removed := p.Quantity - kept[p.ID]
 		if removed == 0 {
 			continue
 		}
-		if t.kept == 0 {
-			if err := s.decks.RemovePendingCard(ctx, userID, deckID, id); err != nil {
-				return fmt.Errorf("removing %q from the deck: %w", t.name, err)
+		if kept[p.ID] == 0 {
+			if err := s.decks.RemovePendingCard(ctx, userID, deckID, p.ID); err != nil {
+				return fmt.Errorf("removing %q from the deck: %w", p.Name, err)
 			}
-		} else if _, err := s.decks.SetPendingQuantity(ctx, userID, deckID, id, t.kept); err != nil {
-			return fmt.Errorf("updating %q in the deck: %w", t.name, err)
+		} else if _, err := s.decks.SetPendingQuantity(ctx, userID, deckID, p.ID, kept[p.ID]); err != nil {
+			return fmt.Errorf("updating %q in the deck: %w", p.Name, err)
 		}
 		summary.CardsRemoved += removed
 	}
