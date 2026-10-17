@@ -926,7 +926,7 @@ Delete a deck and all of its card associations (`card_deck` rows are removed via
 
 ### `POST /deck/:id/duplicate`
 
-Copy a deck into your decks: one of yours, or someone else's `public` or `unlisted` deck. The copy is a new deck, **private** unless the body says otherwise, with the same `format` and `background_scryfall_id`. Its cards are added the way [`POST /deck/:id/import`](#post-deckidimport) adds a Tamiyo deck file, so the copy keeps boards, commander and tags: your owned copies of each printing go in it, missing ones become pending cards.
+Copy a deck into your decks: one of yours, or someone else's `public` or `unlisted` deck. The copy is a new deck, **private** unless the body says otherwise, with the same `format` and `background_scryfall_id`. Its cards are added the way [`POST /deck/:id/import`](#post-deckidimport) adds a Tamiyo deck file, so the copy keeps boards, commander, proxies and tags: your owned copies of each printing go in it (your proxies for the source's proxies, your real copies for its real cards), missing ones become pending cards, pending proxies for the proxies.
 
 Optional body:
 
@@ -953,7 +953,7 @@ If adding the cards fails (Scryfall unreachable, say), the copy is removed and t
 
 ### `POST /deck/:id/collect`
 
-Add the cards of a deck to your collection, one card per copy, in the exact printing and finish listed, in `storage_id` when given. Owned and [pending](#pending-cards-deckidpending) cards both count.
+Add the cards of a deck to your collection, one card per copy, in the exact printing and finish listed, in `storage_id` when given. Owned and [pending](#pending-cards-deckidpending) cards both count. A proxy in the deck, owned or pending, becomes a proxy in your collection.
 
 ```json
 { "mode": "missing", "boards": ["main", "sideboard"], "storage_id": 4 }
@@ -1271,7 +1271,7 @@ For the `commander` format specifically, two deck-construction rules Scryfall's 
 
 Every board is checked card by card (see [Boards](#boards)), and each issue about a card tells its `board`, but the singleton rule and the deck size only look at `main`. The deck size is checked counting every copy of `main` (the commander and pending cards included): exactly 100 cards for `commander`, `brawl`, `duel`, `paupercommander`, `predh` and `gladiator`, exactly 60 for `oathbreaker` and `standardbrawl`, at least 60 for the other constructed formats (`standard`, `pioneer`, `modern`, `legacy`, `vintage`, `pauper`, `premodern`, `explorer`, `historic`, `timeless`, `alchemy`, `oldschool`, `penny`, `future`). Other formats get no size check. A wrong size is reported first, as an issue with an empty `card_name` and a reason like `deck size: 87 cards, commander requires exactly 100`.
 
-Pending cards (see `GET /deck/:id/pending-cards`) are checked like the deck's own cards, one entry per copy, so a pending copy counts toward the singleton rule too. An issue about a pending card has no `card_id`.
+Pending cards (see `GET /deck/:id/pending-cards`) are checked like the deck's own cards, the commander and second commander included, and each of their copies counts toward the singleton rule and the deck size. A card is reported once for all its copies of one printing, finish, proxy status and board, owned and pending together. An issue about a card the deck only has as pending copies has no `card_id`; an issue about a card with owned copies carries the id of one of them.
 
 **Known limitations:** only `commander` itself gets these extra checks (not singleton siblings like `oathbreaker` or `brawl`); named singleton exceptions (e.g. Shadowborn Apostle, Relentless Rats) aren't recognized, only the basic-land exemption.
 
@@ -1291,7 +1291,7 @@ Pending cards (see `GET /deck/:id/pending-cards`) are checked like the deck's ow
 
 ### `GET /deck/:id/stats`
 
-Summarizes the deck's composition: mana curve, color breakdown, and primary card types — all computed from Scryfall data, nothing stored by Tamiyo itself. Lands are excluded from the mana curve, color breakdown, and average mana value (a land's mana value is always 0 and it has no casting colors, so including it would just dilute what the deck actually casts) but are still counted in `card_count`, `land_count`, and `type_breakdown`. Pending cards are included, once per copy, as if they were already in the deck.
+Summarizes the deck's composition: mana curve, color breakdown, and primary card types — all computed from Scryfall data, nothing stored by Tamiyo itself. Lands are excluded from the mana curve, color breakdown, and average mana value (a land's mana value is always 0 and it has no casting colors, so including it would just dilute what the deck actually casts) but are still counted in `card_count`, `land_count`, and `type_breakdown`. Pending cards are included with all their copies, as if they were already in the deck.
 
 **Response `200 OK`**
 ```json
@@ -1435,7 +1435,7 @@ A deck's color identity is its commanders' (the union of both when it has two), 
 }
 ```
 
-The owner's copies and the deck's pending cards are merged into one list, one entry per printing, finish and [board](#boards) with its `quantity`, sorted by name. Each entry has its `board` (`main`, `sideboard` or `considering`). Nothing tells owned and pending cards apart, and storages, proxies and card ids are left out. The commander, and the second commander, are always their own entries with `commander: true`. `tags` are the owner's [card tags](#card-tags-deckidtags), shared by every printing of the card. `card_count` counts every card of `main`, pending ones included. `owner` has the shape of [`GET /users/:id`](#get-usersid).
+The owner's copies and the deck's pending cards are merged into one list, one entry per printing, finish, proxy state and [board](#boards) with its `quantity`, sorted by name. Each entry has its `board` (`main`, `sideboard` or `considering`). Nothing tells owned and pending cards apart, and storages, card ids and the proxy flag are left out: proxies are only kept in entries of their own, apart from real copies of the same printing. The commander, and the second commander, are always their own entries with `commander: true`. `tags` are the owner's [card tags](#card-tags-deckidtags), shared by every printing of the card. `card_count` counts every card of `main`, pending ones included. `owner` has the shape of [`GET /users/:id`](#get-usersid).
 
 **Errors:** `404` unknown, private or malformed id · `429` rate limit exceeded
 
@@ -1641,7 +1641,7 @@ The lines under a `Commander` section header (the first two at most) are the dec
 | `commander_from_first_line` | No | `true` or `false`. Defaults to `false`. Ignored for a Tamiyo file. |
 | `include_locked_storages` | No | `true` or `false`. Defaults to `false`. `true` also uses copies in [storages locked](#storage) against this deck, after the open ones: for a client adding cards on the user's explicit request rather than matching a list. |
 
-A file starting with `{` is read as a [Tamiyo](#tamiyo-format) `deck` file: its cards go on their own boards, with their exact printing and finish, owned copies and missing ones handled as above. Its commanders (two at most) become the deck's commander and second commander if the deck has none yet. Its tags, when it has any, are added to the deck's [tags](#card-tags-deckidtags) (a card keeps the tags it already had); a tag that can't be set, for a card that couldn't be added, is noted in `warnings`. The file's `deck` name and format are not applied: the deck keeps its own.
+A file starting with `{` is read as a [Tamiyo](#tamiyo-format) `deck` file: its cards go on their own boards, with their exact printing and finish, owned copies and missing ones handled as above. Each entry also keeps its proxy status: a `"proxy": true` entry only uses copies of the collection that are proxies, and becomes a pending proxy for the rest; an entry without `proxy`, or with `false`, only uses real copies. Its commanders (two at most) become the deck's commander and second commander if the deck has none yet. Its tags, when it has any, are added to the deck's [tags](#card-tags-deckidtags) (a card keeps the tags it already had); a tag that can't be set, for a card that couldn't be added, is noted in `warnings`. The file's `deck` name and format are not applied: the deck keeps its own.
 
 **Errors** (besides the common ones): `400` invalid deck id, or a Tamiyo file of kind `collection` or `storage` · `404` deck not found.
 
@@ -1740,7 +1740,7 @@ Tamiyo's own file format: a JSON document that keeps everything the other format
 
 - `kind` is `collection` (the whole collection), `storage` (one storage) or `deck`.
 - In a `collection` or `storage` file, each card entry is one printing, finish, proxy status and storage with its `quantity`. `storage` names one of the `storages`, or is `null` for a card in no storage.
-- A `deck` file has a `deck` object (`name`, `format`) instead of `storages`. Its card entries carry a `board` (`main`, `sideboard` or `considering`) instead of `storage` and `proxy`, and each commander's entry (two at most) has `"commander": true`. Owned and pending cards are merged. It has a `tags` list (`[{ "name": "Sol Ring", "tags": ["Ramp"] }]`) when it was exported with its tags.
+- A `deck` file has a `deck` object (`name`, `format`) instead of `storages`. Its card entries carry a `board` (`main`, `sideboard` or `considering`) instead of `storage`, a `proxy` flag, and each commander's entry (two at most) has `"commander": true`. Owned and pending cards are merged: one entry per printing, finish, proxy status and board, each commander apart. `proxy` is optional on import: a file without it (exported before the flag existed) imports as real cards. It has a `tags` list (`[{ "name": "Sol Ring", "tags": ["Ramp"] }]`) when it was exported with its tags.
 - `quantity` is between 1 and 1000. A file whose `tamiyo` version is newer than the API's is refused.
 
 ### `GET /export/manabox`
@@ -1773,7 +1773,7 @@ Exports **one deck** — not the whole collection — as plain text (`Content-Ty
 
 The sideboard follows the deck in a section of its own in every format: `SIDEBOARD:` in `moxfield`, `Sideboard` in `plain` and `arena`. The cards being considered come last, under `MAYBEBOARD:` in `moxfield` and `Maybeboard` in `plain`; `arena` leaves them out. Each section is written only when it has cards, after a blank line.
 
-If the deck has a commander, it comes **first** in every format, with the second commander right after it — in `moxfield`, that printing's line with its full quantity in the deck, not just the one physical card marked as commander — so importing the file back (which treats the first line as the commander when asked) reconstructs the same commander. Everything else is sorted alphabetically. Pending cards are included in every format, a pending commander first like an owned one. All three formats can be imported back with `POST /deck/:id/import`.
+If the deck has a commander, it comes **first** in every format, on a line of its own with a quantity of 1, with the second commander right after it, so importing the file back (which treats the first line as the commander when asked) reconstructs the same commander. Other copies of a commander's card are listed with the rest of their board, and nothing else is marked as commander. Everything else is sorted alphabetically. `moxfield` has no proxy notion: proxies are added up with the real copies of their printing. Pending cards are included in every format, a pending commander first like an owned one. All three formats can be imported back with `POST /deck/:id/import`.
 
 `cardmarket` lists the cards of the chosen [boards](#boards), owned and pending, one line per card name, `4 Dark Ritual`, sorted by name, with no sections and split cards written with ` // ` (copies of a card on several boards are added up). Four more parameters only apply to it:
 

@@ -108,6 +108,28 @@ func TestDuplicateDeck_CopiesSomeoneElsesSharedDeck(t *testing.T) {
 	assert.Equal(t, 9, result.Summary.CardsPending)
 }
 
+func TestDuplicateDeck_KeepsOwnedAndPendingProxiesAsProxies(t *testing.T) {
+	decks := proxyDeckFixture()
+	decks.nextID = 50
+	cards := &fakeCardService{allCards: []card.Card{{ID: 41, Name: "Sol Ring", ScryfallID: solRingSLD, Proxy: true}}}
+	svc := NewService(cards, &fakeStorageService{}, decks, tamiyoResolver())
+
+	result, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{})
+
+	require.NoError(t, err)
+	assert.Equal(t, []int{41}, decks.linkedCards[result.DeckID])
+	type pendingLine struct {
+		name     string
+		proxy    bool
+		quantity int
+	}
+	var pending []pendingLine
+	for _, p := range decks.addedPending {
+		pending = append(pending, pendingLine{p.Name, p.Proxy, p.Quantity})
+	}
+	assert.Equal(t, []pendingLine{{"Sol Ring", false, 1}, {"Sol Ring", true, 1}, {"Duress", true, 2}}, pending)
+}
+
 func TestDuplicateDeck_EmptyDeckGivesAnEmptyCopy(t *testing.T) {
 	decks := &fakeDeckService{nextID: 50, decks: []deck.Deck{{ID: fixtureDeckID, Name: "Vide", Format: "modern"}}}
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
@@ -197,6 +219,48 @@ func TestCollectDeck_AllOnSomeoneElsesDeckCreatesEveryCopy(t *testing.T) {
 	assert.Empty(t, decks.removedPending)
 	require.NotEmpty(t, cards.created)
 	assert.Equal(t, islandNEO, cardNamed(cards, "Island").ScryfallID)
+}
+
+func TestCollectDeck_PendingCommitsASplitPendingCommanderOnce(t *testing.T) {
+	cards := &fakeCardService{}
+	decks := &fakeDeckService{
+		decks:   []deck.Deck{{ID: fixtureDeckID, Name: "Relentless", Format: "commander", CommanderPendingID: ptr(7)}},
+		pending: []deck.PendingCard{{ID: 7, Name: "Relentless Rats", ScryfallID: solRingSLD, Quantity: 3, Board: deck.BoardMain}},
+		entries: map[string][]deck.DeckEntry{fixtureDeckID: {
+			{Name: "Relentless Rats", ScryfallID: solRingSLD, Board: deck.BoardMain, Slot: deck.SlotCommander, Pending: []deck.PendingPart{{ID: 7, Quantity: 1}}},
+			{Name: "Relentless Rats", ScryfallID: solRingSLD, Board: deck.BoardMain, Pending: []deck.PendingPart{{ID: 7, Quantity: 2}}},
+		}},
+	}
+	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+
+	summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{Mode: CollectPending, Boards: []string{deck.BoardMain}})
+
+	require.NoError(t, err)
+	assert.Equal(t, 3, summary.CardsCreated)
+	assert.Equal(t, []int{7}, decks.removedPending)
+}
+
+func TestCollectDeck_AllCreatesProxiesForOwnedAndPendingProxies(t *testing.T) {
+	cards := &fakeCardService{}
+	decks := proxyDeckFixture()
+	decks.owners = map[string]string{fixtureDeckID: otherUserID}
+	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+
+	summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{
+		Mode: CollectAll, Boards: []string{deck.BoardMain, deck.BoardSideboard},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 5, summary.CardsCreated)
+	type created struct {
+		name  string
+		proxy bool
+	}
+	got := map[created]int{}
+	for _, c := range cards.created {
+		got[created{c.Name, c.Proxy}]++
+	}
+	assert.Equal(t, map[created]int{{"Sol Ring", false}: 1, {"Sol Ring", true}: 2, {"Duress", true}: 2}, got)
 }
 
 func TestCollectDeck_MissingSkipsCopiesAlreadyOwnedInAnyPrinting(t *testing.T) {

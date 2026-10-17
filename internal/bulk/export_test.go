@@ -210,82 +210,102 @@ func TestExportCollection_UnknownStorageIsAnError(t *testing.T) {
 
 // --- ExportDeck ------------------------------------------------------------
 
+func contentDeck(d deck.Deck, entries ...deck.DeckEntry) *fakeDeckService {
+	d.ID = fixtureDeckID
+	return &fakeDeckService{decks: []deck.Deck{d}, entries: map[string][]deck.DeckEntry{fixtureDeckID: entries}}
+}
+
+func printingEntry(name, setCode, number string) deck.DeckEntry {
+	return deck.DeckEntry{Name: name, ScryfallID: setCode + "/" + number, SetCode: setCode, CollectorNumber: number, Board: deck.BoardMain}
+}
+
+func ownedExportEntry(name, setCode, number string, ids ...int) deck.DeckEntry {
+	e := printingEntry(name, setCode, number)
+	e.OwnedCardIDs = ids
+	return e
+}
+
+func pendingExportEntry(name, setCode, number string, id, quantity int) deck.DeckEntry {
+	e := printingEntry(name, setCode, number)
+	e.Pending = []deck.PendingPart{{ID: id, Quantity: quantity}}
+	return e
+}
+
+func asCommander(e deck.DeckEntry) deck.DeckEntry {
+	e.Slot = deck.SlotCommander
+	return e
+}
+
+func onBoard(e deck.DeckEntry, board string) deck.DeckEntry {
+	e.Board = board
+	return e
+}
+
+func exportDeckWith(t *testing.T, decks *fakeDeckService, format string) string {
+	t.Helper()
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+	var buf bytes.Buffer
+	require.NoError(t, svc.ExportDeck(context.Background(), testUserID, fixtureDeckID, DeckExportOptions{Format: format}, &buf))
+	return buf.String()
+}
+
 func TestExportDeck_MoxfieldCommanderLineIsWrittenFirst(t *testing.T) {
-	decks := &fakeDeckService{
-		decks: []deck.Deck{{ID: "00000000-0000-0000-0000-000000000001", Name: "Atraxa", CommanderID: ptr(100)}},
-		cardsByDeck: map[string][]deck.DeckCard{
-			"00000000-0000-0000-0000-000000000001": {
-				{ID: 100, Name: "Atraxa, Praetors' Voice", SetCode: "CMR", CollectorNumber: "1"},
-				{ID: 101, Name: "Sol Ring", SetCode: "SLD", CollectorNumber: "1011"},
-			},
-		},
-	}
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+	decks := contentDeck(deck.Deck{Name: "Atraxa", CommanderID: ptr(100)},
+		asCommander(ownedExportEntry("Atraxa, Praetors' Voice", "CMR", "1", 100)),
+		ownedExportEntry("Sol Ring", "SLD", "1011", 101),
+	)
 
-	var buf bytes.Buffer
-	err := svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: DeckExportMoxfield}, &buf)
-
-	require.NoError(t, err)
-	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
-	require.Len(t, lines, 2)
-	assert.Equal(t, "1 Atraxa, Praetors' Voice (CMR) 1", lines[0])
-	assert.Equal(t, "1 Sol Ring (SLD) 1011", lines[1])
+	assert.Equal(t, "1 Atraxa, Praetors' Voice (CMR) 1\n1 Sol Ring (SLD) 1011\n", exportDeckWith(t, decks, DeckExportMoxfield))
 }
 
-func TestExportDeck_MoxfieldCommanderLineIncludesFullQuantityOfThatPrinting(t *testing.T) {
-	decks := &fakeDeckService{
-		decks: []deck.Deck{{ID: "00000000-0000-0000-0000-000000000001", Name: "Mono Mountain", CommanderID: ptr(200)}},
-		cardsByDeck: map[string][]deck.DeckCard{
-			"00000000-0000-0000-0000-000000000001": {
-				{ID: 200, Name: "Mountain", SetCode: "WOE", CollectorNumber: "265"},
-				{ID: 201, Name: "Mountain", SetCode: "WOE", CollectorNumber: "265"},
-			},
-		},
-	}
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
-
-	var buf bytes.Buffer
-	require.NoError(t, svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: DeckExportMoxfield}, &buf))
-
-	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
-	require.Len(t, lines, 1)
-	assert.Equal(t, "2 Mountain (WOE) 265", lines[0])
+func commanderWithAnIdenticalMainBoardCopy() *fakeDeckService {
+	return contentDeck(deck.Deck{Name: "Mono Mountain", CommanderID: ptr(200)},
+		asCommander(ownedExportEntry("Mountain", "WOE", "265", 200)),
+		ownedExportEntry("Mountain", "WOE", "265", 201),
+	)
 }
 
-func TestExportDeck_MoxfieldNoCommanderSortsAlphabeticallyWithNoSpecialFirstLine(t *testing.T) {
-	decks := &fakeDeckService{
-		decks: []deck.Deck{{ID: "00000000-0000-0000-0000-000000000001", Name: "Pile"}},
-		cardsByDeck: map[string][]deck.DeckCard{
-			"00000000-0000-0000-0000-000000000001": {
-				{ID: 1, Name: "Sol Ring", SetCode: "SLD", CollectorNumber: "1011"},
-				{ID: 2, Name: "Lightning Bolt", SetCode: "CMM", CollectorNumber: "456"},
-			},
-		},
-	}
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+func TestExportDeck_MoxfieldListsTheCommanderApartFromAnIdenticalMainBoardCopy(t *testing.T) {
+	out := exportDeckWith(t, commanderWithAnIdenticalMainBoardCopy(), DeckExportMoxfield)
 
-	var buf bytes.Buffer
-	require.NoError(t, svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: DeckExportMoxfield}, &buf))
+	assert.Equal(t, "1 Mountain (WOE) 265\n1 Mountain (WOE) 265\n", out)
+}
 
-	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
-	require.Len(t, lines, 2)
-	assert.Equal(t, "1 Lightning Bolt (CMM) 456", lines[0])
-	assert.Equal(t, "1 Sol Ring (SLD) 1011", lines[1])
+func TestExportDeck_PlainListsTheCommanderApartFromAnIdenticalMainBoardCopy(t *testing.T) {
+	out := exportDeckWith(t, commanderWithAnIdenticalMainBoardCopy(), DeckExportPlain)
+
+	assert.Equal(t, "1 Mountain\n1 Mountain\n", out)
+}
+
+func TestExportDeck_ArenaListsTheCommanderApartFromAnIdenticalMainBoardCopy(t *testing.T) {
+	out := exportDeckWith(t, commanderWithAnIdenticalMainBoardCopy(), DeckExportArena)
+
+	assert.Equal(t, "Commander\n1 Mountain\n\nDeck\n1 Mountain\n", out)
+}
+
+func TestExportDeck_MoxfieldMergesProxiesWithRealCopiesOfAPrinting(t *testing.T) {
+	proxy := ownedExportEntry("Sol Ring", "SLD", "1011", 2)
+	proxy.Proxy = true
+	decks := contentDeck(deck.Deck{Name: "Pile"}, ownedExportEntry("Sol Ring", "SLD", "1011", 1), proxy)
+
+	assert.Equal(t, "2 Sol Ring (SLD) 1011\n", exportDeckWith(t, decks, DeckExportMoxfield))
+}
+
+func TestExportDeck_MoxfieldNoCommanderKeepsTheDeckContentOrder(t *testing.T) {
+	decks := contentDeck(deck.Deck{Name: "Pile"},
+		ownedExportEntry("Lightning Bolt", "CMM", "456", 2),
+		ownedExportEntry("Sol Ring", "SLD", "1011", 1),
+	)
+
+	assert.Equal(t, "1 Lightning Bolt (CMM) 456\n1 Sol Ring (SLD) 1011\n", exportDeckWith(t, decks, DeckExportMoxfield))
 }
 
 func TestExportDeck_MoxfieldFoilSuffix(t *testing.T) {
-	decks := &fakeDeckService{
-		decks: []deck.Deck{{ID: "00000000-0000-0000-0000-000000000001", Name: "Pile"}},
-		cardsByDeck: map[string][]deck.DeckCard{
-			"00000000-0000-0000-0000-000000000001": {{ID: 1, Name: "Sol Ring", SetCode: "SLD", CollectorNumber: "1011", Foil: true}},
-		},
-	}
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+	foil := ownedExportEntry("Sol Ring", "SLD", "1011", 1)
+	foil.Foil = true
+	decks := contentDeck(deck.Deck{Name: "Pile"}, foil)
 
-	var buf bytes.Buffer
-	require.NoError(t, svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: DeckExportMoxfield}, &buf))
-
-	assert.Equal(t, "1 Sol Ring (SLD) 1011 *F*\n", buf.String())
+	assert.Equal(t, "1 Sol Ring (SLD) 1011 *F*\n", exportDeckWith(t, decks, DeckExportMoxfield))
 }
 
 func TestExportDeck_MoxfieldUnknownDeckReturnsErrDeckNotFound(t *testing.T) {
@@ -297,39 +317,31 @@ func TestExportDeck_MoxfieldUnknownDeckReturnsErrDeckNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, ErrDeckNotFound)
 }
 
-func TestExportDeck_MoxfieldPropagatesGetDeckCardsError(t *testing.T) {
-	decks := &fakeDeckService{
-		decks:           []deck.Deck{{ID: "00000000-0000-0000-0000-000000000001", Name: "Pile"}},
-		getDeckCardsErr: errors.New("db down"),
-	}
+func TestExportDeck_MoxfieldPropagatesADeckContentError(t *testing.T) {
+	decks := contentDeck(deck.Deck{Name: "Pile"})
+	decks.getContentErr = errors.New("db down")
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
-	err := svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: DeckExportMoxfield}, &bytes.Buffer{})
+	err := svc.ExportDeck(context.Background(), testUserID, fixtureDeckID, DeckExportOptions{Format: DeckExportMoxfield}, &bytes.Buffer{})
 
-	require.Error(t, err)
+	assert.ErrorIs(t, err, decks.getContentErr)
 }
 
-func exportDeckWith(t *testing.T, decks *fakeDeckService, format string) string {
-	t.Helper()
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
-	var buf bytes.Buffer
-	require.NoError(t, svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: format}, &buf))
-	return buf.String()
+func mixedIsland() deck.DeckEntry {
+	e := ownedExportEntry("Island", "MOM", "278", 101)
+	e.Pending = []deck.PendingPart{{ID: 7, Quantity: 30}}
+	return e
 }
 
 func mixedDeck() *fakeDeckService {
-	return &fakeDeckService{
-		decks: []deck.Deck{{ID: "00000000-0000-0000-0000-000000000001", Name: "Maeve", CommanderID: ptr(100)}},
-		cardsByDeck: map[string][]deck.DeckCard{
-			"00000000-0000-0000-0000-000000000001": {
-				{ID: 100, Name: "Maeve, Insidious Singer", SetCode: "GN3", CollectorNumber: "2", Foil: true},
-				{ID: 101, Name: "Island", SetCode: "MOM", CollectorNumber: "278"},
-				{ID: 102, Name: "Island", SetCode: "ONE", CollectorNumber: "263"},
-				{ID: 103, Name: "Fire / Ice", SetCode: "MH2", CollectorNumber: "290"},
-			},
-		},
-		pending: []deck.PendingCard{{ID: 7, Name: "Island", SetCode: "MOM", CollectorNumber: "278", Quantity: 30}},
-	}
+	maeve := asCommander(ownedExportEntry("Maeve, Insidious Singer", "GN3", "2", 100))
+	maeve.Foil = true
+	return contentDeck(deck.Deck{Name: "Maeve", CommanderID: ptr(100)},
+		maeve,
+		ownedExportEntry("Fire / Ice", "MH2", "290", 103),
+		mixedIsland(),
+		ownedExportEntry("Island", "ONE", "263", 102),
+	)
 }
 
 func TestExportDeck_MoxfieldIncludesPendingCards(t *testing.T) {
@@ -354,32 +366,34 @@ func TestExportDeck_ArenaHasCommanderAndDeckSections(t *testing.T) {
 }
 
 func TestExportDeck_ArenaWithoutCommanderOnlyHasTheDeckSection(t *testing.T) {
-	decks := &fakeDeckService{
-		decks: []deck.Deck{{ID: "00000000-0000-0000-0000-000000000001", Name: "Pile"}},
-		cardsByDeck: map[string][]deck.DeckCard{
-			"00000000-0000-0000-0000-000000000001": {{ID: 1, Name: "Sol Ring", SetCode: "SLD", CollectorNumber: "1011"}},
-		},
-	}
+	decks := contentDeck(deck.Deck{Name: "Pile"}, ownedExportEntry("Sol Ring", "SLD", "1011", 1))
 
 	assert.Equal(t, "Deck\n1 Sol Ring\n", exportDeckWith(t, decks, DeckExportArena))
 }
 
-func TestExportDeck_APendingCommanderComesFirst(t *testing.T) {
-	decks := &fakeDeckService{
-		decks: []deck.Deck{{ID: "00000000-0000-0000-0000-000000000001", Name: "Maeve", CommanderPendingID: ptr(7)}},
-		cardsByDeck: map[string][]deck.DeckCard{
-			"00000000-0000-0000-0000-000000000001": {{ID: 1, Name: "Arcane Signet", SetCode: "FIC", CollectorNumber: "332"}},
-		},
-		pending: []deck.PendingCard{{ID: 7, Name: "Maeve, Insidious Singer", SetCode: "GN3", CollectorNumber: "2", Quantity: 1}},
-	}
+func TestExportDeck_APendingCommanderExportsLikeAnOwnedOne(t *testing.T) {
+	signet := ownedExportEntry("Arcane Signet", "FIC", "332", 1)
+	owned := contentDeck(deck.Deck{Name: "Maeve", CommanderID: ptr(5)},
+		asCommander(ownedExportEntry("Maeve, Insidious Singer", "GN3", "2", 5)),
+		signet,
+		ownedExportEntry("Maeve, Insidious Singer", "GN3", "2", 6, 8),
+	)
+	pending := contentDeck(deck.Deck{Name: "Maeve", CommanderPendingID: ptr(7)},
+		asCommander(pendingExportEntry("Maeve, Insidious Singer", "GN3", "2", 7, 1)),
+		signet,
+		pendingExportEntry("Maeve, Insidious Singer", "GN3", "2", 7, 2),
+	)
 
-	assert.Equal(t, "1 Maeve, Insidious Singer\n1 Arcane Signet\n", exportDeckWith(t, decks, DeckExportPlain))
+	for _, format := range []string{DeckExportMoxfield, DeckExportPlain, DeckExportArena} {
+		assert.Equal(t, exportDeckWith(t, owned, format), exportDeckWith(t, pending, format), format)
+	}
+	assert.Equal(t, "Commander\n1 Maeve, Insidious Singer\n\nDeck\n1 Arcane Signet\n2 Maeve, Insidious Singer\n", exportDeckWith(t, pending, DeckExportArena))
 }
 
 func TestExportDeck_RejectsAnUnknownFormat(t *testing.T) {
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, mixedDeck(), &fakeResolver{})
 
-	err := svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: "mtgo"}, &bytes.Buffer{})
+	err := svc.ExportDeck(context.Background(), testUserID, fixtureDeckID, DeckExportOptions{Format: "mtgo"}, &bytes.Buffer{})
 
 	assert.ErrorIs(t, err, ErrUnknownExportFormat)
 }
@@ -396,13 +410,12 @@ func splitCSVLines(s string) []string {
 
 func boardedDeck() *fakeDeckService {
 	decks := mixedDeck()
-	decks.cardsByDeck["00000000-0000-0000-0000-000000000001"] = append(decks.cardsByDeck["00000000-0000-0000-0000-000000000001"],
-		deck.DeckCard{ID: 104, Name: "Duress", SetCode: "M19", CollectorNumber: "94", Board: deck.BoardSideboard},
-		deck.DeckCard{ID: 105, Name: "Island", SetCode: "MOM", CollectorNumber: "278", Board: deck.BoardSideboard},
-	)
-	decks.pending = append(decks.pending,
-		deck.PendingCard{ID: 8, Name: "Duress", SetCode: "M19", CollectorNumber: "94", Quantity: 1, Board: deck.BoardSideboard},
-		deck.PendingCard{ID: 9, Name: "Fire / Ice", SetCode: "MH2", CollectorNumber: "290", Quantity: 1, Board: deck.BoardConsidering},
+	duress := onBoard(ownedExportEntry("Duress", "M19", "94", 104), deck.BoardSideboard)
+	duress.Pending = []deck.PendingPart{{ID: 8, Quantity: 1}}
+	decks.entries[fixtureDeckID] = append(decks.entries[fixtureDeckID],
+		duress,
+		onBoard(ownedExportEntry("Island", "MOM", "278", 105), deck.BoardSideboard),
+		onBoard(pendingExportEntry("Fire / Ice", "MH2", "290", 9, 1), deck.BoardConsidering),
 	)
 	return decks
 }
@@ -459,6 +472,17 @@ func TestExportSharedDeck_ExportsAsTheOwner(t *testing.T) {
 	var tamiyo bytes.Buffer
 	require.NoError(t, svc.ExportSharedDeck(context.Background(), "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: DeckExportTamiyo, WithTags: true}, &tamiyo))
 	assert.Contains(t, tamiyo.String(), `"Ramp"`)
+}
+
+func TestExportSharedDeck_ListsTheCommanderApartFromAnIdenticalMainBoardCopy(t *testing.T) {
+	decks := commanderWithAnIdenticalMainBoardCopy()
+	decks.owners = map[string]string{fixtureDeckID: "22222222-2222-2222-2222-222222222222"}
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+
+	var buf bytes.Buffer
+	require.NoError(t, svc.ExportSharedDeck(context.Background(), fixtureDeckID, DeckExportOptions{Format: DeckExportMoxfield}, &buf))
+
+	assert.Equal(t, "1 Mountain (WOE) 265\n1 Mountain (WOE) 265\n", buf.String())
 }
 
 func TestExportSharedDeck_Errors(t *testing.T) {

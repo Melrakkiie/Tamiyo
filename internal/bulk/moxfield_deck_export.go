@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 
 	"Melrakkiie/Tamiyo/internal/deck"
@@ -20,22 +19,10 @@ const (
 	DeckExportTamiyo   = "tamiyo"
 )
 
-type deckExportEntry struct {
-	key       moxfieldGroupKey
-	board     string
-	quantity  int
-	commander bool
-}
-
-type boardKey struct {
-	card  moxfieldGroupKey
-	board string
-}
-
 type deckExportBoards struct {
-	main        []deckExportEntry
-	sideboard   []deckExportEntry
-	considering []deckExportEntry
+	main        []deck.DeckEntry
+	sideboard   []deck.DeckEntry
+	considering []deck.DeckEntry
 }
 
 func (s *Service) ExportDeck(ctx context.Context, userID string, deckID string, opts DeckExportOptions, w io.Writer) error {
@@ -44,18 +31,14 @@ func (s *Service) ExportDeck(ctx context.Context, userID string, deckID string, 
 		return ErrUnknownExportFormat
 	}
 
-	d, err := s.decks.GetDeck(ctx, userID, deckID)
+	content, err := s.decks.GetDeckContent(ctx, userID, deckID)
 	if err != nil {
 		if errors.Is(err, deck.ErrNotFound) {
 			return ErrDeckNotFound
 		}
-		return err
+		return fmt.Errorf("loading deck content: %w", err)
 	}
-
-	boards, err := s.deckExportEntries(ctx, userID, d)
-	if err != nil {
-		return err
-	}
+	boards := splitByBoard(content.Entries)
 
 	switch format {
 	case DeckExportPlain:
@@ -65,7 +48,7 @@ func (s *Service) ExportDeck(ctx context.Context, userID string, deckID string, 
 	default:
 		tags := map[string][]string{}
 		if opts.WithTags {
-			deckTags, err := s.decks.GetCardTags(ctx, userID, d.ID)
+			deckTags, err := s.decks.GetCardTags(ctx, userID, content.Deck.ID)
 			if err != nil {
 				return fmt.Errorf("loading tags: %w", err)
 			}
@@ -89,66 +72,10 @@ func (s *Service) ExportSharedDeck(ctx context.Context, deckID string, opts Deck
 	return s.exportDeckAs(ctx, ownerID, d.ID, opts, w)
 }
 
-func (s *Service) deckExportEntries(ctx context.Context, userID string, d deck.Deck) (deckExportBoards, error) {
-	cards, err := s.decks.GetDeckCards(ctx, userID, d.ID, "updated", true)
-	if err != nil {
-		return deckExportBoards{}, fmt.Errorf("loading deck cards: %w", err)
-	}
-	pending, err := s.decks.GetPendingCards(ctx, userID, d.ID)
-	if err != nil {
-		return deckExportBoards{}, fmt.Errorf("loading pending cards: %w", err)
-	}
-
-	commanderKeys := make(map[boardKey]bool)
-	quantities := make(map[boardKey]int)
-	var order []boardKey
-	add := func(key boardKey, quantity int, commander bool) {
-		if commander {
-			commanderKeys[key] = true
-		}
-		if _, ok := quantities[key]; !ok {
-			order = append(order, key)
-		}
-		quantities[key] += quantity
-	}
-	for _, c := range cards {
-		key := boardKey{moxfieldGroupKey{Name: c.Name, SetCode: c.SetCode, CollectorNumber: c.CollectorNumber, Foil: c.Foil}, c.Board}
-		add(key, 1, d.IsCommanderCard(c.ID))
-	}
-	for _, p := range pending {
-		key := boardKey{moxfieldGroupKey{Name: p.Name, SetCode: p.SetCode, CollectorNumber: p.CollectorNumber, Foil: p.Foil}, p.Board}
-		add(key, p.Quantity, d.IsCommanderPending(p.ID))
-	}
-
-	entries := make([]deckExportEntry, 0, len(order))
-	for _, key := range order {
-		entries = append(entries, deckExportEntry{
-			key:       key.card,
-			board:     key.board,
-			quantity:  quantities[key],
-			commander: commanderKeys[key],
-		})
-	}
-	sort.SliceStable(entries, func(i, j int) bool {
-		a, b := entries[i], entries[j]
-		if a.commander != b.commander {
-			return a.commander
-		}
-		if a.key.Name != b.key.Name {
-			return a.key.Name < b.key.Name
-		}
-		if a.key.SetCode != b.key.SetCode {
-			return a.key.SetCode < b.key.SetCode
-		}
-		if a.key.CollectorNumber != b.key.CollectorNumber {
-			return a.key.CollectorNumber < b.key.CollectorNumber
-		}
-		return !a.key.Foil && b.key.Foil
-	})
-
+func splitByBoard(entries []deck.DeckEntry) deckExportBoards {
 	var boards deckExportBoards
 	for _, e := range entries {
-		switch e.board {
+		switch e.Board {
 		case deck.BoardSideboard:
 			boards.sideboard = append(boards.sideboard, e)
 		case deck.BoardConsidering:
@@ -157,7 +84,7 @@ func (s *Service) deckExportEntries(ctx context.Context, userID string, d deck.D
 			boards.main = append(boards.main, e)
 		}
 	}
-	return boards, nil
+	return boards
 }
 
 func writeSection(w io.Writer, header string, lines []string) error {
@@ -175,15 +102,17 @@ func writeSection(w io.Writer, header string, lines []string) error {
 	return nil
 }
 
-func moxfieldLines(entries []deckExportEntry, tags map[string][]string) []string {
-	lines := make([]string, 0, len(entries))
-	for _, e := range entries {
+func moxfieldLines(entries []deck.DeckEntry, tags map[string][]string) []string {
+	groups := deck.GroupByPrinting(entries)
+	lines := make([]string, 0, len(groups))
+	for _, g := range groups {
+		e := g[0]
 		foil := ""
-		if e.key.Foil {
+		if e.Foil {
 			foil = " *F*"
 		}
-		line := fmt.Sprintf("%d %s (%s) %s%s", e.quantity, e.key.Name, e.key.SetCode, e.key.CollectorNumber, foil)
-		for _, tag := range tags[deck.CardNameKey(e.key.Name)] {
+		line := fmt.Sprintf("%d %s (%s) %s%s", g.Quantity(), e.Name, e.SetCode, e.CollectorNumber, foil)
+		for _, tag := range tags[deck.CardNameKey(e.Name)] {
 			line += " #" + tag
 		}
 		lines = append(lines, line)
@@ -203,37 +132,29 @@ func writeMoxfieldDeck(w io.Writer, boards deckExportBoards, tags map[string][]s
 	return writeSection(w, "MAYBEBOARD:", moxfieldLines(boards.considering, tags))
 }
 
-type nameCount struct {
-	name      string
-	quantity  int
-	commander bool
-}
-
-func countByName(entries []deckExportEntry, name func(string) string) []nameCount {
-	var counts []nameCount
-	index := make(map[string]int)
+func splitCommanders(entries []deck.DeckEntry) (commanders, others []deck.DeckEntry) {
 	for _, e := range entries {
-		key := name(e.key.Name)
-		if e.commander {
-			key = "\x00" + key
+		if e.IsCommander() {
+			commanders = append(commanders, e)
+		} else {
+			others = append(others, e)
 		}
-		if i, ok := index[key]; ok {
-			counts[i].quantity += e.quantity
-			continue
-		}
-		index[key] = len(counts)
-		counts = append(counts, nameCount{name: name(e.key.Name), quantity: e.quantity, commander: e.commander})
 	}
-	return counts
+	return commanders, others
 }
 
-func plainLines(entries []deckExportEntry, name func(string) string) []string {
-	counts := countByName(entries, name)
-	lines := make([]string, 0, len(counts))
-	for _, c := range counts {
-		lines = append(lines, fmt.Sprintf("%d %s", c.quantity, c.name))
+func nameLines(entries []deck.DeckEntry, name func(string) string) []string {
+	groups := deck.GroupByCardName(entries)
+	lines := make([]string, 0, len(groups))
+	for _, g := range groups {
+		lines = append(lines, fmt.Sprintf("%d %s", g.Quantity(), name(g[0].Name)))
 	}
 	return lines
+}
+
+func plainLines(entries []deck.DeckEntry, name func(string) string) []string {
+	commanders, others := splitCommanders(entries)
+	return append(nameLines(commanders, name), nameLines(others, name)...)
 }
 
 func samePlainName(name string) string {
@@ -260,27 +181,19 @@ func arenaName(name string) string {
 }
 
 func writeArenaDeck(w io.Writer, boards deckExportBoards) error {
-	counts := countByName(boards.main, arenaName)
-	var commanders, others []nameCount
-	for _, c := range counts {
-		if c.commander {
-			commanders = append(commanders, c)
-		} else {
-			others = append(others, c)
-		}
-	}
+	commanders, others := splitCommanders(boards.main)
 
 	var b strings.Builder
 	if len(commanders) > 0 {
 		b.WriteString("Commander\n")
-		for _, c := range commanders {
-			fmt.Fprintf(&b, "%d %s\n", c.quantity, c.name)
+		for _, line := range nameLines(commanders, arenaName) {
+			b.WriteString(line + "\n")
 		}
 		b.WriteString("\n")
 	}
 	b.WriteString("Deck\n")
-	for _, c := range others {
-		fmt.Fprintf(&b, "%d %s\n", c.quantity, c.name)
+	for _, line := range nameLines(others, arenaName) {
+		b.WriteString(line + "\n")
 	}
 	if _, err := io.WriteString(w, b.String()); err != nil {
 		return fmt.Errorf("writing deck: %w", err)

@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"Melrakkiie/Tamiyo/internal/deck"
 )
 
 func cardmarketExport(t *testing.T, resolver *fakeResolver, opts DeckExportOptions) string {
@@ -58,15 +60,16 @@ func TestExportCardmarketDeck_ChosenBoards(t *testing.T) {
 
 func TestExportCardmarketDeck_WritesSplitCardsWithTwoSlashes(t *testing.T) {
 	decks := tamiyoDeckFixture()
-	decks.pending = nil
-	decks.cardsByDeck[fixtureDeckID] = append(decks.cardsByDeck[fixtureDeckID][:0], decks.cardsByDeck[fixtureDeckID][0])
-	decks.cardsByDeck[fixtureDeckID][0].Name = "Fire / Ice"
+	decks.entries[fixtureDeckID] = []deck.DeckEntry{
+		{Name: "Fire / Ice", SetCode: "mh2", Board: deck.BoardMain, OwnedCardIDs: []int{1}},
+		{Name: "Fire // Ice", SetCode: "dmr", Board: deck.BoardSideboard, Pending: []deck.PendingPart{{ID: 8, Quantity: 2}}},
+	}
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	var buf bytes.Buffer
 	require.NoError(t, svc.ExportCardmarketDeck(context.Background(), testUserID, fixtureDeckID, DeckExportOptions{}, &buf))
 
-	assert.Equal(t, "1 Fire // Ice\n", buf.String())
+	assert.Equal(t, "3 Fire // Ice\n", buf.String())
 }
 
 func TestExportCardmarketDeck_Errors(t *testing.T) {

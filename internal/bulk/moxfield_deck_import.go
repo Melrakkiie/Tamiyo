@@ -21,15 +21,15 @@ type ownedCopies struct {
 	locked     map[int]bool
 }
 
-func (o *ownedCopies) takePrinting(scryfallID string, foil bool, quantity int) []int {
-	return o.take(o.byPrinting[strings.ToLower(scryfallID)], foil, quantity)
+func (o *ownedCopies) takePrinting(scryfallID string, foil bool, proxy proxyMark, quantity int) []int {
+	return o.take(o.byPrinting[strings.ToLower(scryfallID)], foil, proxy, quantity)
 }
 
-func (o *ownedCopies) takeName(name string, foil bool, quantity int) []int {
-	return o.take(o.byName[deck.CardNameKey(name)], foil, quantity)
+func (o *ownedCopies) takeName(name string, foil bool, proxy proxyMark, quantity int) []int {
+	return o.take(o.byName[deck.CardNameKey(name)], foil, proxy, quantity)
 }
 
-func (o *ownedCopies) take(copies []card.Card, foil bool, quantity int) []int {
+func (o *ownedCopies) take(copies []card.Card, foil bool, proxy proxyMark, quantity int) []int {
 	candidates := append([]card.Card(nil), copies...)
 	sort.SliceStable(candidates, func(i, j int) bool {
 		a, b := candidates[i], candidates[j]
@@ -49,7 +49,7 @@ func (o *ownedCopies) take(copies []card.Card, foil bool, quantity int) []int {
 		if len(ids) == quantity {
 			break
 		}
-		if o.used[c.ID] {
+		if o.used[c.ID] || !proxy.accepts(c.Proxy) {
 			continue
 		}
 		o.used[c.ID] = true
@@ -193,9 +193,9 @@ func (s *Service) placeResolvedLines(ctx context.Context, userID string, lines [
 		}
 		var ownedIDs []int
 		if line.SetCode == "" {
-			ownedIDs = owned.takeName(line.CardName, line.Foil, line.Quantity)
+			ownedIDs = owned.takeName(line.CardName, line.Foil, line.Proxy, line.Quantity)
 		} else {
-			ownedIDs = owned.takePrinting(resolvedCard.ScryfallID, line.Foil, line.Quantity)
+			ownedIDs = owned.takePrinting(resolvedCard.ScryfallID, line.Foil, line.Proxy, line.Quantity)
 		}
 		placements = append(placements, deckLinePlacement{
 			line:      line,
@@ -239,6 +239,7 @@ func (s *Service) fillDeck(ctx context.Context, userID string, deckID string, pl
 			SetCode:         setCode,
 			CollectorNumber: collectorNumber,
 			Foil:            p.line.Foil,
+			Proxy:           p.line.Proxy.isProxy(),
 			Quantity:        p.missing,
 			ManaValue:       p.resolved.ManaValue,
 			Colors:          colors,

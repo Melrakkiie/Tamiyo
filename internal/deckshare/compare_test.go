@@ -26,8 +26,7 @@ type storedDeck struct {
 	ownerID string
 	deck    deck.Deck
 	shared  bool
-	cards   []deck.DeckCard
-	pending []deck.PendingCard
+	entries []deck.DeckEntry
 }
 
 type fakeDeckStore struct {
@@ -61,9 +60,9 @@ func (f *fakeDeckStore) GetSharedDeck(ctx context.Context, id string) (string, d
 	return d.ownerID, d.deck, nil
 }
 
-func (f *fakeDeckStore) GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error) {
-	f.visited = append(f.visited, userID+":"+id)
-	return f.decks[id].cards, nil
+func (f *fakeDeckStore) GetDeckContent(ctx context.Context, userID string, deckID string) (deck.DeckContent, error) {
+	f.visited = append(f.visited, userID+":"+deckID)
+	return deck.DeckContent{Deck: f.decks[deckID].deck, Entries: f.decks[deckID].entries}, nil
 }
 
 func (f *fakeDeckStore) CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error) {
@@ -86,34 +85,30 @@ func (f *fakeDeckStore) GetCardTags(ctx context.Context, userID string, deckID s
 	return deck.DeckTags{}, nil
 }
 
-func (f *fakeDeckStore) GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error) {
-	return f.decks[deckID].pending, nil
-}
-
 func compareStore() *fakeDeckStore {
 	return &fakeDeckStore{decks: map[string]storedDeck{
 		myDeckID: {
 			ownerID: viewerID,
 			deck:    deck.Deck{ID: myDeckID, Name: "Mine", Format: "commander", Visibility: deck.VisibilityPrivate, CommanderID: intPtr(1)},
-			cards: []deck.DeckCard{
-				{ID: 1, Name: "Atraxa, Praetors' Voice", ScryfallID: "atraxa-cmr", ManaValue: 4},
-				{ID: 2, Name: "Sol Ring", ScryfallID: "sol-sld"},
-				{ID: 3, Name: "Sol Ring", ScryfallID: "sol-cmm"},
-				{ID: 4, Name: "Island", ScryfallID: "island-a"},
-				{ID: 5, Name: "Fire // Ice", ScryfallID: "fire-mh2", CardType: strPtr("Instant"), Colors: strPtr("UR"), ColorIdentity: strPtr("UR")},
+			entries: []deck.DeckEntry{
+				{Name: "Atraxa, Praetors' Voice", ScryfallID: "atraxa-cmr", ManaValue: 4, Slot: deck.SlotCommander, OwnedCardIDs: []int{1}},
+				{Name: "Counterspell", ScryfallID: "cs", Pending: []deck.PendingPart{{ID: 9, Quantity: 2}}},
+				{Name: "Fire // Ice", ScryfallID: "fire-mh2", CardType: strPtr("Instant"), Colors: strPtr("UR"), ColorIdentity: strPtr("UR"), OwnedCardIDs: []int{5}},
+				{Name: "Island", ScryfallID: "island-a", OwnedCardIDs: []int{4}},
+				{Name: "Sol Ring", ScryfallID: "sol-cmm", OwnedCardIDs: []int{3}},
+				{Name: "Sol Ring", ScryfallID: "sol-sld", OwnedCardIDs: []int{2}},
 			},
-			pending: []deck.PendingCard{{ID: 9, Name: "Counterspell", ScryfallID: "cs", Quantity: 2}},
 		},
 		theirDeck: {
 			ownerID: strangerID,
 			shared:  true,
 			deck:    deck.Deck{ID: theirDeck, Name: "Theirs", Format: "commander", Visibility: deck.VisibilityUnlisted},
-			cards: []deck.DeckCard{
-				{ID: 20, Name: "Sol Ring", ScryfallID: "sol-lea"},
-				{ID: 21, Name: "Island", ScryfallID: "island-b"},
-				{ID: 22, Name: "Island", ScryfallID: "island-c"},
-				{ID: 23, Name: "Fire / Ice", ScryfallID: "fire-other"},
-				{ID: 24, Name: "Lightning Bolt", ScryfallID: "bolt"},
+			entries: []deck.DeckEntry{
+				{Name: "Fire / Ice", ScryfallID: "fire-other", OwnedCardIDs: []int{23}},
+				{Name: "Island", ScryfallID: "island-b", OwnedCardIDs: []int{21}},
+				{Name: "Island", ScryfallID: "island-c", OwnedCardIDs: []int{22}},
+				{Name: "Lightning Bolt", ScryfallID: "bolt", OwnedCardIDs: []int{24}},
+				{Name: "Sol Ring", ScryfallID: "sol-lea", OwnedCardIDs: []int{20}},
 			},
 		},
 		privateID: {
@@ -299,8 +294,10 @@ func TestCompareDecksHandler_Errors(t *testing.T) {
 func TestCompareDecks_OnlyComparesTheMainBoards(t *testing.T) {
 	store := compareStore()
 	mine := store.decks[myDeckID]
-	mine.cards = append(mine.cards, deck.DeckCard{ID: 6, Name: "Lightning Bolt", ScryfallID: "bolt", Board: deck.BoardSideboard})
-	mine.pending = append(mine.pending, deck.PendingCard{ID: 10, Name: "Opt", ScryfallID: "opt", Quantity: 1, Board: deck.BoardConsidering})
+	mine.entries = append(mine.entries,
+		deck.DeckEntry{Name: "Lightning Bolt", ScryfallID: "bolt", Board: deck.BoardSideboard, OwnedCardIDs: []int{6}},
+		deck.DeckEntry{Name: "Opt", ScryfallID: "opt", Board: deck.BoardConsidering, Pending: []deck.PendingPart{{ID: 10, Quantity: 1}}},
+	)
 	store.decks[myDeckID] = mine
 	svc := NewService(store, compareUsers(), &fakeInsights{})
 

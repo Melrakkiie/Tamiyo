@@ -61,7 +61,7 @@ func (s *Service) ExportCardmarketDeck(ctx context.Context, userID string, deckI
 		return err
 	}
 
-	entries, err := s.collectEntries(ctx, userID, d.ID, boards)
+	entries, err := s.entriesInBoards(ctx, userID, d.ID, boards)
 	if err != nil {
 		return err
 	}
@@ -75,21 +75,28 @@ func (s *Service) ExportCardmarketDeck(ctx context.Context, userID string, deckI
 
 	quantities := make(map[string]int)
 	var lines []string
-	for _, e := range entries {
-		if opts.OnlyPending && e.pendingID == 0 {
+	for _, group := range deck.GroupByCardName(entries) {
+		name := arenaName(group[0].Name)
+		if !opts.BasicLands && isBasicLand(group[0].Name) {
 			continue
 		}
-		if !opts.BasicLands && isBasicLand(e.card.Name) {
-			continue
+		for _, e := range group {
+			quantity := e.Quantity()
+			if opts.OnlyPending {
+				quantity = e.PendingQuantity()
+			}
+			if quantity == 0 {
+				continue
+			}
+			line := name
+			if setName := setNames[strings.ToLower(e.SetCode)]; setName != "" {
+				line += " (" + setName + ")"
+			}
+			if _, seen := quantities[line]; !seen {
+				lines = append(lines, line)
+			}
+			quantities[line] += quantity
 		}
-		line := arenaName(e.card.Name)
-		if setName := setNames[strings.ToLower(e.card.SetCode)]; setName != "" {
-			line += " (" + setName + ")"
-		}
-		if _, seen := quantities[line]; !seen {
-			lines = append(lines, line)
-		}
-		quantities[line] += e.quantity
 	}
 	sort.Slice(lines, func(i, j int) bool { return strings.ToLower(lines[i]) < strings.ToLower(lines[j]) })
 

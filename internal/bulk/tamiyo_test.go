@@ -203,6 +203,13 @@ func tamiyoDeckFixture() *fakeDeckService {
 			{ID: 8, Name: "Island", ScryfallID: islandNEO, SetCode: "neo", CollectorNumber: "294", Quantity: 3, Board: deck.BoardMain},
 			{ID: 9, Name: "Duress", ScryfallID: duressM19, SetCode: "m19", CollectorNumber: "94", Quantity: 1, Foil: true, Board: deck.BoardConsidering},
 		},
+		entries: map[string][]deck.DeckEntry{deckID: {
+			{Name: "Tamiyo, Inquisitive Student", ScryfallID: tamiyoNEO, SetCode: "neo", CollectorNumber: "75", Board: deck.BoardMain, Slot: deck.SlotCommander, Pending: []deck.PendingPart{{ID: 7, Quantity: 1}}},
+			{Name: "Island", ScryfallID: islandNEO, SetCode: "neo", CollectorNumber: "294", Board: deck.BoardMain, OwnedCardIDs: []int{2, 3}, Pending: []deck.PendingPart{{ID: 8, Quantity: 3}}},
+			{Name: "Sol Ring", ScryfallID: solRingSLD, SetCode: "sld", CollectorNumber: "1011", Board: deck.BoardMain, OwnedCardIDs: []int{1}},
+			{Name: "Duress", ScryfallID: duressM19, SetCode: "m19", CollectorNumber: "94", Board: deck.BoardSideboard, OwnedCardIDs: []int{4}},
+			{Name: "Duress", ScryfallID: duressM19, SetCode: "m19", CollectorNumber: "94", Foil: true, Board: deck.BoardConsidering, Pending: []deck.PendingPart{{ID: 9, Quantity: 1}}},
+		}},
 		tags: deck.DeckTags{Tags: []string{"Pioche", "Ramp"}, Cards: []deck.TaggedCard{{Name: "Sol Ring", Tags: []string{"Ramp"}}}},
 	}
 }
@@ -225,6 +232,33 @@ func TestExportTamiyoDeck_WritesBoardsCommanderAndTags(t *testing.T) {
 		{Name: "Duress", ScryfallID: duressM19, SetCode: "m19", CollectorNumber: "94", Foil: true, Quantity: 1, Board: deck.BoardConsidering},
 	}, file.deckCards)
 	assert.Equal(t, []tamiyoCardTags{{Name: "Sol Ring", Tags: []string{"Ramp"}}}, file.Tags)
+}
+
+func proxyDeckFixture() *fakeDeckService {
+	return &fakeDeckService{
+		decks: []deck.Deck{{ID: fixtureDeckID, Name: "Proxies", Format: "commander"}},
+		entries: map[string][]deck.DeckEntry{fixtureDeckID: {
+			{Name: "Sol Ring", ScryfallID: solRingSLD, SetCode: "sld", CollectorNumber: "1011", Board: deck.BoardMain, OwnedCardIDs: []int{1}},
+			{Name: "Sol Ring", ScryfallID: solRingSLD, SetCode: "sld", CollectorNumber: "1011", Proxy: true, Board: deck.BoardMain, OwnedCardIDs: []int{2}, Pending: []deck.PendingPart{{ID: 8, Quantity: 1}}},
+			{Name: "Duress", ScryfallID: duressM19, SetCode: "m19", CollectorNumber: "94", Proxy: true, Board: deck.BoardSideboard, Pending: []deck.PendingPart{{ID: 9, Quantity: 2}}},
+		}},
+	}
+}
+
+func TestExportTamiyoDeck_WritesEachLinesProxyState(t *testing.T) {
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, proxyDeckFixture(), &fakeResolver{})
+
+	var buf bytes.Buffer
+	require.NoError(t, svc.ExportTamiyoDeck(context.Background(), testUserID, fixtureDeckID, false, &buf))
+
+	file, err := parseTamiyoFile(buf.Bytes())
+	require.NoError(t, err)
+	assert.Equal(t, []tamiyoDeckCard{
+		{Name: "Sol Ring", ScryfallID: solRingSLD, SetCode: "sld", CollectorNumber: "1011", Quantity: 1, Board: deck.BoardMain},
+		{Name: "Sol Ring", ScryfallID: solRingSLD, SetCode: "sld", CollectorNumber: "1011", Proxy: true, Quantity: 2, Board: deck.BoardMain},
+		{Name: "Duress", ScryfallID: duressM19, SetCode: "m19", CollectorNumber: "94", Proxy: true, Quantity: 2, Board: deck.BoardSideboard},
+	}, file.deckCards)
+	assert.Contains(t, buf.String(), `"proxy": false`)
 }
 
 func TestExportTamiyoDeck_WithoutTags(t *testing.T) {
@@ -284,4 +318,45 @@ func TestImportIntoDeck_RefusesATamiyoCollectionFile(t *testing.T) {
 
 	_, err = svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader(`{"tamiyo": 1, "kind": "deck", "cards": [{"name": "Sol Ring", "scryfall_id": "`+solRingSLD+`", "quantity": 1, "board": "graveyard"}]}`))
 	assert.ErrorIs(t, err, ErrInvalidFile)
+}
+
+func TestTamiyoDeck_RoundTripKeepsEachLinesProxyState(t *testing.T) {
+	var exported bytes.Buffer
+	require.NoError(t, NewService(&fakeCardService{}, &fakeStorageService{}, proxyDeckFixture(), &fakeResolver{}).ExportTamiyoDeck(context.Background(), testUserID, fixtureDeckID, false, &exported))
+	cards := &fakeCardService{allCards: []card.Card{
+		{ID: 40, Name: "Sol Ring", ScryfallID: solRingSLD},
+		{ID: 41, Name: "Sol Ring", ScryfallID: solRingSLD, Proxy: true},
+		{ID: 42, Name: "Duress", ScryfallID: duressM19},
+	}}
+	decks := withTargetDeck(&fakeDeckService{})
+
+	summary, err := NewService(cards, &fakeStorageService{}, decks, tamiyoResolver()).ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, &exported)
+
+	require.NoError(t, err)
+	assert.Equal(t, []int{40, 41}, decks.linkedCards[targetDeckID])
+	assert.Equal(t, 3, summary.CardsPending)
+	require.Len(t, decks.addedPending, 2)
+	assert.Equal(t, "Sol Ring", decks.addedPending[0].Name)
+	assert.True(t, decks.addedPending[0].Proxy)
+	assert.Equal(t, 1, decks.addedPending[0].Quantity)
+	assert.Equal(t, "Duress", decks.addedPending[1].Name)
+	assert.True(t, decks.addedPending[1].Proxy)
+	assert.Equal(t, 2, decks.addedPending[1].Quantity)
+}
+
+func TestImportIntoDeck_AnOlderTamiyoFileWithoutProxyImportsRealCards(t *testing.T) {
+	file := `{"tamiyo": 1, "kind": "deck", "cards": [{"name": "Sol Ring", "scryfall_id": "` + solRingSLD + `", "set_code": "sld", "collector_number": "1011", "quantity": 2, "board": "main"}]}`
+	cards := &fakeCardService{allCards: []card.Card{
+		{ID: 40, Name: "Sol Ring", ScryfallID: solRingSLD, Proxy: true},
+		{ID: 41, Name: "Sol Ring", ScryfallID: solRingSLD},
+	}}
+	decks := withTargetDeck(&fakeDeckService{})
+
+	_, err := NewService(cards, &fakeStorageService{}, decks, tamiyoResolver()).ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader(file))
+
+	require.NoError(t, err)
+	assert.Equal(t, []int{41}, decks.linkedCards[targetDeckID])
+	require.Len(t, decks.addedPending, 1)
+	assert.False(t, decks.addedPending[0].Proxy)
+	assert.Equal(t, 1, decks.addedPending[0].Quantity)
 }

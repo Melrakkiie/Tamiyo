@@ -66,31 +66,19 @@ func cleanTag(raw string) (string, error) {
 }
 
 func (s *Service) deckCardNames(ctx context.Context, userID string, deckID string) (map[string]string, error) {
-	owned, err := s.repo.FindCardsByDeckID(ctx, userID, deckID, "name", false)
+	content, err := s.GetDeckContent(ctx, userID, deckID)
 	if err != nil {
 		return nil, err
 	}
-	pending, err := s.repo.FindPendingCards(ctx, userID, deckID)
-	if err != nil {
-		return nil, err
-	}
-	names := make(map[string]string, len(owned)+len(pending))
-	for _, c := range owned {
-		names[CardNameKey(c.Name)] = c.Name
-	}
-	for _, p := range pending {
-		key := CardNameKey(p.Name)
-		if _, ok := names[key]; !ok {
-			names[key] = p.Name
-		}
+	groups := GroupByCardName(content.Entries)
+	names := make(map[string]string, len(groups))
+	for _, g := range groups {
+		names[CardNameKey(g[0].Name)] = g[0].Name
 	}
 	return names, nil
 }
 
 func (s *Service) GetCardTags(ctx context.Context, userID string, deckID string) (DeckTags, error) {
-	if _, err := s.repo.FindByID(ctx, userID, deckID); err != nil {
-		return DeckTags{}, err
-	}
 	names, err := s.deckCardNames(ctx, userID, deckID)
 	if err != nil {
 		return DeckTags{}, err
@@ -129,9 +117,6 @@ func (s *Service) GetCardTags(ctx context.Context, userID string, deckID string)
 }
 
 func (s *Service) SetCardTags(ctx context.Context, userID string, deckID string, cardName string, rawTags []string) (TaggedCard, error) {
-	if _, err := s.repo.FindByID(ctx, userID, deckID); err != nil {
-		return TaggedCard{}, err
-	}
 	names, err := s.deckCardNames(ctx, userID, deckID)
 	if err != nil {
 		return TaggedCard{}, err

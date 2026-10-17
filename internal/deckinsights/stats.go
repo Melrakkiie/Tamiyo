@@ -9,7 +9,7 @@ import (
 	"Melrakkiie/Tamiyo/internal/scryfall"
 )
 
-func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card, usdPerEUR float64) DeckStats {
+func computeStats(entries []deck.DeckEntry, scryfallByID map[string]scryfall.Card, usdPerEUR float64) DeckStats {
 	stats := DeckStats{
 		ManaCurve:      []ManaCurveBucket{},
 		BackFaceLands:  []BackFaceCard{},
@@ -23,51 +23,49 @@ func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card, 
 	var totalManaValue float64
 	var nonlandCount int
 
-	for _, c := range cards {
-		stats.CardCount++
+	for _, e := range entries {
+		quantity := e.Quantity()
+		stats.CardCount += quantity
 
-		sc, ok := scryfallByID[c.ScryfallID]
+		sc, ok := scryfallByID[e.ScryfallID]
 		if !ok {
-			stats.TypeBreakdown["Unknown"]++
+			stats.TypeBreakdown["Unknown"] += quantity
 			continue
 		}
 
-		if !c.Proxy {
-			eur, usd := sc.Prices.For(c.Foil, usdPerEUR)
-			if isPending(c) {
-				stats.PendingValue.EUR += eur
-				stats.PendingValue.USD += usd
-			} else {
-				stats.OwnedValue.EUR += eur
-				stats.OwnedValue.USD += usd
-			}
+		if !e.Proxy {
+			eur, usd := sc.Prices.For(e.Foil, usdPerEUR)
+			stats.OwnedValue.EUR += eur * float64(e.OwnedQuantity())
+			stats.OwnedValue.USD += usd * float64(e.OwnedQuantity())
+			stats.PendingValue.EUR += eur * float64(e.PendingQuantity())
+			stats.PendingValue.USD += usd * float64(e.PendingQuantity())
 		}
 
 		t := scryfall.PrimaryType(sc.TypeLine)
-		stats.TypeBreakdown[t]++
+		stats.TypeBreakdown[t] += quantity
 
 		if t == "Land" {
-			stats.LandCount++
+			stats.LandCount += quantity
 			continue
 		}
 
-		nonlandCount++
+		nonlandCount += quantity
 		if _, back, ok := strings.Cut(sc.TypeLine, "//"); ok && scryfall.PrimaryType(back) == scryfall.TypeLand {
-			if i, seen := backFaceIndex[c.Name]; seen {
-				stats.BackFaceLands[i].Quantity++
+			if i, seen := backFaceIndex[e.Name]; seen {
+				stats.BackFaceLands[i].Quantity += quantity
 			} else {
-				backFaceIndex[c.Name] = len(stats.BackFaceLands)
-				stats.BackFaceLands = append(stats.BackFaceLands, BackFaceCard{Name: c.Name, ScryfallID: c.ScryfallID, Quantity: 1})
+				backFaceIndex[e.Name] = len(stats.BackFaceLands)
+				stats.BackFaceLands = append(stats.BackFaceLands, BackFaceCard{Name: e.Name, ScryfallID: e.ScryfallID, Quantity: quantity})
 			}
 		}
-		totalManaValue += sc.CMC
-		addToCurve(curve, cardIndex, int(sc.CMC), c, t, isPermanent(sc.TypeLine))
+		totalManaValue += sc.CMC * float64(quantity)
+		addToCurve(curve, cardIndex, int(sc.CMC), e, t, isPermanent(sc.TypeLine))
 
 		if len(sc.Colors) == 0 {
-			stats.ColorBreakdown["C"]++
+			stats.ColorBreakdown["C"] += quantity
 		} else {
 			for _, color := range sc.Colors {
-				stats.ColorBreakdown[color]++
+				stats.ColorBreakdown[color] += quantity
 			}
 		}
 	}
@@ -103,22 +101,18 @@ func computeStats(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card, 
 	return stats
 }
 
-func cardsValue(cards []deck.DeckCard, scryfallByID map[string]scryfall.Card, usdPerEUR float64) Value {
+func entriesValue(entries []deck.DeckEntry, scryfallByID map[string]scryfall.Card, usdPerEUR float64) Value {
 	var total Value
-	for _, c := range cards {
-		sc, ok := scryfallByID[c.ScryfallID]
-		if !ok || c.Proxy {
+	for _, e := range entries {
+		sc, ok := scryfallByID[e.ScryfallID]
+		if !ok || e.Proxy {
 			continue
 		}
-		eur, usd := sc.Prices.For(c.Foil, usdPerEUR)
-		total.EUR += eur
-		total.USD += usd
+		eur, usd := sc.Prices.For(e.Foil, usdPerEUR)
+		total.EUR += eur * float64(e.Quantity())
+		total.USD += usd * float64(e.Quantity())
 	}
 	return Value{EUR: roundToCents(total.EUR), USD: roundToCents(total.USD)}
-}
-
-func isPending(c deck.DeckCard) bool {
-	return c.ID < 0
 }
 
 func roundToCents(amount float64) float64 {
@@ -130,23 +124,24 @@ func isPermanent(typeLine string) bool {
 	return !strings.Contains(front, "Instant") && !strings.Contains(front, "Sorcery")
 }
 
-func addToCurve(curve map[int]*ManaCurveBucket, cardIndex map[int]map[string]int, mv int, c deck.DeckCard, cardType string, permanent bool) {
+func addToCurve(curve map[int]*ManaCurveBucket, cardIndex map[int]map[string]int, mv int, e deck.DeckEntry, cardType string, permanent bool) {
 	bucket, ok := curve[mv]
 	if !ok {
 		bucket = &ManaCurveBucket{ManaValue: mv, Cards: []ManaCurveCard{}}
 		curve[mv] = bucket
 		cardIndex[mv] = make(map[string]int)
 	}
-	bucket.Count++
+	quantity := e.Quantity()
+	bucket.Count += quantity
 	if permanent {
-		bucket.Permanents++
+		bucket.Permanents += quantity
 	} else {
-		bucket.NonPermanents++
+		bucket.NonPermanents += quantity
 	}
-	if i, ok := cardIndex[mv][c.Name]; ok {
-		bucket.Cards[i].Quantity++
+	if i, ok := cardIndex[mv][e.Name]; ok {
+		bucket.Cards[i].Quantity += quantity
 		return
 	}
-	cardIndex[mv][c.Name] = len(bucket.Cards)
-	bucket.Cards = append(bucket.Cards, ManaCurveCard{Name: c.Name, ScryfallID: c.ScryfallID, Quantity: 1, Type: cardType})
+	cardIndex[mv][e.Name] = len(bucket.Cards)
+	bucket.Cards = append(bucket.Cards, ManaCurveCard{Name: e.Name, ScryfallID: e.ScryfallID, Quantity: quantity, Type: cardType})
 }

@@ -2564,6 +2564,9 @@ paths:
         use the English Scryfall name, whatever the list's language. A file starting with "{" is read as a Tamiyo deck file
         (see TamiyoFile): cards go on their boards, its commanders become
         the deck's when it has none, and its tags are added to the deck's.
+        A proxy entry only uses the collection's proxies and becomes a
+        pending proxy for the rest; an entry without proxy, or false, only
+        uses real copies.
       requestBody:
         required: true
         content:
@@ -2624,9 +2627,11 @@ paths:
         after the body's name or "<name> (copie)" when it is absent or blank,
         in the body's folder_id or at the root, with the body's visibility or
         private. Its cards, boards,
-        commander and tags are added as POST /deck/{id}/import does with a
-        Tamiyo deck file: owned copies go in the copy, missing ones become
-        pending cards. If adding the cards fails, the copy is removed.
+        commander, proxies and tags are added as POST /deck/{id}/import does
+        with a Tamiyo deck file: owned copies go in the copy (proxies for
+        proxies, real copies for real cards), missing ones become pending
+        cards, pending proxies for proxies. If adding the cards fails, the
+        copy is removed.
       requestBody:
         required: false
         content:
@@ -2678,7 +2683,8 @@ paths:
       description: >
         Creates cards in the user's collection from the cards of the chosen
         boards of a deck, owned and pending alike, in their exact printing
-        and finish, in storage_id when given. On one of the user's own
+        and finish, in storage_id when given. A proxy in the deck, owned
+        or pending, is created as a proxy. On one of the user's own
         decks, mode "pending" adds the pending cards and puts them in the
         deck, like POST /deck/{id}/pending/commit; "all" does the same and
         also adds one more copy of every card already in the deck, which
@@ -3824,10 +3830,12 @@ paths:
         printings=true, "2 Dark Confidant (Modern Masters)", expansion names
         being Scryfall's, without the basic lands with basic_lands=false.
         moxfield: one line per printing, "1 Sol Ring (SLD) 1011 *F*", the
-        commanders' lines first with their full quantity, the rest sorted
+        commanders first on lines of their own with a quantity of 1 (other
+        copies of their card stay with the rest of the deck), the rest sorted
         alphabetically, so importing the file back reconstructs the same
-        commander. plain: one line per card name, "4 Lightning Bolt",
-        the commanders first. arena: MTG Arena's format, a "Commander"
+        commander; proxies are added up with the real copies of their
+        printing. plain: one line per card name, "4 Lightning Bolt",
+        the commanders first on lines of their own. arena: MTG Arena's format, a "Commander"
         section (when the deck has one) then a "Deck" section, one line per
         card name, split cards written with " // ". The sideboard follows in
         a section of its own ("SIDEBOARD:" in moxfield, "Sideboard"
@@ -4236,7 +4244,8 @@ components:
         Tamiyo's own versioned file format, for a collection, a storage or
         a deck. Collection and storage files list storages and cards with
         their storage and proxy status; deck files have a deck object,
-        cards with their board and commander flag, and optionally tags.
+        cards with their board, proxy status and commander flag, and
+        optionally tags.
       properties:
         tamiyo:
           type: integer
@@ -4282,7 +4291,10 @@ components:
                 type: boolean
               proxy:
                 type: boolean
-                description: Collection and storage files only.
+                default: false
+                description: >
+                  Whether the entry's copies are proxies. Optional on import:
+                  a deck file without it imports as real cards.
               quantity:
                 type: integer
                 minimum: 1
@@ -4333,6 +4345,7 @@ components:
       properties:
         card_id:
           type: integer
+          description: One of the card's owned copies in the deck. Absent when the card is only pending, or for an issue about the whole deck.
         card_name:
           type: string
           description: Empty for an issue about the whole deck, such as its size.
@@ -5404,7 +5417,7 @@ components:
 
     SharedDeckCard:
       type: object
-      description: One printing of a card in a shared deck, with how many copies the deck holds.
+      description: One printing, finish, proxy state and board of a card in a shared deck, with how many copies the deck holds. Proxies are entries of their own, though the proxy flag isn't exposed.
       properties:
         name:
           type: string
