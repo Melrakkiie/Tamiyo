@@ -60,7 +60,7 @@ func TestExportCardmarketDeck_ChosenBoards(t *testing.T) {
 
 func TestExportCardmarketDeck_WritesSplitCardsWithTwoSlashes(t *testing.T) {
 	decks := tamiyoDeckFixture()
-	decks.entriesByDeck[fixtureDeckID] = []deck.DeckEntry{
+	decks.entries[fixtureDeckID] = []deck.DeckEntry{
 		{Name: "Fire / Ice", SetCode: "mh2", Board: deck.BoardMain, OwnedCardIDs: []int{1}},
 		{Name: "Fire // Ice", SetCode: "dmr", Board: deck.BoardSideboard, PendingIDs: []int{8}, PendingQuantity: 2},
 	}
