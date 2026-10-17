@@ -2,9 +2,6 @@ package bulk
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -109,33 +106,4 @@ func TestSwitchProxy_IgnoresCardsAlreadyInThatStateAndRejectsOthers(t *testing.T
 	assert.ErrorIs(t, err, ErrCardsNotInDeck)
 	assert.Empty(t, decks.unlinkedCards)
 	assert.Empty(t, decks.removedPending)
-}
-
-func TestHandler_SwitchProxy(t *testing.T) {
-	service := &fakeImportService{summary: Summary{CardsLinked: 1, CardsRemoved: 1}}
-	router := setupRouter(service)
-
-	post := func(body string) *httptest.ResponseRecorder {
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/deck/"+fixtureDeckID+"/switch-proxy", strings.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		router.ServeHTTP(w, req)
-		return w
-	}
-
-	w := post(`{"card_ids": [2, 3], "proxy": true}`)
-	require.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, ProxySwitch{CardIDs: []int{2, 3}, Proxy: true}, service.lastProxySwitch)
-	assert.Contains(t, w.Body.String(), `"cards_linked":1`)
-
-	assert.Equal(t, http.StatusOK, post(`{"pending_ids": [8], "proxy": false}`).Code)
-	assert.Equal(t, ProxySwitch{PendingIDs: []int{8}}, service.lastProxySwitch)
-	assert.Equal(t, http.StatusBadRequest, post(`{"card_ids": [2]}`).Code)
-	assert.Equal(t, http.StatusBadRequest, post(`{"card_ids": [], "proxy": false}`).Code)
-	assert.Equal(t, http.StatusBadRequest, post(`nope`).Code)
-
-	service.err = ErrCardsNotInDeck
-	assert.Equal(t, http.StatusBadRequest, post(`{"card_ids": [9], "proxy": true}`).Code)
-	service.err = ErrDeckNotFound
-	assert.Equal(t, http.StatusNotFound, post(`{"card_ids": [9], "proxy": true}`).Code)
 }

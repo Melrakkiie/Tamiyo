@@ -236,7 +236,7 @@ func (h *Handler) bulkEditDeck(ctx *gin.Context) {
 		return
 	}
 
-	file, err := openUploadedFile(ctx, "file")
+	file, err := openUploadedFile(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

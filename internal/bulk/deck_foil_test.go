@@ -152,31 +152,56 @@ func TestSwitchFoil_PendingCommanderBecomesOwned(t *testing.T) {
 	assert.ErrorIs(t, err, ErrCardsNotInDeck)
 }
 
-func TestHandler_SwitchFoil(t *testing.T) {
-	service := &fakeImportService{summary: Summary{CardsLinked: 1, CardsRemoved: 1}}
-	router := setupRouter(service)
-
-	post := func(body string) *httptest.ResponseRecorder {
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/deck/"+fixtureDeckID+"/switch-foil", strings.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		router.ServeHTTP(w, req)
-		return w
+func TestHandler_SwitchDeckCards(t *testing.T) {
+	cases := []struct {
+		field string
+		last  func(*fakeImportService) any
+		want  func(cardIDs, pendingIDs []int, value bool) any
+	}{
+		{
+			field: "foil",
+			last:  func(s *fakeImportService) any { return s.lastFoilSwitch },
+			want: func(cardIDs, pendingIDs []int, value bool) any {
+				return FoilSwitch{CardIDs: cardIDs, PendingIDs: pendingIDs, Foil: value}
+			},
+		},
+		{
+			field: "proxy",
+			last:  func(s *fakeImportService) any { return s.lastProxySwitch },
+			want: func(cardIDs, pendingIDs []int, value bool) any {
+				return ProxySwitch{CardIDs: cardIDs, PendingIDs: pendingIDs, Proxy: value}
+			},
+		},
 	}
+	for _, tc := range cases {
+		t.Run(tc.field, func(t *testing.T) {
+			service := &fakeImportService{summary: Summary{CardsLinked: 1, CardsRemoved: 1}}
+			router := setupRouter(service)
 
-	w := post(`{"card_ids": [2, 3], "foil": true}`)
-	require.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, FoilSwitch{CardIDs: []int{2, 3}, Foil: true}, service.lastFoilSwitch)
-	assert.Contains(t, w.Body.String(), `"cards_linked":1`)
+			post := func(body string) *httptest.ResponseRecorder {
+				w := httptest.NewRecorder()
+				body = strings.ReplaceAll(body, "FIELD", tc.field)
+				req := httptest.NewRequest(http.MethodPost, "/deck/"+fixtureDeckID+"/switch-"+tc.field, strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				router.ServeHTTP(w, req)
+				return w
+			}
 
-	assert.Equal(t, http.StatusOK, post(`{"pending_ids": [8], "foil": false}`).Code)
-	assert.Equal(t, FoilSwitch{PendingIDs: []int{8}}, service.lastFoilSwitch)
-	assert.Equal(t, http.StatusBadRequest, post(`{"card_ids": [2]}`).Code)
-	assert.Equal(t, http.StatusBadRequest, post(`{"card_ids": [], "foil": false}`).Code)
-	assert.Equal(t, http.StatusBadRequest, post(`nope`).Code)
+			w := post(`{"card_ids": [2, 3], "FIELD": true}`)
+			require.Equal(t, http.StatusOK, w.Code)
+			assert.Equal(t, tc.want([]int{2, 3}, nil, true), tc.last(service))
+			assert.Contains(t, w.Body.String(), `"cards_linked":1`)
 
-	service.err = ErrCardsNotInDeck
-	assert.Equal(t, http.StatusBadRequest, post(`{"card_ids": [9], "foil": true}`).Code)
-	service.err = ErrDeckNotFound
-	assert.Equal(t, http.StatusNotFound, post(`{"card_ids": [9], "foil": true}`).Code)
+			assert.Equal(t, http.StatusOK, post(`{"pending_ids": [8], "FIELD": false}`).Code)
+			assert.Equal(t, tc.want(nil, []int{8}, false), tc.last(service))
+			assert.Equal(t, http.StatusBadRequest, post(`{"card_ids": [2]}`).Code)
+			assert.Equal(t, http.StatusBadRequest, post(`{"card_ids": [], "FIELD": false}`).Code)
+			assert.Equal(t, http.StatusBadRequest, post(`nope`).Code)
+
+			service.err = ErrCardsNotInDeck
+			assert.Equal(t, http.StatusBadRequest, post(`{"card_ids": [9], "FIELD": true}`).Code)
+			service.err = ErrDeckNotFound
+			assert.Equal(t, http.StatusNotFound, post(`{"card_ids": [9], "FIELD": true}`).Code)
+		})
+	}
 }

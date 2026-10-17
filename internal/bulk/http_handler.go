@@ -119,7 +119,7 @@ func (h *Handler) importManaBox(ctx *gin.Context) {
 		return
 	}
 
-	file, err := openUploadedFile(ctx, "file")
+	file, err := openUploadedFile(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -145,7 +145,7 @@ func (h *Handler) importMoxfieldCollection(ctx *gin.Context) {
 		return
 	}
 
-	file, err := openUploadedFile(ctx, "file")
+	file, err := openUploadedFile(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -171,7 +171,7 @@ func (h *Handler) importCardList(ctx *gin.Context) {
 		return
 	}
 
-	file, err := openUploadedFile(ctx, "file")
+	file, err := openUploadedFile(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -197,7 +197,7 @@ func (h *Handler) importTamiyo(ctx *gin.Context) {
 		return
 	}
 
-	file, err := openUploadedFile(ctx, "file")
+	file, err := openUploadedFile(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -241,7 +241,7 @@ func (h *Handler) importIntoDeck(ctx *gin.Context) {
 		}
 	}
 
-	file, err := openUploadedFile(ctx, "file")
+	file, err := openUploadedFile(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -464,8 +464,8 @@ func optionalStorageID(raw string) (*int, bool) {
 	return &id, true
 }
 
-func openUploadedFile(ctx *gin.Context, field string) (multipartFile, error) {
-	header, err := ctx.FormFile(field)
+func openUploadedFile(ctx *gin.Context) (multipartFile, error) {
+	header, err := ctx.FormFile("file")
 	if err != nil {
 		return nil, errMissingFile
 	}

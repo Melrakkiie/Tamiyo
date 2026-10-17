@@ -6,7 +6,7 @@ Go REST API for a Magic: The Gathering collection: cards, physical storages, dec
 
 ```bash
 docker compose up --build        # API on :8080 + Postgres, live reload (air)
-make lint                        # golangci-lint (gofmt, goimports, misspell, unconvert)
+make lint                        # golangci-lint, integration-tagged files included (see .golangci.yml)
 make test-unit                   # go test ./internal/...
 go test ./internal/... -tags=integration   # integration tests, real Postgres via testcontainers (needs Docker)
 make check                       # build, vet, lint, govulncheck, all tests

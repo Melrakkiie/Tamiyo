@@ -2,12 +2,30 @@ version: "2"
 
 run:
   timeout: 5m
+  build-tags:
+    - integration
 
 linters:
   default: standard
   enable:
     - unconvert
     - misspell
+    - dupl
+    - gosec
+    - sqlclosecheck
+    - rowserrcheck
+    - bodyclose
+    - noctx
+    - unparam
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - noctx
+      - path: _test\.go
+        text: G124
+        linters:
+          - gosec
 
 formatters:
   enable:

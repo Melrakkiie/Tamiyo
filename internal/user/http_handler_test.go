@@ -19,6 +19,7 @@ import (
 )
 
 const testJWTSecret = "test-secret"
+const testUserID = "11111111-1111-1111-1111-111111111111"
 const testAccessTokenTTL = time.Hour
 
 var testCookie = authcookie.New("", true, 24*time.Hour)
@@ -147,10 +148,10 @@ func setupProtectedRouter(service userService, tokens refreshTokenService) *gin.
 	return router
 }
 
-func authenticatedRequest(method, path, body, userID string) *http.Request {
+func authenticatedRequest(method, path, body string) *http.Request {
 	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	token, _ := auth.GenerateToken(testJWTSecret, userID, time.Hour)
+	token, _ := auth.GenerateToken(testJWTSecret, testUserID, time.Hour)
 	req.Header.Set("Authorization", "Bearer "+token)
 	return req
 }
@@ -188,7 +189,7 @@ func TestHandler_Register_SetsRefreshCookie(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusCreated, w.Code)
-	cookie := findCookie(w, authcookie.DefaultName)
+	cookie := findRefreshCookie(w)
 	require.NotNil(t, cookie)
 	assert.Equal(t, "a-refresh-token", cookie.Value)
 	assert.True(t, cookie.HttpOnly)
@@ -279,7 +280,7 @@ func TestHandler_Login_SetsRefreshCookie(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	cookie := findCookie(w, authcookie.DefaultName)
+	cookie := findRefreshCookie(w)
 	require.NotNil(t, cookie)
 	assert.Equal(t, "a-refresh-token", cookie.Value)
 }
@@ -304,7 +305,7 @@ func TestHandler_Login_OmitsRefreshTokenFromBodyForCookieOnlyClients(t *testing.
 	_, hasRefreshToken := response["refresh_token"]
 	assert.False(t, hasRefreshToken)
 
-	cookie := findCookie(w, authcookie.DefaultName)
+	cookie := findRefreshCookie(w)
 	require.NotNil(t, cookie)
 	assert.Equal(t, "a-refresh-token", cookie.Value)
 }
@@ -320,7 +321,7 @@ func TestHandler_Login_DoesNotSetRefreshCookieOnInvalidCredentials(t *testing.T)
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusUnauthorized, w.Code)
-	assert.Nil(t, findCookie(w, authcookie.DefaultName))
+	assert.Nil(t, findRefreshCookie(w))
 }
 
 func TestHandler_Login_ReturnsUnauthorizedOnInvalidCredentials(t *testing.T) {
@@ -400,7 +401,7 @@ func TestHandler_ChangePassword_ReturnsNoContentOnSuccess(t *testing.T) {
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
 	body := `{"current_password": "oldpassword", "new_password": "newpassword"}`
-	req := authenticatedRequest(http.MethodPost, "/auth/password", body, "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodPost, "/auth/password", body)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -416,7 +417,7 @@ func TestHandler_ChangePassword_RevokesAllRefreshTokensOnSuccess(t *testing.T) {
 	router := setupProtectedRouter(service, tokens)
 
 	body := `{"current_password": "oldpassword", "new_password": "newpassword"}`
-	req := authenticatedRequest(http.MethodPost, "/auth/password", body, "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodPost, "/auth/password", body)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -430,7 +431,7 @@ func TestHandler_ChangePassword_ReturnsInternalServerErrorWhenRevokeAllFails(t *
 	router := setupProtectedRouter(service, tokens)
 
 	body := `{"current_password": "oldpassword", "new_password": "newpassword"}`
-	req := authenticatedRequest(http.MethodPost, "/auth/password", body, "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodPost, "/auth/password", body)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -442,7 +443,7 @@ func TestHandler_ChangePassword_ReturnsUnauthorizedOnIncorrectCurrentPassword(t 
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
 	body := `{"current_password": "wrongpassword", "new_password": "newpassword"}`
-	req := authenticatedRequest(http.MethodPost, "/auth/password", body, "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodPost, "/auth/password", body)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -454,7 +455,7 @@ func TestHandler_ChangePassword_ReturnsNotFoundWhenUserNoLongerExists(t *testing
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
 	body := `{"current_password": "oldpassword", "new_password": "newpassword"}`
-	req := authenticatedRequest(http.MethodPost, "/auth/password", body, "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodPost, "/auth/password", body)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -466,7 +467,7 @@ func TestHandler_ChangePassword_ReturnsBadRequestOnShortNewPassword(t *testing.T
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
 	body := `{"current_password": "oldpassword", "new_password": "short"}`
-	req := authenticatedRequest(http.MethodPost, "/auth/password", body, "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodPost, "/auth/password", body)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -478,7 +479,7 @@ func TestHandler_ChangePassword_ReturnsBadRequestWhenCurrentPasswordMissing(t *t
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
 	body := `{"new_password": "newpassword"}`
-	req := authenticatedRequest(http.MethodPost, "/auth/password", body, "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodPost, "/auth/password", body)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -502,14 +503,14 @@ func TestHandler_DeleteMe_ReturnsNoContentAndClearsCookieOnSuccess(t *testing.T)
 	service := &fakeService{}
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
-	req := authenticatedRequest(http.MethodDelete, "/auth/me", `{"password": "password"}`, "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodDelete, "/auth/me", `{"password": "password"}`)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNoContent, w.Code)
 	assert.Equal(t, "11111111-1111-1111-1111-111111111111", service.deleteAccountCalledWithUserID)
 	assert.Equal(t, "password", service.deleteAccountCalledWithPass)
-	cookie := findCookie(w, authcookie.DefaultName)
+	cookie := findRefreshCookie(w)
 	require.NotNil(t, cookie)
 	assert.Empty(t, cookie.Value)
 	assert.Less(t, cookie.MaxAge, 0)
@@ -519,20 +520,20 @@ func TestHandler_DeleteMe_ReturnsUnauthorizedOnIncorrectPassword(t *testing.T) {
 	service := &fakeService{deleteAccountErr: ErrIncorrectPassword}
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
-	req := authenticatedRequest(http.MethodDelete, "/auth/me", `{"password": "wrongpassword"}`, "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodDelete, "/auth/me", `{"password": "wrongpassword"}`)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	assert.Contains(t, w.Body.String(), "incorrect password")
-	assert.Nil(t, findCookie(w, authcookie.DefaultName))
+	assert.Nil(t, findRefreshCookie(w))
 }
 
 func TestHandler_DeleteMe_ReturnsBadRequestWithoutPassword(t *testing.T) {
 	service := &fakeService{}
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
-	req := authenticatedRequest(http.MethodDelete, "/auth/me", `{}`, "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodDelete, "/auth/me", `{}`)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -544,7 +545,7 @@ func TestHandler_DeleteMe_ReturnsNotFoundWhenUserNoLongerExists(t *testing.T) {
 	service := &fakeService{deleteAccountErr: ErrNotFound}
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
-	req := authenticatedRequest(http.MethodDelete, "/auth/me", `{"password": "password"}`, "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodDelete, "/auth/me", `{"password": "password"}`)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -570,9 +571,9 @@ type errAnError struct{}
 
 func (errAnError) Error() string { return "boom" }
 
-func findCookie(w *httptest.ResponseRecorder, name string) *http.Cookie {
+func findRefreshCookie(w *httptest.ResponseRecorder) *http.Cookie {
 	for _, c := range w.Result().Cookies() {
-		if c.Name == name {
+		if c.Name == authcookie.DefaultName {
 			return c
 		}
 	}
@@ -583,7 +584,7 @@ func TestHandler_Me_ReturnsTheAccountEmail(t *testing.T) {
 	service := &fakeService{getUser: User{ID: "11111111-1111-1111-1111-111111111111", Email: "alice@example.com"}}
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
-	req := authenticatedRequest(http.MethodGet, "/auth/me", "", "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodGet, "/auth/me", "")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -595,7 +596,7 @@ func TestHandler_Me_ReturnsNotFoundWhenTheUserIsGone(t *testing.T) {
 	service := &fakeService{getUserErr: ErrNotFound}
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
-	req := authenticatedRequest(http.MethodGet, "/auth/me", "", "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodGet, "/auth/me", "")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -617,7 +618,7 @@ func TestHandler_Me_ReturnsTheDisplayName(t *testing.T) {
 	service := &fakeService{getUser: User{ID: "11111111-1111-1111-1111-111111111111", Email: "alice@example.com", DisplayName: &name}}
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
-	req := authenticatedRequest(http.MethodGet, "/auth/me", "", "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodGet, "/auth/me", "")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -629,7 +630,7 @@ func TestHandler_UpdateMe_SetsTheDisplayName(t *testing.T) {
 	service := &fakeService{}
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
-	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"display_name": "Tamiyo"}`, "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"display_name": "Tamiyo"}`)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -643,7 +644,7 @@ func TestHandler_UpdateMe_ClearsTheDisplayNameWithNull(t *testing.T) {
 	service := &fakeService{}
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
-	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"display_name": null}`, "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"display_name": null}`)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -656,7 +657,7 @@ func TestHandler_UpdateMe_RequiresAField(t *testing.T) {
 	service := &fakeService{}
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
-	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{}`, "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{}`)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -669,7 +670,7 @@ func TestHandler_UpdateMe_RejectsATooLongDisplayName(t *testing.T) {
 	service := &fakeService{setDisplayNameErr: ErrInvalidDisplayName}
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
-	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"display_name": "x"}`, "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"display_name": "x"}`)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -681,7 +682,7 @@ func TestHandler_UpdateMe_RejectsANonStringDisplayName(t *testing.T) {
 	service := &fakeService{}
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
-	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"display_name": 42}`, "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"display_name": 42}`)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -737,7 +738,7 @@ func TestHandler_UpdateMe_SetsTheAvatarAlone(t *testing.T) {
 	service := &fakeService{}
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
-	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"avatar_scryfall_id": "`+avatarID+`"}`, "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"avatar_scryfall_id": "`+avatarID+`"}`)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -752,7 +753,7 @@ func TestHandler_UpdateMe_ClearsTheAvatarWithNull(t *testing.T) {
 	service := &fakeService{}
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
-	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"avatar_scryfall_id": null}`, "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"avatar_scryfall_id": null}`)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -765,7 +766,7 @@ func TestHandler_UpdateMe_RejectsAnInvalidAvatarBeforeChangingAnything(t *testin
 	service := &fakeService{}
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
-	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"display_name": "Tamiyo", "avatar_scryfall_id": "not-a-uuid"}`, "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"display_name": "Tamiyo", "avatar_scryfall_id": "not-a-uuid"}`)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -778,7 +779,7 @@ func TestHandler_UpdateMe_SetsBothFields(t *testing.T) {
 	service := &fakeService{}
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
-	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"display_name": "Tamiyo", "avatar_scryfall_id": "`+avatarID+`"}`, "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodPatch, "/auth/me", `{"display_name": "Tamiyo", "avatar_scryfall_id": "`+avatarID+`"}`)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -791,7 +792,7 @@ func TestHandler_Me_ReturnsTheAccountID(t *testing.T) {
 	service := &fakeService{getUser: User{ID: "11111111-1111-1111-1111-111111111111", Email: "alice@example.com"}}
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
-	req := authenticatedRequest(http.MethodGet, "/auth/me", "", "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodGet, "/auth/me", "")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -804,7 +805,7 @@ func TestHandler_Profile_ReturnsThePublicFieldsOnly(t *testing.T) {
 	service := &fakeService{getUser: User{ID: "22222222-2222-2222-2222-222222222222", Email: "bob@example.com", PasswordHash: "hash", DisplayName: &name}}
 	router := setupProtectedRouter(service, &fakeTokenService{})
 
-	req := authenticatedRequest(http.MethodGet, "/users/22222222-2222-2222-2222-222222222222", "", "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodGet, "/users/22222222-2222-2222-2222-222222222222", "")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -816,7 +817,7 @@ func TestHandler_Profile_ReturnsThePublicFieldsOnly(t *testing.T) {
 func TestHandler_Profile_ReturnsNotFoundForAnUnknownUser(t *testing.T) {
 	router := setupProtectedRouter(&fakeService{getUserErr: ErrNotFound}, &fakeTokenService{})
 
-	req := authenticatedRequest(http.MethodGet, "/users/22222222-2222-2222-2222-222222222222", "", "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodGet, "/users/22222222-2222-2222-2222-222222222222", "")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -826,7 +827,7 @@ func TestHandler_Profile_ReturnsNotFoundForAnUnknownUser(t *testing.T) {
 func TestHandler_Profile_RejectsAnInvalidID(t *testing.T) {
 	router := setupProtectedRouter(&fakeService{}, &fakeTokenService{})
 
-	req := authenticatedRequest(http.MethodGet, "/users/42", "", "11111111-1111-1111-1111-111111111111")
+	req := authenticatedRequest(http.MethodGet, "/users/42", "")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
