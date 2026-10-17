@@ -2564,6 +2564,9 @@ paths:
         use the English Scryfall name, whatever the list's language. A file starting with "{" is read as a Tamiyo deck file
         (see TamiyoFile): cards go on their boards, its commanders become
         the deck's when it has none, and its tags are added to the deck's.
+        A proxy entry only uses the collection's proxies and becomes a
+        pending proxy for the rest; an entry without proxy, or false, only
+        uses real copies.
       requestBody:
         required: true
         content:
@@ -2624,9 +2627,11 @@ paths:
         after the body's name or "<name> (copie)" when it is absent or blank,
         in the body's folder_id or at the root, with the body's visibility or
         private. Its cards, boards,
-        commander and tags are added as POST /deck/{id}/import does with a
-        Tamiyo deck file: owned copies go in the copy, missing ones become
-        pending cards. If adding the cards fails, the copy is removed.
+        commander, proxies and tags are added as POST /deck/{id}/import does
+        with a Tamiyo deck file: owned copies go in the copy (proxies for
+        proxies, real copies for real cards), missing ones become pending
+        cards, pending proxies for proxies. If adding the cards fails, the
+        copy is removed.
       requestBody:
         required: false
         content:
@@ -4236,7 +4241,8 @@ components:
         Tamiyo's own versioned file format, for a collection, a storage or
         a deck. Collection and storage files list storages and cards with
         their storage and proxy status; deck files have a deck object,
-        cards with their board and commander flag, and optionally tags.
+        cards with their board, proxy status and commander flag, and
+        optionally tags.
       properties:
         tamiyo:
           type: integer
@@ -4282,7 +4288,10 @@ components:
                 type: boolean
               proxy:
                 type: boolean
-                description: Collection and storage files only.
+                default: false
+                description: >
+                  Whether the entry's copies are proxies. Optional on import:
+                  a deck file without it imports as real cards.
               quantity:
                 type: integer
                 minimum: 1

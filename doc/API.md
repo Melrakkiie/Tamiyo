@@ -926,7 +926,7 @@ Delete a deck and all of its card associations (`card_deck` rows are removed via
 
 ### `POST /deck/:id/duplicate`
 
-Copy a deck into your decks: one of yours, or someone else's `public` or `unlisted` deck. The copy is a new deck, **private** unless the body says otherwise, with the same `format` and `background_scryfall_id`. Its cards are added the way [`POST /deck/:id/import`](#post-deckidimport) adds a Tamiyo deck file, so the copy keeps boards, commander and tags: your owned copies of each printing go in it, missing ones become pending cards.
+Copy a deck into your decks: one of yours, or someone else's `public` or `unlisted` deck. The copy is a new deck, **private** unless the body says otherwise, with the same `format` and `background_scryfall_id`. Its cards are added the way [`POST /deck/:id/import`](#post-deckidimport) adds a Tamiyo deck file, so the copy keeps boards, commander, proxies and tags: your owned copies of each printing go in it (your proxies for the source's proxies, your real copies for its real cards), missing ones become pending cards, pending proxies for the proxies.
 
 Optional body:
 
@@ -1641,7 +1641,7 @@ The lines under a `Commander` section header (the first two at most) are the dec
 | `commander_from_first_line` | No | `true` or `false`. Defaults to `false`. Ignored for a Tamiyo file. |
 | `include_locked_storages` | No | `true` or `false`. Defaults to `false`. `true` also uses copies in [storages locked](#storage) against this deck, after the open ones: for a client adding cards on the user's explicit request rather than matching a list. |
 
-A file starting with `{` is read as a [Tamiyo](#tamiyo-format) `deck` file: its cards go on their own boards, with their exact printing and finish, owned copies and missing ones handled as above. Its commanders (two at most) become the deck's commander and second commander if the deck has none yet. Its tags, when it has any, are added to the deck's [tags](#card-tags-deckidtags) (a card keeps the tags it already had); a tag that can't be set, for a card that couldn't be added, is noted in `warnings`. The file's `deck` name and format are not applied: the deck keeps its own.
+A file starting with `{` is read as a [Tamiyo](#tamiyo-format) `deck` file: its cards go on their own boards, with their exact printing and finish, owned copies and missing ones handled as above. Each entry also keeps its proxy status: a `"proxy": true` entry only uses copies of the collection that are proxies, and becomes a pending proxy for the rest; an entry without `proxy`, or with `false`, only uses real copies. Its commanders (two at most) become the deck's commander and second commander if the deck has none yet. Its tags, when it has any, are added to the deck's [tags](#card-tags-deckidtags) (a card keeps the tags it already had); a tag that can't be set, for a card that couldn't be added, is noted in `warnings`. The file's `deck` name and format are not applied: the deck keeps its own.
 
 **Errors** (besides the common ones): `400` invalid deck id, or a Tamiyo file of kind `collection` or `storage` · `404` deck not found.
 
@@ -1740,7 +1740,7 @@ Tamiyo's own file format: a JSON document that keeps everything the other format
 
 - `kind` is `collection` (the whole collection), `storage` (one storage) or `deck`.
 - In a `collection` or `storage` file, each card entry is one printing, finish, proxy status and storage with its `quantity`. `storage` names one of the `storages`, or is `null` for a card in no storage.
-- A `deck` file has a `deck` object (`name`, `format`) instead of `storages`. Its card entries carry a `board` (`main`, `sideboard` or `considering`) instead of `storage` and `proxy`, and each commander's entry (two at most) has `"commander": true`. Owned and pending cards are merged. It has a `tags` list (`[{ "name": "Sol Ring", "tags": ["Ramp"] }]`) when it was exported with its tags.
+- A `deck` file has a `deck` object (`name`, `format`) instead of `storages`. Its card entries carry a `board` (`main`, `sideboard` or `considering`) instead of `storage`, a `proxy` flag, and each commander's entry (two at most) has `"commander": true`. Owned and pending cards are merged: one entry per printing, finish, proxy status and board, each commander apart. `proxy` is optional on import: a file without it (exported before the flag existed) imports as real cards. It has a `tags` list (`[{ "name": "Sol Ring", "tags": ["Ramp"] }]`) when it was exported with its tags.
 - `quantity` is between 1 and 1000. A file whose `tamiyo` version is newer than the API's is refused.
 
 ### `GET /export/manabox`

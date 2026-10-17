@@ -47,6 +47,7 @@ type tamiyoDeckCard struct {
 	SetCode         string `json:"set_code"`
 	CollectorNumber string `json:"collector_number"`
 	Foil            bool   `json:"foil"`
+	Proxy           bool   `json:"proxy"`
 	Quantity        int    `json:"quantity"`
 	Board           string `json:"board"`
 	Commander       bool   `json:"commander,omitempty"`

@@ -102,90 +102,26 @@ func (s *Service) ExportTamiyoCollection(ctx context.Context, userID string, sto
 	return writeTamiyoFile(w, file, out)
 }
 
-type tamiyoDeckKey struct {
-	name            string
-	scryfallID      string
-	setCode         string
-	collectorNumber string
-	foil            bool
-	board           string
-	commander       bool
+func (s *Service) ExportTamiyoDeck(ctx context.Context, userID string, deckID string, withTags bool, w io.Writer) error {
+	_, err := s.writeTamiyoDeck(ctx, userID, deckID, withTags, w)
+	return err
 }
 
-func (s *Service) ExportTamiyoDeck(ctx context.Context, userID string, deckID string, withTags bool, w io.Writer) error {
-	d, err := s.decks.GetDeck(ctx, userID, deckID)
+func (s *Service) writeTamiyoDeck(ctx context.Context, userID string, deckID string, withTags bool, w io.Writer) (lines int, err error) {
+	content, err := s.decks.GetDeckContent(ctx, userID, deckID)
 	if err != nil {
 		if errors.Is(err, deck.ErrNotFound) {
-			return ErrDeckNotFound
+			return 0, ErrDeckNotFound
 		}
-		return err
+		return 0, fmt.Errorf("loading deck content: %w", err)
 	}
-	cards, err := s.decks.GetDeckCards(ctx, userID, d.ID, "name", false)
-	if err != nil {
-		return fmt.Errorf("loading deck cards: %w", err)
-	}
-	pending, err := s.decks.GetPendingCards(ctx, userID, d.ID)
-	if err != nil {
-		return fmt.Errorf("loading pending cards: %w", err)
-	}
+	d := content.Deck
 
-	quantities := make(map[tamiyoDeckKey]int)
-	var order []tamiyoDeckKey
-	add := func(key tamiyoDeckKey, quantity int) {
-		if key.board == "" {
-			key.board = deck.BoardMain
-		}
-		if _, seen := quantities[key]; !seen {
-			order = append(order, key)
-		}
-		quantities[key] += quantity
-	}
-	for _, c := range cards {
-		add(tamiyoDeckKey{
-			name: c.Name, scryfallID: c.ScryfallID, setCode: c.SetCode, collectorNumber: c.CollectorNumber,
-			foil: c.Foil, board: c.Board, commander: d.IsCommanderCard(c.ID),
-		}, 1)
-	}
-	for _, p := range pending {
-		key := tamiyoDeckKey{
-			name: p.Name, scryfallID: p.ScryfallID, setCode: p.SetCode, collectorNumber: p.CollectorNumber,
-			foil: p.Foil, board: p.Board,
-		}
-		quantity := p.Quantity
-		if d.IsCommanderPending(p.ID) {
-			commander := key
-			commander.commander = true
-			add(commander, 1)
-			quantity--
-		}
-		if quantity > 0 {
-			add(key, quantity)
-		}
-	}
-
-	boardOrder := map[string]int{deck.BoardMain: 0, deck.BoardSideboard: 1, deck.BoardConsidering: 2}
-	sort.SliceStable(order, func(i, j int) bool {
-		a, b := order[i], order[j]
-		if a.commander != b.commander {
-			return a.commander
-		}
-		if a.board != b.board {
-			return boardOrder[a.board] < boardOrder[b.board]
-		}
-		if a.name != b.name {
-			return a.name < b.name
-		}
-		if a.setCode != b.setCode {
-			return a.setCode < b.setCode
-		}
-		return !a.foil && b.foil
-	})
-
-	out := make([]tamiyoDeckCard, 0, len(order))
-	for _, key := range order {
+	out := make([]tamiyoDeckCard, 0, len(content.Entries))
+	for _, e := range content.Entries {
 		out = append(out, tamiyoDeckCard{
-			Name: key.name, ScryfallID: key.scryfallID, SetCode: key.setCode, CollectorNumber: key.collectorNumber,
-			Foil: key.foil, Quantity: quantities[key], Board: key.board, Commander: key.commander,
+			Name: e.Name, ScryfallID: e.ScryfallID, SetCode: e.SetCode, CollectorNumber: e.CollectorNumber,
+			Foil: e.Foil, Proxy: e.Proxy, Quantity: e.Quantity(), Board: e.Board, Commander: e.IsCommander(),
 		})
 	}
 
@@ -194,7 +130,7 @@ func (s *Service) ExportTamiyoDeck(ctx context.Context, userID string, deckID st
 	if withTags {
 		tags, err := s.decks.GetCardTags(ctx, userID, d.ID)
 		if err != nil {
-			return fmt.Errorf("loading tags: %w", err)
+			return 0, fmt.Errorf("loading tags: %w", err)
 		}
 		file.Tags = []tamiyoCardTags{}
 		for _, c := range tags.Cards {
@@ -203,5 +139,5 @@ func (s *Service) ExportTamiyoDeck(ctx context.Context, userID string, deckID st
 			}
 		}
 	}
-	return writeTamiyoFile(w, file, out)
+	return len(out), writeTamiyoFile(w, file, out)
 }
