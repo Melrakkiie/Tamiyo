@@ -3824,10 +3824,12 @@ paths:
         printings=true, "2 Dark Confidant (Modern Masters)", expansion names
         being Scryfall's, without the basic lands with basic_lands=false.
         moxfield: one line per printing, "1 Sol Ring (SLD) 1011 *F*", the
-        commanders' lines first with their full quantity, the rest sorted
+        commanders first on lines of their own with a quantity of 1 (other
+        copies of their card stay with the rest of the deck), the rest sorted
         alphabetically, so importing the file back reconstructs the same
-        commander. plain: one line per card name, "4 Lightning Bolt",
-        the commanders first. arena: MTG Arena's format, a "Commander"
+        commander; proxies are added up with the real copies of their
+        printing. plain: one line per card name, "4 Lightning Bolt",
+        the commanders first on lines of their own. arena: MTG Arena's format, a "Commander"
         section (when the deck has one) then a "Deck" section, one line per
         card name, split cards written with " // ". The sideboard follows in
         a section of its own ("SIDEBOARD:" in moxfield, "Sideboard"

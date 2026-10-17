@@ -18,7 +18,26 @@ func partnerDeckFixture() *fakeDeckService {
 	decks.decks[0].CommanderPendingID = nil
 	decks.decks[0].CommanderID = ptr(1)
 	decks.decks[0].PartnerPendingID = ptr(7)
+	entries := decks.entries[fixtureDeckID]
+	tamiyo, island, solRing := entries[0], entries[1], entries[2]
+	solRing.Slot = deck.SlotCommander
+	tamiyo.Slot = deck.SlotPartner
+	decks.entries[fixtureDeckID] = append([]deck.DeckEntry{solRing, tamiyo, island}, entries[3:]...)
 	return decks
+}
+
+func TestExportDeck_PartnerDecksExportBothCommandersAndNothingElseAsCommander(t *testing.T) {
+	decks := partnerDeckFixture()
+	extraTamiyo := decks.entries[fixtureDeckID][1]
+	extraTamiyo.Slot = deck.SlotNone
+	extraTamiyo.PendingQuantity = 2
+	decks.entries[fixtureDeckID] = append(decks.entries[fixtureDeckID], extraTamiyo)
+
+	out := exportDeckWith(t, decks, DeckExportArena)
+
+	assert.Equal(t, "Commander\n1 Sol Ring\n1 Tamiyo, Inquisitive Student\n\n"+
+		"Deck\n5 Island\n2 Tamiyo, Inquisitive Student\n\n"+
+		"Sideboard\n1 Duress\n", out)
 }
 
 func TestExportDeck_ArenaListsBothCommanders(t *testing.T) {
