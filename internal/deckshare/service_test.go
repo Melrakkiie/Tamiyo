@@ -133,11 +133,11 @@ func TestService_GetSharedDeck_ShowsEachDeckContentEntryAsOneCardSortedByName(t 
 		ownerID: ownerID,
 		deck:    deck.Deck{ID: "00000000-0000-0000-0000-000000000009"},
 		entries: []deck.DeckEntry{
-			{Name: "Tamiyo", ScryfallID: "t", SetCode: "neo", Board: deck.BoardMain, Slot: deck.SlotCommander, PendingIDs: []int{8}, PendingQuantity: 1},
-			{Name: "Island", ScryfallID: "i", SetCode: "neo", Board: deck.BoardMain, OwnedCardIDs: []int{3}, PendingIDs: []int{5}, PendingQuantity: 2},
+			{Name: "Tamiyo", ScryfallID: "t", SetCode: "neo", Board: deck.BoardMain, Slot: deck.SlotCommander, Pending: []deck.PendingPart{{ID: 8, Quantity: 1}}},
+			{Name: "Island", ScryfallID: "i", SetCode: "neo", Board: deck.BoardMain, OwnedCardIDs: []int{3}, Pending: []deck.PendingPart{{ID: 5, Quantity: 2}}},
 			{Name: "Island", ScryfallID: "i", SetCode: "neo", Board: deck.BoardMain, Proxy: true, OwnedCardIDs: []int{2}},
 			{Name: "Tamiyo", ScryfallID: "t", SetCode: "neo", Board: deck.BoardMain, OwnedCardIDs: []int{1}},
-			{Name: "Brainstorm", ScryfallID: "b", SetCode: "ice", Board: deck.BoardSideboard, Foil: true, PendingIDs: []int{6}, PendingQuantity: 4, ManaValue: 1, Colors: strPtr("U"), CardType: strPtr("Instant"), ColorIdentity: strPtr("U")},
+			{Name: "Brainstorm", ScryfallID: "b", SetCode: "ice", Board: deck.BoardSideboard, Foil: true, Pending: []deck.PendingPart{{ID: 6, Quantity: 4}}, ManaValue: 1, Colors: strPtr("U"), CardType: strPtr("Instant"), ColorIdentity: strPtr("U")},
 		},
 	}
 	service := newService(decks, &fakeInsights{})
@@ -162,7 +162,7 @@ func TestService_GetSharedDeck_AddsEachCardsTagsWhateverThePrinting(t *testing.T
 			{Name: "Island", ScryfallID: "i", SetCode: "neo", OwnedCardIDs: []int{1}},
 			{Name: "Island", ScryfallID: "i", SetCode: "neo", Foil: true, OwnedCardIDs: []int{2}},
 			{Name: "Fire // Ice", ScryfallID: "f", SetCode: "mh2", OwnedCardIDs: []int{3}},
-			{Name: "Brainstorm", ScryfallID: "b", SetCode: "ice", PendingIDs: []int{6}, PendingQuantity: 1},
+			{Name: "Brainstorm", ScryfallID: "b", SetCode: "ice", Pending: []deck.PendingPart{{ID: 6, Quantity: 1}}},
 		},
 		tags: deck.DeckTags{Cards: []deck.TaggedCard{
 			{Name: "Island", Tags: []string{"Terrain"}},

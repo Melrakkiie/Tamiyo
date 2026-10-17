@@ -62,7 +62,7 @@ func TestExportCardmarketDeck_WritesSplitCardsWithTwoSlashes(t *testing.T) {
 	decks := tamiyoDeckFixture()
 	decks.entries[fixtureDeckID] = []deck.DeckEntry{
 		{Name: "Fire / Ice", SetCode: "mh2", Board: deck.BoardMain, OwnedCardIDs: []int{1}},
-		{Name: "Fire // Ice", SetCode: "dmr", Board: deck.BoardSideboard, PendingIDs: []int{8}, PendingQuantity: 2},
+		{Name: "Fire // Ice", SetCode: "dmr", Board: deck.BoardSideboard, Pending: []deck.PendingPart{{ID: 8, Quantity: 2}}},
 	}
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 

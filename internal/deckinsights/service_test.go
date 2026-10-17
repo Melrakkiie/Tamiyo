@@ -52,7 +52,7 @@ func owned(name, scryfallID string, cardIDs ...int) deck.DeckEntry {
 }
 
 func pending(name, scryfallID string, pendingID, quantity int) deck.DeckEntry {
-	return deck.DeckEntry{Name: name, ScryfallID: scryfallID, Board: deck.BoardMain, PendingIDs: []int{pendingID}, PendingQuantity: quantity}
+	return deck.DeckEntry{Name: name, ScryfallID: scryfallID, Board: deck.BoardMain, Pending: []deck.PendingPart{{ID: pendingID, Quantity: quantity}}}
 }
 
 func onBoard(board string, e deck.DeckEntry) deck.DeckEntry {
@@ -76,8 +76,7 @@ func proxy(e deck.DeckEntry) deck.DeckEntry {
 }
 
 func withPending(pendingID, quantity int, e deck.DeckEntry) deck.DeckEntry {
-	e.PendingIDs = append(e.PendingIDs, pendingID)
-	e.PendingQuantity += quantity
+	e.Pending = append(e.Pending, deck.PendingPart{ID: pendingID, Quantity: quantity})
 	return e
 }
 

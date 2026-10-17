@@ -108,9 +108,9 @@ func TestDeckContent_MergesOwnedAndPendingCopiesOfOnePrinting(t *testing.T) {
 	assert.Equal(t, BoardMain, entry.Board)
 	assert.Equal(t, 5, entry.Quantity())
 	assert.Equal(t, 2, entry.OwnedQuantity())
-	assert.Equal(t, 3, entry.PendingQuantity)
+	assert.Equal(t, 3, entry.PendingQuantity())
 	assert.ElementsMatch(t, []int{first, second}, entry.OwnedCardIDs)
-	assert.Equal(t, []int{pendingID}, entry.PendingIDs)
+	assert.Equal(t, []PendingPart{{ID: pendingID, Quantity: 3}}, entry.Pending)
 	assert.Equal(t, SlotNone, entry.Slot)
 	assert.False(t, entry.IsCommander())
 }
@@ -129,7 +129,7 @@ type entrySummary struct {
 func summarize(entries []DeckEntry) []entrySummary {
 	summaries := make([]entrySummary, 0, len(entries))
 	for _, e := range entries {
-		summaries = append(summaries, entrySummary{e.Name, e.Board, e.Foil, e.Proxy, e.Slot, e.OwnedQuantity(), e.PendingQuantity, e.Quantity()})
+		summaries = append(summaries, entrySummary{e.Name, e.Board, e.Foil, e.Proxy, e.Slot, e.OwnedQuantity(), e.PendingQuantity(), e.Quantity()})
 	}
 	return summaries
 }
@@ -189,8 +189,8 @@ func TestDeckContent_SplitsAPendingCommanderOfThreeIntoTheCommanderAndTwoRegular
 		{name: atraxa.name, board: BoardMain, slot: SlotCommander, pending: 1, quantity: 1},
 		{name: atraxa.name, board: BoardMain, pending: 2, quantity: 2},
 	}, summarize(entries))
-	assert.Equal(t, []int{pendingID}, entries[0].PendingIDs)
-	assert.Equal(t, []int{pendingID}, entries[1].PendingIDs)
+	assert.Equal(t, []PendingPart{{ID: pendingID, Quantity: 1}}, entries[0].Pending)
+	assert.Equal(t, []PendingPart{{ID: pendingID, Quantity: 2}}, entries[1].Pending)
 }
 
 func TestDeckContent_MergesACommandersExtraCopiesWithAnotherPendingCardOfThePrinting(t *testing.T) {
@@ -205,7 +205,7 @@ func TestDeckContent_MergesACommandersExtraCopiesWithAnotherPendingCardOfThePrin
 		{name: atraxa.name, board: BoardMain, slot: SlotCommander, pending: 1, quantity: 1},
 		{name: atraxa.name, board: BoardMain, pending: 4, quantity: 4},
 	}, summarize(entries))
-	assert.ElementsMatch(t, []int{commander, other}, entries[1].PendingIDs)
+	assert.ElementsMatch(t, []PendingPart{{ID: commander, Quantity: 1}, {ID: other, Quantity: 3}}, entries[1].Pending)
 }
 
 func TestDeckContent_ListsTwoCommandersOwnedAndPending(t *testing.T) {
@@ -222,10 +222,10 @@ func TestDeckContent_ListsTwoCommandersOwnedAndPending(t *testing.T) {
 		{name: tymna.name, board: BoardMain, slot: SlotPartner, owned: 1, quantity: 1},
 		{name: atraxa.name, board: BoardMain, owned: 1, quantity: 1},
 	}, summarize(entries))
-	assert.Equal(t, []int{commander}, entries[0].PendingIDs)
+	assert.Equal(t, []int{commander}, entries[0].PendingIDs())
 	assert.Empty(t, entries[0].OwnedCardIDs)
 	assert.Equal(t, []int{partner}, entries[1].OwnedCardIDs)
-	assert.Empty(t, entries[1].PendingIDs)
+	assert.Empty(t, entries[1].Pending)
 }
 
 func TestDeckContent_ListsAPendingPartnerAfterAnOwnedCommander(t *testing.T) {

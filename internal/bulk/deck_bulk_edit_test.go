@@ -83,12 +83,16 @@ func TestBulkEditDeck_ClearsARemovedCommander(t *testing.T) {
 	decks := tamiyoDeckFixture()
 	decks.decks[0].CommanderPendingID = nil
 	decks.decks[0].CommanderID = ptr(1)
+	entries := decks.entries[fixtureDeckID]
+	entries[0].Slot = deck.SlotNone
+	entries[2].Slot = deck.SlotCommander
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, bulkEditResolver())
 
 	_, err := svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, strings.NewReader("5 Island (NEO) 294\n"))
 
 	require.NoError(t, err)
 	assert.True(t, decks.commanderCleared)
+	assert.Equal(t, deck.SlotCommander, decks.clearedSlot)
 	assert.Contains(t, decks.unlinkedCards, 1)
 }
 
@@ -134,4 +138,50 @@ func TestHandler_BulkEditDeck(t *testing.T) {
 		setupRouter(&fakeImportService{err: editErr}).ServeHTTP(w, multipartRequest(t, "/deck/00000000-0000-0000-0000-000000000001/bulk-edit", "1 Island\n", nil))
 		assert.Equal(t, want, w.Code, editErr.Error())
 	}
+}
+
+func mergedContentDeck() *fakeDeckService {
+	sol := ownedExportEntry("Sol Ring", "sld", "1011", 1)
+	sol.ScryfallID = solRingSLD
+	solCopy := ownedExportEntry("Sol Ring", "sld", "1011", 2)
+	solCopy.ScryfallID = solRingSLD
+	island := ownedExportEntry("Island", "neo", "294", 3)
+	island.ScryfallID = islandNEO
+	island.Pending = []deck.PendingPart{{ID: 8, Quantity: 2}}
+	islandProxy := ownedExportEntry("Island", "neo", "294", 4)
+	islandProxy.ScryfallID = islandNEO
+	islandProxy.Proxy = true
+	return contentDeck(deck.Deck{Name: "Merged", Format: "commander", CommanderID: ptr(1)}, asCommander(sol), solCopy, island, islandProxy)
+}
+
+func TestBulkEditDeck_TheExportOfAMergedDeckChangesNothing(t *testing.T) {
+	decks := mergedContentDeck()
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{err: assert.AnError})
+	var exported bytes.Buffer
+	require.NoError(t, svc.ExportDeck(context.Background(), testUserID, fixtureDeckID, DeckExportOptions{Format: DeckExportMoxfield}, &exported))
+
+	summary, err := svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, &exported)
+
+	require.NoError(t, err, "the export lists every card the deck has, so nothing is looked up")
+	assert.Empty(t, decks.unlinkedCards)
+	assert.Empty(t, decks.removedPending)
+	assert.Empty(t, decks.pendingQuantities)
+	assert.False(t, decks.commanderCleared)
+	assert.Zero(t, summary.CardsRemoved)
+}
+
+func TestBulkEditDeck_ShrinksAPendingCommanderSplitAcrossEntries(t *testing.T) {
+	commander := asCommander(pendingExportEntry("Tamiyo, Inquisitive Student", "neo", "75", 7, 1))
+	extra := pendingExportEntry("Tamiyo, Inquisitive Student", "neo", "75", 7, 2)
+	extra.Pending = append(extra.Pending, deck.PendingPart{ID: 11, Quantity: 1})
+	decks := contentDeck(deck.Deck{Name: "Tamiyo", Format: "commander", CommanderPendingID: ptr(7)}, commander, extra)
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{err: assert.AnError})
+
+	summary, err := svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, strings.NewReader("2 Tamiyo, Inquisitive Student (NEO) 75\n"))
+
+	require.NoError(t, err)
+	assert.Equal(t, map[int]int{7: 2}, decks.pendingQuantities, "the commander keeps its slot and one extra copy")
+	assert.Equal(t, []int{11}, decks.removedPending)
+	assert.False(t, decks.commanderCleared)
+	assert.Equal(t, 2, summary.CardsRemoved)
 }

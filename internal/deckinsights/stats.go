@@ -37,8 +37,8 @@ func computeStats(entries []deck.DeckEntry, scryfallByID map[string]scryfall.Car
 			eur, usd := sc.Prices.For(e.Foil, usdPerEUR)
 			stats.OwnedValue.EUR += eur * float64(e.OwnedQuantity())
 			stats.OwnedValue.USD += usd * float64(e.OwnedQuantity())
-			stats.PendingValue.EUR += eur * float64(e.PendingQuantity)
-			stats.PendingValue.USD += usd * float64(e.PendingQuantity)
+			stats.PendingValue.EUR += eur * float64(e.PendingQuantity())
+			stats.PendingValue.USD += usd * float64(e.PendingQuantity())
 		}
 
 		t := scryfall.PrimaryType(sc.TypeLine)

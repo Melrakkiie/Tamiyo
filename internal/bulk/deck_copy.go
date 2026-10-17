@@ -227,7 +227,7 @@ func (s *Service) CollectDeck(ctx context.Context, userID string, deckID string,
 func (s *Service) commitEntriesPending(ctx context.Context, userID string, deckID string, storageID *int, entries []deck.DeckEntry, summary *Summary) {
 	committed := make(map[int]bool)
 	for _, e := range entries {
-		for _, pendingID := range e.PendingIDs {
+		for _, pendingID := range e.PendingIDs() {
 			if committed[pendingID] {
 				continue
 			}

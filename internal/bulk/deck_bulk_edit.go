@@ -17,28 +17,30 @@ import (
 	"Melrakkiie/Tamiyo/internal/deck"
 )
 
-type deckCopyMatch struct {
-	card    deck.DeckCard
+type ownedMatch struct {
+	entry   deck.DeckEntry
+	cardID  int
 	matched bool
 }
 
 type pendingMatch struct {
-	item deck.PendingCard
-	kept int
+	entry deck.DeckEntry
+	part  deck.PendingPart
+	kept  int
 }
 
-func lineMatches(line moxfieldDeckLine, name string, setCode string, collectorNumber string, foil bool, board string) bool {
-	if boardOf(board) != line.Board {
+func lineMatches(line moxfieldDeckLine, e deck.DeckEntry) bool {
+	if boardOf(e.Board) != line.Board {
 		return false
 	}
 	if line.SetCode != "" {
-		return strings.EqualFold(setCode, line.SetCode) && collectorNumber == line.CollectorNumber && foil == line.Foil
+		return strings.EqualFold(e.SetCode, line.SetCode) && e.CollectorNumber == line.CollectorNumber && e.Foil == line.Foil
 	}
-	if line.Foil && !foil {
+	if line.Foil && !e.Foil {
 		return false
 	}
 	wanted := deck.CardNameKey(line.CardName)
-	return deck.CardNameKey(name) == wanted || deck.CardNameKey(frontFaceName(name)) == wanted
+	return deck.CardNameKey(e.Name) == wanted || deck.CardNameKey(frontFaceName(e.Name)) == wanted
 }
 
 func bulkEditOrder(lines []moxfieldDeckLine) []moxfieldDeckLine {
@@ -66,25 +68,19 @@ func (s *Service) BulkEditDeck(ctx context.Context, userID string, deckID string
 		return Summary{}, err
 	}
 
-	cards, err := s.decks.GetDeckCards(ctx, userID, d.ID, "name", false)
+	content, err := s.decks.GetDeckContent(ctx, userID, d.ID)
 	if err != nil {
-		return Summary{}, fmt.Errorf("loading deck cards: %w", err)
+		return Summary{}, fmt.Errorf("loading deck content: %w", err)
 	}
-	pending, err := s.decks.GetPendingCards(ctx, userID, d.ID)
-	if err != nil {
-		return Summary{}, fmt.Errorf("loading pending cards: %w", err)
-	}
-
-	copies := make([]*deckCopyMatch, 0, len(cards))
-	for _, c := range cards {
-		copies = append(copies, &deckCopyMatch{card: c})
-	}
-	sort.SliceStable(copies, func(i, j int) bool {
-		return d.IsCommanderCard(copies[i].card.ID) && !d.IsCommanderCard(copies[j].card.ID)
-	})
-	pendings := make([]*pendingMatch, 0, len(pending))
-	for _, p := range pending {
-		pendings = append(pendings, &pendingMatch{item: p})
+	var copies []*ownedMatch
+	var pendings []*pendingMatch
+	for _, e := range content.Entries {
+		for _, id := range e.OwnedCardIDs {
+			copies = append(copies, &ownedMatch{entry: e, cardID: id})
+		}
+		for _, part := range e.Pending {
+			pendings = append(pendings, &pendingMatch{entry: e, part: part})
+		}
 	}
 
 	var toAdd []moxfieldDeckLine
@@ -94,7 +90,7 @@ func (s *Service) BulkEditDeck(ctx context.Context, userID string, deckID string
 			if need == 0 {
 				break
 			}
-			if !c.matched && lineMatches(line, c.card.Name, c.card.SetCode, c.card.CollectorNumber, c.card.Foil, c.card.Board) {
+			if !c.matched && lineMatches(line, c.entry) {
 				c.matched = true
 				need--
 			}
@@ -103,8 +99,8 @@ func (s *Service) BulkEditDeck(ctx context.Context, userID string, deckID string
 			if need == 0 {
 				break
 			}
-			free := p.item.Quantity - p.kept
-			if free > 0 && lineMatches(line, p.item.Name, p.item.SetCode, p.item.CollectorNumber, p.item.Foil, p.item.Board) {
+			free := p.part.Quantity - p.kept
+			if free > 0 && lineMatches(line, p.entry) {
 				taken := min(free, need)
 				p.kept += taken
 				need -= taken
@@ -125,7 +121,7 @@ func (s *Service) BulkEditDeck(ctx context.Context, userID string, deckID string
 	}
 
 	var summary Summary
-	if err := s.removeUnlisted(ctx, userID, d, copies, pendings, &summary); err != nil {
+	if err := s.removeUnlisted(ctx, userID, d.ID, copies, pendings, &summary); err != nil {
 		return summary, err
 	}
 
@@ -143,32 +139,51 @@ func (s *Service) BulkEditDeck(ctx context.Context, userID string, deckID string
 	return summary, nil
 }
 
-func (s *Service) removeUnlisted(ctx context.Context, userID string, d deck.Deck, copies []*deckCopyMatch, pendings []*pendingMatch, summary *Summary) error {
+func (s *Service) removeUnlisted(ctx context.Context, userID string, deckID string, copies []*ownedMatch, pendings []*pendingMatch, summary *Summary) error {
 	for _, c := range copies {
 		if c.matched {
 			continue
 		}
-		if slot, ok := d.CardSlot(c.card.ID); ok {
-			if err := s.decks.ClearCommander(ctx, userID, d.ID, slot); err != nil {
+		if c.entry.IsCommander() {
+			if err := s.decks.ClearCommander(ctx, userID, deckID, c.entry.Slot); err != nil {
 				return fmt.Errorf("clearing the commander: %w", err)
 			}
 		}
-		if err := s.decks.RemoveCardFromDeck(ctx, userID, d.ID, c.card.ID); err != nil {
-			return fmt.Errorf("removing %q from the deck: %w", c.card.Name, err)
+		if err := s.decks.RemoveCardFromDeck(ctx, userID, deckID, c.cardID); err != nil {
+			return fmt.Errorf("removing %q from the deck: %w", c.entry.Name, err)
 		}
 		summary.CardsRemoved++
 	}
+
+	type pendingTotal struct {
+		name     string
+		quantity int
+		kept     int
+	}
+	var order []int
+	totals := make(map[int]*pendingTotal)
 	for _, p := range pendings {
-		removed := p.item.Quantity - p.kept
+		t, ok := totals[p.part.ID]
+		if !ok {
+			t = &pendingTotal{name: p.entry.Name}
+			totals[p.part.ID] = t
+			order = append(order, p.part.ID)
+		}
+		t.quantity += p.part.Quantity
+		t.kept += p.kept
+	}
+	for _, id := range order {
+		t := totals[id]
+		removed := t.quantity - t.kept
 		if removed == 0 {
 			continue
 		}
-		if p.kept == 0 {
-			if err := s.decks.RemovePendingCard(ctx, userID, d.ID, p.item.ID); err != nil {
-				return fmt.Errorf("removing %q from the deck: %w", p.item.Name, err)
+		if t.kept == 0 {
+			if err := s.decks.RemovePendingCard(ctx, userID, deckID, id); err != nil {
+				return fmt.Errorf("removing %q from the deck: %w", t.name, err)
 			}
-		} else if _, err := s.decks.SetPendingQuantity(ctx, userID, d.ID, p.item.ID, p.kept); err != nil {
-			return fmt.Errorf("updating %q in the deck: %w", p.item.Name, err)
+		} else if _, err := s.decks.SetPendingQuantity(ctx, userID, deckID, id, t.kept); err != nil {
+			return fmt.Errorf("updating %q in the deck: %w", t.name, err)
 		}
 		summary.CardsRemoved += removed
 	}

@@ -227,8 +227,7 @@ func ownedExportEntry(name, setCode, number string, ids ...int) deck.DeckEntry {
 
 func pendingExportEntry(name, setCode, number string, id, quantity int) deck.DeckEntry {
 	e := printingEntry(name, setCode, number)
-	e.PendingIDs = []int{id}
-	e.PendingQuantity = quantity
+	e.Pending = []deck.PendingPart{{ID: id, Quantity: quantity}}
 	return e
 }
 
@@ -330,8 +329,7 @@ func TestExportDeck_MoxfieldPropagatesADeckContentError(t *testing.T) {
 
 func mixedIsland() deck.DeckEntry {
 	e := ownedExportEntry("Island", "MOM", "278", 101)
-	e.PendingIDs = []int{7}
-	e.PendingQuantity = 30
+	e.Pending = []deck.PendingPart{{ID: 7, Quantity: 30}}
 	return e
 }
 
@@ -413,8 +411,7 @@ func splitCSVLines(s string) []string {
 func boardedDeck() *fakeDeckService {
 	decks := mixedDeck()
 	duress := onBoard(ownedExportEntry("Duress", "M19", "94", 104), deck.BoardSideboard)
-	duress.PendingIDs = []int{8}
-	duress.PendingQuantity = 1
+	duress.Pending = []deck.PendingPart{{ID: 8, Quantity: 1}}
 	decks.entries[fixtureDeckID] = append(decks.entries[fixtureDeckID],
 		duress,
 		onBoard(ownedExportEntry("Island", "MOM", "278", 105), deck.BoardSideboard),

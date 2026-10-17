@@ -18,7 +18,7 @@ func TestGroupByPrinting_MergesProxiesWithRealCopiesButKeepsFinishBoardAndComman
 	entries := []DeckEntry{
 		{Name: "Atraxa", ScryfallID: "a", Slot: SlotCommander, Board: BoardMain, OwnedCardIDs: []int{1}},
 		{Name: "Atraxa", ScryfallID: "a", Board: BoardMain, OwnedCardIDs: []int{2}},
-		{Name: "Atraxa", ScryfallID: "A", Board: BoardMain, Proxy: true, PendingIDs: []int{7}, PendingQuantity: 2},
+		{Name: "Atraxa", ScryfallID: "A", Board: BoardMain, Proxy: true, Pending: []PendingPart{{ID: 7, Quantity: 2}}},
 		{Name: "Atraxa", ScryfallID: "a", Board: BoardMain, Foil: true, OwnedCardIDs: []int{3}},
 		{Name: "Atraxa", ScryfallID: "a", Board: BoardSideboard, OwnedCardIDs: []int{4}},
 		{Name: "Atraxa", ScryfallID: "b", Board: BoardMain, OwnedCardIDs: []int{5}},
@@ -37,7 +37,7 @@ func TestGroupByCardName_MergesEveryPrintingFinishBoardAndSlotOfANormalizedName(
 	entries := []DeckEntry{
 		{Name: "Fire // Ice", ScryfallID: "a", Slot: SlotCommander, OwnedCardIDs: []int{1}},
 		{Name: "Lightning Bolt", ScryfallID: "c", OwnedCardIDs: []int{2}},
-		{Name: "fire  / ice", ScryfallID: "b", Foil: true, Proxy: true, Board: BoardSideboard, PendingIDs: []int{7}, PendingQuantity: 3},
+		{Name: "fire  / ice", ScryfallID: "b", Foil: true, Proxy: true, Board: BoardSideboard, Pending: []PendingPart{{ID: 7, Quantity: 3}}},
 	}
 
 	groups := GroupByCardName(entries)

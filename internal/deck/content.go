@@ -26,17 +26,40 @@ type DeckEntry struct {
 	Slot            CommanderSlot
 	Price           *float64
 
-	OwnedCardIDs    []int
-	PendingIDs      []int
-	PendingQuantity int
+	OwnedCardIDs []int
+	Pending      []PendingPart
+}
+
+// PendingPart is the share of one pending card in an entry: a pending
+// commander of several copies is split between its commander entry and a
+// regular one, which can also hold other pending cards of the printing.
+type PendingPart struct {
+	ID       int
+	Quantity int
 }
 
 func (e DeckEntry) OwnedQuantity() int {
 	return len(e.OwnedCardIDs)
 }
 
+func (e DeckEntry) PendingQuantity() int {
+	total := 0
+	for _, p := range e.Pending {
+		total += p.Quantity
+	}
+	return total
+}
+
+func (e DeckEntry) PendingIDs() []int {
+	ids := make([]int, 0, len(e.Pending))
+	for _, p := range e.Pending {
+		ids = append(ids, p.ID)
+	}
+	return ids
+}
+
 func (e DeckEntry) Quantity() int {
-	return e.OwnedQuantity() + e.PendingQuantity
+	return e.OwnedQuantity() + e.PendingQuantity()
 }
 
 func (e DeckEntry) IsCommander() bool {
@@ -83,8 +106,7 @@ func mergeDeckEntries(d Deck, owned []DeckCard, pending []PendingCard) []DeckEnt
 			return
 		}
 		entries[i].OwnedCardIDs = append(entries[i].OwnedCardIDs, e.OwnedCardIDs...)
-		entries[i].PendingIDs = append(entries[i].PendingIDs, e.PendingIDs...)
-		entries[i].PendingQuantity += e.PendingQuantity
+		entries[i].Pending = append(entries[i].Pending, e.Pending...)
 	}
 
 	for _, c := range owned {
@@ -169,8 +191,7 @@ func pendingEntry(p PendingCard, quantity int) DeckEntry {
 		Proxy:           p.Proxy,
 		Board:           p.Board,
 		Price:           p.Price,
-		PendingIDs:      []int{p.ID},
-		PendingQuantity: quantity,
+		Pending:         []PendingPart{{ID: p.ID, Quantity: quantity}},
 	}
 }
 
@@ -187,7 +208,7 @@ func (g EntryGroup) OwnedQuantity() int {
 func (g EntryGroup) PendingQuantity() int {
 	total := 0
 	for _, e := range g {
-		total += e.PendingQuantity
+		total += e.PendingQuantity()
 	}
 	return total
 }

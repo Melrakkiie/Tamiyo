@@ -30,7 +30,7 @@ func TestExportDeck_PartnerDecksExportBothCommandersAndNothingElseAsCommander(t 
 	decks := partnerDeckFixture()
 	extraTamiyo := decks.entries[fixtureDeckID][1]
 	extraTamiyo.Slot = deck.SlotNone
-	extraTamiyo.PendingQuantity = 2
+	extraTamiyo.Pending = []deck.PendingPart{{ID: 7, Quantity: 2}}
 	decks.entries[fixtureDeckID] = append(decks.entries[fixtureDeckID], extraTamiyo)
 
 	out := exportDeckWith(t, decks, DeckExportArena)
@@ -131,6 +131,15 @@ func TestBulkEditDeck_ClearsTheSlotOfARemovedPartner(t *testing.T) {
 	decks.decks[0].CommanderID = ptr(2)
 	decks.decks[0].PartnerPendingID = nil
 	decks.decks[0].PartnerID = ptr(1)
+	solRing, tamiyo, island := decks.entries[fixtureDeckID][0], decks.entries[fixtureDeckID][1], decks.entries[fixtureDeckID][2]
+	solRing.Slot = deck.SlotPartner
+	tamiyo.Slot = deck.SlotNone
+	islandCommander := island
+	islandCommander.Slot = deck.SlotCommander
+	islandCommander.OwnedCardIDs = []int{2}
+	islandCommander.Pending = nil
+	island.OwnedCardIDs = []int{3}
+	decks.entries[fixtureDeckID] = append([]deck.DeckEntry{islandCommander, solRing, island, tamiyo}, decks.entries[fixtureDeckID][3:]...)
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, bulkEditResolver())
 
 	_, err := svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, strings.NewReader("5 Island (NEO) 294\n"))

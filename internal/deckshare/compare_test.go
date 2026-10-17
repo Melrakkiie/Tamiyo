@@ -92,7 +92,7 @@ func compareStore() *fakeDeckStore {
 			deck:    deck.Deck{ID: myDeckID, Name: "Mine", Format: "commander", Visibility: deck.VisibilityPrivate, CommanderID: intPtr(1)},
 			entries: []deck.DeckEntry{
 				{Name: "Atraxa, Praetors' Voice", ScryfallID: "atraxa-cmr", ManaValue: 4, Slot: deck.SlotCommander, OwnedCardIDs: []int{1}},
-				{Name: "Counterspell", ScryfallID: "cs", PendingIDs: []int{9}, PendingQuantity: 2},
+				{Name: "Counterspell", ScryfallID: "cs", Pending: []deck.PendingPart{{ID: 9, Quantity: 2}}},
 				{Name: "Fire // Ice", ScryfallID: "fire-mh2", CardType: strPtr("Instant"), Colors: strPtr("UR"), ColorIdentity: strPtr("UR"), OwnedCardIDs: []int{5}},
 				{Name: "Island", ScryfallID: "island-a", OwnedCardIDs: []int{4}},
 				{Name: "Sol Ring", ScryfallID: "sol-cmm", OwnedCardIDs: []int{3}},
@@ -296,7 +296,7 @@ func TestCompareDecks_OnlyComparesTheMainBoards(t *testing.T) {
 	mine := store.decks[myDeckID]
 	mine.entries = append(mine.entries,
 		deck.DeckEntry{Name: "Lightning Bolt", ScryfallID: "bolt", Board: deck.BoardSideboard, OwnedCardIDs: []int{6}},
-		deck.DeckEntry{Name: "Opt", ScryfallID: "opt", Board: deck.BoardConsidering, PendingIDs: []int{10}, PendingQuantity: 1},
+		deck.DeckEntry{Name: "Opt", ScryfallID: "opt", Board: deck.BoardConsidering, Pending: []deck.PendingPart{{ID: 10, Quantity: 1}}},
 	)
 	store.decks[myDeckID] = mine
 	svc := NewService(store, compareUsers(), &fakeInsights{})

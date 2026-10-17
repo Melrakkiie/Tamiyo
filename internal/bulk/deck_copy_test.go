@@ -227,8 +227,8 @@ func TestCollectDeck_PendingCommitsASplitPendingCommanderOnce(t *testing.T) {
 		decks:   []deck.Deck{{ID: fixtureDeckID, Name: "Relentless", Format: "commander", CommanderPendingID: ptr(7)}},
 		pending: []deck.PendingCard{{ID: 7, Name: "Relentless Rats", ScryfallID: solRingSLD, Quantity: 3, Board: deck.BoardMain}},
 		entries: map[string][]deck.DeckEntry{fixtureDeckID: {
-			{Name: "Relentless Rats", ScryfallID: solRingSLD, Board: deck.BoardMain, Slot: deck.SlotCommander, PendingIDs: []int{7}, PendingQuantity: 1},
-			{Name: "Relentless Rats", ScryfallID: solRingSLD, Board: deck.BoardMain, PendingIDs: []int{7}, PendingQuantity: 2},
+			{Name: "Relentless Rats", ScryfallID: solRingSLD, Board: deck.BoardMain, Slot: deck.SlotCommander, Pending: []deck.PendingPart{{ID: 7, Quantity: 1}}},
+			{Name: "Relentless Rats", ScryfallID: solRingSLD, Board: deck.BoardMain, Pending: []deck.PendingPart{{ID: 7, Quantity: 2}}},
 		}},
 	}
 	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})

@@ -83,7 +83,7 @@ func (s *Service) ExportCardmarketDeck(ctx context.Context, userID string, deckI
 		for _, e := range group {
 			quantity := e.Quantity()
 			if opts.OnlyPending {
-				quantity = e.PendingQuantity
+				quantity = e.PendingQuantity()
 			}
 			if quantity == 0 {
 				continue
