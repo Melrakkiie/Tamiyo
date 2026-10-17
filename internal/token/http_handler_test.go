@@ -123,9 +123,9 @@ func cookieRequest(path, refreshToken string) *http.Request {
 	return req
 }
 
-func findCookie(w *httptest.ResponseRecorder, name string) *http.Cookie {
+func findRefreshCookie(w *httptest.ResponseRecorder) *http.Cookie {
 	for _, c := range w.Result().Cookies() {
-		if c.Name == name {
+		if c.Name == authcookie.DefaultName {
 			return c
 		}
 	}
@@ -151,7 +151,7 @@ func TestHandler_Refresh_SetsRotatedTokenInCookie(t *testing.T) {
 	router.ServeHTTP(w, cookieRequest("/auth/refresh", "cookie-refresh-token"))
 
 	require.Equal(t, http.StatusOK, w.Code)
-	cookie := findCookie(w, authcookie.DefaultName)
+	cookie := findRefreshCookie(w)
 	require.NotNil(t, cookie)
 	assert.Equal(t, "new-refresh-token", cookie.Value)
 	assert.True(t, cookie.HttpOnly)
@@ -179,7 +179,7 @@ func TestHandler_Refresh_ClearsCookieOnInvalidToken(t *testing.T) {
 	router.ServeHTTP(w, cookieRequest("/auth/refresh", "revoked-refresh-token"))
 
 	require.Equal(t, http.StatusUnauthorized, w.Code)
-	cookie := findCookie(w, authcookie.DefaultName)
+	cookie := findRefreshCookie(w)
 	require.NotNil(t, cookie)
 	assert.Less(t, cookie.MaxAge, 0)
 }
@@ -215,7 +215,7 @@ func TestHandler_Logout_RevokesCookieTokenAndClearsCookie(t *testing.T) {
 
 	require.Equal(t, http.StatusNoContent, w.Code)
 	assert.Equal(t, "cookie-refresh-token", service.revokeCalledWith)
-	cookie := findCookie(w, authcookie.DefaultName)
+	cookie := findRefreshCookie(w)
 	require.NotNil(t, cookie)
 	assert.Less(t, cookie.MaxAge, 0)
 }
@@ -237,7 +237,7 @@ func TestHandler_Refresh_OmitsRefreshTokenFromBodyForCookieOnlyClients(t *testin
 	_, hasRefreshToken := response["refresh_token"]
 	assert.False(t, hasRefreshToken)
 
-	cookie := findCookie(w, authcookie.DefaultName)
+	cookie := findRefreshCookie(w)
 	require.NotNil(t, cookie)
 	assert.Equal(t, "new-refresh-token", cookie.Value)
 }

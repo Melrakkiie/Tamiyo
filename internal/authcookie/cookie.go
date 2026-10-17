@@ -47,7 +47,7 @@ func (c RefreshCookie) Read(r *http.Request) string {
 }
 
 func (c RefreshCookie) cookie(value string, maxAge int) *http.Cookie {
-	return &http.Cookie{
+	return &http.Cookie{ //nolint:gosec // G124 cannot see that Secure comes from REFRESH_COOKIE_SECURE, which defaults to true
 		Name:     c.Name,
 		Value:    value,
 		Path:     c.Path,

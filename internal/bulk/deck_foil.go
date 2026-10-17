@@ -257,6 +257,15 @@ func finishName(c deck.PendingCard) string {
 }
 
 func (h *Handler) switchFoil(ctx *gin.Context) {
+	var req SwitchFoilRequest
+	h.switchDeckCards(ctx, "foil", &req,
+		func() bool { return req.Foil != nil && len(req.CardIDs)+len(req.PendingIDs) > 0 },
+		func(c context.Context, userID, deckID string) (Summary, error) {
+			return h.service.SwitchFoil(c, userID, deckID, FoilSwitch{CardIDs: req.CardIDs, PendingIDs: req.PendingIDs, Foil: *req.Foil})
+		})
+}
+
+func (h *Handler) switchDeckCards(ctx *gin.Context, field string, req any, complete func() bool, run func(c context.Context, userID, deckID string) (Summary, error)) {
 	userID, ok := auth.UserIDFromContext(ctx)
 	if !ok {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
@@ -267,13 +276,12 @@ func (h *Handler) switchFoil(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
-	var req SwitchFoilRequest
-	if err := json.NewDecoder(ctx.Request.Body).Decode(&req); err != nil || req.Foil == nil || len(req.CardIDs)+len(req.PendingIDs) == 0 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "foil and at least one of card_ids or pending_ids are required"})
+	if err := json.NewDecoder(ctx.Request.Body).Decode(req); err != nil || !complete() {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": field + " and at least one of card_ids or pending_ids are required"})
 		return
 	}
 
-	summary, err := h.service.SwitchFoil(ctx.Request.Context(), userID, deckID, FoilSwitch{CardIDs: req.CardIDs, PendingIDs: req.PendingIDs, Foil: *req.Foil})
+	summary, err := run(ctx.Request.Context(), userID, deckID)
 	if err != nil {
 		apierr.Respond(ctx, err,
 			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},

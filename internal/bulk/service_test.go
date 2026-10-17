@@ -917,13 +917,12 @@ func plainListResolver() *fakeResolver {
 	}}
 }
 
-func importPlainList(t *testing.T, cards *fakeCardService, decks *fakeDeckService, decklist string) (Summary, *fakeResolver) {
+func importPlainList(t *testing.T, cards *fakeCardService, decks *fakeDeckService, decklist string) Summary {
 	t.Helper()
-	resolver := plainListResolver()
-	svc := NewService(cards, &fakeStorageService{}, withTargetDeck(decks), resolver)
+	svc := NewService(cards, &fakeStorageService{}, withTargetDeck(decks), plainListResolver())
 	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader(decklist))
 	require.NoError(t, err)
-	return summary, resolver
+	return summary
 }
 
 func TestImportIntoDeck_PlainListUsesAnyOwnedPrinting(t *testing.T) {
@@ -933,7 +932,7 @@ func TestImportIntoDeck_PlainListUsesAnyOwnedPrinting(t *testing.T) {
 	}}
 	decks := &fakeDeckService{}
 
-	summary, _ := importPlainList(t, cards, decks, "3 Sol Ring\n")
+	summary := importPlainList(t, cards, decks, "3 Sol Ring\n")
 
 	assert.Equal(t, 2, summary.CardsLinked)
 	assert.Equal(t, 1, summary.CardsPending)
@@ -943,7 +942,7 @@ func TestImportIntoDeck_PlainListUsesAnyOwnedPrinting(t *testing.T) {
 func TestImportIntoDeck_PlainListAddsTheScryfallPrintingAsPending(t *testing.T) {
 	decks := &fakeDeckService{}
 
-	summary, _ := importPlainList(t, &fakeCardService{}, decks, "1 Sol Ring\n")
+	summary := importPlainList(t, &fakeCardService{}, decks, "1 Sol Ring\n")
 
 	assert.Equal(t, 1, summary.CardsPending)
 	require.Len(t, decks.addedPending, 1)
@@ -959,7 +958,7 @@ func TestImportIntoDeck_PlainListMatchesSplitCardsWithEitherSeparator(t *testing
 	cards := &fakeCardService{allCards: []card.Card{{ID: 8, Name: "Fire // Ice", ScryfallID: "55555555-0000-0000-0000-000000000000"}}}
 	decks := &fakeDeckService{}
 
-	summary, _ := importPlainList(t, cards, decks, "2 Fire / Ice\n")
+	summary := importPlainList(t, cards, decks, "2 Fire / Ice\n")
 
 	assert.Equal(t, 1, summary.CardsLinked)
 	assert.Equal(t, 1, summary.CardsPending)
@@ -967,7 +966,7 @@ func TestImportIntoDeck_PlainListMatchesSplitCardsWithEitherSeparator(t *testing
 }
 
 func TestImportIntoDeck_PlainListWarnsAboutUnknownNames(t *testing.T) {
-	summary, _ := importPlainList(t, &fakeCardService{}, &fakeDeckService{}, "1 Not A Real Card\n1 Sol Ring\n")
+	summary := importPlainList(t, &fakeCardService{}, &fakeDeckService{}, "1 Not A Real Card\n1 Sol Ring\n")
 
 	assert.Equal(t, 1, summary.CardsSkipped)
 	assert.Equal(t, 1, summary.CardsPending)
