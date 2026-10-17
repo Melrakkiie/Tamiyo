@@ -203,7 +203,7 @@ func tamiyoDeckFixture() *fakeDeckService {
 			{ID: 8, Name: "Island", ScryfallID: islandNEO, SetCode: "neo", CollectorNumber: "294", Quantity: 3, Board: deck.BoardMain},
 			{ID: 9, Name: "Duress", ScryfallID: duressM19, SetCode: "m19", CollectorNumber: "94", Quantity: 1, Foil: true, Board: deck.BoardConsidering},
 		},
-		entriesByDeck: map[string][]deck.DeckEntry{deckID: {
+		entries: map[string][]deck.DeckEntry{deckID: {
 			{Name: "Tamiyo, Inquisitive Student", ScryfallID: tamiyoNEO, SetCode: "neo", CollectorNumber: "75", Board: deck.BoardMain, Slot: deck.SlotCommander, PendingIDs: []int{7}, PendingQuantity: 1},
 			{Name: "Island", ScryfallID: islandNEO, SetCode: "neo", CollectorNumber: "294", Board: deck.BoardMain, OwnedCardIDs: []int{2, 3}, PendingIDs: []int{8}, PendingQuantity: 3},
 			{Name: "Sol Ring", ScryfallID: solRingSLD, SetCode: "sld", CollectorNumber: "1011", Board: deck.BoardMain, OwnedCardIDs: []int{1}},
@@ -237,7 +237,7 @@ func TestExportTamiyoDeck_WritesBoardsCommanderAndTags(t *testing.T) {
 func proxyDeckFixture() *fakeDeckService {
 	return &fakeDeckService{
 		decks: []deck.Deck{{ID: fixtureDeckID, Name: "Proxies", Format: "commander"}},
-		entriesByDeck: map[string][]deck.DeckEntry{fixtureDeckID: {
+		entries: map[string][]deck.DeckEntry{fixtureDeckID: {
 			{Name: "Sol Ring", ScryfallID: solRingSLD, SetCode: "sld", CollectorNumber: "1011", Board: deck.BoardMain, OwnedCardIDs: []int{1}},
 			{Name: "Sol Ring", ScryfallID: solRingSLD, SetCode: "sld", CollectorNumber: "1011", Proxy: true, Board: deck.BoardMain, OwnedCardIDs: []int{2}, PendingIDs: []int{8}, PendingQuantity: 1},
 			{Name: "Duress", ScryfallID: duressM19, SetCode: "m19", CollectorNumber: "94", Proxy: true, Board: deck.BoardSideboard, PendingIDs: []int{9}, PendingQuantity: 2},

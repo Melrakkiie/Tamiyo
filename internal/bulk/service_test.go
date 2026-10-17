@@ -162,13 +162,13 @@ type fakeDeckService struct {
 	linkedCards map[string][]int
 	linkErr     error
 
-	cardsByDeck     map[string][]deck.DeckCard
-	entriesByDeck   map[string][]deck.DeckEntry
-	getDeckErr      error
-	getDeckCardsErr error
-	createDeckErr   error
+	cardsByDeck   map[string][]deck.DeckCard
+	getDeckErr    error
+	createDeckErr error
 
 	pending        []deck.PendingCard
+	entries        map[string][]deck.DeckEntry
+	getContentErr  error
 	removedPending []int
 	promoted       map[int]int
 
@@ -322,9 +322,6 @@ func (f *fakeDeckService) GetDeck(ctx context.Context, userID string, id string)
 }
 
 func (f *fakeDeckService) GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error) {
-	if f.getDeckCardsErr != nil {
-		return nil, f.getDeckCardsErr
-	}
 	return f.cardsByDeck[id], nil
 }
 
@@ -333,10 +330,10 @@ func (f *fakeDeckService) GetDeckContent(ctx context.Context, userID string, dec
 	if err != nil {
 		return deck.DeckContent{}, err
 	}
-	if f.getDeckCardsErr != nil {
-		return deck.DeckContent{}, f.getDeckCardsErr
+	if f.getContentErr != nil {
+		return deck.DeckContent{}, f.getContentErr
 	}
-	return deck.DeckContent{Deck: d, Entries: f.entriesByDeck[deckID]}, nil
+	return deck.DeckContent{Deck: d, Entries: f.entries[deckID]}, nil
 }
 
 func (f *fakeDeckService) CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error) {
