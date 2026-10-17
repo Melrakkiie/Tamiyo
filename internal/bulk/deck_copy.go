@@ -120,12 +120,6 @@ type CollectRequest struct {
 	Boards    []string `json:"boards"`
 }
 
-type collectEntry struct {
-	card      card.Card
-	quantity  int
-	pendingID int
-}
-
 func wantedBoards(boards []string) (map[string]bool, error) {
 	wanted := make(map[string]bool, len(boards))
 	for _, b := range boards {
@@ -147,47 +141,25 @@ func boardOf(board string) string {
 	return board
 }
 
-func (s *Service) collectEntries(ctx context.Context, ownerID string, deckID string, boards map[string]bool) ([]collectEntry, error) {
-	cards, err := s.decks.GetDeckCards(ctx, ownerID, deckID, "name", false)
+func (s *Service) entriesInBoards(ctx context.Context, ownerID string, deckID string, boards map[string]bool) ([]deck.DeckEntry, error) {
+	content, err := s.decks.GetDeckContent(ctx, ownerID, deckID)
 	if err != nil {
-		return nil, fmt.Errorf("loading deck cards: %w", err)
+		return nil, fmt.Errorf("loading deck content: %w", err)
 	}
-	pending, err := s.decks.GetPendingCards(ctx, ownerID, deckID)
-	if err != nil {
-		return nil, fmt.Errorf("loading pending cards: %w", err)
-	}
-
-	type key struct {
-		scryfallID string
-		foil       bool
-	}
-	index := make(map[key]int)
-	var entries []collectEntry
-	for _, c := range cards {
-		if !boards[boardOf(c.Board)] {
-			continue
+	entries := make([]deck.DeckEntry, 0, len(content.Entries))
+	for _, e := range content.Entries {
+		if boards[boardOf(e.Board)] {
+			entries = append(entries, e)
 		}
-		k := key{c.ScryfallID, c.Foil}
-		if i, ok := index[k]; ok {
-			entries[i].quantity++
-			continue
-		}
-		index[k] = len(entries)
-		entries = append(entries, collectEntry{quantity: 1, card: card.Card{
-			Name: c.Name, ScryfallID: c.ScryfallID, SetCode: c.SetCode, CollectorNumber: c.CollectorNumber, Foil: c.Foil,
-			ManaValue: c.ManaValue, Colors: c.Colors, CardType: c.CardType, ColorIdentity: c.ColorIdentity,
-		}})
-	}
-	for _, p := range pending {
-		if !boards[boardOf(p.Board)] {
-			continue
-		}
-		entries = append(entries, collectEntry{pendingID: p.ID, quantity: p.Quantity, card: card.Card{
-			Name: p.Name, ScryfallID: p.ScryfallID, SetCode: p.SetCode, CollectorNumber: p.CollectorNumber, Foil: p.Foil, Proxy: p.Proxy,
-			ManaValue: p.ManaValue, Colors: p.Colors, CardType: p.CardType, ColorIdentity: p.ColorIdentity,
-		}})
 	}
 	return entries, nil
+}
+
+func entryCard(e deck.DeckEntry, storageID *int) card.Card {
+	return card.Card{
+		Name: e.Name, ScryfallID: e.ScryfallID, SetCode: e.SetCode, CollectorNumber: e.CollectorNumber, Foil: e.Foil, Proxy: e.Proxy,
+		StorageID: storageID, ManaValue: e.ManaValue, Colors: e.Colors, CardType: e.CardType, ColorIdentity: e.ColorIdentity,
+	}
 }
 
 func (s *Service) CollectDeck(ctx context.Context, userID string, deckID string, req CollectRequest) (Summary, error) {
@@ -214,38 +186,36 @@ func (s *Service) CollectDeck(ctx context.Context, userID string, deckID string,
 		}
 	}
 
-	entries, err := s.collectEntries(ctx, source.ownerID, source.deck.ID, boards)
+	entries, err := s.entriesInBoards(ctx, source.ownerID, source.deck.ID, boards)
 	if err != nil {
 		return Summary{}, err
 	}
 
+	copies := make([]int, len(entries))
+	for i, e := range entries {
+		copies[i] = e.Quantity()
+		if source.mine {
+			copies[i] = e.OwnedQuantity()
+		}
+	}
 	if req.Mode == CollectMissing {
-		entries, err = s.withoutOwnedCopies(ctx, userID, entries)
-		if err != nil {
+		if copies, err = s.withoutOwnedCopies(ctx, userID, entries, copies); err != nil {
 			return Summary{}, err
 		}
 	}
 
 	var summary Summary
-	for _, e := range entries {
-		if source.mine && e.pendingID != 0 {
-			committed, err := s.CommitPendingCards(ctx, userID, source.deck.ID, req.StorageID, &e.pendingID, nil)
-			summary.CardsCreated += committed.CardsCreated
-			summary.CardsLinked += committed.CardsCreated
-			if err != nil {
-				summary.Warnings = append(summary.Warnings, fmt.Sprintf("%q: %v", e.card.Name, err))
-			}
-			continue
-		}
-		if req.Mode == CollectPending {
-			continue
-		}
-		for i := 0; i < e.quantity; i++ {
-			c := e.card
-			c.StorageID = req.StorageID
-			if _, err := s.cards.CreateCard(ctx, userID, c); err != nil {
+	if source.mine {
+		s.commitEntriesPending(ctx, userID, source.deck.ID, req.StorageID, entries, &summary)
+	}
+	if req.Mode == CollectPending {
+		return summary, nil
+	}
+	for i, e := range entries {
+		for range copies[i] {
+			if _, err := s.cards.CreateCard(ctx, userID, entryCard(e, req.StorageID)); err != nil {
 				summary.CardsSkipped++
-				summary.Warnings = append(summary.Warnings, fmt.Sprintf("could not create %q: %v", c.Name, err))
+				summary.Warnings = append(summary.Warnings, fmt.Sprintf("could not create %q: %v", e.Name, err))
 				continue
 			}
 			summary.CardsCreated++
@@ -254,34 +224,41 @@ func (s *Service) CollectDeck(ctx context.Context, userID string, deckID string,
 	return summary, nil
 }
 
-func (s *Service) withoutOwnedCopies(ctx context.Context, userID string, entries []collectEntry) ([]collectEntry, error) {
-	keys := make([]string, 0, len(entries))
-	seen := make(map[string]bool)
+func (s *Service) commitEntriesPending(ctx context.Context, userID string, deckID string, storageID *int, entries []deck.DeckEntry, summary *Summary) {
+	committed := make(map[int]bool)
 	for _, e := range entries {
-		key := deck.CardNameKey(e.card.Name)
-		if !seen[key] {
-			seen[key] = true
-			keys = append(keys, key)
+		for _, pendingID := range e.PendingIDs {
+			if committed[pendingID] {
+				continue
+			}
+			committed[pendingID] = true
+			result, err := s.CommitPendingCards(ctx, userID, deckID, storageID, &pendingID, nil)
+			summary.CardsCreated += result.CardsCreated
+			summary.CardsLinked += result.CardsCreated
+			if err != nil {
+				summary.Warnings = append(summary.Warnings, fmt.Sprintf("%q: %v", e.Name, err))
+			}
 		}
+	}
+}
+
+func (s *Service) withoutOwnedCopies(ctx context.Context, userID string, entries []deck.DeckEntry, copies []int) ([]int, error) {
+	groups := deck.GroupByCardName(entries)
+	keys := make([]string, 0, len(groups))
+	for _, g := range groups {
+		keys = append(keys, deck.CardNameKey(g[0].Name))
 	}
 	owned, err := s.decks.CountCopiesByName(ctx, userID, keys)
 	if err != nil {
 		return nil, fmt.Errorf("counting owned copies: %w", err)
 	}
 
-	missing := make([]collectEntry, 0, len(entries))
-	for _, e := range entries {
-		key := deck.CardNameKey(e.card.Name)
-		covered := owned[key]
-		if covered > e.quantity {
-			covered = e.quantity
-		}
+	missing := make([]int, len(copies))
+	for i, e := range entries {
+		key := deck.CardNameKey(e.Name)
+		covered := min(owned[key], copies[i])
 		owned[key] -= covered
-		if e.quantity > covered {
-			e.quantity -= covered
-			e.pendingID = 0
-			missing = append(missing, e)
-		}
+		missing[i] = copies[i] - covered
 	}
 	return missing, nil
 }

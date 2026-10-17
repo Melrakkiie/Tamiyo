@@ -221,6 +221,48 @@ func TestCollectDeck_AllOnSomeoneElsesDeckCreatesEveryCopy(t *testing.T) {
 	assert.Equal(t, islandNEO, cardNamed(cards, "Island").ScryfallID)
 }
 
+func TestCollectDeck_PendingCommitsASplitPendingCommanderOnce(t *testing.T) {
+	cards := &fakeCardService{}
+	decks := &fakeDeckService{
+		decks:   []deck.Deck{{ID: fixtureDeckID, Name: "Relentless", Format: "commander", CommanderPendingID: ptr(7)}},
+		pending: []deck.PendingCard{{ID: 7, Name: "Relentless Rats", ScryfallID: solRingSLD, Quantity: 3, Board: deck.BoardMain}},
+		entriesByDeck: map[string][]deck.DeckEntry{fixtureDeckID: {
+			{Name: "Relentless Rats", ScryfallID: solRingSLD, Board: deck.BoardMain, Slot: deck.SlotCommander, PendingIDs: []int{7}, PendingQuantity: 1},
+			{Name: "Relentless Rats", ScryfallID: solRingSLD, Board: deck.BoardMain, PendingIDs: []int{7}, PendingQuantity: 2},
+		}},
+	}
+	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+
+	summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{Mode: CollectPending, Boards: []string{deck.BoardMain}})
+
+	require.NoError(t, err)
+	assert.Equal(t, 3, summary.CardsCreated)
+	assert.Equal(t, []int{7}, decks.removedPending)
+}
+
+func TestCollectDeck_AllCreatesProxiesForOwnedAndPendingProxies(t *testing.T) {
+	cards := &fakeCardService{}
+	decks := proxyDeckFixture()
+	decks.owners = map[string]string{fixtureDeckID: otherUserID}
+	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+
+	summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{
+		Mode: CollectAll, Boards: []string{deck.BoardMain, deck.BoardSideboard},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 5, summary.CardsCreated)
+	type created struct {
+		name  string
+		proxy bool
+	}
+	got := map[created]int{}
+	for _, c := range cards.created {
+		got[created{c.Name, c.Proxy}]++
+	}
+	assert.Equal(t, map[created]int{{"Sol Ring", false}: 1, {"Sol Ring", true}: 2, {"Duress", true}: 2}, got)
+}
+
 func TestCollectDeck_MissingSkipsCopiesAlreadyOwnedInAnyPrinting(t *testing.T) {
 	cards := &fakeCardService{}
 	decks := sharedDeckFixture()

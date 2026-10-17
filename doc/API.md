@@ -953,7 +953,7 @@ If adding the cards fails (Scryfall unreachable, say), the copy is removed and t
 
 ### `POST /deck/:id/collect`
 
-Add the cards of a deck to your collection, one card per copy, in the exact printing and finish listed, in `storage_id` when given. Owned and [pending](#pending-cards-deckidpending) cards both count.
+Add the cards of a deck to your collection, one card per copy, in the exact printing and finish listed, in `storage_id` when given. Owned and [pending](#pending-cards-deckidpending) cards both count. A proxy in the deck, owned or pending, becomes a proxy in your collection.
 
 ```json
 { "mode": "missing", "boards": ["main", "sideboard"], "storage_id": 4 }

@@ -2683,7 +2683,8 @@ paths:
       description: >
         Creates cards in the user's collection from the cards of the chosen
         boards of a deck, owned and pending alike, in their exact printing
-        and finish, in storage_id when given. On one of the user's own
+        and finish, in storage_id when given. A proxy in the deck, owned
+        or pending, is created as a proxy. On one of the user's own
         decks, mode "pending" adds the pending cards and puts them in the
         deck, like POST /deck/{id}/pending/commit; "all" does the same and
         also adds one more copy of every card already in the deck, which
