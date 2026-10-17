@@ -73,13 +73,9 @@ func (s *Service) DuplicateDeck(ctx context.Context, userID string, deckID strin
 		return DuplicateSummary{}, err
 	}
 
-	content, err := s.collectEntries(ctx, source.ownerID, source.deck.ID, allBoards)
-	if err != nil {
-		return DuplicateSummary{}, err
-	}
-
 	var file bytes.Buffer
-	if err := s.ExportTamiyoDeck(ctx, source.ownerID, source.deck.ID, true, &file); err != nil {
+	lines, err := s.writeTamiyoDeck(ctx, source.ownerID, source.deck.ID, true, &file)
+	if err != nil {
 		return DuplicateSummary{}, err
 	}
 
@@ -103,7 +99,7 @@ func (s *Service) DuplicateDeck(ctx context.Context, userID string, deckID strin
 		return DuplicateSummary{}, fmt.Errorf("creating the copy: %w", err)
 	}
 
-	if len(content) == 0 {
+	if lines == 0 {
 		return DuplicateSummary{DeckID: created.ID, Summary: Summary{DecksCreated: 1}}, nil
 	}
 
@@ -123,8 +119,6 @@ type CollectRequest struct {
 	StorageID *int     `json:"storage_id"`
 	Boards    []string `json:"boards"`
 }
-
-var allBoards = map[string]bool{deck.BoardMain: true, deck.BoardSideboard: true, deck.BoardConsidering: true}
 
 type collectEntry struct {
 	card      card.Card

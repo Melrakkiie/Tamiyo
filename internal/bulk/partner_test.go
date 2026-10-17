@@ -18,6 +18,12 @@ func partnerDeckFixture() *fakeDeckService {
 	decks.decks[0].CommanderPendingID = nil
 	decks.decks[0].CommanderID = ptr(1)
 	decks.decks[0].PartnerPendingID = ptr(7)
+	entries := decks.entriesByDeck[fixtureDeckID]
+	decks.entriesByDeck[fixtureDeckID] = []deck.DeckEntry{
+		{Name: "Sol Ring", ScryfallID: solRingSLD, SetCode: "sld", CollectorNumber: "1011", Board: deck.BoardMain, Slot: deck.SlotCommander, OwnedCardIDs: []int{1}},
+		{Name: "Tamiyo, Inquisitive Student", ScryfallID: tamiyoNEO, SetCode: "neo", CollectorNumber: "75", Board: deck.BoardMain, Slot: deck.SlotPartner, PendingIDs: []int{7}, PendingQuantity: 1},
+		entries[1], entries[3], entries[4],
+	}
 	return decks
 }
 

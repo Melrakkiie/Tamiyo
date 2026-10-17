@@ -75,9 +75,11 @@ type moxfieldDeckLine struct {
 	SetCode         string
 	CollectorNumber string
 	Foil            bool
-	Board           string
-	Commander       bool
-	Tags            []string
+	// Proxy is nil when the line doesn't say: text lists take real copies and proxies alike.
+	Proxy     *bool
+	Board     string
+	Commander bool
+	Tags      []string
 }
 
 const maxCommanders = 2

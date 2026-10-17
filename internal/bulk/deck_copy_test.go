@@ -108,6 +108,28 @@ func TestDuplicateDeck_CopiesSomeoneElsesSharedDeck(t *testing.T) {
 	assert.Equal(t, 9, result.Summary.CardsPending)
 }
 
+func TestDuplicateDeck_KeepsOwnedAndPendingProxiesAsProxies(t *testing.T) {
+	decks := proxyDeckFixture()
+	decks.nextID = 50
+	cards := &fakeCardService{allCards: []card.Card{{ID: 41, Name: "Sol Ring", ScryfallID: solRingSLD, Proxy: true}}}
+	svc := NewService(cards, &fakeStorageService{}, decks, tamiyoResolver())
+
+	result, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{})
+
+	require.NoError(t, err)
+	assert.Equal(t, []int{41}, decks.linkedCards[result.DeckID])
+	type pendingLine struct {
+		name     string
+		proxy    bool
+		quantity int
+	}
+	var pending []pendingLine
+	for _, p := range decks.addedPending {
+		pending = append(pending, pendingLine{p.Name, p.Proxy, p.Quantity})
+	}
+	assert.Equal(t, []pendingLine{{"Sol Ring", false, 1}, {"Sol Ring", true, 1}, {"Duress", true, 2}}, pending)
+}
+
 func TestDuplicateDeck_EmptyDeckGivesAnEmptyCopy(t *testing.T) {
 	decks := &fakeDeckService{nextID: 50, decks: []deck.Deck{{ID: fixtureDeckID, Name: "Vide", Format: "modern"}}}
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
