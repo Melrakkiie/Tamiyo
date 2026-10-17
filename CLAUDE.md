@@ -1,12 +1,11 @@
 # Tamiyo API
 
-Go REST API for a Magic: The Gathering collection: cards, physical storages, decks (boards, pending cards, tags, folders), sharing, likes, follows, display preferences. Module `Melrakkiie/Tamiyo`, Go 1.26, Gin, sqlx + lib/pq, PostgreSQL (schema `tamiyo`), goose migrations, zap logs. The web front is a separate repo, `Tamiyo-front`, served on the same origin (`/api` prefix in prod on Clever Cloud).
+Go REST API for a Magic: The Gathering collection: cards, physical storages, decks (boards, pending cards, tags, folders), sharing, likes, follows, display preferences. Module `Melrakkiie/Tamiyo`, Gin, sqlx + lib/pq, PostgreSQL (schema `tamiyo`), goose migrations, zap logs. The web front is a separate repo, `Tamiyo-front`, served on the same origin (`/api` prefix in prod on Clever Cloud).
 
 ## Commands
 
 ```bash
 docker compose up --build        # API on :8080 + Postgres, live reload (air)
-go build ./... && go vet ./...
 make lint                        # golangci-lint (gofmt, goimports, misspell, unconvert)
 make test-unit                   # go test ./internal/...
 go test ./internal/... -tags=integration   # integration tests, real Postgres via testcontainers (needs Docker)
@@ -32,13 +31,13 @@ Run the relevant tests and the linter before calling a change done. Integration 
 - **External calls:** Scryfall and SMTP are called from services, never from handlers or repositories. Scryfall goes through `internal/scryfall` (batches of 75, paced, retried on 429).
 - **Preferences and sortable data live in the database**, never in the browser.
 - **Docs:** any change to a route, a field or a validation rule updates `doc/API.md` and `doc/openapi.yaml` in the same change, and the README when it lists the feature.
-- **No comments in Go code.** SQL migrations keep their header comment explaining the change.
+- **Comments:** names and tests carry the meaning; a comment only states a constraint the code can't show. SQL migrations keep their header comment explaining the change.
 - **Remove dead code** a change leaves behind.
 - Code, README, docs and commit messages in English.
 
 ## Commits
 
-Imperative subject under ~70 characters, then a short body saying what changed and why. The API is pushed and deployed before the front that depends on it. Pushing to `main` deploys to production once CI passes.
+Imperative subject under ~70 characters, then a short body saying what changed and why. The API is pushed and deployed before the front that depends on it. Pushing to `main` deploys to production once CI passes. Commit on a branch and open a PR; merging to `main` is mine.
 
 ## Agent skills
 
