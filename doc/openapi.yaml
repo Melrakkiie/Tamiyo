@@ -5404,7 +5404,7 @@ components:
 
     SharedDeckCard:
       type: object
-      description: One printing of a card in a shared deck, with how many copies the deck holds.
+      description: One printing, finish, proxy state and board of a card in a shared deck, with how many copies the deck holds. Proxies are entries of their own, though the proxy flag isn't exposed.
       properties:
         name:
           type: string

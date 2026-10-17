@@ -16,8 +16,7 @@ var ErrNotFound = errors.New("shared deck not found")
 type deckService interface {
 	GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error)
 	GetSharedDeck(ctx context.Context, deckID string) (string, deck.Deck, error)
-	GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error)
-	GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error)
+	GetDeckContent(ctx context.Context, userID string, deckID string) (deck.DeckContent, error)
 	GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error)
 	BrowsePublicDecks(ctx context.Context, filter deck.PublicFilter) ([]deck.PublicDeck, int, error)
 	CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error)
@@ -117,14 +116,9 @@ func (s *Service) loadContent(ctx context.Context, ownerID string, d deck.Deck) 
 		return Owner{}, nil, fmt.Errorf("loading deck owner: %w", err)
 	}
 
-	owned, err := s.decks.GetDeckCards(ctx, ownerID, d.ID, "name", false)
+	content, err := s.decks.GetDeckContent(ctx, ownerID, d.ID)
 	if err != nil {
-		return Owner{}, nil, fmt.Errorf("loading deck cards: %w", err)
-	}
-
-	pending, err := s.decks.GetPendingCards(ctx, ownerID, d.ID)
-	if err != nil {
-		return Owner{}, nil, fmt.Errorf("loading pending cards: %w", err)
+		return Owner{}, nil, fmt.Errorf("loading deck content: %w", err)
 	}
 
 	tags, err := s.decks.GetCardTags(ctx, ownerID, d.ID)
@@ -132,11 +126,12 @@ func (s *Service) loadContent(ctx context.Context, ownerID string, d deck.Deck) 
 		return Owner{}, nil, fmt.Errorf("loading card tags: %w", err)
 	}
 
-	cards := mergeCards(d, owned, pending)
 	byName := tags.ByCardName()
-	for i := range cards {
-		cards[i].Tags = byName[deck.CardNameKey(cards[i].Name)]
+	cards := make([]Card, 0, len(content.Entries))
+	for _, e := range content.Entries {
+		cards = append(cards, sharedCard(e, byName[deck.CardNameKey(e.Name)]))
 	}
+	sort.SliceStable(cards, func(i, j int) bool { return cards[i].Name < cards[j].Name })
 
 	return Owner{ID: owner.ID, DisplayName: owner.DisplayName, AvatarScryfallID: owner.AvatarScryfallID}, cards, nil
 }
@@ -168,85 +163,20 @@ func (s *Service) GetSharedDeckStats(ctx context.Context, deckID string) (deckin
 	return s.insights.GetDeckStats(ctx, ownerID, d.ID)
 }
 
-type cardKey struct {
-	scryfallID string
-	foil       bool
-	commander  bool
-	board      string
-}
-
-func mergeCards(d deck.Deck, owned []deck.DeckCard, pending []deck.PendingCard) []Card {
-	merged := make(map[cardKey]*Card)
-	var order []cardKey
-
-	add := func(key cardKey, c Card) {
-		if existing, ok := merged[key]; ok {
-			existing.Quantity += c.Quantity
-			return
-		}
-		merged[key] = &c
-		order = append(order, key)
-	}
-
-	for _, c := range owned {
-		commander := d.IsCommanderCard(c.ID)
-		add(cardKey{c.ScryfallID, c.Foil, commander, c.Board}, Card{
-			Name:            c.Name,
-			ScryfallID:      c.ScryfallID,
-			SetCode:         c.SetCode,
-			CollectorNumber: c.CollectorNumber,
-			Foil:            c.Foil,
-			Quantity:        1,
-			ManaValue:       c.ManaValue,
-			Colors:          c.Colors,
-			CardType:        c.CardType,
-			ColorIdentity:   c.ColorIdentity,
-			Commander:       commander,
-			Board:           c.Board,
-		})
-	}
-
-	for _, p := range pending {
-		quantity := p.Quantity
-		if quantity < 1 {
-			quantity = 1
-		}
-		commander := d.IsCommanderPending(p.ID)
-		if commander {
-			add(cardKey{p.ScryfallID, p.Foil, true, p.Board}, pendingCard(p, 1, true))
-			quantity--
-		}
-		if quantity > 0 {
-			add(cardKey{p.ScryfallID, p.Foil, false, p.Board}, pendingCard(p, quantity, false))
-		}
-	}
-
-	cards := make([]Card, 0, len(order))
-	for _, key := range order {
-		cards = append(cards, *merged[key])
-	}
-	sort.SliceStable(cards, func(i, j int) bool {
-		if cards[i].Name != cards[j].Name {
-			return cards[i].Name < cards[j].Name
-		}
-		return cards[i].SetCode < cards[j].SetCode
-	})
-	return cards
-}
-
-func pendingCard(p deck.PendingCard, quantity int, commander bool) Card {
+func sharedCard(e deck.DeckEntry, tags []string) Card {
 	return Card{
-		Name:            p.Name,
-		ScryfallID:      p.ScryfallID,
-		SetCode:         p.SetCode,
-		CollectorNumber: p.CollectorNumber,
-		Foil:            p.Foil,
-		Quantity:        quantity,
-		ManaValue:       p.ManaValue,
-		Colors:          p.Colors,
-		CardType:        p.CardType,
-		ColorIdentity:   p.ColorIdentity,
-		Commander:       commander,
-		Board:           p.Board,
+		Name:            e.Name,
+		ScryfallID:      e.ScryfallID,
+		SetCode:         e.SetCode,
+		CollectorNumber: e.CollectorNumber,
+		Foil:            e.Foil,
+		Quantity:        e.Quantity(),
+		ManaValue:       e.ManaValue,
+		Colors:          e.Colors,
+		CardType:        e.CardType,
+		ColorIdentity:   e.ColorIdentity,
+		Commander:       e.IsCommander(),
+		Board:           e.Board,
+		Tags:            tags,
 	}
 }

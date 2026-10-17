@@ -20,8 +20,7 @@ type fakeDecks struct {
 	ownerID   string
 	deck      deck.Deck
 	sharedErr error
-	cards     []deck.DeckCard
-	pending   []deck.PendingCard
+	entries   []deck.DeckEntry
 	tags      deck.DeckTags
 	tagsErr   error
 
@@ -58,14 +57,10 @@ func (f *fakeDecks) GetDeck(ctx context.Context, userID string, id string) (deck
 	return deck.Deck{}, deck.ErrNotFound
 }
 
-func (f *fakeDecks) GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error) {
+func (f *fakeDecks) GetDeckContent(ctx context.Context, userID string, deckID string) (deck.DeckContent, error) {
 	f.lastUserID = userID
-	f.lastDeckID = id
-	return f.cards, nil
-}
-
-func (f *fakeDecks) GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error) {
-	return f.pending, nil
+	f.lastDeckID = deckID
+	return deck.DeckContent{Deck: f.deck, Entries: f.entries}, nil
 }
 
 type fakeUsers struct {
@@ -133,19 +128,16 @@ func TestService_GetSharedDeck_MapsMissingDeckToErrNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
-func TestService_GetSharedDeck_MergesCopiesAndPendingCardsWithoutOwnership(t *testing.T) {
+func TestService_GetSharedDeck_ShowsEachDeckContentEntryAsOneCardSortedByName(t *testing.T) {
 	decks := &fakeDecks{
 		ownerID: ownerID,
-		deck:    deck.Deck{ID: "00000000-0000-0000-0000-000000000009", CommanderID: intPtr(1)},
-		cards: []deck.DeckCard{
-			{ID: 1, Name: "Tamiyo", ScryfallID: "t", SetCode: "neo"},
-			{ID: 2, Name: "Island", ScryfallID: "i", SetCode: "neo", StorageID: intPtr(3), Proxy: true},
-			{ID: 3, Name: "Island", ScryfallID: "i", SetCode: "neo"},
-			{ID: 4, Name: "Island", ScryfallID: "i", SetCode: "neo", Foil: true},
-		},
-		pending: []deck.PendingCard{
-			{ID: 5, Name: "Island", ScryfallID: "i", SetCode: "neo", Quantity: 2},
-			{ID: 6, Name: "Brainstorm", ScryfallID: "b", SetCode: "ice", Quantity: 1},
+		deck:    deck.Deck{ID: "00000000-0000-0000-0000-000000000009"},
+		entries: []deck.DeckEntry{
+			{Name: "Tamiyo", ScryfallID: "t", SetCode: "neo", Board: deck.BoardMain, Slot: deck.SlotCommander, PendingIDs: []int{8}, PendingQuantity: 1},
+			{Name: "Island", ScryfallID: "i", SetCode: "neo", Board: deck.BoardMain, OwnedCardIDs: []int{3}, PendingIDs: []int{5}, PendingQuantity: 2},
+			{Name: "Island", ScryfallID: "i", SetCode: "neo", Board: deck.BoardMain, Proxy: true, OwnedCardIDs: []int{2}},
+			{Name: "Tamiyo", ScryfallID: "t", SetCode: "neo", Board: deck.BoardMain, OwnedCardIDs: []int{1}},
+			{Name: "Brainstorm", ScryfallID: "b", SetCode: "ice", Board: deck.BoardSideboard, Foil: true, PendingIDs: []int{6}, PendingQuantity: 4, ManaValue: 1, Colors: strPtr("U"), CardType: strPtr("Instant"), ColorIdentity: strPtr("U")},
 		},
 	}
 	service := newService(decks, &fakeInsights{})
@@ -154,10 +146,11 @@ func TestService_GetSharedDeck_MergesCopiesAndPendingCardsWithoutOwnership(t *te
 
 	require.NoError(t, err)
 	assert.Equal(t, []Card{
-		{Name: "Brainstorm", ScryfallID: "b", SetCode: "ice", Quantity: 1},
-		{Name: "Island", ScryfallID: "i", SetCode: "neo", Quantity: 4},
-		{Name: "Island", ScryfallID: "i", SetCode: "neo", Foil: true, Quantity: 1},
-		{Name: "Tamiyo", ScryfallID: "t", SetCode: "neo", Quantity: 1, Commander: true},
+		{Name: "Brainstorm", ScryfallID: "b", SetCode: "ice", Board: deck.BoardSideboard, Foil: true, Quantity: 4, ManaValue: 1, Colors: strPtr("U"), CardType: strPtr("Instant"), ColorIdentity: strPtr("U")},
+		{Name: "Island", ScryfallID: "i", SetCode: "neo", Board: deck.BoardMain, Quantity: 3},
+		{Name: "Island", ScryfallID: "i", SetCode: "neo", Board: deck.BoardMain, Quantity: 1},
+		{Name: "Tamiyo", ScryfallID: "t", SetCode: "neo", Board: deck.BoardMain, Quantity: 1, Commander: true},
+		{Name: "Tamiyo", ScryfallID: "t", SetCode: "neo", Board: deck.BoardMain, Quantity: 1},
 	}, shared.Cards)
 }
 
@@ -165,12 +158,12 @@ func TestService_GetSharedDeck_AddsEachCardsTagsWhateverThePrinting(t *testing.T
 	decks := &fakeDecks{
 		ownerID: ownerID,
 		deck:    deck.Deck{ID: "00000000-0000-0000-0000-000000000009"},
-		cards: []deck.DeckCard{
-			{ID: 1, Name: "Island", ScryfallID: "i", SetCode: "neo"},
-			{ID: 2, Name: "Island", ScryfallID: "i", SetCode: "neo", Foil: true},
-			{ID: 3, Name: "Fire // Ice", ScryfallID: "f", SetCode: "mh2"},
+		entries: []deck.DeckEntry{
+			{Name: "Island", ScryfallID: "i", SetCode: "neo", OwnedCardIDs: []int{1}},
+			{Name: "Island", ScryfallID: "i", SetCode: "neo", Foil: true, OwnedCardIDs: []int{2}},
+			{Name: "Fire // Ice", ScryfallID: "f", SetCode: "mh2", OwnedCardIDs: []int{3}},
+			{Name: "Brainstorm", ScryfallID: "b", SetCode: "ice", PendingIDs: []int{6}, PendingQuantity: 1},
 		},
-		pending: []deck.PendingCard{{ID: 6, Name: "Brainstorm", ScryfallID: "b", SetCode: "ice", Quantity: 1}},
 		tags: deck.DeckTags{Cards: []deck.TaggedCard{
 			{Name: "Island", Tags: []string{"Terrain"}},
 			{Name: "Fire / Ice", Tags: []string{"Removal", "Pioche"}},
@@ -195,20 +188,6 @@ func TestService_GetSharedDeck_PropagatesTagErrors(t *testing.T) {
 	_, err := service.GetSharedDeck(context.Background(), deckID)
 
 	require.Error(t, err)
-}
-
-func TestService_GetSharedDeck_FlagsAPendingCommander(t *testing.T) {
-	decks := &fakeDecks{
-		ownerID: ownerID,
-		deck:    deck.Deck{ID: "00000000-0000-0000-0000-000000000009", CommanderPendingID: intPtr(5)},
-		pending: []deck.PendingCard{{ID: 5, Name: "Tamiyo", ScryfallID: "t", SetCode: "neo", Quantity: 1}},
-	}
-	service := newService(decks, &fakeInsights{})
-
-	shared, err := service.GetSharedDeck(context.Background(), deckID)
-
-	require.NoError(t, err)
-	assert.Equal(t, []Card{{Name: "Tamiyo", ScryfallID: "t", SetCode: "neo", Quantity: 1, Commander: true}}, shared.Cards)
 }
 
 func TestService_GetSharedDeckLegality_ChecksAsTheOwnerAndHidesCardIDs(t *testing.T) {
@@ -254,32 +233,6 @@ func TestService_GetSharedDeckStats_PropagatesInsightErrors(t *testing.T) {
 	_, err := service.GetSharedDeckStats(context.Background(), deckID)
 
 	assert.ErrorIs(t, err, boom)
-}
-
-func TestService_GetSharedDeck_KeepsEachBoardApart(t *testing.T) {
-	decks := &fakeDecks{
-		ownerID: ownerID,
-		deck:    deck.Deck{ID: "00000000-0000-0000-0000-000000000009"},
-		cards: []deck.DeckCard{
-			{ID: 1, Name: "Duress", ScryfallID: "d", Board: deck.BoardMain},
-			{ID: 2, Name: "Duress", ScryfallID: "d", Board: deck.BoardSideboard},
-		},
-		pending: []deck.PendingCard{
-			{ID: 5, Name: "Duress", ScryfallID: "d", Quantity: 2, Board: deck.BoardSideboard},
-			{ID: 6, Name: "Duress", ScryfallID: "d", Quantity: 1, Board: deck.BoardConsidering},
-		},
-	}
-	service := newService(decks, &fakeInsights{})
-
-	shared, err := service.GetSharedDeck(context.Background(), deckID)
-
-	require.NoError(t, err)
-	quantities := map[string]int{}
-	for _, c := range shared.Cards {
-		quantities[c.Board] += c.Quantity
-	}
-	assert.Len(t, shared.Cards, 3)
-	assert.Equal(t, map[string]int{deck.BoardMain: 1, deck.BoardSideboard: 3, deck.BoardConsidering: 1}, quantities)
 }
 
 func TestService_BrowsePublicDecks_PassesTheFilter(t *testing.T) {

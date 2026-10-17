@@ -40,7 +40,8 @@ type Deck struct {
 type CommanderSlot int
 
 const (
-	SlotCommander CommanderSlot = iota
+	SlotNone CommanderSlot = iota
+	SlotCommander
 	SlotPartner
 )
 
@@ -55,7 +56,7 @@ func (d Deck) CardSlot(cardID int) (CommanderSlot, bool) {
 	case sameID(d.PartnerID, cardID):
 		return SlotPartner, true
 	}
-	return 0, false
+	return SlotNone, false
 }
 
 func (d Deck) PendingSlot(pendingID int) (CommanderSlot, bool) {
@@ -65,7 +66,7 @@ func (d Deck) PendingSlot(pendingID int) (CommanderSlot, bool) {
 	case sameID(d.PartnerPendingID, pendingID):
 		return SlotPartner, true
 	}
-	return 0, false
+	return SlotNone, false
 }
 
 func (d Deck) IsCommanderCard(cardID int) bool {
