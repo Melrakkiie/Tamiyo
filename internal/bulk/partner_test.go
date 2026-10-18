@@ -55,7 +55,7 @@ func TestExportDeck_MoxfieldPutsBothCommandersFirst(t *testing.T) {
 
 func TestTamiyoDeck_RoundTripsTwoCommanders(t *testing.T) {
 	var exported bytes.Buffer
-	require.NoError(t, NewService(&fakeCardService{}, &fakeStorageService{}, partnerDeckFixture(), &fakeResolver{}).ExportTamiyoDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", false, &exported))
+	require.NoError(t, newTestService(&fakeCardService{}, &fakeStorageService{}, partnerDeckFixture(), &fakeResolver{}).ExportTamiyoDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", false, &exported))
 
 	file, err := parseTamiyoFile(exported.Bytes())
 	require.NoError(t, err)
@@ -65,7 +65,7 @@ func TestTamiyoDeck_RoundTripsTwoCommanders(t *testing.T) {
 
 	cards := &fakeCardService{allCards: []card.Card{{ID: 40, Name: "Sol Ring", ScryfallID: solRingSLD}}}
 	decks := withTargetDeck(&fakeDeckService{})
-	_, err = NewService(cards, &fakeStorageService{}, decks, tamiyoResolver()).ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, &exported)
+	_, err = newTestService(cards, &fakeStorageService{}, decks, tamiyoResolver()).ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, &exported)
 
 	require.NoError(t, err)
 	assert.Equal(t, 40, decks.cardCommanderID)
@@ -117,7 +117,7 @@ func TestSwitchFoil_KeepsThePartnerSlot(t *testing.T) {
 	decks.decks[0].CommanderPendingID = ptr(99)
 	decks.decks[0].PartnerID = ptr(1)
 	cards.allCards = append(cards.allCards, card.Card{ID: 30, Name: "Sol Ring", ScryfallID: solRingSLD, Foil: true})
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	_, err := svc.SwitchFoil(context.Background(), testUserID, fixtureDeckID, FoilSwitch{CardIDs: []int{1}, Foil: true})
 
@@ -140,7 +140,7 @@ func TestBulkEditDeck_ClearsTheSlotOfARemovedPartner(t *testing.T) {
 	islandCommander.Pending = nil
 	island.OwnedCardIDs = []int{3}
 	decks.entries[fixtureDeckID] = append([]deck.DeckEntry{islandCommander, solRing, island, tamiyo}, decks.entries[fixtureDeckID][3:]...)
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, bulkEditResolver())
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, bulkEditResolver())
 
 	_, err := svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, strings.NewReader("5 Island (NEO) 294\n"))
 

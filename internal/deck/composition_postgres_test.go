@@ -38,13 +38,6 @@ func (f contentFixture) collection(t *testing.T) []collectionCard {
 	return cards
 }
 
-func (f contentFixture) storage(t *testing.T, name string) int {
-	t.Helper()
-	var id int
-	require.NoError(t, f.db.Get(&id, `INSERT INTO tamiyo.storage (user_id, name, type) VALUES ($1, $2, 'box') RETURNING id`, f.userID, name))
-	return id
-}
-
 // deckState is everything a composition operation may change: the deck row
 // (commander slots, updated date), its owned and pending cards, and the
 // owner's collection.

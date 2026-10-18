@@ -33,7 +33,7 @@ func foilFixture() (*fakeCardService, *fakeDeckService) {
 
 func TestSwitchFoil_UsesOwnedCopiesOfTheOtherFinishFreeOnesFirst(t *testing.T) {
 	cards, decks := foilFixture()
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	summary, err := svc.SwitchFoil(context.Background(), testUserID, fixtureDeckID, FoilSwitch{CardIDs: []int{2, 3}, Foil: true})
 
@@ -48,7 +48,7 @@ func TestSwitchFoil_UsesOwnedCopiesOfTheOtherFinishFreeOnesFirst(t *testing.T) {
 
 func TestSwitchFoil_GoesPendingWithoutACopyOfThatFinish(t *testing.T) {
 	cards, decks := foilFixture()
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	summary, err := svc.SwitchFoil(context.Background(), testUserID, fixtureDeckID, FoilSwitch{CardIDs: []int{4}, Foil: true})
 
@@ -68,7 +68,7 @@ func TestSwitchFoil_GoesPendingWithoutACopyOfThatFinish(t *testing.T) {
 func TestSwitchFoil_LeavesProxyCopiesForNonProxyCards(t *testing.T) {
 	cards, decks := foilFixture()
 	cards.allCards = append(cards.allCards, card.Card{ID: 30, Name: "Duress", ScryfallID: duressM19, Foil: true, Proxy: true})
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	summary, err := svc.SwitchFoil(context.Background(), testUserID, fixtureDeckID, FoilSwitch{CardIDs: []int{4}, Foil: true})
 
@@ -84,7 +84,7 @@ func TestSwitchFoil_KeepsTheCommander(t *testing.T) {
 	cards, decks := foilFixture()
 	decks.decks[0].CommanderPendingID = nil
 	decks.decks[0].CommanderID = ptr(1)
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	_, err := svc.SwitchFoil(context.Background(), testUserID, fixtureDeckID, FoilSwitch{CardIDs: []int{1}, Foil: true})
 	require.NoError(t, err)
@@ -99,7 +99,7 @@ func TestSwitchFoil_KeepsTheCommander(t *testing.T) {
 
 func TestSwitchFoil_IgnoresCardsAlreadyInThatFinishAndRejectsOthers(t *testing.T) {
 	cards, decks := foilFixture()
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	summary, err := svc.SwitchFoil(context.Background(), testUserID, fixtureDeckID, FoilSwitch{CardIDs: []int{1, 1}, Foil: false})
 	require.NoError(t, err)
@@ -116,7 +116,7 @@ func TestSwitchFoil_IgnoresCardsAlreadyInThatFinishAndRejectsOthers(t *testing.T
 
 func TestSwitchFoil_PendingCardsTakeOwnedCopiesOfTheNewFinish(t *testing.T) {
 	cards, decks := foilFixture()
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	summary, err := svc.SwitchFoil(context.Background(), testUserID, fixtureDeckID, FoilSwitch{PendingIDs: []int{8}, Foil: true})
 
@@ -134,7 +134,7 @@ func TestSwitchFoil_PendingCardsTakeOwnedCopiesOfTheNewFinish(t *testing.T) {
 func TestSwitchFoil_PendingCommanderBecomesOwned(t *testing.T) {
 	cards, decks := foilFixture()
 	cards.allCards = append(cards.allCards, card.Card{ID: 40, Name: "Tamiyo, Inquisitive Student", ScryfallID: tamiyoNEO, Foil: true})
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	_, err := svc.SwitchFoil(context.Background(), testUserID, fixtureDeckID, FoilSwitch{PendingIDs: []int{7}, Foil: true})
 	require.NoError(t, err)

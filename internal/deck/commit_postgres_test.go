@@ -139,14 +139,14 @@ func TestCommitPendingCards_CommitsBothPendingCommanders(t *testing.T) {
 
 func TestCommitPendingCards_PutsTheCopiesInTheTargetStorage(t *testing.T) {
 	f := newContentFixture(t)
-	box := f.storage(t, "Box")
+	box := f.storage(t, "Box", false)
 	f.pendingCard(t, bolt, 2, copyOptions{})
 
-	f.commit(t, PendingCommit{StorageID: &box})
+	f.commit(t, PendingCommit{StorageID: box})
 
 	assert.Equal(t, []collectionCard{
-		{name: bolt.name, scryfallID: bolt.scryfallID, storageID: &box},
-		{name: bolt.name, scryfallID: bolt.scryfallID, storageID: &box},
+		{name: bolt.name, scryfallID: bolt.scryfallID, storageID: box},
+		{name: bolt.name, scryfallID: bolt.scryfallID, storageID: box},
 	}, f.collection(t))
 }
 

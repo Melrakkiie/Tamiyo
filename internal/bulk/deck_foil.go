@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 
@@ -13,7 +14,6 @@ import (
 
 	"Melrakkiie/Tamiyo/internal/apierr"
 	"Melrakkiie/Tamiyo/internal/auth"
-	"Melrakkiie/Tamiyo/internal/card"
 	"Melrakkiie/Tamiyo/internal/deck"
 )
 
@@ -26,7 +26,7 @@ type SwitchFoilRequest struct {
 }
 
 func (o *ownedCopies) takeFinish(scryfallID string, foil bool, proxy bool) (int, bool) {
-	var candidates []card.Card
+	var candidates []deck.OwnedCopy
 	for _, c := range o.byPrinting[strings.ToLower(scryfallID)] {
 		if c.Foil == foil && c.Proxy == proxy && !o.used[c.ID] {
 			candidates = append(candidates, c)
@@ -100,7 +100,11 @@ func (s *Service) switchCards(ctx context.Context, userID string, deckID string,
 		return Summary{}, nil
 	}
 
-	owned, err := s.loadOwnedCopies(ctx, userID, deckID, false)
+	var wanted deck.CopiesWanted
+	for _, to := range slices.Concat(copyTargets, pendingTargets) {
+		wanted.ScryfallIDs = append(wanted.ScryfallIDs, to.ScryfallID)
+	}
+	owned, err := s.loadOwnedCopies(ctx, userID, deckID, wanted, false)
 	if err != nil {
 		return Summary{}, err
 	}
