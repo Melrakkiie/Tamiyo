@@ -111,12 +111,22 @@ func (r cardRow) toDomain() DeckCard {
 	return DeckCard(r)
 }
 
+type queryer interface {
+	sqlx.ExtContext
+	GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
+	SelectContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
+	PrepareNamedContext(ctx context.Context, query string) (*sqlx.NamedStmt, error)
+}
+
+// PostgresRepository runs its queries on db: the pool, or the transaction of
+// a composition (see Compose), whose repository has no pool to begin another.
 type PostgresRepository struct {
-	db *sqlx.DB
+	db   queryer
+	pool *sqlx.DB
 }
 
 func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
-	return &PostgresRepository{db: db}
+	return &PostgresRepository{db: db, pool: db}
 }
 
 func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter Filter) ([]Deck, int, error) {

@@ -229,17 +229,6 @@ type collectedEntry struct {
 	copies int
 }
 
-func (s *Service) commitEntriesPending(ctx context.Context, userID string, deckID string, storageID *int, entries []deck.DeckEntry, summary *Summary) {
-	for _, p := range deck.PendingTotals(entries) {
-		result, err := s.CommitPendingCards(ctx, userID, deckID, storageID, &p.ID, nil)
-		summary.CardsCreated += result.CardsCreated
-		summary.CardsLinked += result.CardsCreated
-		if err != nil {
-			summary.Warnings = append(summary.Warnings, fmt.Sprintf("%q: %v", p.Name, err))
-		}
-	}
-}
-
 func (s *Service) withoutOwnedCopies(ctx context.Context, userID string, collected []collectedEntry) error {
 	keys := make([]string, 0, len(collected))
 	seen := make(map[string]bool)

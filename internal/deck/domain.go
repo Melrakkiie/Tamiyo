@@ -181,6 +181,7 @@ type Repository interface {
 	UnlinkCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error
 
 	PendingRepository
+	Composer
 	PublicRepository
 	CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error)
 	FindOwnedCopies(ctx context.Context, userID string, targetDeckID string, scryfallIDs []string, nameKeys []string) ([]OwnedCopy, error)

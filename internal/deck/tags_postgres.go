@@ -43,7 +43,7 @@ func (r *PostgresRepository) FindDeckTags(ctx context.Context, userID string, de
 }
 
 func (r *PostgresRepository) CreateTag(ctx context.Context, userID string, deckID string, tag string) error {
-	tx, err := r.db.BeginTxx(ctx, nil)
+	tx, err := r.pool.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -69,7 +69,7 @@ func (r *PostgresRepository) CreateTag(ctx context.Context, userID string, deckI
 }
 
 func (r *PostgresRepository) ReplaceCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) error {
-	tx, err := r.db.BeginTxx(ctx, nil)
+	tx, err := r.pool.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -100,7 +100,7 @@ func (r *PostgresRepository) ReplaceCardTags(ctx context.Context, userID string,
 }
 
 func (r *PostgresRepository) RenameTag(ctx context.Context, userID string, deckID string, from string, to string) error {
-	tx, err := r.db.BeginTxx(ctx, nil)
+	tx, err := r.pool.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -135,7 +135,7 @@ func (r *PostgresRepository) RenameTag(ctx context.Context, userID string, deckI
 }
 
 func (r *PostgresRepository) DeleteTag(ctx context.Context, userID string, deckID string, tag string) error {
-	tx, err := r.db.BeginTxx(ctx, nil)
+	tx, err := r.pool.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
 	}
