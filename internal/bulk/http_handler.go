@@ -33,7 +33,6 @@ type importService interface {
 	ExportSharedDeck(ctx context.Context, deckID string, opts DeckExportOptions, w io.Writer) error
 
 	RefreshCardDetails(ctx context.Context, userID string, afterID int) (DetailsRefreshSummary, error)
-	CommitPendingCards(ctx context.Context, userID string, deckID string, storageID, pendingID, quantity *int) (PendingCommitSummary, error)
 	DuplicateDeck(ctx context.Context, userID string, deckID string, req DuplicateRequest) (DuplicateSummary, error)
 	BulkEditDeck(ctx context.Context, userID string, deckID string, r io.Reader) (Summary, error)
 	SwitchFoil(ctx context.Context, userID string, deckID string, req FoilSwitch) (Summary, error)
@@ -63,7 +62,6 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.GET("/export/tamiyo", h.exportTamiyoCollection)
 
 	router.POST("/cards/refresh-details", h.refreshCardDetails)
-	router.POST("/deck/:id/pending/commit", h.commitPendingCards)
 	router.POST("/deck/:id/import", h.importIntoDeck)
 	router.POST("/deck/:id/bulk-edit", h.bulkEditDeck)
 	router.POST("/deck/:id/switch-foil", h.switchFoil)

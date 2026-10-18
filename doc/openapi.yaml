@@ -2251,8 +2251,11 @@ paths:
         given as pending_id), in the given storage (or without storage),
         adds each one to the deck on the board it was pending on, and
         removes it from the pending list. Without pending_id, pending cards
-        on the considering board are left out. Items are handled one at a time: if something fails,
-        the items already handled stay done and the rest stay pending.
+        on the considering board are left out. A pending commander or second
+        commander keeps its slot: its first new copy fills it. All or
+        nothing: on a failure the error comes alone (no summary) and
+        nothing changed, so retrying never creates duplicates. The deck's
+        updated date moves once per commit.
       requestBody:
         required: false
         content:

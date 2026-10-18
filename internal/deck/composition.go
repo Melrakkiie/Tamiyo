@@ -1,0 +1,28 @@
+package deck
+
+import "context"
+
+// CompositionStore is what a composition operation reads and writes. Every
+// call runs inside the transaction Composer.Compose opened, so the operation
+// applies entirely or not at all.
+type CompositionStore interface {
+	FindByID(ctx context.Context, userID string, id string) (Deck, error)
+	Update(ctx context.Context, userID string, d Deck) (Deck, error)
+
+	FindPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error)
+	UpdatePendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (PendingCard, error)
+	DeletePendingCard(ctx context.Context, userID string, deckID string, id int) error
+
+	LinkCardToDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error
+
+	StorageExists(ctx context.Context, userID string, storageID int) (bool, error)
+	CreateCollectionCard(ctx context.Context, userID string, c DeckCard) (int, error)
+}
+
+// Composer applies a change to one of the user's decks in a single
+// transaction: it locks the deck (ErrNotFound when the user doesn't own it),
+// runs apply, bumps the deck's updated date once and commits. Any error from
+// apply rolls everything back.
+type Composer interface {
+	Compose(ctx context.Context, userID string, deckID string, apply func(CompositionStore) error) error
+}

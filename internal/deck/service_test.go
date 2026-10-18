@@ -119,6 +119,10 @@ func (f *fakeRepository) DeleteTag(ctx context.Context, userID string, deckID st
 	return nil
 }
 
+func (f *fakeRepository) Compose(ctx context.Context, userID string, deckID string, apply func(CompositionStore) error) error {
+	return errors.New("compositions are tested against Postgres")
+}
+
 func (f *fakeRepository) FindPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error) {
 	f.lastUserID = userID
 	return f.pending, nil
@@ -652,28 +656,6 @@ func TestService_UpdateDeck_ClearCommanderClearsBoth(t *testing.T) {
 	assert.Nil(t, result.CommanderID)
 }
 
-func TestService_PromotePendingCommander(t *testing.T) {
-	pendingID := 7
-	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", CommanderPendingID: &pendingID}}
-	service := NewService(repo)
-
-	require.NoError(t, service.PromotePendingCommander(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 7, 42))
-
-	require.NotNil(t, repo.updatedDeck.CommanderID)
-	assert.Equal(t, 42, *repo.updatedDeck.CommanderID)
-	assert.Nil(t, repo.updatedDeck.CommanderPendingID)
-}
-
-func TestService_PromotePendingCommander_IgnoresOtherPendingCards(t *testing.T) {
-	pendingID := 7
-	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", CommanderPendingID: &pendingID}}
-	service := NewService(repo)
-
-	require.NoError(t, service.PromotePendingCommander(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 8, 42))
-
-	assert.Zero(t, repo.updatedDeck.ID)
-}
-
 func TestService_GetSharedDeck_ReturnsOwnerAndDeck(t *testing.T) {
 	repo := &fakeRepository{sharedOwnerID: otherUserID, sharedDeck: Deck{ID: "00000000-0000-0000-0000-000000000004", Name: "Shared"}}
 	service := NewService(repo)
@@ -1099,19 +1081,6 @@ func TestService_UpdateDeck_ClearsOnlyThePartner(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 4, *result.CommanderID)
 	assert.False(t, result.HasPartner())
-}
-
-func TestService_PromotePendingCommander_PromotesThePendingPartner(t *testing.T) {
-	commander, partner := 4, 7
-	repo := &fakeRepository{findByIDDeck: Deck{ID: partnerDeckID, CommanderID: &commander, PartnerPendingID: &partner}}
-	service := NewService(repo)
-
-	require.NoError(t, service.PromotePendingCommander(context.Background(), testUserID, partnerDeckID, 7, 42))
-
-	assert.Equal(t, 4, *repo.updatedDeck.CommanderID)
-	require.NotNil(t, repo.updatedDeck.PartnerID)
-	assert.Equal(t, 42, *repo.updatedDeck.PartnerID)
-	assert.Nil(t, repo.updatedDeck.PartnerPendingID)
 }
 
 func TestService_SetCardCommander_SetsThePartnerSlot(t *testing.T) {

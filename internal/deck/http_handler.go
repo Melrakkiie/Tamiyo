@@ -225,6 +225,7 @@ type deckService interface {
 	AddPendingCard(ctx context.Context, userID string, deckID string, p PendingCard) (PendingCard, error)
 	RemovePendingCard(ctx context.Context, userID string, deckID string, id int) error
 	UpdatePendingCard(ctx context.Context, userID string, deckID string, id int, quantity *int, board *string) (PendingCard, error)
+	CommitPendingCards(ctx context.Context, userID string, deckID string, req PendingCommit) (PendingCommitSummary, error)
 
 	GetCardTags(ctx context.Context, userID string, deckID string) (DeckTags, error)
 	SetCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) (TaggedCard, error)
@@ -260,6 +261,7 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.POST("/deck/:id/pending", h.addPendingCard)
 	router.PATCH("/deck/:id/pending/:pending_id", h.updatePendingCard)
 	router.DELETE("/deck/:id/pending/:pending_id", h.removePendingCard)
+	router.POST("/deck/:id/pending/commit", h.commitPendingCards)
 
 	h.registerTagRoutes(router)
 	h.registerViewRoutes(router)

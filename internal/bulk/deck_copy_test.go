@@ -176,11 +176,11 @@ func TestCollectDeck_PendingCommitsOnlyTheChosenBoards(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 4, summary.CardsCreated)
 	assert.Equal(t, 4, summary.CardsLinked)
-	assert.Len(t, decks.linkedCards[fixtureDeckID], 4)
-	assert.ElementsMatch(t, []int{7, 8}, decks.removedPending)
-	for _, c := range cards.created {
-		assert.Equal(t, 4, *c.StorageID)
-	}
+	assert.ElementsMatch(t, []deck.PendingCommit{
+		{StorageID: ptr(4), PendingID: ptr(7)},
+		{StorageID: ptr(4), PendingID: ptr(8)},
+	}, decks.commits)
+	assert.Empty(t, cards.created)
 }
 
 func TestCollectDeck_AllOnOwnDeckAlsoAddsCopiesOfItsCards(t *testing.T) {
@@ -195,12 +195,12 @@ func TestCollectDeck_AllOnOwnDeckAlsoAddsCopiesOfItsCards(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 7, summary.CardsCreated)
 	assert.Equal(t, 4, summary.CardsLinked)
-	assert.Len(t, decks.linkedCards[fixtureDeckID], 4)
+	assert.Len(t, decks.commits, 2)
 	names := map[string]int{}
 	for _, c := range cards.created {
 		names[c.Name]++
 	}
-	assert.Equal(t, map[string]int{"Tamiyo, Inquisitive Student": 1, "Island": 5, "Sol Ring": 1}, names)
+	assert.Equal(t, map[string]int{"Island": 2, "Sol Ring": 1}, names, "only the owned copies; pending ones are committed")
 }
 
 func TestCollectDeck_AllOnSomeoneElsesDeckCreatesEveryCopy(t *testing.T) {
@@ -237,7 +237,7 @@ func TestCollectDeck_PendingCommitsASplitPendingCommanderOnce(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 3, summary.CardsCreated)
-	assert.Equal(t, []int{7}, decks.removedPending)
+	assert.Equal(t, []deck.PendingCommit{{PendingID: ptr(7)}}, decks.commits)
 }
 
 func TestCollectDeck_AllCreatesProxiesForOwnedAndPendingProxies(t *testing.T) {
