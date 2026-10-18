@@ -24,7 +24,7 @@ func storeFixture() (*fakeCardService, *fakeDeckService, *fakeStorageService) {
 
 func TestStoreDeck_MovesOwnedCopiesOfTheChosenBoards(t *testing.T) {
 	cards, decks, storages := storeFixture()
-	svc := NewService(cards, storages, decks, &fakeResolver{})
+	svc := newTestService(cards, storages, decks, &fakeResolver{})
 
 	summary, err := svc.StoreDeck(context.Background(), testUserID, fixtureDeckID, 4, []string{deck.BoardMain})
 
@@ -36,7 +36,7 @@ func TestStoreDeck_MovesOwnedCopiesOfTheChosenBoards(t *testing.T) {
 
 func TestStoreDeck_IncludesOtherBoardsWhenAsked(t *testing.T) {
 	cards, decks, storages := storeFixture()
-	svc := NewService(cards, storages, decks, &fakeResolver{})
+	svc := newTestService(cards, storages, decks, &fakeResolver{})
 
 	summary, err := svc.StoreDeck(context.Background(), testUserID, fixtureDeckID, 5, []string{deck.BoardMain, deck.BoardSideboard, deck.BoardConsidering})
 
@@ -48,8 +48,8 @@ func TestStoreDeck_IncludesOtherBoardsWhenAsked(t *testing.T) {
 func TestStoreDeck_RejectsBadRequests(t *testing.T) {
 	ctx := context.Background()
 	cards, decks, storages := storeFixture()
-	own := NewService(cards, storages, decks, &fakeResolver{})
-	shared := NewService(&fakeCardService{}, storages, sharedDeckFixture(), &fakeResolver{})
+	own := newTestService(cards, storages, decks, &fakeResolver{})
+	shared := newTestService(&fakeCardService{}, storages, sharedDeckFixture(), &fakeResolver{})
 	main := []string{deck.BoardMain}
 
 	_, err := own.StoreDeck(ctx, testUserID, fixtureDeckID, 4, nil)

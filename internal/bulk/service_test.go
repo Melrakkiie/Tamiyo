@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -188,6 +189,10 @@ type fakeDeckService struct {
 	unlinkedCards    []int
 	commanderCleared bool
 	clearedSlot      deck.CommanderSlot
+
+	collection   *fakeCardService
+	storages     *fakeStorageService
+	findOwnedErr error
 }
 
 func (f *fakeDeckService) RemoveCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error {
@@ -213,6 +218,66 @@ func (f *fakeDeckService) GetSharedDeck(ctx context.Context, id string) (string,
 		}
 	}
 	return "", deck.Deck{}, deck.ErrNotFound
+}
+
+// newTestService lets the fake deck service answer FindOwnedCopies from the
+// collection and storages held by the fake card and storage services.
+func newTestService(cards cardService, storages storageService, decks deckService, scryfall ScryfallResolver) *Service {
+	if d, ok := decks.(*fakeDeckService); ok {
+		d.collection, _ = cards.(*fakeCardService)
+		d.storages, _ = storages.(*fakeStorageService)
+	}
+	return NewService(cards, storages, decks, scryfall)
+}
+
+func (f *fakeDeckService) FindOwnedCopies(ctx context.Context, userID string, targetDeckID string, wanted deck.CopiesWanted) ([]deck.OwnedCopy, error) {
+	if f.findOwnedErr != nil {
+		return nil, f.findOwnedErr
+	}
+	if f.collection == nil {
+		return nil, nil
+	}
+	wantedPrintings := make(map[string]bool, len(wanted.ScryfallIDs))
+	for _, id := range wanted.ScryfallIDs {
+		wantedPrintings[strings.ToLower(id)] = true
+	}
+	wantedNames := make(map[string]bool, len(wanted.Names))
+	for _, name := range wanted.Names {
+		wantedNames[deck.CardNameKey(name)] = true
+	}
+	inDeck, inTarget := map[int]bool{}, map[int]bool{}
+	decks, _, _ := f.GetAllDecks(ctx, userID, deck.Filter{})
+	for _, d := range decks {
+		for _, c := range f.cardsByDeck[d.ID] {
+			inDeck[c.ID] = true
+			if d.ID == targetDeckID {
+				inTarget[c.ID] = true
+			}
+		}
+	}
+	var copies []deck.OwnedCopy
+	for _, c := range f.collection.allCards {
+		if !wantedPrintings[strings.ToLower(c.ScryfallID)] && !wantedNames[deck.CardNameKey(c.Name)] && !wantedNames[deck.CardNameKey(frontFaceName(c.Name))] {
+			continue
+		}
+		copies = append(copies, deck.OwnedCopy{
+			ID: c.ID, Name: c.Name, ScryfallID: c.ScryfallID, Foil: c.Foil, Proxy: c.Proxy,
+			InDeck: inDeck[c.ID], InTargetDeck: inTarget[c.ID], LockedAgainstTarget: f.lockedAgainst(c.StorageID, targetDeckID),
+		})
+	}
+	return copies, nil
+}
+
+func (f *fakeDeckService) lockedAgainst(storageID *int, deckID string) bool {
+	if storageID == nil || f.storages == nil {
+		return false
+	}
+	for _, st := range f.storages.storages {
+		if st.ID == *storageID {
+			return st.Locked && !slices.Contains(st.AllowedDeckIDs, deckID)
+		}
+	}
+	return false
 }
 
 func (f *fakeDeckService) CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error) {
@@ -398,7 +463,7 @@ Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,2
 	cards := &fakeCardService{}
 	storages := &fakeStorageService{}
 	decks := &fakeDeckService{}
-	svc := NewService(cards, storages, decks, &fakeResolver{})
+	svc := newTestService(cards, storages, decks, &fakeResolver{})
 
 	summary, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
@@ -420,7 +485,7 @@ Atraxa Deck,deck,Counterspell,CLB,bbbbbbbb-0000-0000-0000-000000000000,1,,1
 	cards := &fakeCardService{}
 	storages := &fakeStorageService{storages: []storage.Storage{{ID: 4, Name: "Box", Type: "box"}}}
 	decks := &fakeDeckService{}
-	svc := NewService(cards, storages, decks, &fakeResolver{})
+	svc := newTestService(cards, storages, decks, &fakeResolver{})
 
 	summary, err := svc.ImportManaBox(context.Background(), testUserID, ptr(4), strings.NewReader(csv))
 
@@ -443,7 +508,7 @@ func TestImportManaBox_IntoAnUnknownStorageFails(t *testing.T) {
 Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
 `
 	cards := &fakeCardService{}
-	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
 	_, err := svc.ImportManaBox(context.Background(), testUserID, ptr(4), strings.NewReader(csv))
 
@@ -461,7 +526,7 @@ Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
 	resolver := &fakeResolver{resolved: map[string]ResolvedCard{
 		resolveKeyByID("aaaaaaaa-0000-0000-0000-000000000000"): {ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000", ManaValue: 1},
 	}}
-	svc := NewService(cards, storages, decks, resolver)
+	svc := newTestService(cards, storages, decks, resolver)
 
 	_, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
@@ -478,7 +543,7 @@ Main Binder,binder,Anneau solaire,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,
 	resolver := &fakeResolver{resolved: map[string]ResolvedCard{
 		resolveKeyByID("aaaaaaaa-0000-0000-0000-000000000000"): {ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000", Name: "Sol Ring", ManaValue: 1},
 	}}
-	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, resolver)
+	svc := newTestService(cards, &fakeStorageService{}, &fakeDeckService{}, resolver)
 
 	_, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
@@ -495,7 +560,7 @@ Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
 	storages := &fakeStorageService{}
 	decks := &fakeDeckService{}
 	resolver := &fakeResolver{err: errors.New("scryfall unreachable")}
-	svc := NewService(cards, storages, decks, resolver)
+	svc := newTestService(cards, storages, decks, resolver)
 
 	summary, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
@@ -515,7 +580,7 @@ Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
 	cards := &fakeCardService{}
 	storages := &fakeStorageService{storages: []storage.Storage{{ID: 42, Name: "Main Binder", Type: "binder"}}}
 	decks := &fakeDeckService{}
-	svc := NewService(cards, storages, decks, &fakeResolver{})
+	svc := newTestService(cards, storages, decks, &fakeResolver{})
 
 	summary, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
@@ -531,7 +596,7 @@ Atraxa Deck,deck,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
 	cards := &fakeCardService{}
 	storages := &fakeStorageService{}
 	decks := &fakeDeckService{}
-	svc := NewService(cards, storages, decks, &fakeResolver{})
+	svc := newTestService(cards, storages, decks, &fakeResolver{})
 
 	summary, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
@@ -552,7 +617,7 @@ Atraxa Deck,deck,Lightning Bolt,CMM,bbbbbbbb-0000-0000-0000-000000000000,456,,1
 	cards := &fakeCardService{}
 	storages := &fakeStorageService{}
 	decks := &fakeDeckService{}
-	svc := NewService(cards, storages, decks, &fakeResolver{})
+	svc := newTestService(cards, storages, decks, &fakeResolver{})
 
 	summary, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
@@ -569,7 +634,7 @@ Atraxa Deck,deck,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
 	cards := &fakeCardService{}
 	storages := &fakeStorageService{}
 	decks := &fakeDeckService{createDeckErr: errors.New("db is down")}
-	svc := NewService(cards, storages, decks, &fakeResolver{})
+	svc := newTestService(cards, storages, decks, &fakeResolver{})
 
 	_, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
@@ -584,7 +649,7 @@ Main Binder,binder,Lightning Bolt,CMM,bbbbbbbb-0000-0000-0000-000000000000,456,,
 	cards := &fakeCardService{createErr: errors.New("boom")}
 	storages := &fakeStorageService{}
 	decks := &fakeDeckService{}
-	svc := NewService(cards, storages, decks, &fakeResolver{})
+	svc := newTestService(cards, storages, decks, &fakeResolver{})
 
 	summary, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
@@ -595,7 +660,7 @@ Main Binder,binder,Lightning Bolt,CMM,bbbbbbbb-0000-0000-0000-000000000000,456,,
 }
 
 func TestImportManaBox_InvalidFileReturnsErrInvalidFile(t *testing.T) {
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
 	_, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader("not,a,valid,header\n"))
 
@@ -612,7 +677,7 @@ func TestImportMoxfieldCollection_ResolvesAndCreatesCards(t *testing.T) {
 	cards := &fakeCardService{}
 	storages := &fakeStorageService{storages: []storage.Storage{{ID: 7, Name: "Binder", Type: "binder"}}}
 	resolver := &fakeResolver{resolved: map[string]ResolvedCard{resolveKey("sld", "1011"): {ScryfallID: "cccccccc-0000-0000-0000-000000000000", ManaValue: 1}}}
-	svc := NewService(cards, storages, &fakeDeckService{}, resolver)
+	svc := newTestService(cards, storages, &fakeDeckService{}, resolver)
 
 	summary, err := svc.ImportMoxfieldCollection(context.Background(), testUserID, 7, strings.NewReader(csv))
 
@@ -632,7 +697,7 @@ func TestImportMoxfieldCollection_StoresTheEnglishScryfallName(t *testing.T) {
 	cards := &fakeCardService{}
 	storages := &fakeStorageService{storages: []storage.Storage{{ID: 7, Name: "Binder", Type: "binder"}}}
 	resolver := &fakeResolver{resolved: map[string]ResolvedCard{resolveKey("sld", "1011"): {ScryfallID: solRingID, Name: "Sol Ring", ManaValue: 1}}}
-	svc := NewService(cards, storages, &fakeDeckService{}, resolver)
+	svc := newTestService(cards, storages, &fakeDeckService{}, resolver)
 
 	_, err := svc.ImportMoxfieldCollection(context.Background(), testUserID, 7, strings.NewReader(csv))
 
@@ -647,7 +712,7 @@ func TestImportMoxfieldCollection_SkipsUnresolvedCards(t *testing.T) {
 `
 	cards := &fakeCardService{}
 	storages := &fakeStorageService{storages: []storage.Storage{{ID: 7}}}
-	svc := NewService(cards, storages, &fakeDeckService{}, &fakeResolver{})
+	svc := newTestService(cards, storages, &fakeDeckService{}, &fakeResolver{})
 
 	summary, err := svc.ImportMoxfieldCollection(context.Background(), testUserID, 7, strings.NewReader(csv))
 
@@ -658,7 +723,7 @@ func TestImportMoxfieldCollection_SkipsUnresolvedCards(t *testing.T) {
 }
 
 func TestImportMoxfieldCollection_UnknownStorageReturnsErrTargetStorageNotFound(t *testing.T) {
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
 	_, err := svc.ImportMoxfieldCollection(context.Background(), testUserID, 99, strings.NewReader("Count,Name,Edition,Foil,Collector Number\n"))
 
@@ -672,7 +737,7 @@ func TestImportMoxfieldCollection_ScryfallFailureReturnsErrScryfallUnavailable(t
 `
 	storages := &fakeStorageService{storages: []storage.Storage{{ID: 7}}}
 	resolver := &fakeResolver{err: errors.New("network down")}
-	svc := NewService(&fakeCardService{}, storages, &fakeDeckService{}, resolver)
+	svc := newTestService(&fakeCardService{}, storages, &fakeDeckService{}, resolver)
 
 	_, err := svc.ImportMoxfieldCollection(context.Background(), testUserID, 7, strings.NewReader(csv))
 
@@ -708,7 +773,7 @@ func withTargetDeck(decks *fakeDeckService) *fakeDeckService {
 
 func importDeck(t *testing.T, cards *fakeCardService, decks *fakeDeckService, decklist string, commanderFromFirstLine bool) Summary {
 	t.Helper()
-	svc := NewService(cards, &fakeStorageService{}, withTargetDeck(decks), deckImportResolver())
+	svc := newTestService(cards, &fakeStorageService{}, withTargetDeck(decks), deckImportResolver())
 	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{CommanderFromFirstLine: commanderFromFirstLine}, strings.NewReader(decklist))
 	require.NoError(t, err)
 	return summary
@@ -755,7 +820,7 @@ func TestImportIntoDeck_SkipsCopiesInStoragesClosedToTheDeck(t *testing.T) {
 		{ID: 3, Name: "Binder", AllowedDeckIDs: []string{"00000000-0000-0000-0000-000000000099"}},
 	}}
 	decks := withTargetDeck(&fakeDeckService{})
-	svc := NewService(cards, storages, decks, deckImportResolver())
+	svc := newTestService(cards, storages, decks, deckImportResolver())
 
 	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader("3 Sol Ring (SLD) 1011\n"))
 
@@ -776,14 +841,14 @@ func TestImportIntoDeck_IncludeLockedStoragesUsesOpenCopiesFirst(t *testing.T) {
 	}}
 
 	decks := withTargetDeck(&fakeDeckService{})
-	svc := NewService(cards, storages, decks, deckImportResolver())
+	svc := newTestService(cards, storages, decks, deckImportResolver())
 	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{IncludeLockedStorages: true}, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
 	require.NoError(t, err)
 	assert.Equal(t, 1, summary.CardsLinked)
 	assert.Equal(t, []int{7}, decks.linkedCards[targetDeckID])
 
 	decks = withTargetDeck(&fakeDeckService{})
-	svc = NewService(cards, storages, decks, deckImportResolver())
+	svc = newTestService(cards, storages, decks, deckImportResolver())
 	summary, err = svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{IncludeLockedStorages: true}, strings.NewReader("2 Sol Ring (SLD) 1011\n"))
 	require.NoError(t, err)
 	assert.Equal(t, 2, summary.CardsLinked)
@@ -928,7 +993,7 @@ func plainListResolver() *fakeResolver {
 
 func importPlainList(t *testing.T, cards *fakeCardService, decks *fakeDeckService, decklist string) Summary {
 	t.Helper()
-	svc := NewService(cards, &fakeStorageService{}, withTargetDeck(decks), plainListResolver())
+	svc := newTestService(cards, &fakeStorageService{}, withTargetDeck(decks), plainListResolver())
 	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader(decklist))
 	require.NoError(t, err)
 	return summary
@@ -985,7 +1050,7 @@ func TestImportIntoDeck_PlainListWarnsAboutUnknownNames(t *testing.T) {
 
 func importIntoDeck(t *testing.T, cards *fakeCardService, decks *fakeDeckService, decklist string, commanderFromFirstLine bool) Summary {
 	t.Helper()
-	svc := NewService(cards, &fakeStorageService{}, decks, deckImportResolver())
+	svc := newTestService(cards, &fakeStorageService{}, decks, deckImportResolver())
 	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{CommanderFromFirstLine: commanderFromFirstLine}, strings.NewReader(decklist))
 	require.NoError(t, err)
 	return summary
@@ -1037,7 +1102,7 @@ func TestImportIntoDeck_SetsTheCommanderOnlyWhenTheDeckHasNone(t *testing.T) {
 }
 
 func TestImportIntoDeck_ReturnsDeckNotFound(t *testing.T) {
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, deckImportResolver())
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, deckImportResolver())
 
 	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader("1 Sol Ring\n"))
 
@@ -1046,15 +1111,15 @@ func TestImportIntoDeck_ReturnsDeckNotFound(t *testing.T) {
 
 func TestImportIntoDeck_ReturnsErrorWhenScryfallResolveFails(t *testing.T) {
 	resolver := &fakeResolver{err: errors.New("scryfall is down")}
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, withTargetDeck(&fakeDeckService{}), resolver)
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, withTargetDeck(&fakeDeckService{}), resolver)
 
 	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
 
 	assert.ErrorIs(t, err, ErrScryfallUnavailable)
 }
 
-func TestImportIntoDeck_ReturnsErrorWhenTheCollectionCannotBeLoaded(t *testing.T) {
-	svc := NewService(&fakeCardService{getAllErr: errors.New("db is down")}, &fakeStorageService{}, withTargetDeck(&fakeDeckService{}), deckImportResolver())
+func TestImportIntoDeck_ReturnsErrorWhenOwnedCopiesCannotBeFound(t *testing.T) {
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, withTargetDeck(&fakeDeckService{findOwnedErr: errors.New("db is down")}), deckImportResolver())
 
 	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
 
@@ -1091,7 +1156,7 @@ Main Binder,binder,Lightning Helix,RAV,aaaaaaaa-0000-0000-0000-000000000000,213,
 			ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000", ManaValue: 2, Colors: "WR", CardType: "Instant", ColorIdentity: "WR",
 		},
 	}}
-	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, resolver)
+	svc := newTestService(cards, &fakeStorageService{}, &fakeDeckService{}, resolver)
 
 	_, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
@@ -1110,7 +1175,7 @@ func TestImportManaBox_LeavesColorsAndTypeUnknownWhenScryfallMissesTheCard(t *te
 Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
 `
 	cards := &fakeCardService{}
-	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
 	_, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
@@ -1130,7 +1195,7 @@ func TestRefreshCardDetails_FillsMissingDetailsFromScryfall(t *testing.T) {
 			ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000", ManaValue: 1, Colors: "", CardType: "Artifact", ColorIdentity: "",
 		},
 	}}
-	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, resolver)
+	svc := newTestService(cards, &fakeStorageService{}, &fakeDeckService{}, resolver)
 
 	summary, err := svc.RefreshCardDetails(context.Background(), testUserID, 0)
 
@@ -1154,7 +1219,7 @@ func TestRefreshCardDetails_ReturnsCursorWhenCardsRemain(t *testing.T) {
 	resolver := &fakeResolver{resolved: map[string]ResolvedCard{
 		resolveKeyByID("aaaaaaaa-0000-0000-0000-000000000000"): {ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000", CardType: "Artifact"},
 	}}
-	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, resolver)
+	svc := newTestService(cards, &fakeStorageService{}, &fakeDeckService{}, resolver)
 
 	summary, err := svc.RefreshCardDetails(context.Background(), testUserID, 10)
 
@@ -1168,7 +1233,7 @@ func TestRefreshCardDetails_ReturnsCursorWhenCardsRemain(t *testing.T) {
 
 func TestRefreshCardDetails_DoesNothingWhenNoCardIsMissingDetails(t *testing.T) {
 	resolver := &fakeResolver{err: errors.New("must not be called")}
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, resolver)
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, resolver)
 
 	summary, err := svc.RefreshCardDetails(context.Background(), testUserID, 0)
 
@@ -1179,7 +1244,7 @@ func TestRefreshCardDetails_DoesNothingWhenNoCardIsMissingDetails(t *testing.T) 
 func TestRefreshCardDetails_ReturnsScryfallUnavailable(t *testing.T) {
 	cards := &fakeCardService{missingDetails: []card.Card{{ID: 1, ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000"}}}
 	resolver := &fakeResolver{err: errors.New("timeout")}
-	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, resolver)
+	svc := newTestService(cards, &fakeStorageService{}, &fakeDeckService{}, resolver)
 
 	_, err := svc.RefreshCardDetails(context.Background(), testUserID, 0)
 
@@ -1194,7 +1259,7 @@ func TestCommitPendingCards_CreatesEachCopyAndPutsItInTheDeck(t *testing.T) {
 		{ID: 2, Name: "Sol Ring", ScryfallID: "bbbbbbbb-0000-0000-0000-000000000000", SetCode: "c21", CollectorNumber: "263", Quantity: 1, Foil: true, Proxy: true},
 	}}
 	storages := &fakeStorageService{storages: []storage.Storage{{ID: 4, Name: "Binder"}}}
-	svc := NewService(cards, storages, decks, &fakeResolver{})
+	svc := newTestService(cards, storages, decks, &fakeResolver{})
 	storageID := 4
 
 	summary, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", &storageID, nil, nil)
@@ -1217,7 +1282,7 @@ func TestCommitPendingCards_CreatesEachCopyAndPutsItInTheDeck(t *testing.T) {
 func TestCommitPendingCards_RejectsAnUnknownStorage(t *testing.T) {
 	cards := &fakeCardService{}
 	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 1, Name: "Sol Ring", Quantity: 1}}}
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 	storageID := 42
 
 	_, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", &storageID, nil, nil)
@@ -1229,7 +1294,7 @@ func TestCommitPendingCards_RejectsAnUnknownStorage(t *testing.T) {
 
 func TestCommitPendingCards_ReturnsDeckNotFound(t *testing.T) {
 	decks := &fakeDeckService{getDeckErr: deck.ErrNotFound}
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	_, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, nil, nil)
 
@@ -1239,7 +1304,7 @@ func TestCommitPendingCards_ReturnsDeckNotFound(t *testing.T) {
 func TestCommitPendingCards_KeepsTheItemWhenCreationFails(t *testing.T) {
 	cards := &fakeCardService{createErr: errors.New("database down")}
 	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 1, Name: "Sol Ring", Quantity: 1}}}
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	_, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, nil, nil)
 
@@ -1253,7 +1318,7 @@ func TestCommitPendingCards_CanCommitASingleCard(t *testing.T) {
 		{ID: 1, Name: "Lightning Bolt", Quantity: 1},
 		{ID: 2, Name: "Sol Ring", Quantity: 2},
 	}}
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 	pendingID := 2
 
 	summary, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, &pendingID, nil)
@@ -1268,7 +1333,7 @@ func TestCommitPendingCards_CanCommitASingleCard(t *testing.T) {
 func TestCommitPendingCards_CanCommitPartOfAPendingCard(t *testing.T) {
 	cards := &fakeCardService{}
 	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 2, Name: "Island", Quantity: 34}}}
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 	pendingID, quantity := 2, 10
 
 	summary, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, &pendingID, &quantity)
@@ -1283,7 +1348,7 @@ func TestCommitPendingCards_CanCommitPartOfAPendingCard(t *testing.T) {
 func TestCommitPendingCards_ClampsTheQuantityToThePendingCard(t *testing.T) {
 	cards := &fakeCardService{}
 	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 2, Name: "Island", Quantity: 3}}}
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 	pendingID, quantity := 2, 10
 
 	summary, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, &pendingID, &quantity)
@@ -1297,7 +1362,7 @@ func TestCommitPendingCards_ClampsTheQuantityToThePendingCard(t *testing.T) {
 func TestCommitPendingCards_ReturnsNotFoundForAnUnknownPendingCard(t *testing.T) {
 	cards := &fakeCardService{}
 	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 1, Name: "Lightning Bolt", Quantity: 1}}}
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 	pendingID := 42
 
 	_, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, &pendingID, nil)
@@ -1309,7 +1374,7 @@ func TestCommitPendingCards_ReturnsNotFoundForAnUnknownPendingCard(t *testing.T)
 func TestCommitPendingCards_OffersEachItemAsCommanderOnce(t *testing.T) {
 	cards := &fakeCardService{}
 	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 3, Name: "Atraxa", Quantity: 2}}}
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	_, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, nil, nil)
 
@@ -1324,7 +1389,7 @@ func TestCommitPendingCards_CommitAllSkipsConsideringCardsAndKeepsTheBoard(t *te
 		{ID: 1, Name: "Duress", Quantity: 1, Board: deck.BoardSideboard},
 		{ID: 2, Name: "Opt", Quantity: 1, Board: deck.BoardConsidering},
 	}}
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	summary, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, nil, nil)
 
@@ -1341,7 +1406,7 @@ func TestCommitPendingCards_CommitAllSkipsConsideringCardsAndKeepsTheBoard(t *te
 func TestCommitPendingCards_CanCommitASingleConsideringCard(t *testing.T) {
 	cards := &fakeCardService{}
 	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 2, Name: "Opt", Quantity: 1, Board: deck.BoardConsidering}}}
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 	pendingID := 2
 
 	summary, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, &pendingID, nil)

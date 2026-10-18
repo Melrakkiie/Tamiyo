@@ -56,6 +56,7 @@ type deckService interface {
 	GetDeckContent(ctx context.Context, userID string, deckID string) (deck.DeckContent, error)
 	GetSharedDeck(ctx context.Context, id string) (string, deck.Deck, error)
 	CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error)
+	FindOwnedCopies(ctx context.Context, userID string, targetDeckID string, wanted deck.CopiesWanted) ([]deck.OwnedCopy, error)
 	CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error)
 	DeleteDeck(ctx context.Context, userID string, id string) error
 	PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error
@@ -267,10 +268,6 @@ func (s *Service) exportedCards(ctx context.Context, userID string, storageID *i
 		return nil, fmt.Errorf("loading cards: %w", err)
 	}
 	return cards, nil
-}
-
-func (s *Service) loadAllCards(ctx context.Context, userID string) ([]card.Card, error) {
-	return s.loadCards(ctx, userID, nil)
 }
 
 func (s *Service) loadCards(ctx context.Context, userID string, storageID *int) ([]card.Card, error) {

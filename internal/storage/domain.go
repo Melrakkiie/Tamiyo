@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"errors"
-	"slices"
 	"time"
 )
 
@@ -28,10 +27,6 @@ type Storage struct {
 type Value struct {
 	EUR float64
 	USD float64
-}
-
-func (s Storage) OpenTo(deckID string) bool {
-	return !s.Locked || slices.Contains(s.AllowedDeckIDs, deckID)
 }
 
 type Filter struct {

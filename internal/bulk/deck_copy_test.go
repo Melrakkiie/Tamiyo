@@ -43,7 +43,7 @@ func TestDuplicateDeck_CopiesOwnDeckAsPrivate(t *testing.T) {
 	folderID := 7
 	decks.decks[0].FolderID = &folderID
 	decks.decks[0].Favorite = true
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
 	targetFolderID := 9
 
 	result, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{Name: "  Tempo v2 ", FolderID: &targetFolderID})
@@ -71,7 +71,7 @@ func TestDuplicateDeck_EmptyRequestGivesDefaultNameAndNoFolder(t *testing.T) {
 	decks := copyDeckFixture()
 	folderID := 7
 	decks.decks[0].FolderID = &folderID
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
 
 	_, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{Name: "   "})
 
@@ -84,7 +84,7 @@ func TestDuplicateDeck_EmptyRequestGivesDefaultNameAndNoFolder(t *testing.T) {
 
 func TestDuplicateDeck_UsesTheChosenVisibility(t *testing.T) {
 	decks := copyDeckFixture()
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
 
 	_, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{Visibility: deck.VisibilityUnlisted})
 
@@ -97,7 +97,7 @@ func TestDuplicateDeck_CopiesSomeoneElsesSharedDeck(t *testing.T) {
 	decks := sharedDeckFixture()
 	folderID := 7
 	decks.decks[0].FolderID = &folderID
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
 
 	result, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{})
 
@@ -112,7 +112,7 @@ func TestDuplicateDeck_KeepsOwnedAndPendingProxiesAsProxies(t *testing.T) {
 	decks := proxyDeckFixture()
 	decks.nextID = 50
 	cards := &fakeCardService{allCards: []card.Card{{ID: 41, Name: "Sol Ring", ScryfallID: solRingSLD, Proxy: true}}}
-	svc := NewService(cards, &fakeStorageService{}, decks, tamiyoResolver())
+	svc := newTestService(cards, &fakeStorageService{}, decks, tamiyoResolver())
 
 	result, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{})
 
@@ -132,7 +132,7 @@ func TestDuplicateDeck_KeepsOwnedAndPendingProxiesAsProxies(t *testing.T) {
 
 func TestDuplicateDeck_EmptyDeckGivesAnEmptyCopy(t *testing.T) {
 	decks := &fakeDeckService{nextID: 50, decks: []deck.Deck{{ID: fixtureDeckID, Name: "Vide", Format: "modern"}}}
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
 
 	result, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{})
 
@@ -144,7 +144,7 @@ func TestDuplicateDeck_EmptyDeckGivesAnEmptyCopy(t *testing.T) {
 
 func TestDuplicateDeck_RemovesTheCopyWhenScryfallFails(t *testing.T) {
 	decks := copyDeckFixture()
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{err: errors.New("down")})
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{err: errors.New("down")})
 
 	_, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{})
 
@@ -155,7 +155,7 @@ func TestDuplicateDeck_RemovesTheCopyWhenScryfallFails(t *testing.T) {
 
 func TestDuplicateDeck_UnknownDeck(t *testing.T) {
 	decks := tamiyoDeckFixture()
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
 
 	_, err := svc.DuplicateDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000099", DuplicateRequest{})
 
@@ -167,7 +167,7 @@ func TestCollectDeck_PendingCommitsOnlyTheChosenBoards(t *testing.T) {
 	cards := &fakeCardService{}
 	decks := tamiyoDeckFixture()
 	storages := &fakeStorageService{storages: []storage.Storage{{ID: 4, Name: "Box", Type: "box"}}}
-	svc := NewService(cards, storages, decks, &fakeResolver{})
+	svc := newTestService(cards, storages, decks, &fakeResolver{})
 
 	summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{
 		Mode: CollectPending, StorageID: ptr(4), Boards: []string{deck.BoardMain, deck.BoardSideboard},
@@ -186,7 +186,7 @@ func TestCollectDeck_PendingCommitsOnlyTheChosenBoards(t *testing.T) {
 func TestCollectDeck_AllOnOwnDeckAlsoAddsCopiesOfItsCards(t *testing.T) {
 	cards := &fakeCardService{}
 	decks := tamiyoDeckFixture()
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{
 		Mode: CollectAll, Boards: []string{deck.BoardMain},
@@ -206,7 +206,7 @@ func TestCollectDeck_AllOnOwnDeckAlsoAddsCopiesOfItsCards(t *testing.T) {
 func TestCollectDeck_AllOnSomeoneElsesDeckCreatesEveryCopy(t *testing.T) {
 	cards := &fakeCardService{}
 	decks := sharedDeckFixture()
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{
 		Mode: CollectAll, Boards: []string{deck.BoardMain, deck.BoardSideboard, deck.BoardConsidering},
@@ -231,7 +231,7 @@ func TestCollectDeck_PendingCommitsASplitPendingCommanderOnce(t *testing.T) {
 			{Name: "Relentless Rats", ScryfallID: solRingSLD, Board: deck.BoardMain, Pending: []deck.PendingPart{{ID: 7, Quantity: 2}}},
 		}},
 	}
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{Mode: CollectPending, Boards: []string{deck.BoardMain}})
 
@@ -244,7 +244,7 @@ func TestCollectDeck_AllCreatesProxiesForOwnedAndPendingProxies(t *testing.T) {
 	cards := &fakeCardService{}
 	decks := proxyDeckFixture()
 	decks.owners = map[string]string{fixtureDeckID: otherUserID}
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{
 		Mode: CollectAll, Boards: []string{deck.BoardMain, deck.BoardSideboard},
@@ -267,7 +267,7 @@ func TestCollectDeck_MissingSkipsCopiesAlreadyOwnedInAnyPrinting(t *testing.T) {
 	cards := &fakeCardService{}
 	decks := sharedDeckFixture()
 	decks.ownedCopies = map[string]int{"island": 4, "duress": 1}
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{
 		Mode: CollectMissing, Boards: []string{deck.BoardMain, deck.BoardSideboard, deck.BoardConsidering},
@@ -285,8 +285,8 @@ func TestCollectDeck_MissingSkipsCopiesAlreadyOwnedInAnyPrinting(t *testing.T) {
 
 func TestCollectDeck_RejectsBadRequests(t *testing.T) {
 	ctx := context.Background()
-	own := NewService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{})
-	shared := NewService(&fakeCardService{}, &fakeStorageService{}, sharedDeckFixture(), &fakeResolver{})
+	own := newTestService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{})
+	shared := newTestService(&fakeCardService{}, &fakeStorageService{}, sharedDeckFixture(), &fakeResolver{})
 	main := []string{deck.BoardMain}
 
 	_, err := own.CollectDeck(ctx, testUserID, fixtureDeckID, CollectRequest{Mode: "everything", Boards: main})
