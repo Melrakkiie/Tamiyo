@@ -909,6 +909,10 @@ func TestService_BrowsePublicDecks_PassesTheFilter(t *testing.T) {
 	assert.Equal(t, "ott", repo.lastPublicFilter.Name)
 }
 
+func (f *fakeRepository) FindOwnedCopies(ctx context.Context, userID string, targetDeckID string, scryfallIDs []string, nameKeys []string) ([]OwnedCopy, error) {
+	return nil, nil
+}
+
 func (f *fakeRepository) CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error) {
 	f.lastUserID = userID
 	counts := map[string]int{}

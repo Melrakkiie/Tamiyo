@@ -22,7 +22,7 @@ func proxyFixture() (*fakeCardService, *fakeDeckService) {
 
 func TestSwitchProxy_LinksAFreeProxyCopyOfTheSameFinish(t *testing.T) {
 	cards, decks := proxyFixture()
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	summary, err := svc.SwitchProxy(context.Background(), testUserID, fixtureDeckID, ProxySwitch{CardIDs: []int{2}, Proxy: true})
 
@@ -37,7 +37,7 @@ func TestSwitchProxy_LinksAFreeProxyCopyOfTheSameFinish(t *testing.T) {
 
 func TestSwitchProxy_GoesPendingWithoutAFreeProxyCopy(t *testing.T) {
 	cards, decks := proxyFixture()
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	summary, err := svc.SwitchProxy(context.Background(), testUserID, fixtureDeckID, ProxySwitch{CardIDs: []int{4}, Proxy: true})
 
@@ -61,7 +61,7 @@ func TestSwitchProxy_PendingProxySwitchesBack(t *testing.T) {
 		card.Card{ID: 70, Name: "Island", ScryfallID: islandNEO},
 		card.Card{ID: 71, Name: "Island", ScryfallID: islandNEO},
 	)
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	summary, err := svc.SwitchProxy(context.Background(), testUserID, fixtureDeckID, ProxySwitch{PendingIDs: []int{10, 8}, Proxy: false})
 
@@ -78,7 +78,7 @@ func TestSwitchProxy_MovesTheCommander(t *testing.T) {
 	cards, decks := proxyFixture()
 	decks.decks[0].CommanderPendingID = nil
 	decks.decks[0].CommanderID = ptr(1)
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	_, err := svc.SwitchProxy(context.Background(), testUserID, fixtureDeckID, ProxySwitch{CardIDs: []int{1}, Proxy: true})
 	require.NoError(t, err)
@@ -94,7 +94,7 @@ func TestSwitchProxy_MovesTheCommander(t *testing.T) {
 
 func TestSwitchProxy_IgnoresCardsAlreadyInThatStateAndRejectsOthers(t *testing.T) {
 	cards, decks := proxyFixture()
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	summary, err := svc.SwitchProxy(context.Background(), testUserID, fixtureDeckID, ProxySwitch{CardIDs: []int{1}, Proxy: false})
 	require.NoError(t, err)

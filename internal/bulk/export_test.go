@@ -25,7 +25,7 @@ func TestExportManaBox_GroupsIdenticalCardsByStorageIntoOneRowWithQuantity(t *te
 		{Name: "Sol Ring", SetCode: "CMM", ScryfallID: "aaaa", CollectorNumber: "123", StorageID: ptr(7)},
 	}}
 	storages := &fakeStorageService{storages: []storage.Storage{{ID: 7, Name: "Main Binder", Type: "binder"}}}
-	svc := NewService(cards, storages, &fakeDeckService{}, &fakeResolver{})
+	svc := newTestService(cards, storages, &fakeDeckService{}, &fakeResolver{})
 
 	var buf bytes.Buffer
 	err := svc.ExportManaBox(context.Background(), testUserID, nil, &buf)
@@ -46,7 +46,7 @@ func TestExportManaBox_UsesDeckBinderTypeForDeckboxStorages(t *testing.T) {
 		{ID: 9, Name: "Atraxa Deck", Type: "deckbox"},
 		{ID: 10, Name: "Old Deck", Type: "Deck"},
 	}}
-	svc := NewService(cards, storages, &fakeDeckService{}, &fakeResolver{})
+	svc := newTestService(cards, storages, &fakeDeckService{}, &fakeResolver{})
 
 	var buf bytes.Buffer
 	require.NoError(t, svc.ExportManaBox(context.Background(), testUserID, nil, &buf))
@@ -61,7 +61,7 @@ func TestExportManaBox_GroupsCardsWithNilStorageUnderUnsortedBucketSortedLast(t 
 		{Name: "Sol Ring", SetCode: "CMM", CollectorNumber: "123", StorageID: ptr(7)},
 	}}
 	storages := &fakeStorageService{storages: []storage.Storage{{ID: 7, Name: "Main Binder", Type: "binder"}}}
-	svc := NewService(cards, storages, &fakeDeckService{}, &fakeResolver{})
+	svc := newTestService(cards, storages, &fakeDeckService{}, &fakeResolver{})
 
 	var buf bytes.Buffer
 	require.NoError(t, svc.ExportManaBox(context.Background(), testUserID, nil, &buf))
@@ -78,7 +78,7 @@ func TestExportManaBox_DistinguishesFoilFromNonFoilAsSeparateRows(t *testing.T) 
 		{Name: "Sol Ring", SetCode: "CMM", CollectorNumber: "123", Foil: true, StorageID: ptr(7)},
 	}}
 	storages := &fakeStorageService{storages: []storage.Storage{{ID: 7, Name: "Main Binder", Type: "binder"}}}
-	svc := NewService(cards, storages, &fakeDeckService{}, &fakeResolver{})
+	svc := newTestService(cards, storages, &fakeDeckService{}, &fakeResolver{})
 
 	var buf bytes.Buffer
 	require.NoError(t, svc.ExportManaBox(context.Background(), testUserID, nil, &buf))
@@ -91,7 +91,7 @@ func TestExportManaBox_DistinguishesFoilFromNonFoilAsSeparateRows(t *testing.T) 
 
 func TestExportManaBox_PropagatesCardLoadError(t *testing.T) {
 	cards := &fakeCardService{getAllErr: errors.New("db down")}
-	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
 	err := svc.ExportManaBox(context.Background(), testUserID, nil, &bytes.Buffer{})
 
@@ -101,7 +101,7 @@ func TestExportManaBox_PropagatesCardLoadError(t *testing.T) {
 func TestExportManaBox_PropagatesStorageLoadError(t *testing.T) {
 	cards := &fakeCardService{allCards: []card.Card{{Name: "Sol Ring", StorageID: ptr(7)}}}
 	storages := &fakeStorageService{getAllErr: errors.New("db down")}
-	svc := NewService(cards, storages, &fakeDeckService{}, &fakeResolver{})
+	svc := newTestService(cards, storages, &fakeDeckService{}, &fakeResolver{})
 
 	err := svc.ExportManaBox(context.Background(), testUserID, nil, &bytes.Buffer{})
 
@@ -109,7 +109,7 @@ func TestExportManaBox_PropagatesStorageLoadError(t *testing.T) {
 }
 
 func TestExportManaBox_EmptyCollectionProducesHeaderOnly(t *testing.T) {
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
 	var buf bytes.Buffer
 	require.NoError(t, svc.ExportManaBox(context.Background(), testUserID, nil, &buf))
@@ -124,7 +124,7 @@ func TestExportMoxfieldCollection_GroupsAcrossStoragesRegardlessOfBucket(t *test
 		{Name: "Sol Ring", SetCode: "SLD", CollectorNumber: "1011", StorageID: ptr(7)},
 		{Name: "Sol Ring", SetCode: "SLD", CollectorNumber: "1011", StorageID: nil},
 	}}
-	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
 	var buf bytes.Buffer
 	require.NoError(t, svc.ExportMoxfieldCollection(context.Background(), testUserID, nil, &buf))
@@ -139,7 +139,7 @@ func TestExportMoxfieldCollection_LowercasesSetCode(t *testing.T) {
 	cards := &fakeCardService{allCards: []card.Card{
 		{Name: "Sol Ring", SetCode: "SLD", CollectorNumber: "1011"},
 	}}
-	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
 	var buf bytes.Buffer
 	require.NoError(t, svc.ExportMoxfieldCollection(context.Background(), testUserID, nil, &buf))
@@ -153,7 +153,7 @@ func TestExportMoxfieldCollection_MarksFoilCardsAndSortsByNameThenSetThenCollect
 		{Name: "Counterspell", SetCode: "CLB", CollectorNumber: "2"},
 		{Name: "Counterspell", SetCode: "CLB", CollectorNumber: "1"},
 	}}
-	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
 	var buf bytes.Buffer
 	require.NoError(t, svc.ExportMoxfieldCollection(context.Background(), testUserID, nil, &buf))
@@ -167,7 +167,7 @@ func TestExportMoxfieldCollection_MarksFoilCardsAndSortsByNameThenSetThenCollect
 
 func TestExportMoxfieldCollection_PropagatesCardLoadError(t *testing.T) {
 	cards := &fakeCardService{getAllErr: errors.New("db down")}
-	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
 	err := svc.ExportMoxfieldCollection(context.Background(), testUserID, nil, &bytes.Buffer{})
 
@@ -186,7 +186,7 @@ func TestExportCollection_OnlyExportsTheGivenStorage(t *testing.T) {
 		{ID: 7, Name: "Main Binder", Type: "binder"},
 		{ID: 8, Name: "Box", Type: "box"},
 	}}
-	svc := NewService(cards, storages, &fakeDeckService{}, &fakeResolver{})
+	svc := newTestService(cards, storages, &fakeDeckService{}, &fakeResolver{})
 
 	var manabox bytes.Buffer
 	require.NoError(t, svc.ExportManaBox(context.Background(), testUserID, ptr(7), &manabox))
@@ -202,7 +202,7 @@ func TestExportCollection_OnlyExportsTheGivenStorage(t *testing.T) {
 }
 
 func TestExportCollection_UnknownStorageIsAnError(t *testing.T) {
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
 	assert.ErrorIs(t, svc.ExportManaBox(context.Background(), testUserID, ptr(3), &bytes.Buffer{}), ErrTargetStorageNotFound)
 	assert.ErrorIs(t, svc.ExportMoxfieldCollection(context.Background(), testUserID, ptr(3), &bytes.Buffer{}), ErrTargetStorageNotFound)
@@ -243,7 +243,7 @@ func onBoard(e deck.DeckEntry, board string) deck.DeckEntry {
 
 func exportDeckWith(t *testing.T, decks *fakeDeckService, format string) string {
 	t.Helper()
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 	var buf bytes.Buffer
 	require.NoError(t, svc.ExportDeck(context.Background(), testUserID, fixtureDeckID, DeckExportOptions{Format: format}, &buf))
 	return buf.String()
@@ -309,7 +309,7 @@ func TestExportDeck_MoxfieldFoilSuffix(t *testing.T) {
 }
 
 func TestExportDeck_MoxfieldUnknownDeckReturnsErrDeckNotFound(t *testing.T) {
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
 	err := svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000999", DeckExportOptions{Format: DeckExportMoxfield}, &bytes.Buffer{})
 
@@ -320,7 +320,7 @@ func TestExportDeck_MoxfieldUnknownDeckReturnsErrDeckNotFound(t *testing.T) {
 func TestExportDeck_MoxfieldPropagatesADeckContentError(t *testing.T) {
 	decks := contentDeck(deck.Deck{Name: "Pile"})
 	decks.getContentErr = errors.New("db down")
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	err := svc.ExportDeck(context.Background(), testUserID, fixtureDeckID, DeckExportOptions{Format: DeckExportMoxfield}, &bytes.Buffer{})
 
@@ -391,7 +391,7 @@ func TestExportDeck_APendingCommanderExportsLikeAnOwnedOne(t *testing.T) {
 }
 
 func TestExportDeck_RejectsAnUnknownFormat(t *testing.T) {
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, mixedDeck(), &fakeResolver{})
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, mixedDeck(), &fakeResolver{})
 
 	err := svc.ExportDeck(context.Background(), testUserID, fixtureDeckID, DeckExportOptions{Format: "mtgo"}, &bytes.Buffer{})
 
@@ -462,7 +462,7 @@ func TestExportDeck_RoundTripsThroughTheImportParser(t *testing.T) {
 func TestExportSharedDeck_ExportsAsTheOwner(t *testing.T) {
 	decks := tamiyoDeckFixture()
 	decks.owners = map[string]string{"00000000-0000-0000-0000-000000000001": "22222222-2222-2222-2222-222222222222"}
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	var plain bytes.Buffer
 	require.NoError(t, svc.ExportSharedDeck(context.Background(), "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: DeckExportPlain, WithTags: false}, &plain))
@@ -477,7 +477,7 @@ func TestExportSharedDeck_ExportsAsTheOwner(t *testing.T) {
 func TestExportSharedDeck_ListsTheCommanderApartFromAnIdenticalMainBoardCopy(t *testing.T) {
 	decks := commanderWithAnIdenticalMainBoardCopy()
 	decks.owners = map[string]string{fixtureDeckID: "22222222-2222-2222-2222-222222222222"}
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	var buf bytes.Buffer
 	require.NoError(t, svc.ExportSharedDeck(context.Background(), fixtureDeckID, DeckExportOptions{Format: DeckExportMoxfield}, &buf))
@@ -487,7 +487,7 @@ func TestExportSharedDeck_ListsTheCommanderApartFromAnIdenticalMainBoardCopy(t *
 
 func TestExportSharedDeck_Errors(t *testing.T) {
 	decks := tamiyoDeckFixture()
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	assert.ErrorIs(t, svc.ExportSharedDeck(context.Background(), "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: DeckExportPlain, WithTags: false}, &bytes.Buffer{}), ErrDeckNotFound)
 	assert.ErrorIs(t, svc.ExportSharedDeck(context.Background(), "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: "csv", WithTags: false}, &bytes.Buffer{}), ErrUnknownExportFormat)

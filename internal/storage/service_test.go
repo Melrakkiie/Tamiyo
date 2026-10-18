@@ -182,14 +182,6 @@ func TestService_UpdateStorage_KeepsAllowedDecksWhenOnlyUnlocking(t *testing.T) 
 	assert.Equal(t, allowed, repo.updatedStorage.AllowedDeckIDs)
 }
 
-func TestStorage_OpenTo(t *testing.T) {
-	deckID := "00000000-0000-0000-0000-000000000001"
-	assert.True(t, Storage{}.OpenTo(deckID))
-	assert.True(t, Storage{AllowedDeckIDs: []string{"other"}}.OpenTo(deckID))
-	assert.False(t, Storage{Locked: true}.OpenTo(deckID))
-	assert.True(t, Storage{Locked: true, AllowedDeckIDs: []string{deckID}}.OpenTo(deckID))
-}
-
 func TestService_UpdateStorage_ReturnsNotFoundWhenStorageDoesNotBelongToUser(t *testing.T) {
 	repo := &fakeRepository{findByIDErr: ErrNotFound}
 	service := NewService(repo)

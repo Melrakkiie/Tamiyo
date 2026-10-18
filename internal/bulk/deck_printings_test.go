@@ -41,7 +41,7 @@ func repeat(p PrintingChoice, n int) []PrintingChoice {
 
 func TestSplitPrintings_UnchangedSplitIsANoOp(t *testing.T) {
 	cards, decks := printingsFixture()
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	summary, err := svc.SplitPrintings(context.Background(), testUserID, fixtureDeckID, PrintingSplit{
 		CardIDs: []int{2, 3}, PendingIDs: []int{8}, Printings: repeat(neoIsland, 5),
@@ -56,7 +56,7 @@ func TestSplitPrintings_UnchangedSplitIsANoOp(t *testing.T) {
 
 func TestSplitPrintings_OwnedCopyTakesAnOwnedCopyOfTheOtherPrinting(t *testing.T) {
 	cards, decks := printingsFixture()
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	summary, err := svc.SplitPrintings(context.Background(), testUserID, fixtureDeckID, PrintingSplit{
 		CardIDs: []int{2, 3}, Printings: []PrintingChoice{oneIsland, neoIsland},
@@ -73,7 +73,7 @@ func TestSplitPrintings_OwnedCopyTakesAnOwnedCopyOfTheOtherPrinting(t *testing.T
 
 func TestSplitPrintings_GoesPendingWithoutACopyOfThatPrinting(t *testing.T) {
 	cards, decks := printingsFixture()
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	summary, err := svc.SplitPrintings(context.Background(), testUserID, fixtureDeckID, PrintingSplit{
 		CardIDs: []int{2, 3}, Printings: []PrintingChoice{neoIsland, broIsland},
@@ -97,7 +97,7 @@ func TestSplitPrintings_GoesPendingWithoutACopyOfThatPrinting(t *testing.T) {
 func TestSplitPrintings_SplitsAPendingCard(t *testing.T) {
 	cards, decks := printingsFixture()
 	decks.pending[1].Quantity = 10
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	summary, err := svc.SplitPrintings(context.Background(), testUserID, fixtureDeckID, PrintingSplit{
 		PendingIDs: []int{8}, Printings: append(repeat(neoIsland, 7), repeat(oneIsland, 3)...),
@@ -114,7 +114,7 @@ func TestSplitPrintings_SplitsAPendingCard(t *testing.T) {
 	assert.Equal(t, Summary{CardsLinked: 1, CardsPending: 2, CardsRemoved: 3}, summary)
 
 	decks = tamiyoDeckFixture()
-	svc = NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc = newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 	summary, err = svc.SplitPrintings(context.Background(), testUserID, fixtureDeckID, PrintingSplit{
 		PendingIDs: []int{8}, Printings: repeat(broIsland, 3),
 	})
@@ -125,7 +125,7 @@ func TestSplitPrintings_SplitsAPendingCard(t *testing.T) {
 
 func TestSplitPrintings_RejectsMismatches(t *testing.T) {
 	cards, decks := printingsFixture()
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 	split := func(req PrintingSplit) error {
 		_, err := svc.SplitPrintings(context.Background(), testUserID, fixtureDeckID, req)
 		return err
@@ -144,7 +144,7 @@ func TestSplitPrintings_RejectsMismatches(t *testing.T) {
 
 func TestSplitPrintings_RejectsTheCommander(t *testing.T) {
 	cards, decks := printingsFixture()
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
 
 	_, err := svc.SplitPrintings(context.Background(), testUserID, fixtureDeckID, PrintingSplit{PendingIDs: []int{7}, Printings: repeat(oneIsland, 1)})
 	assert.ErrorIs(t, err, ErrSplitMismatch)

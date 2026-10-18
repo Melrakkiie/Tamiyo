@@ -9,13 +9,12 @@ import (
 	"sort"
 	"strings"
 
-	"Melrakkiie/Tamiyo/internal/card"
 	"Melrakkiie/Tamiyo/internal/deck"
 )
 
 type ownedCopies struct {
-	byPrinting map[string][]card.Card
-	byName     map[string][]card.Card
+	byPrinting map[string][]deck.OwnedCopy
+	byName     map[string][]deck.OwnedCopy
 	inDeck     map[int]bool
 	used       map[int]bool
 	locked     map[int]bool
@@ -29,8 +28,8 @@ func (o *ownedCopies) takeName(name string, foil bool, proxy proxyMark, quantity
 	return o.take(o.byName[deck.CardNameKey(name)], foil, proxy, quantity)
 }
 
-func (o *ownedCopies) take(copies []card.Card, foil bool, proxy proxyMark, quantity int) []int {
-	candidates := append([]card.Card(nil), copies...)
+func (o *ownedCopies) take(copies []deck.OwnedCopy, foil bool, proxy proxyMark, quantity int) []int {
+	candidates := append([]deck.OwnedCopy(nil), copies...)
 	sort.SliceStable(candidates, func(i, j int) bool {
 		a, b := candidates[i], candidates[j]
 		if o.locked[a.ID] != o.locked[b.ID] {
@@ -58,31 +57,27 @@ func (o *ownedCopies) take(copies []card.Card, foil bool, proxy proxyMark, quant
 	return ids
 }
 
-func (s *Service) loadOwnedCopies(ctx context.Context, userID string, targetDeckID string, includeLocked bool) (*ownedCopies, error) {
-	cards, err := s.loadAllCards(ctx, userID)
+func (s *Service) loadOwnedCopies(ctx context.Context, userID string, targetDeckID string, wanted deck.CopiesWanted, includeLocked bool) (*ownedCopies, error) {
+	copies, err := s.decks.FindOwnedCopies(ctx, userID, targetDeckID, wanted)
 	if err != nil {
-		return nil, fmt.Errorf("loading the collection: %w", err)
-	}
-	storagesByID, err := s.loadAllStoragesByID(ctx, userID)
-	if err != nil {
-		return nil, fmt.Errorf("loading storages: %w", err)
+		return nil, fmt.Errorf("finding owned copies: %w", err)
 	}
 	owned := &ownedCopies{
-		byPrinting: make(map[string][]card.Card),
-		byName:     make(map[string][]card.Card),
+		byPrinting: make(map[string][]deck.OwnedCopy),
+		byName:     make(map[string][]deck.OwnedCopy),
 		inDeck:     make(map[int]bool),
 		used:       make(map[int]bool),
 		locked:     make(map[int]bool),
 	}
-	for _, c := range cards {
-		if c.StorageID != nil {
-			if st, ok := storagesByID[*c.StorageID]; ok && !st.OpenTo(targetDeckID) {
-				if !includeLocked {
-					continue
-				}
-				owned.locked[c.ID] = true
+	for _, c := range copies {
+		if c.LockedAgainstTarget {
+			if !includeLocked {
+				continue
 			}
+			owned.locked[c.ID] = true
 		}
+		owned.inDeck[c.ID] = c.InDeck
+		owned.used[c.ID] = c.InTargetDeck
 		key := strings.ToLower(c.ScryfallID)
 		owned.byPrinting[key] = append(owned.byPrinting[key], c)
 		full, front := deck.CardNameKey(c.Name), deck.CardNameKey(frontFaceName(c.Name))
@@ -91,29 +86,7 @@ func (s *Service) loadOwnedCopies(ctx context.Context, userID string, targetDeck
 			owned.byName[front] = append(owned.byName[front], c)
 		}
 	}
-
-	const limit = 100
-	for page := 1; ; page++ {
-		decks, total, err := s.decks.GetAllDecks(ctx, userID, deck.Filter{Page: page, Limit: limit})
-		if err != nil {
-			return nil, fmt.Errorf("loading decks: %w", err)
-		}
-		for _, d := range decks {
-			deckCards, err := s.decks.GetDeckCards(ctx, userID, d.ID, "updated", true)
-			if err != nil {
-				return nil, fmt.Errorf("loading the cards of deck %q: %w", d.Name, err)
-			}
-			for _, c := range deckCards {
-				owned.inDeck[c.ID] = true
-				if d.ID == targetDeckID {
-					owned.used[c.ID] = true
-				}
-			}
-		}
-		if len(decks) == 0 || page*limit >= total {
-			return owned, nil
-		}
-	}
+	return owned, nil
 }
 
 func scryfallName(name string) string {
@@ -169,7 +142,15 @@ type deckLinePlacement struct {
 }
 
 func (s *Service) placeResolvedLines(ctx context.Context, userID string, lines []moxfieldDeckLine, resolved map[string]ResolvedCard, commanders int, targetDeckID string, includeLocked bool) ([]deckLinePlacement, Summary, error) {
-	owned, err := s.loadOwnedCopies(ctx, userID, targetDeckID, includeLocked)
+	var wanted deck.CopiesWanted
+	for _, line := range lines {
+		if line.SetCode == "" {
+			wanted.Names = append(wanted.Names, line.CardName)
+		} else if rc, ok := resolved[deckLineKey(line)]; ok {
+			wanted.ScryfallIDs = append(wanted.ScryfallIDs, rc.ScryfallID)
+		}
+	}
+	owned, err := s.loadOwnedCopies(ctx, userID, targetDeckID, wanted, includeLocked)
 	if err != nil {
 		return nil, Summary{}, err
 	}
