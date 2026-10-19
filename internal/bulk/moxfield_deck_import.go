@@ -6,88 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 
 	"Melrakkiie/Tamiyo/internal/deck"
 )
-
-type ownedCopies struct {
-	byPrinting map[string][]deck.OwnedCopy
-	byName     map[string][]deck.OwnedCopy
-	inDeck     map[int]bool
-	used       map[int]bool
-	locked     map[int]bool
-}
-
-func (o *ownedCopies) takePrinting(scryfallID string, foil bool, proxy proxyMark, quantity int) []int {
-	return o.take(o.byPrinting[strings.ToLower(scryfallID)], foil, proxy, quantity)
-}
-
-func (o *ownedCopies) takeName(name string, foil bool, proxy proxyMark, quantity int) []int {
-	return o.take(o.byName[deck.CardNameKey(name)], foil, proxy, quantity)
-}
-
-func (o *ownedCopies) take(copies []deck.OwnedCopy, foil bool, proxy proxyMark, quantity int) []int {
-	candidates := append([]deck.OwnedCopy(nil), copies...)
-	sort.SliceStable(candidates, func(i, j int) bool {
-		a, b := candidates[i], candidates[j]
-		if o.locked[a.ID] != o.locked[b.ID] {
-			return !o.locked[a.ID]
-		}
-		if o.inDeck[a.ID] != o.inDeck[b.ID] {
-			return !o.inDeck[a.ID]
-		}
-		if (a.Foil == foil) != (b.Foil == foil) {
-			return a.Foil == foil
-		}
-		return a.ID < b.ID
-	})
-	ids := make([]int, 0, quantity)
-	for _, c := range candidates {
-		if len(ids) == quantity {
-			break
-		}
-		if o.used[c.ID] || !proxy.accepts(c.Proxy) {
-			continue
-		}
-		o.used[c.ID] = true
-		ids = append(ids, c.ID)
-	}
-	return ids
-}
-
-func (s *Service) loadOwnedCopies(ctx context.Context, userID string, targetDeckID string, wanted deck.CopiesWanted, includeLocked bool) (*ownedCopies, error) {
-	copies, err := s.decks.FindOwnedCopies(ctx, userID, targetDeckID, wanted)
-	if err != nil {
-		return nil, fmt.Errorf("finding owned copies: %w", err)
-	}
-	owned := &ownedCopies{
-		byPrinting: make(map[string][]deck.OwnedCopy),
-		byName:     make(map[string][]deck.OwnedCopy),
-		inDeck:     make(map[int]bool),
-		used:       make(map[int]bool),
-		locked:     make(map[int]bool),
-	}
-	for _, c := range copies {
-		if c.LockedAgainstTarget {
-			if !includeLocked {
-				continue
-			}
-			owned.locked[c.ID] = true
-		}
-		owned.inDeck[c.ID] = c.InDeck
-		owned.used[c.ID] = c.InTargetDeck
-		key := strings.ToLower(c.ScryfallID)
-		owned.byPrinting[key] = append(owned.byPrinting[key], c)
-		full, front := deck.CardNameKey(c.Name), deck.CardNameKey(frontFaceName(c.Name))
-		owned.byName[full] = append(owned.byName[full], c)
-		if front != full {
-			owned.byName[front] = append(owned.byName[front], c)
-		}
-	}
-	return owned, nil
-}
 
 func scryfallName(name string) string {
 	if strings.Contains(name, "//") {
@@ -133,36 +55,19 @@ func (line moxfieldDeckLine) printing(resolved ResolvedCard) (name, setCode, col
 	return resolved.Name, line.SetCode, line.CollectorNumber
 }
 
-type deckLinePlacement struct {
-	line      moxfieldDeckLine
-	resolved  ResolvedCard
-	ownedIDs  []int
-	missing   int
-	commander bool
-}
-
-func (s *Service) placeResolvedLines(ctx context.Context, userID string, lines []moxfieldDeckLine, resolved map[string]ResolvedCard, commanders int, targetDeckID string, includeLocked bool) ([]deckLinePlacement, Summary, error) {
-	var wanted deck.CopiesWanted
-	for _, line := range lines {
-		if line.SetCode == "" {
-			wanted.Names = append(wanted.Names, line.CardName)
-		} else if rc, ok := resolved[deckLineKey(line)]; ok {
-			wanted.ScryfallIDs = append(wanted.ScryfallIDs, rc.ScryfallID)
-		}
-	}
-	owned, err := s.loadOwnedCopies(ctx, userID, targetDeckID, wanted, includeLocked)
-	if err != nil {
-		return nil, Summary{}, err
-	}
-
+// placementLines turns the resolved lines into placement lines. The first
+// two commander lines of the main board ask for the commander slots; lines
+// Scryfall doesn't know are skipped with a warning.
+func placementLines(lines []moxfieldDeckLine, resolved map[string]ResolvedCard) ([]deck.PlacementLine, Summary) {
 	var summary Summary
-	placements := make([]deckLinePlacement, 0, len(lines))
+	placed := make([]deck.PlacementLine, 0, len(lines))
+	commanders := maxCommanders
 	for _, line := range lines {
 		commander := commanders > 0 && line.Commander && deck.InMainBoard(line.Board)
 		if commander {
 			commanders--
 		}
-		resolvedCard, ok := resolved[deckLineKey(line)]
+		rc, ok := resolved[deckLineKey(line)]
 		if !ok {
 			summary.CardsSkipped += line.Quantity
 			label := ""
@@ -172,81 +77,44 @@ func (s *Service) placeResolvedLines(ctx context.Context, userID string, lines [
 			summary.Warnings = append(summary.Warnings, fmt.Sprintf("line %d: %s%s not found on scryfall", line.LineNo, label, describeDeckLine(line)))
 			continue
 		}
-		var ownedIDs []int
-		if line.SetCode == "" {
-			ownedIDs = owned.takeName(line.CardName, line.Foil, line.Proxy, line.Quantity)
-		} else {
-			ownedIDs = owned.takePrinting(resolvedCard.ScryfallID, line.Foil, line.Proxy, line.Quantity)
-		}
-		placements = append(placements, deckLinePlacement{
-			line:      line,
-			resolved:  resolvedCard,
-			ownedIDs:  ownedIDs,
-			missing:   line.Quantity - len(ownedIDs),
-			commander: commander,
+		colors, cardType, identity := rc.details()
+		name, setCode, collectorNumber := line.printing(rc)
+		placed = append(placed, deck.PlacementLine{
+			Printing: deck.Printing{
+				Name: name, ScryfallID: rc.ScryfallID, SetCode: setCode, CollectorNumber: collectorNumber,
+				ManaValue: rc.ManaValue, Colors: colors, CardType: cardType, ColorIdentity: identity,
+			},
+			AnyPrinting: line.SetCode == "",
+			Foil:        line.Foil,
+			Proxy:       line.Proxy,
+			Board:       line.Board,
+			Quantity:    line.Quantity,
+			Commander:   commander,
 		})
 	}
-	return placements, summary, nil
+	return placed, summary
 }
 
-func (s *Service) fillDeck(ctx context.Context, userID string, deckID string, placements []deckLinePlacement, summary *Summary) {
-	slot := deck.SlotCommander
-	for _, p := range placements {
-		linked := 0
-		for _, cardID := range p.ownedIDs {
-			if err := s.decks.PutCardInDeck(ctx, userID, deckID, cardID, p.line.Board); err != nil {
-				summary.Warnings = append(summary.Warnings, fmt.Sprintf("line %d: could not put %q in the deck: %v", p.line.LineNo, p.line.CardName, err))
-				continue
-			}
-			if linked == 0 && p.commander {
-				if err := s.decks.SetCardCommander(ctx, userID, deckID, slot, cardID); err != nil {
-					summary.Warnings = append(summary.Warnings, fmt.Sprintf("could not make %q the commander: %v", p.line.CardName, err))
-				} else {
-					slot = deck.SlotPartner
-				}
-			}
-			linked++
-			summary.CardsLinked++
+// placeLines places the lines into the deck in one step and adds the result
+// to the summary.
+func (s *Service) placeLines(ctx context.Context, userID string, deckID string, plan deck.PlacementPlan, summary *Summary) error {
+	placed, err := s.decks.PlaceCards(ctx, userID, deckID, plan)
+	if err != nil {
+		if errors.Is(err, deck.ErrNotFound) {
+			return ErrDeckNotFound
 		}
-		if p.missing == 0 {
-			continue
-		}
-
-		colors, cardType, identity := p.resolved.details()
-		name, setCode, collectorNumber := p.line.printing(p.resolved)
-		pending, err := s.decks.AddPendingCard(ctx, userID, deckID, deck.PendingCard{
-			Name:            name,
-			ScryfallID:      p.resolved.ScryfallID,
-			SetCode:         setCode,
-			CollectorNumber: collectorNumber,
-			Foil:            p.line.Foil,
-			Proxy:           p.line.Proxy.isProxy(),
-			Quantity:        p.missing,
-			ManaValue:       p.resolved.ManaValue,
-			Colors:          colors,
-			CardType:        cardType,
-			ColorIdentity:   identity,
-			Board:           p.line.Board,
-		})
-		if err != nil {
-			summary.CardsSkipped += p.missing
-			summary.Warnings = append(summary.Warnings, fmt.Sprintf("line %d: could not add %q to the deck: %v", p.line.LineNo, p.line.CardName, err))
-			continue
-		}
-		summary.CardsPending += p.missing
-
-		if p.commander && linked == 0 {
-			if err := s.decks.SetPendingCommander(ctx, userID, deckID, slot, pending.ID); err != nil {
-				summary.Warnings = append(summary.Warnings, fmt.Sprintf("could not make %q the commander: %v", p.line.CardName, err))
-			} else {
-				slot = deck.SlotPartner
-			}
-		}
+		return err
 	}
+	summary.CardsLinked += placed.CardsLinked
+	summary.CardsPending += placed.CardsPending
+	for _, skipped := range placed.SkippedTags {
+		summary.Warnings = append(summary.Warnings, fmt.Sprintf("could not tag %q: %v", skipped.CardName, skipped.Err))
+	}
+	return nil
 }
 
-func lineTags(lines []moxfieldDeckLine, resolved map[string]ResolvedCard) []tamiyoCardTags {
-	var tags []tamiyoCardTags
+func lineTags(lines []moxfieldDeckLine, resolved map[string]ResolvedCard) []deck.TaggedCard {
+	var tags []deck.TaggedCard
 	index := make(map[string]int)
 	for _, line := range lines {
 		if len(line.Tags) == 0 {
@@ -261,7 +129,7 @@ func lineTags(lines []moxfieldDeckLine, resolved map[string]ResolvedCard) []tami
 		if !seen {
 			i = len(tags)
 			index[key] = i
-			tags = append(tags, tamiyoCardTags{Name: name})
+			tags = append(tags, deck.TaggedCard{Name: name})
 		}
 		for _, tag := range line.Tags {
 			if !containsFold(tags[i].Tags, tag) {
@@ -273,8 +141,7 @@ func lineTags(lines []moxfieldDeckLine, resolved map[string]ResolvedCard) []tami
 }
 
 func (s *Service) ImportIntoDeck(ctx context.Context, userID string, deckID string, opts DeckImportOptions, r io.Reader) (Summary, error) {
-	d, err := s.decks.GetDeck(ctx, userID, deckID)
-	if err != nil {
+	if _, err := s.decks.GetDeck(ctx, userID, deckID); err != nil {
 		if errors.Is(err, deck.ErrNotFound) {
 			return Summary{}, ErrDeckNotFound
 		}
@@ -287,7 +154,7 @@ func (s *Service) ImportIntoDeck(ctx context.Context, userID string, deckID stri
 	}
 
 	var lines []moxfieldDeckLine
-	var tags []tamiyoCardTags
+	var tags []deck.TaggedCard
 	tamiyoFile := looksLikeJSON(data)
 	if tamiyoFile {
 		file, err := parseTamiyoFile(data)
@@ -301,7 +168,7 @@ func (s *Service) ImportIntoDeck(ctx context.Context, userID string, deckID stri
 			return Summary{}, invalidTamiyo("the deck has no cards")
 		}
 		lines = tamiyoDeckLines(file)
-		tags = file.Tags
+		tags = file.taggedCards()
 	} else {
 		if lines, err = parseMoxfieldDeckList(bytes.NewReader(data)); err != nil {
 			return Summary{}, err
@@ -319,18 +186,10 @@ func (s *Service) ImportIntoDeck(ctx context.Context, userID string, deckID stri
 		tags = lineTags(lines, resolved)
 	}
 
-	commanders := maxCommanders
-	if d.HasCommander() {
-		commanders = 0
-	}
-	placements, summary, err := s.placeResolvedLines(ctx, userID, lines, resolved, commanders, d.ID, opts.IncludeLockedStorages)
-	if err != nil {
+	placed, summary := placementLines(lines, resolved)
+	plan := deck.PlacementPlan{Lines: placed, Tags: tags, IncludeLockedStorages: opts.IncludeLockedStorages}
+	if err := s.placeLines(ctx, userID, deckID, plan, &summary); err != nil {
 		return Summary{}, err
-	}
-
-	s.fillDeck(ctx, userID, d.ID, placements, &summary)
-	if err := s.applyTamiyoTags(ctx, userID, d.ID, tags, &summary); err != nil {
-		return summary, err
 	}
 	return summary, nil
 }

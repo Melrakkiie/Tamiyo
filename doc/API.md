@@ -1631,6 +1631,8 @@ Each card goes on the [board](#boards) of the section it's listed under: `main` 
 
 `cards_created` and `decks_created` are always `0` for this route.
 
+The resolved lines are placed all at once, with the commanders and the tags: on a failure (a database error, the deck deleted meanwhile) nothing is placed, no copy is put in the deck, no pending card is added, no commander or tag is set, and the route returns the error alone, with no summary. Lines Scryfall can't resolve don't count as a failure: they are skipped and noted in `warnings`. The deck's `updated` date moves once per import.
+
 The lines under a `Commander` section header (the first two at most) are the deck's commanders, but only if the deck has none yet: the first becomes the commander, the second the second commander. When the list has no such section and `commander_from_first_line` is `true`, the first card line of `main` is treated as the commander. An owned commander becomes the deck's `commander_id` (`partner_id` for the second); one the collection lacks becomes its pending commander (`commander_pending_id`, `partner_pending_id`). A commander that can't be resolved on Scryfall is skipped (counted in `cards_skipped`, noted in `warnings`) and the rest of the list is still imported.
 
 **Form fields**
@@ -1657,7 +1659,7 @@ Replace a deck's content with a list: every card on the list ends up in the deck
 
 - Each line is matched against the deck's copies and pending cards on the same [board](#boards): a line with a printing matches that printing and finish, a plain line matches the card by name, any printing (foil only when the line says `*F*`). Lines with a printing are matched first.
 - Copies of the deck that no line matches leave it: owned copies stay in the collection, pending ones are dropped. Removing a commander clears it; when it was the commander, the second commander takes its place. Moving a card to another board is a removal plus an addition.
-- What the deck lacks is added as `POST /deck/:id/import` adds it: free owned copies first, pending cards for the rest. Nothing is removed when Scryfall can't resolve the cards to add.
+- What the deck lacks is added as `POST /deck/:id/import` adds it: free owned copies first, pending cards for the rest, all at once. The additions never set a commander. Nothing is removed when Scryfall can't resolve the cards to add. When the additions fail, the route returns the error alone, with no summary, and none of them is made.
 - Each card on the list gets exactly the tags its lines give (`#tag`, as in the import), no tag clearing its tags.
 
 **Response `200 OK`** — the [import summary](#bulk-import), plus `cards_removed`, the copies that left the deck.

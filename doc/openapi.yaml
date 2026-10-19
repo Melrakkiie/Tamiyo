@@ -2313,7 +2313,9 @@ paths:
         cards on the same board (by printing and finish, or by name for a
         line without printing); unmatched copies leave the deck (owned ones
         stay in the collection, a removed commander is cleared), and what
-        the deck lacks is added as POST /deck/{id}/import adds it. Each
+        the deck lacks is added as POST /deck/{id}/import adds it, all at
+        once and without setting a commander (when that fails, the error
+        comes alone, with no summary, and nothing is added). Each
         listed card gets exactly the tags its lines give. Sending back the
         moxfield export with tags=true changes nothing.
       requestBody:
@@ -2576,6 +2578,10 @@ paths:
         A proxy entry only uses the collection's proxies and becomes a
         pending proxy for the rest; an entry without proxy, or false, only
         uses real copies.
+        The resolved lines, commanders and tags are placed all at once: on a
+        failure nothing is placed and the error comes alone, with no
+        summary. Unresolved lines are skipped and noted in warnings. The
+        deck's updated date moves once per import.
       requestBody:
         required: true
         content:

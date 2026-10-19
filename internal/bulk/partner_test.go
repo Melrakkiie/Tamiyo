@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"Melrakkiie/Tamiyo/internal/card"
 	"Melrakkiie/Tamiyo/internal/deck"
 )
 
@@ -55,7 +54,7 @@ func TestExportDeck_MoxfieldPutsBothCommandersFirst(t *testing.T) {
 
 func TestTamiyoDeck_RoundTripsTwoCommanders(t *testing.T) {
 	var exported bytes.Buffer
-	require.NoError(t, newTestService(&fakeCardService{}, &fakeStorageService{}, partnerDeckFixture(), &fakeResolver{}).ExportTamiyoDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", false, &exported))
+	require.NoError(t, NewService(&fakeCardService{}, &fakeStorageService{}, partnerDeckFixture(), &fakeResolver{}).ExportTamiyoDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", false, &exported))
 
 	file, err := parseTamiyoFile(exported.Bytes())
 	require.NoError(t, err)
@@ -63,39 +62,38 @@ func TestTamiyoDeck_RoundTripsTwoCommanders(t *testing.T) {
 	assert.True(t, file.deckCards[1].Commander)
 	assert.False(t, file.deckCards[2].Commander)
 
-	cards := &fakeCardService{allCards: []card.Card{{ID: 40, Name: "Sol Ring", ScryfallID: solRingSLD}}}
 	decks := withTargetDeck(&fakeDeckService{})
-	_, err = newTestService(cards, &fakeStorageService{}, decks, tamiyoResolver()).ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, &exported)
+	_, err = NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver()).ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, &exported)
 
 	require.NoError(t, err)
-	assert.Equal(t, 40, decks.cardCommanderID)
-	require.NotEmpty(t, decks.addedPending)
-	assert.Equal(t, "Tamiyo, Inquisitive Student", decks.addedPending[0].Name)
-	assert.Equal(t, decks.addedPending[0].ID, decks.pendingPartnerID)
-	assert.Zero(t, decks.pendingCommanderID)
+	lines := placedLines(decks.placedPlan(t, targetDeckID))
+	require.Len(t, lines, 5)
+	assert.Equal(t, placedLine{name: "Sol Ring", setCode: "sld", quantity: 1, board: deck.BoardMain, commander: true, proxy: deck.RealOnly}, lines[0])
+	assert.Equal(t, placedLine{name: "Tamiyo, Inquisitive Student", setCode: "neo", quantity: 1, board: deck.BoardMain, commander: true, proxy: deck.RealOnly}, lines[1])
+	assert.False(t, lines[2].commander)
 }
 
 func TestImportIntoDeck_TakesUpToTwoCommandersFromTheCommanderSection(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 5, Name: "Atraxa, Praetors' Voice", ScryfallID: atraxaID}}}
 	decks := &fakeDeckService{}
 
-	importDeck(t, cards, decks, "Commander\n1 Atraxa, Praetors' Voice (CMR) 1\n1 Sol Ring (SLD) 1011\n\nDeck\n1 Sol Ring (SLD) 1011\n", false)
+	importDeck(t, &fakeCardService{}, decks, "Commander\n1 Atraxa, Praetors' Voice (CMR) 1\n1 Sol Ring (SLD) 1011\n\nDeck\n1 Sol Ring (SLD) 1011\n", false)
 
-	assert.Equal(t, 5, decks.cardCommanderID)
-	require.Len(t, decks.addedPending, 2)
-	assert.Equal(t, decks.addedPending[0].ID, decks.pendingPartnerID)
-	assert.Zero(t, decks.pendingCommanderID)
+	assert.Equal(t, []placedLine{
+		{name: "Atraxa, Praetors' Voice", setCode: "CMR", quantity: 1, board: deck.BoardMain, commander: true},
+		{name: "Sol Ring", setCode: "SLD", quantity: 1, board: deck.BoardMain, commander: true},
+		{name: "Sol Ring", setCode: "SLD", quantity: 1, board: deck.BoardMain},
+	}, placedLines(decks.placedPlan(t, targetDeckID)))
 }
 
 func TestImportIntoDeck_FirstLineStillMarksOneCommander(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 5, Name: "Atraxa, Praetors' Voice", ScryfallID: atraxaID}}}
 	decks := &fakeDeckService{}
 
-	importDeck(t, cards, decks, "1 Atraxa, Praetors' Voice (CMR) 1\n1 Sol Ring (SLD) 1011\n", true)
+	importDeck(t, &fakeCardService{}, decks, "1 Atraxa, Praetors' Voice (CMR) 1\n1 Sol Ring (SLD) 1011\n", true)
 
-	assert.Equal(t, 5, decks.cardCommanderID)
-	assert.Zero(t, decks.pendingPartnerID)
-	assert.Zero(t, decks.cardPartnerID)
+	assert.Equal(t, []placedLine{
+		{name: "Atraxa, Praetors' Voice", setCode: "CMR", quantity: 1, board: deck.BoardMain, commander: true},
+		{name: "Sol Ring", setCode: "SLD", quantity: 1, board: deck.BoardMain},
+	}, placedLines(decks.placedPlan(t, targetDeckID)))
 }
 
 func TestParseMoxfieldDeckList_MarksAtMostTwoCommanders(t *testing.T) {
@@ -126,7 +124,7 @@ func TestBulkEditDeck_ClearsTheSlotOfARemovedPartner(t *testing.T) {
 	islandCommander.Pending = nil
 	island.OwnedCardIDs = []int{3}
 	decks.entries[fixtureDeckID] = append([]deck.DeckEntry{islandCommander, solRing, island, tamiyo}, decks.entries[fixtureDeckID][3:]...)
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, bulkEditResolver())
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, bulkEditResolver())
 
 	_, err := svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, strings.NewReader("5 Island (NEO) 294\n"))
 

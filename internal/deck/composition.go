@@ -16,6 +16,10 @@ type CompositionStore interface {
 
 	LinkCardToDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error
 
+	FindCardTags(ctx context.Context, userID string, deckID string) ([]CardTag, error)
+	FindDeckTags(ctx context.Context, userID string, deckID string) ([]string, error)
+	WriteCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) error
+
 	StorageExists(ctx context.Context, userID string, storageID int) (bool, error)
 	CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error)
 	CreateCollectionCard(ctx context.Context, userID string, c DeckCard) (int, error)

@@ -16,7 +16,7 @@ import (
 
 func cardmarketExport(t *testing.T, resolver *fakeResolver, opts DeckExportOptions) string {
 	t.Helper()
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), resolver)
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), resolver)
 	var buf bytes.Buffer
 	require.NoError(t, svc.ExportCardmarketDeck(context.Background(), testUserID, fixtureDeckID, opts, &buf))
 	return buf.String()
@@ -53,7 +53,7 @@ func TestExportCardmarketDeck_ChosenBoards(t *testing.T) {
 	assert.Equal(t, "1 Duress\n", cardmarketExport(t, &fakeResolver{}, DeckExportOptions{Boards: []string{"considering"}, OnlyPending: true}))
 	assert.Equal(t, "5 Island\n1 Sol Ring\n1 Tamiyo, Inquisitive Student\n", cardmarketExport(t, &fakeResolver{}, DeckExportOptions{Boards: []string{"main"}, BasicLands: true}))
 
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{})
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{})
 	err := svc.ExportCardmarketDeck(context.Background(), testUserID, fixtureDeckID, DeckExportOptions{Boards: []string{"maybe"}}, &bytes.Buffer{})
 	assert.ErrorIs(t, err, ErrNoBoards)
 }
@@ -64,7 +64,7 @@ func TestExportCardmarketDeck_WritesSplitCardsWithTwoSlashes(t *testing.T) {
 		{Name: "Fire / Ice", SetCode: "mh2", Board: deck.BoardMain, OwnedCardIDs: []int{1}},
 		{Name: "Fire // Ice", SetCode: "dmr", Board: deck.BoardSideboard, Pending: []deck.PendingPart{{ID: 8, Quantity: 2}}},
 	}
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	var buf bytes.Buffer
 	require.NoError(t, svc.ExportCardmarketDeck(context.Background(), testUserID, fixtureDeckID, DeckExportOptions{}, &buf))
@@ -73,7 +73,7 @@ func TestExportCardmarketDeck_WritesSplitCardsWithTwoSlashes(t *testing.T) {
 }
 
 func TestExportCardmarketDeck_Errors(t *testing.T) {
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{err: errors.New("down")})
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{err: errors.New("down")})
 
 	err := svc.ExportCardmarketDeck(context.Background(), testUserID, fixtureDeckID, DeckExportOptions{Printings: true}, &bytes.Buffer{})
 	assert.ErrorIs(t, err, ErrScryfallUnavailable)
@@ -84,7 +84,7 @@ func TestExportCardmarketDeck_Errors(t *testing.T) {
 
 func TestExportSharedDeck_Cardmarket(t *testing.T) {
 	decks := sharedDeckFixture()
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	var buf bytes.Buffer
 	require.NoError(t, svc.ExportSharedDeck(context.Background(), fixtureDeckID, DeckExportOptions{Format: DeckExportCardmarket, OnlyPending: true, BasicLands: true}, &buf))

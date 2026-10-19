@@ -55,7 +55,6 @@ type deckService interface {
 	GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error)
 	GetDeckContent(ctx context.Context, userID string, deckID string) (deck.DeckContent, error)
 	GetSharedDeck(ctx context.Context, id string) (string, deck.Deck, error)
-	FindOwnedCopies(ctx context.Context, userID string, targetDeckID string, wanted deck.CopiesWanted) ([]deck.OwnedCopy, error)
 	CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error)
 	DeleteDeck(ctx context.Context, userID string, id string) error
 	PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error
@@ -63,6 +62,7 @@ type deckService interface {
 	ClearCommander(ctx context.Context, userID string, deckID string, slot deck.CommanderSlot) error
 	GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error)
 	RemovePendingCard(ctx context.Context, userID string, deckID string, id int) error
+	PlaceCards(ctx context.Context, userID string, deckID string, plan deck.PlacementPlan) (deck.PlacementSummary, error)
 	CollectOwnDeck(ctx context.Context, userID string, deckID string, req deck.OwnDeckCollect) (deck.CollectSummary, error)
 	CollectSharedDeck(ctx context.Context, userID string, deckID string, req deck.SharedDeckCollect) (deck.CollectSummary, error)
 	AddPendingCard(ctx context.Context, userID string, deckID string, p deck.PendingCard) (deck.PendingCard, error)

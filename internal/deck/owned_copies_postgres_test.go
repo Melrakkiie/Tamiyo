@@ -50,7 +50,7 @@ func (f contentFixture) storage(t *testing.T, name string, locked bool, openTo .
 
 func (f contentFixture) ownedCopies(t *testing.T, wanted CopiesWanted) []OwnedCopy {
 	t.Helper()
-	copies, err := f.service.FindOwnedCopies(context.Background(), f.userID, contentDeckID, wanted)
+	copies, err := findOwnedCopies(context.Background(), f.repo, f.userID, contentDeckID, wanted)
 	require.NoError(t, err)
 	return copies
 }

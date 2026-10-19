@@ -109,6 +109,7 @@ func (s *Service) BulkEditDeck(ctx context.Context, userID string, deckID string
 		if need > 0 {
 			missing := line
 			missing.Quantity = need
+			missing.Commander = false
 			toAdd = append(toAdd, missing)
 		}
 	}
@@ -126,13 +127,12 @@ func (s *Service) BulkEditDeck(ctx context.Context, userID string, deckID string
 	}
 
 	if len(toAdd) > 0 {
-		placements, placed, err := s.placeResolvedLines(ctx, userID, toAdd, resolved, 0, d.ID, false)
-		if err != nil {
-			return summary, err
+		placed, unresolved := placementLines(toAdd, resolved)
+		summary.CardsSkipped += unresolved.CardsSkipped
+		summary.Warnings = append(summary.Warnings, unresolved.Warnings...)
+		if err := s.placeLines(ctx, userID, d.ID, deck.PlacementPlan{Lines: placed}, &summary); err != nil {
+			return Summary{}, err
 		}
-		summary.CardsSkipped += placed.CardsSkipped
-		summary.Warnings = append(summary.Warnings, placed.Warnings...)
-		s.fillDeck(ctx, userID, d.ID, placements, &summary)
 	}
 
 	s.replaceListedTags(ctx, userID, d.ID, lines, &summary)

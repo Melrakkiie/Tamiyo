@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"Melrakkiie/Tamiyo/internal/card"
 	"Melrakkiie/Tamiyo/internal/deck"
 	"Melrakkiie/Tamiyo/internal/storage"
 )
@@ -43,7 +42,7 @@ func TestDuplicateDeck_CopiesOwnDeckAsPrivate(t *testing.T) {
 	folderID := 7
 	decks.decks[0].FolderID = &folderID
 	decks.decks[0].Favorite = true
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
 	targetFolderID := 9
 
 	result, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{Name: "  Tempo v2 ", FolderID: &targetFolderID})
@@ -61,17 +60,17 @@ func TestDuplicateDeck_CopiesOwnDeckAsPrivate(t *testing.T) {
 	assert.False(t, copied.Favorite)
 	assert.Equal(t, 1, result.Summary.DecksCreated)
 	assert.Equal(t, 9, result.Summary.CardsPending)
-	assert.Equal(t, "Tamiyo, Inquisitive Student", decks.addedPending[0].Name)
-	assert.Equal(t, result.DeckID, decks.addedPending[0].DeckID)
-	assert.Equal(t, decks.addedPending[0].ID, decks.pendingCommanderID)
-	assert.Contains(t, decks.setTags, "Sol Ring")
+	plan := decks.placedPlan(t, result.DeckID)
+	assert.Equal(t, "Tamiyo, Inquisitive Student", plan.Lines[0].Printing.Name)
+	assert.True(t, plan.Lines[0].Commander)
+	assert.Equal(t, []deck.TaggedCard{{Name: "Sol Ring", Tags: []string{"Ramp"}}}, plan.Tags)
 }
 
 func TestDuplicateDeck_EmptyRequestGivesDefaultNameAndNoFolder(t *testing.T) {
 	decks := copyDeckFixture()
 	folderID := 7
 	decks.decks[0].FolderID = &folderID
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
 
 	_, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{Name: "   "})
 
@@ -84,7 +83,7 @@ func TestDuplicateDeck_EmptyRequestGivesDefaultNameAndNoFolder(t *testing.T) {
 
 func TestDuplicateDeck_UsesTheChosenVisibility(t *testing.T) {
 	decks := copyDeckFixture()
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
 
 	_, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{Visibility: deck.VisibilityUnlisted})
 
@@ -97,7 +96,7 @@ func TestDuplicateDeck_CopiesSomeoneElsesSharedDeck(t *testing.T) {
 	decks := sharedDeckFixture()
 	folderID := 7
 	decks.decks[0].FolderID = &folderID
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
 
 	result, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{})
 
@@ -111,28 +110,21 @@ func TestDuplicateDeck_CopiesSomeoneElsesSharedDeck(t *testing.T) {
 func TestDuplicateDeck_KeepsOwnedAndPendingProxiesAsProxies(t *testing.T) {
 	decks := proxyDeckFixture()
 	decks.nextID = 50
-	cards := &fakeCardService{allCards: []card.Card{{ID: 41, Name: "Sol Ring", ScryfallID: solRingSLD, Proxy: true}}}
-	svc := newTestService(cards, &fakeStorageService{}, decks, tamiyoResolver())
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
 
 	result, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{})
 
 	require.NoError(t, err)
-	assert.Equal(t, []int{41}, decks.linkedCards[result.DeckID])
-	type pendingLine struct {
-		name     string
-		proxy    bool
-		quantity int
-	}
-	var pending []pendingLine
-	for _, p := range decks.addedPending {
-		pending = append(pending, pendingLine{p.Name, p.Proxy, p.Quantity})
-	}
-	assert.Equal(t, []pendingLine{{"Sol Ring", false, 1}, {"Sol Ring", true, 1}, {"Duress", true, 2}}, pending)
+	assert.Equal(t, []placedLine{
+		{name: "Sol Ring", setCode: "sld", quantity: 1, board: deck.BoardMain, proxy: deck.RealOnly},
+		{name: "Sol Ring", setCode: "sld", quantity: 2, board: deck.BoardMain, proxy: deck.ProxyOnly},
+		{name: "Duress", setCode: "m19", quantity: 2, board: deck.BoardSideboard, proxy: deck.ProxyOnly},
+	}, placedLines(decks.placedPlan(t, result.DeckID)))
 }
 
 func TestDuplicateDeck_EmptyDeckGivesAnEmptyCopy(t *testing.T) {
 	decks := &fakeDeckService{nextID: 50, decks: []deck.Deck{{ID: fixtureDeckID, Name: "Vide", Format: "modern"}}}
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
 
 	result, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{})
 
@@ -144,7 +136,7 @@ func TestDuplicateDeck_EmptyDeckGivesAnEmptyCopy(t *testing.T) {
 
 func TestDuplicateDeck_RemovesTheCopyWhenScryfallFails(t *testing.T) {
 	decks := copyDeckFixture()
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{err: errors.New("down")})
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{err: errors.New("down")})
 
 	_, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{})
 
@@ -155,7 +147,7 @@ func TestDuplicateDeck_RemovesTheCopyWhenScryfallFails(t *testing.T) {
 
 func TestDuplicateDeck_UnknownDeck(t *testing.T) {
 	decks := tamiyoDeckFixture()
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
 
 	_, err := svc.DuplicateDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000099", DuplicateRequest{})
 
@@ -167,7 +159,7 @@ func TestCollectDeck_PendingOnOwnDeckAsksTheDeckModuleForThePendingCardsOnly(t *
 	decks := tamiyoDeckFixture()
 	decks.collectResult = deck.CollectSummary{CardsCreated: 4, CardsLinked: 4}
 	storages := &fakeStorageService{storages: []storage.Storage{{ID: 4, Name: "Box", Type: "box"}}}
-	svc := newTestService(&fakeCardService{}, storages, decks, &fakeResolver{})
+	svc := NewService(&fakeCardService{}, storages, decks, &fakeResolver{})
 
 	summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{
 		Mode: CollectPending, StorageID: ptr(4), Boards: []string{deck.BoardSideboard, deck.BoardMain},
@@ -182,7 +174,7 @@ func TestCollectDeck_PendingOnOwnDeckAsksTheDeckModuleForThePendingCardsOnly(t *
 func TestCollectDeck_AllOnOwnDeckAlsoAsksForCopiesOfTheOwnedCards(t *testing.T) {
 	decks := tamiyoDeckFixture()
 	decks.collectResult = deck.CollectSummary{CardsCreated: 7, CardsLinked: 4}
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{Mode: CollectAll, Boards: []string{deck.BoardMain}})
 
@@ -195,7 +187,7 @@ func TestCollectDeck_OnSomeoneElsesDeckUsesTheSharedCollect(t *testing.T) {
 	for mode, missingOnly := range map[string]bool{CollectAll: false, CollectMissing: true} {
 		decks := sharedDeckFixture()
 		decks.collectResult = deck.CollectSummary{CardsCreated: 9}
-		svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+		svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 		summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{
 			Mode: mode, Boards: []string{deck.BoardConsidering, deck.BoardMain},
@@ -211,7 +203,7 @@ func TestCollectDeck_OnSomeoneElsesDeckUsesTheSharedCollect(t *testing.T) {
 func TestCollectDeck_ReturnsTheDeckModuleFailureWithoutASummary(t *testing.T) {
 	decks := tamiyoDeckFixture()
 	decks.collectErr = errors.New("boom")
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{Mode: CollectAll, Boards: []string{deck.BoardMain}})
 
@@ -221,8 +213,8 @@ func TestCollectDeck_ReturnsTheDeckModuleFailureWithoutASummary(t *testing.T) {
 
 func TestCollectDeck_RejectsBadRequests(t *testing.T) {
 	ctx := context.Background()
-	own := newTestService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{})
-	shared := newTestService(&fakeCardService{}, &fakeStorageService{}, sharedDeckFixture(), &fakeResolver{})
+	own := NewService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{})
+	shared := NewService(&fakeCardService{}, &fakeStorageService{}, sharedDeckFixture(), &fakeResolver{})
 	main := []string{deck.BoardMain}
 
 	_, err := own.CollectDeck(ctx, testUserID, fixtureDeckID, CollectRequest{Mode: "everything", Boards: main})
