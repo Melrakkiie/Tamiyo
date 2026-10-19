@@ -123,7 +123,7 @@ func tamiyoDeckLines(file tamiyoFile) []moxfieldDeckLine {
 			SetCode:         c.SetCode,
 			CollectorNumber: c.CollectorNumber,
 			Foil:            c.Foil,
-			Proxy:           proxyMarkOf(c.Proxy),
+			Proxy:           proxyMatch(c.Proxy),
 			Board:           c.Board,
 		}
 		if c.Commander && commanders < maxCommanders && deck.InMainBoard(c.Board) {
@@ -137,27 +137,12 @@ func tamiyoDeckLines(file tamiyoFile) []moxfieldDeckLine {
 	return lines
 }
 
-func (s *Service) applyTamiyoTags(ctx context.Context, userID string, deckID string, tags []tamiyoCardTags, summary *Summary) error {
-	if len(tags) == 0 {
-		return nil
+func (file tamiyoFile) taggedCards() []deck.TaggedCard {
+	var tags []deck.TaggedCard
+	for _, t := range file.Tags {
+		tags = append(tags, deck.TaggedCard{Name: t.Name, Tags: t.Tags})
 	}
-	current, err := s.decks.GetCardTags(ctx, userID, deckID)
-	if err != nil {
-		return fmt.Errorf("loading tags: %w", err)
-	}
-	existing := current.ByCardName()
-	for _, entry := range tags {
-		merged := append([]string{}, existing[deck.CardNameKey(entry.Name)]...)
-		for _, tag := range entry.Tags {
-			if !containsFold(merged, tag) {
-				merged = append(merged, tag)
-			}
-		}
-		if _, err := s.decks.SetCardTags(ctx, userID, deckID, entry.Name, merged); err != nil {
-			summary.Warnings = append(summary.Warnings, fmt.Sprintf("could not tag %q: %v", entry.Name, err))
-		}
-	}
-	return nil
+	return tags
 }
 
 func containsFold(values []string, value string) bool {

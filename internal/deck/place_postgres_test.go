@@ -276,3 +276,14 @@ func TestPlaceCards_TakesCopiesOfAnyPrintingOfTheCardWhenAsked(t *testing.T) {
 	assert.Equal(t, otherPrinting.setCode, entries[1].SetCode)
 	assert.Equal(t, []int{copyID}, entries[1].OwnedCardIDs)
 }
+
+func TestPlaceCards_TakesACopyUsedByAnotherDeckWhenNoneIsFree(t *testing.T) {
+	f := newContentFixture(t)
+	shared := f.collectionCopy(t, collectionCopy{printing: bolt})
+	f.putInDeck(t, shared, otherDeckID)
+
+	summary := f.place(t, PlacementPlan{Lines: []PlacementLine{line(bolt, 1)}})
+
+	assert.Equal(t, PlacementSummary{CardsLinked: 1}, summary)
+	assert.Equal(t, []int{shared}, f.content(t).Entries[0].OwnedCardIDs)
+}

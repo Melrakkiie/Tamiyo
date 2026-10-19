@@ -153,15 +153,13 @@ func (f *fakeStorageService) CreateStorage(ctx context.Context, userID string, s
 }
 
 type fakeDeckService struct {
-	tags       deck.DeckTags
-	setTags    map[string][]string
-	setTagsErr error
+	tags    deck.DeckTags
+	setTags map[string][]string
 
 	decks       []deck.Deck
 	nextID      int
 	created     []deck.Deck
 	linkedCards map[string][]int
-	linkErr     error
 
 	cardsByDeck   map[string][]deck.DeckCard
 	getDeckErr    error
@@ -174,7 +172,6 @@ type fakeDeckService struct {
 	commits        []deck.PendingCommit
 
 	addedPending       []deck.PendingCard
-	addPendingErr      error
 	pendingCommanderID int
 	cardCommanderID    int
 	pendingPartnerID   int
@@ -190,9 +187,42 @@ type fakeDeckService struct {
 	commanderCleared bool
 	clearedSlot      deck.CommanderSlot
 
-	collection   *fakeCardService
-	storages     *fakeStorageService
-	findOwnedErr error
+	collection *fakeCardService
+	storages   *fakeStorageService
+
+	placed       []placedPlan
+	placeSummary *deck.PlacementSummary
+	placeErr     error
+}
+
+type placedPlan struct {
+	deckID string
+	plan   deck.PlacementPlan
+}
+
+// PlaceCards records the plan and, unless told otherwise, reports every card
+// as pending.
+func (f *fakeDeckService) PlaceCards(ctx context.Context, userID string, deckID string, plan deck.PlacementPlan) (deck.PlacementSummary, error) {
+	if f.placeErr != nil {
+		return deck.PlacementSummary{}, f.placeErr
+	}
+	f.placed = append(f.placed, placedPlan{deckID: deckID, plan: plan})
+	if f.placeSummary != nil {
+		return *f.placeSummary, nil
+	}
+	var summary deck.PlacementSummary
+	for _, line := range plan.Lines {
+		summary.CardsPending += line.Quantity
+	}
+	return summary, nil
+}
+
+// placedPlan returns the one plan placed into the deck.
+func (f *fakeDeckService) placedPlan(t *testing.T, deckID string) deck.PlacementPlan {
+	t.Helper()
+	require.Len(t, f.placed, 1)
+	require.Equal(t, deckID, f.placed[0].deckID)
+	return f.placed[0].plan
 }
 
 func (f *fakeDeckService) RemoveCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error {
@@ -231,9 +261,6 @@ func newTestService(cards cardService, storages storageService, decks deckServic
 }
 
 func (f *fakeDeckService) FindOwnedCopies(ctx context.Context, userID string, targetDeckID string, wanted deck.CopiesWanted) ([]deck.OwnedCopy, error) {
-	if f.findOwnedErr != nil {
-		return nil, f.findOwnedErr
-	}
 	if f.collection == nil {
 		return nil, nil
 	}
@@ -303,9 +330,6 @@ func (f *fakeDeckService) GetCardTags(ctx context.Context, userID string, deckID
 }
 
 func (f *fakeDeckService) SetCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) (deck.TaggedCard, error) {
-	if f.setTagsErr != nil {
-		return deck.TaggedCard{}, f.setTagsErr
-	}
 	if f.setTags == nil {
 		f.setTags = map[string][]string{}
 	}
@@ -323,9 +347,6 @@ func (f *fakeDeckService) SetCardCommander(ctx context.Context, userID string, d
 }
 
 func (f *fakeDeckService) AddPendingCard(ctx context.Context, userID string, deckID string, p deck.PendingCard) (deck.PendingCard, error) {
-	if f.addPendingErr != nil {
-		return deck.PendingCard{}, f.addPendingErr
-	}
 	p.ID = len(f.addedPending) + 100
 	p.DeckID = deckID
 	f.addedPending = append(f.addedPending, p)
@@ -415,9 +436,6 @@ func (f *fakeDeckService) CreateDeck(ctx context.Context, userID string, d deck.
 }
 
 func (f *fakeDeckService) PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error {
-	if f.linkErr != nil {
-		return f.linkErr
-	}
 	if f.linkedCards == nil {
 		f.linkedCards = make(map[string][]int)
 	}
@@ -781,6 +799,28 @@ func importDeck(t *testing.T, cards *fakeCardService, decks *fakeDeckService, de
 	return summary
 }
 
+func TestImportIntoDeck_PlacesTheResolvedLinesAsOnePlan(t *testing.T) {
+	decks := &fakeDeckService{placeSummary: &deck.PlacementSummary{CardsLinked: 2, CardsPending: 1}}
+
+	summary := importDeck(t, &fakeCardService{}, decks, "1 Atraxa, Praetors' Voice (CMR) 1\n2 Sol Ring (SLD) 1011 *F*\n", true)
+
+	assert.Equal(t, deck.PlacementPlan{Lines: []deck.PlacementLine{
+		{
+			Printing:  deck.Printing{Name: "Atraxa, Praetors' Voice", ScryfallID: atraxaID, SetCode: "CMR", CollectorNumber: "1", ManaValue: 4, Colors: ptrString("WUBG"), CardType: ptrString("Creature"), ColorIdentity: ptrString("WUBG")},
+			Board:     deck.BoardMain,
+			Quantity:  1,
+			Commander: true,
+		},
+		{
+			Printing: deck.Printing{Name: "Sol Ring", ScryfallID: solRingID, SetCode: "SLD", CollectorNumber: "1011", ManaValue: 1, Colors: ptrString(""), CardType: ptrString("Artifact"), ColorIdentity: ptrString("")},
+			Foil:     true,
+			Board:    deck.BoardMain,
+			Quantity: 2,
+		},
+	}}, decks.placedPlan(t, targetDeckID))
+	assert.Equal(t, Summary{CardsLinked: 2, CardsPending: 1}, summary)
+}
+
 func TestImportIntoDeck_NeverCreatesCardsOrDecks(t *testing.T) {
 	cards := &fakeCardService{}
 	decks := &fakeDeckService{}
@@ -793,197 +833,84 @@ func TestImportIntoDeck_NeverCreatesCardsOrDecks(t *testing.T) {
 	assert.Equal(t, 0, summary.DecksCreated)
 }
 
-func TestImportIntoDeck_PutsOwnedCopiesInTheDeck(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{
-		{ID: 5, Name: "Atraxa, Praetors' Voice", ScryfallID: atraxaID},
-		{ID: 6, Name: "Sol Ring", ScryfallID: solRingID},
-		{ID: 7, Name: "Sol Ring", ScryfallID: solRingID},
-	}}
-	decks := &fakeDeckService{}
-
-	summary := importDeck(t, cards, decks, "1 Atraxa, Praetors' Voice (CMR) 1\n2 Sol Ring (SLD) 1011\n", true)
-
-	assert.Equal(t, 3, summary.CardsLinked)
-	assert.Equal(t, 0, summary.CardsPending)
-	assert.Equal(t, 5, decks.cardCommanderID)
-	assert.ElementsMatch(t, []int{5, 6, 7}, decks.linkedCards[targetDeckID])
-	assert.Empty(t, decks.addedPending)
+// placedLine is what a test checks of a placement line.
+type placedLine struct {
+	name        string
+	setCode     string
+	quantity    int
+	board       string
+	commander   bool
+	anyPrinting bool
+	foil        bool
+	proxy       deck.ProxyMatch
 }
 
-func TestImportIntoDeck_SkipsCopiesInStoragesClosedToTheDeck(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{
-		{ID: 6, Name: "Sol Ring", ScryfallID: solRingID, StorageID: ptr(1)},
-		{ID: 7, Name: "Sol Ring", ScryfallID: solRingID, StorageID: ptr(2)},
-		{ID: 8, Name: "Sol Ring", ScryfallID: solRingID, StorageID: ptr(3)},
-	}}
-	storages := &fakeStorageService{storages: []storage.Storage{
-		{ID: 1, Name: "Trades", Locked: true},
-		{ID: 2, Name: "Reserved", Locked: true, AllowedDeckIDs: []string{targetDeckID}},
-		{ID: 3, Name: "Binder", AllowedDeckIDs: []string{"00000000-0000-0000-0000-000000000099"}},
-	}}
-	decks := withTargetDeck(&fakeDeckService{})
-	svc := newTestService(cards, storages, decks, deckImportResolver())
-
-	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader("3 Sol Ring (SLD) 1011\n"))
-
-	require.NoError(t, err)
-	assert.Equal(t, 2, summary.CardsLinked)
-	assert.Equal(t, 1, summary.CardsPending)
-	assert.ElementsMatch(t, []int{7, 8}, decks.linkedCards[targetDeckID])
+func placedLines(plan deck.PlacementPlan) []placedLine {
+	lines := make([]placedLine, 0, len(plan.Lines))
+	for _, l := range plan.Lines {
+		lines = append(lines, placedLine{l.Printing.Name, l.Printing.SetCode, l.Quantity, l.Board, l.Commander, l.AnyPrinting, l.Foil, l.Proxy})
+	}
+	return lines
 }
 
-func TestImportIntoDeck_IncludeLockedStoragesUsesOpenCopiesFirst(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{
-		{ID: 6, Name: "Sol Ring", ScryfallID: solRingID, StorageID: ptr(1)},
-		{ID: 7, Name: "Sol Ring", ScryfallID: solRingID, StorageID: ptr(2)},
-	}}
-	storages := &fakeStorageService{storages: []storage.Storage{
-		{ID: 1, Name: "Trades", Locked: true},
-		{ID: 2, Name: "Binder"},
-	}}
+func TestImportIntoDeck_UsesLockedStoragesOnlyWhenAsked(t *testing.T) {
+	for _, include := range []bool{false, true} {
+		decks := withTargetDeck(&fakeDeckService{})
+		svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, deckImportResolver())
 
-	decks := withTargetDeck(&fakeDeckService{})
-	svc := newTestService(cards, storages, decks, deckImportResolver())
-	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{IncludeLockedStorages: true}, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
-	require.NoError(t, err)
-	assert.Equal(t, 1, summary.CardsLinked)
-	assert.Equal(t, []int{7}, decks.linkedCards[targetDeckID])
+		_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{IncludeLockedStorages: include}, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
 
-	decks = withTargetDeck(&fakeDeckService{})
-	svc = newTestService(cards, storages, decks, deckImportResolver())
-	summary, err = svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{IncludeLockedStorages: true}, strings.NewReader("2 Sol Ring (SLD) 1011\n"))
-	require.NoError(t, err)
-	assert.Equal(t, 2, summary.CardsLinked)
-	assert.Equal(t, 0, summary.CardsPending)
-	assert.ElementsMatch(t, []int{6, 7}, decks.linkedCards[targetDeckID])
-}
-
-func TestImportIntoDeck_AddsMissingCopiesAsPending(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 6, Name: "Sol Ring", ScryfallID: solRingID}}}
-	decks := &fakeDeckService{}
-
-	summary := importDeck(t, cards, decks, "3 Sol Ring (SLD) 1011\n", false)
-
-	assert.Equal(t, 1, summary.CardsLinked)
-	assert.Equal(t, 2, summary.CardsPending)
-	assert.Equal(t, []int{6}, decks.linkedCards[targetDeckID])
-	require.Len(t, decks.addedPending, 1)
-	pending := decks.addedPending[0]
-	assert.Equal(t, targetDeckID, pending.DeckID)
-	assert.Equal(t, "Sol Ring", pending.Name)
-	assert.Equal(t, solRingID, pending.ScryfallID)
-	assert.Equal(t, "SLD", pending.SetCode)
-	assert.Equal(t, "1011", pending.CollectorNumber)
-	assert.Equal(t, 2, pending.Quantity)
-	assert.Equal(t, 1.0, pending.ManaValue)
-	require.NotNil(t, pending.CardType)
-	assert.Equal(t, "Artifact", *pending.CardType)
+		require.NoError(t, err)
+		assert.Equal(t, include, decks.placedPlan(t, targetDeckID).IncludeLockedStorages)
+	}
 }
 
 func TestImportIntoDeck_AddsMoxfieldTags(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 6, Name: "Sol Ring", ScryfallID: solRingID}}}
-	decks := &fakeDeckService{tags: deck.DeckTags{Cards: []deck.TaggedCard{{Name: "Sol Ring", Tags: []string{"Mana"}}}}}
+	decks := &fakeDeckService{}
 
-	importDeck(t, cards, decks, "1 Sol Ring (SLD) 1011 #ramp #mana\nSideboard\n2 Sol Ring (SLD) 1011 #artifact\n1 Atraxa, Praetors' Voice (CMR) 1\n", false)
+	importDeck(t, &fakeCardService{}, decks, "1 Sol Ring (SLD) 1011 #ramp #mana\nSideboard\n2 Sol Ring (SLD) 1011 #artifact #Ramp\n1 Atraxa, Praetors' Voice (CMR) 1\n", false)
 
-	assert.Equal(t, map[string][]string{"Sol Ring": {"Mana", "ramp", "artifact"}}, decks.setTags)
+	assert.Equal(t, []deck.TaggedCard{{Name: "Sol Ring", Tags: []string{"ramp", "mana", "artifact"}}}, decks.placedPlan(t, targetDeckID).Tags)
+}
+
+func TestImportIntoDeck_ReportsTagsTheDeckCouldNotApply(t *testing.T) {
+	decks := &fakeDeckService{placeSummary: &deck.PlacementSummary{CardsPending: 1, SkippedTags: []deck.SkippedTags{{CardName: "Sol Ring", Err: deck.ErrInvalidTag}}}}
+
+	summary := importDeck(t, &fakeCardService{}, decks, "1 Sol Ring (SLD) 1011 #ramp\n", false)
+
+	require.Len(t, summary.Warnings, 1)
+	assert.Contains(t, summary.Warnings[0], `could not tag "Sol Ring"`)
+	assert.Equal(t, 1, summary.CardsPending)
 }
 
 func TestImportIntoDeck_StoresAndTagsTheEnglishScryfallName(t *testing.T) {
-	cards := &fakeCardService{}
 	decks := &fakeDeckService{}
 
-	importDeck(t, cards, decks, "2 Anneau solaire (SLD) 1011 #ramp\n", false)
+	importDeck(t, &fakeCardService{}, decks, "2 Anneau solaire (SLD) 1011 #ramp\n", false)
 
-	require.Len(t, decks.addedPending, 1)
-	assert.Equal(t, "Sol Ring", decks.addedPending[0].Name)
-	assert.Equal(t, map[string][]string{"Sol Ring": {"ramp"}}, decks.setTags)
+	plan := decks.placedPlan(t, targetDeckID)
+	assert.Equal(t, []placedLine{{name: "Sol Ring", setCode: "SLD", quantity: 2, board: deck.BoardMain}}, placedLines(plan))
+	assert.Equal(t, []deck.TaggedCard{{Name: "Sol Ring", Tags: []string{"ramp"}}}, plan.Tags)
 }
 
-func TestImportIntoDeck_OnlyUsesTheExactPrinting(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 6, Name: "Sol Ring", ScryfallID: "33333333-0000-0000-0000-000000000000"}}}
+func TestImportIntoDeck_MarksNoCommanderWithoutTheFlag(t *testing.T) {
 	decks := &fakeDeckService{}
 
-	summary := importDeck(t, cards, decks, "1 Sol Ring (SLD) 1011\n", false)
+	importDeck(t, &fakeCardService{}, decks, "1 Atraxa, Praetors' Voice (CMR) 1\n", false)
 
-	assert.Equal(t, 0, summary.CardsLinked)
-	assert.Equal(t, 1, summary.CardsPending)
-	assert.Empty(t, decks.linkedCards[targetDeckID])
-}
-
-func TestImportIntoDeck_PrefersCopiesInNoDeckThenTheSameFinish(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{
-		{ID: 1, Name: "Sol Ring", ScryfallID: solRingID, Foil: false},
-		{ID: 2, Name: "Sol Ring", ScryfallID: solRingID, Foil: true},
-		{ID: 3, Name: "Sol Ring", ScryfallID: solRingID, Foil: true},
-	}}
-	decks := &fakeDeckService{
-		decks:       []deck.Deck{{ID: "00000000-0000-0000-0000-000000000099", Name: "Other"}},
-		cardsByDeck: map[string][]deck.DeckCard{"00000000-0000-0000-0000-000000000099": {{ID: 2}}},
-	}
-
-	importDeck(t, cards, decks, "2 Sol Ring (SLD) 1011 *F*\n", false)
-
-	assert.Equal(t, []int{3, 1}, decks.linkedCards[targetDeckID])
-}
-
-func TestImportIntoDeck_ReusesACopyAlreadyInAnotherDeck(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 2, Name: "Sol Ring", ScryfallID: solRingID}}}
-	decks := &fakeDeckService{
-		decks:       []deck.Deck{{ID: "00000000-0000-0000-0000-000000000099", Name: "Other"}},
-		cardsByDeck: map[string][]deck.DeckCard{"00000000-0000-0000-0000-000000000099": {{ID: 2}}},
-	}
-
-	summary := importDeck(t, cards, decks, "1 Sol Ring (SLD) 1011\n", false)
-
-	assert.Equal(t, 1, summary.CardsLinked)
-	assert.Equal(t, []int{2}, decks.linkedCards[targetDeckID])
-}
-
-func TestImportIntoDeck_UsesEachOwnedCopyOnce(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 6, Name: "Sol Ring", ScryfallID: solRingID}}}
-	decks := &fakeDeckService{}
-
-	summary := importDeck(t, cards, decks, "1 Sol Ring (SLD) 1011\n1 Sol Ring (SLD) 1011\n", false)
-
-	assert.Equal(t, 1, summary.CardsLinked)
-	assert.Equal(t, 1, summary.CardsPending)
-}
-
-func TestImportIntoDeck_MakesAPendingCommanderWhenItIsNotOwned(t *testing.T) {
-	cards := &fakeCardService{}
-	decks := &fakeDeckService{}
-
-	summary := importDeck(t, cards, decks, "1 Atraxa, Praetors' Voice (CMR) 1\n1 Sol Ring (SLD) 1011\n", true)
-
-	assert.Equal(t, 2, summary.CardsPending)
-	assert.Zero(t, decks.cardCommanderID)
-	require.Len(t, decks.addedPending, 2)
-	assert.Equal(t, "Atraxa, Praetors' Voice", decks.addedPending[0].Name)
-	assert.Equal(t, decks.addedPending[0].ID, decks.pendingCommanderID)
-}
-
-func TestImportIntoDeck_WithoutCommanderFlag(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 5, Name: "Atraxa, Praetors' Voice", ScryfallID: atraxaID}}}
-	decks := &fakeDeckService{}
-
-	importDeck(t, cards, decks, "1 Atraxa, Praetors' Voice (CMR) 1\n", false)
-
-	assert.Zero(t, decks.cardCommanderID)
-	assert.Zero(t, decks.pendingCommanderID)
+	assert.False(t, decks.placedPlan(t, targetDeckID).Lines[0].Commander)
 }
 
 func TestImportIntoDeck_UnresolvedLinesAreSkippedButTheRestIsImported(t *testing.T) {
-	cards := &fakeCardService{}
 	decks := &fakeDeckService{}
 
-	summary := importDeck(t, cards, decks, "1 Mystery Commander (XXX) 999\n1 Sol Ring (SLD) 1011\n", true)
+	summary := importDeck(t, &fakeCardService{}, decks, "1 Mystery Commander (XXX) 999\n1 Sol Ring (SLD) 1011\n", true)
 
 	assert.Equal(t, 1, summary.CardsSkipped)
 	assert.Equal(t, 1, summary.CardsPending)
-	assert.Zero(t, decks.cardCommanderID)
-	assert.Zero(t, decks.pendingCommanderID)
-	assert.NotEmpty(t, summary.Warnings)
+	require.Len(t, summary.Warnings, 1)
+	assert.Contains(t, summary.Warnings[0], `commander "Mystery Commander"`)
+	assert.Equal(t, []placedLine{{name: "Sol Ring", setCode: "SLD", quantity: 1, board: deck.BoardMain}}, placedLines(decks.placedPlan(t, targetDeckID)))
 }
 
 func plainListResolver() *fakeResolver {
@@ -993,114 +920,35 @@ func plainListResolver() *fakeResolver {
 	}}
 }
 
-func importPlainList(t *testing.T, cards *fakeCardService, decks *fakeDeckService, decklist string) Summary {
+func importPlainList(t *testing.T, decks *fakeDeckService, decklist string) Summary {
 	t.Helper()
-	svc := newTestService(cards, &fakeStorageService{}, withTargetDeck(decks), plainListResolver())
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, withTargetDeck(decks), plainListResolver())
 	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader(decklist))
 	require.NoError(t, err)
 	return summary
 }
 
-func TestImportIntoDeck_PlainListUsesAnyOwnedPrinting(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{
-		{ID: 6, Name: "Sol Ring", ScryfallID: "33333333-0000-0000-0000-000000000000"},
-		{ID: 7, Name: "Sol Ring", ScryfallID: solRingID},
-	}}
+func TestImportIntoDeck_PlainListAcceptsAnyPrintingAndAddsTheScryfallOneAsPending(t *testing.T) {
 	decks := &fakeDeckService{}
 
-	summary := importPlainList(t, cards, decks, "3 Sol Ring\n")
+	importPlainList(t, decks, "3 Sol Ring\n2 Fire / Ice\n")
 
-	assert.Equal(t, 2, summary.CardsLinked)
-	assert.Equal(t, 1, summary.CardsPending)
-	assert.ElementsMatch(t, []int{6, 7}, decks.linkedCards[targetDeckID])
-}
-
-func TestImportIntoDeck_PlainListAddsTheScryfallPrintingAsPending(t *testing.T) {
-	decks := &fakeDeckService{}
-
-	summary := importPlainList(t, &fakeCardService{}, decks, "1 Sol Ring\n")
-
-	assert.Equal(t, 1, summary.CardsPending)
-	require.Len(t, decks.addedPending, 1)
-	pending := decks.addedPending[0]
-	assert.Equal(t, "Sol Ring", pending.Name)
-	assert.Equal(t, solRingID, pending.ScryfallID)
-	assert.Equal(t, "cmm", pending.SetCode)
-	assert.Equal(t, "464", pending.CollectorNumber)
-	assert.Equal(t, 1.0, pending.ManaValue)
-}
-
-func TestImportIntoDeck_PlainListMatchesSplitCardsWithEitherSeparator(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 8, Name: "Fire // Ice", ScryfallID: "55555555-0000-0000-0000-000000000000"}}}
-	decks := &fakeDeckService{}
-
-	summary := importPlainList(t, cards, decks, "2 Fire / Ice\n")
-
-	assert.Equal(t, 1, summary.CardsLinked)
-	assert.Equal(t, 1, summary.CardsPending)
-	assert.Equal(t, "Fire // Ice", decks.addedPending[0].Name)
+	plan := decks.placedPlan(t, targetDeckID)
+	assert.Equal(t, []placedLine{
+		{name: "Sol Ring", setCode: "cmm", quantity: 3, board: deck.BoardMain, anyPrinting: true},
+		{name: "Fire // Ice", setCode: "mh2", quantity: 2, board: deck.BoardMain, anyPrinting: true},
+	}, placedLines(plan))
+	assert.Equal(t, solRingID, plan.Lines[0].Printing.ScryfallID)
+	assert.Equal(t, "464", plan.Lines[0].Printing.CollectorNumber)
 }
 
 func TestImportIntoDeck_PlainListWarnsAboutUnknownNames(t *testing.T) {
-	summary := importPlainList(t, &fakeCardService{}, &fakeDeckService{}, "1 Not A Real Card\n1 Sol Ring\n")
+	summary := importPlainList(t, &fakeDeckService{}, "1 Not A Real Card\n1 Sol Ring\n")
 
 	assert.Equal(t, 1, summary.CardsSkipped)
 	assert.Equal(t, 1, summary.CardsPending)
 	require.Len(t, summary.Warnings, 1)
 	assert.Contains(t, summary.Warnings[0], "Not A Real Card")
-}
-
-func importIntoDeck(t *testing.T, cards *fakeCardService, decks *fakeDeckService, decklist string, commanderFromFirstLine bool) Summary {
-	t.Helper()
-	svc := newTestService(cards, &fakeStorageService{}, decks, deckImportResolver())
-	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{CommanderFromFirstLine: commanderFromFirstLine}, strings.NewReader(decklist))
-	require.NoError(t, err)
-	return summary
-}
-
-func TestImportIntoDeck_AddsCardsToTheExistingDeck(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 6, Name: "Sol Ring", ScryfallID: solRingID}}}
-	decks := &fakeDeckService{decks: []deck.Deck{{ID: targetDeckID, Name: "Target"}}}
-
-	summary := importIntoDeck(t, cards, decks, "2 Sol Ring (SLD) 1011\n", false)
-
-	assert.Empty(t, decks.created)
-	assert.Equal(t, 0, summary.DecksCreated)
-	assert.Equal(t, 1, summary.CardsLinked)
-	assert.Equal(t, 1, summary.CardsPending)
-	assert.Equal(t, []int{6}, decks.linkedCards[targetDeckID])
-	assert.Equal(t, targetDeckID, decks.addedPending[0].DeckID)
-}
-
-func TestImportIntoDeck_DoesNotReuseCopiesAlreadyInTheDeck(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{
-		{ID: 6, Name: "Sol Ring", ScryfallID: solRingID},
-		{ID: 7, Name: "Sol Ring", ScryfallID: solRingID},
-	}}
-	decks := &fakeDeckService{
-		decks:       []deck.Deck{{ID: targetDeckID, Name: "Target"}},
-		cardsByDeck: map[string][]deck.DeckCard{targetDeckID: {{ID: 6}}},
-	}
-
-	summary := importIntoDeck(t, cards, decks, "2 Sol Ring (SLD) 1011\n", false)
-
-	assert.Equal(t, 1, summary.CardsLinked)
-	assert.Equal(t, 1, summary.CardsPending)
-	assert.Equal(t, []int{7}, decks.linkedCards[targetDeckID])
-}
-
-func TestImportIntoDeck_SetsTheCommanderOnlyWhenTheDeckHasNone(t *testing.T) {
-	owned := []card.Card{{ID: 5, Name: "Atraxa, Praetors' Voice", ScryfallID: atraxaID}}
-
-	decks := &fakeDeckService{decks: []deck.Deck{{ID: targetDeckID, Name: "Target"}}}
-	importIntoDeck(t, &fakeCardService{allCards: owned}, decks, "1 Atraxa, Praetors' Voice (CMR) 1\n", true)
-	assert.Equal(t, 5, decks.cardCommanderID)
-
-	commanderID := 9
-	decks = &fakeDeckService{decks: []deck.Deck{{ID: targetDeckID, Name: "Target", CommanderID: &commanderID}}}
-	importIntoDeck(t, &fakeCardService{allCards: owned}, decks, "1 Atraxa, Praetors' Voice (CMR) 1\n", true)
-	assert.Zero(t, decks.cardCommanderID)
-	assert.Equal(t, []int{5}, decks.linkedCards[targetDeckID])
 }
 
 func TestImportIntoDeck_ReturnsDeckNotFound(t *testing.T) {
@@ -1113,39 +961,31 @@ func TestImportIntoDeck_ReturnsDeckNotFound(t *testing.T) {
 
 func TestImportIntoDeck_ReturnsErrorWhenScryfallResolveFails(t *testing.T) {
 	resolver := &fakeResolver{err: errors.New("scryfall is down")}
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, withTargetDeck(&fakeDeckService{}), resolver)
+	decks := withTargetDeck(&fakeDeckService{})
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, resolver)
 
 	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
 
 	assert.ErrorIs(t, err, ErrScryfallUnavailable)
+	assert.Empty(t, decks.placed)
 }
 
-func TestImportIntoDeck_ReturnsErrorWhenOwnedCopiesCannotBeFound(t *testing.T) {
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, withTargetDeck(&fakeDeckService{findOwnedErr: errors.New("db is down")}), deckImportResolver())
+func TestImportIntoDeck_ReturnsThePlacementErrorWithoutAPartialSummary(t *testing.T) {
+	placeErr := errors.New("insert failed")
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, withTargetDeck(&fakeDeckService{placeErr: placeErr}), deckImportResolver())
+
+	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader("1 Mystery (XXX) 1\n1 Sol Ring (SLD) 1011\n"))
+
+	assert.ErrorIs(t, err, placeErr)
+	assert.Equal(t, Summary{}, summary)
+}
+
+func TestImportIntoDeck_ReturnsDeckNotFoundWhenTheDeckGoesAwayWhilePlacing(t *testing.T) {
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, withTargetDeck(&fakeDeckService{placeErr: deck.ErrNotFound}), deckImportResolver())
 
 	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
 
-	require.Error(t, err)
-}
-
-func TestImportIntoDeck_WarnsWhenPuttingACopyInTheDeckFails(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 6, Name: "Sol Ring", ScryfallID: solRingID}}}
-	decks := &fakeDeckService{linkErr: errors.New("link failed")}
-
-	summary := importDeck(t, cards, decks, "1 Sol Ring (SLD) 1011\n", false)
-
-	assert.Equal(t, 0, summary.CardsLinked)
-	assert.NotEmpty(t, summary.Warnings)
-}
-
-func TestImportIntoDeck_WarnsWhenAddingAPendingCardFails(t *testing.T) {
-	decks := &fakeDeckService{addPendingErr: errors.New("insert failed")}
-
-	summary := importDeck(t, &fakeCardService{}, decks, "1 Sol Ring (SLD) 1011\n", false)
-
-	assert.Equal(t, 0, summary.CardsPending)
-	assert.Equal(t, 1, summary.CardsSkipped)
-	assert.NotEmpty(t, summary.Warnings)
+	assert.ErrorIs(t, err, ErrDeckNotFound)
 }
 
 func TestImportManaBox_StoresColorsAndTypeFromScryfall(t *testing.T) {
@@ -1253,27 +1093,14 @@ func TestRefreshCardDetails_ReturnsScryfallUnavailable(t *testing.T) {
 	assert.ErrorIs(t, err, ErrScryfallUnavailable)
 }
 
-func TestImportIntoDeck_PutsEachSectionInItsBoard(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 6, Name: "Sol Ring", ScryfallID: solRingID}}}
+func TestImportIntoDeck_PutsEachSectionInItsBoardAndTakesTheCommanderFromTheMainBoard(t *testing.T) {
 	decks := &fakeDeckService{}
 
-	summary := importDeck(t, cards, decks, "Sideboard\n1 Sol Ring (SLD) 1011\n\nMaybeboard:\n1 Atraxa, Praetors' Voice (CMR) 1\n", true)
+	importDeck(t, &fakeCardService{}, decks, "Sideboard\n1 Sol Ring (SLD) 1011\n\nMaybeboard:\n1 Sol Ring (SLD) 1011\nDeck\n1 Atraxa, Praetors' Voice (CMR) 1\n", true)
 
-	assert.Equal(t, 1, summary.CardsLinked)
-	assert.Equal(t, 1, summary.CardsPending)
-	assert.Equal(t, deck.BoardSideboard, decks.linkedBoards[6])
-	require.Len(t, decks.addedPending, 1)
-	assert.Equal(t, deck.BoardConsidering, decks.addedPending[0].Board)
-	assert.Zero(t, decks.cardCommanderID)
-	assert.Zero(t, decks.pendingCommanderID)
-}
-
-func TestImportIntoDeck_TakesTheCommanderFromTheMainBoard(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 5, Name: "Atraxa, Praetors' Voice", ScryfallID: atraxaID}}}
-	decks := &fakeDeckService{}
-
-	importDeck(t, cards, decks, "Sideboard\n1 Sol Ring (SLD) 1011\nDeck\n1 Atraxa, Praetors' Voice (CMR) 1\n", true)
-
-	assert.Equal(t, 5, decks.cardCommanderID)
-	assert.Equal(t, deck.BoardMain, decks.linkedBoards[5])
+	assert.Equal(t, []placedLine{
+		{name: "Sol Ring", setCode: "SLD", quantity: 1, board: deck.BoardSideboard},
+		{name: "Sol Ring", setCode: "SLD", quantity: 1, board: deck.BoardConsidering},
+		{name: "Atraxa, Praetors' Voice", setCode: "CMR", quantity: 1, board: deck.BoardMain, commander: true},
+	}, placedLines(decks.placedPlan(t, targetDeckID)))
 }

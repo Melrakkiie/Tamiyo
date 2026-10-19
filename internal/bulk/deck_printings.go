@@ -74,7 +74,7 @@ func (s *Service) SplitPrintings(ctx context.Context, userID string, deckID stri
 	for _, want := range toPlace {
 		wanted.ScryfallIDs = append(wanted.ScryfallIDs, want.ScryfallID)
 	}
-	owned, err := s.loadOwnedCopies(ctx, userID, deckID, wanted, false)
+	owned, err := s.loadOwnedCopies(ctx, userID, deckID, wanted)
 	if err != nil {
 		return Summary{}, err
 	}

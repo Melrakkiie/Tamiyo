@@ -39,10 +39,9 @@ func TestBulkEditDeck_KeepsListedCardsRemovesTheRestAndAddsNewOnes(t *testing.T)
 	assert.False(t, decks.commanderCleared)
 	assert.Equal(t, 3, summary.CardsRemoved)
 	assert.Equal(t, 2, summary.CardsPending)
-	require.Len(t, decks.addedPending, 1)
-	assert.Equal(t, "Lightning Bolt", decks.addedPending[0].Name)
-	assert.Equal(t, 2, decks.addedPending[0].Quantity)
-	assert.Equal(t, deck.BoardMain, decks.addedPending[0].Board)
+	plan := decks.placedPlan(t, fixtureDeckID)
+	assert.Equal(t, []placedLine{{name: "Lightning Bolt", setCode: "m10", quantity: 2, board: deck.BoardMain, anyPrinting: true}}, placedLines(plan))
+	assert.Empty(t, plan.Tags, "bulk edit replaces the tags itself")
 	assert.Equal(t, map[string][]string{
 		"Tamiyo, Inquisitive Student": {"commander"},
 		"Island":                      {"land"},
@@ -62,7 +61,7 @@ func TestBulkEditDeck_TheCurrentListChangesNothing(t *testing.T) {
 	assert.Empty(t, decks.unlinkedCards)
 	assert.Empty(t, decks.removedPending)
 	assert.Empty(t, decks.pendingQuantities)
-	assert.Empty(t, decks.addedPending)
+	assert.Empty(t, decks.placed)
 	assert.Empty(t, decks.setTags)
 	assert.Zero(t, summary.CardsRemoved)
 }

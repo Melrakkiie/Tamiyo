@@ -104,7 +104,7 @@ func (s *Service) switchCards(ctx context.Context, userID string, deckID string,
 	for _, to := range slices.Concat(copyTargets, pendingTargets) {
 		wanted.ScryfallIDs = append(wanted.ScryfallIDs, to.ScryfallID)
 	}
-	owned, err := s.loadOwnedCopies(ctx, userID, deckID, wanted, false)
+	owned, err := s.loadOwnedCopies(ctx, userID, deckID, wanted)
 	if err != nil {
 		return Summary{}, err
 	}

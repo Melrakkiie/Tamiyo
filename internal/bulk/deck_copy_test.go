@@ -61,10 +61,10 @@ func TestDuplicateDeck_CopiesOwnDeckAsPrivate(t *testing.T) {
 	assert.False(t, copied.Favorite)
 	assert.Equal(t, 1, result.Summary.DecksCreated)
 	assert.Equal(t, 9, result.Summary.CardsPending)
-	assert.Equal(t, "Tamiyo, Inquisitive Student", decks.addedPending[0].Name)
-	assert.Equal(t, result.DeckID, decks.addedPending[0].DeckID)
-	assert.Equal(t, decks.addedPending[0].ID, decks.pendingCommanderID)
-	assert.Contains(t, decks.setTags, "Sol Ring")
+	plan := decks.placedPlan(t, result.DeckID)
+	assert.Equal(t, "Tamiyo, Inquisitive Student", plan.Lines[0].Printing.Name)
+	assert.True(t, plan.Lines[0].Commander)
+	assert.Equal(t, []deck.TaggedCard{{Name: "Sol Ring", Tags: []string{"Ramp"}}}, plan.Tags)
 }
 
 func TestDuplicateDeck_EmptyRequestGivesDefaultNameAndNoFolder(t *testing.T) {
@@ -111,23 +111,16 @@ func TestDuplicateDeck_CopiesSomeoneElsesSharedDeck(t *testing.T) {
 func TestDuplicateDeck_KeepsOwnedAndPendingProxiesAsProxies(t *testing.T) {
 	decks := proxyDeckFixture()
 	decks.nextID = 50
-	cards := &fakeCardService{allCards: []card.Card{{ID: 41, Name: "Sol Ring", ScryfallID: solRingSLD, Proxy: true}}}
-	svc := newTestService(cards, &fakeStorageService{}, decks, tamiyoResolver())
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
 
 	result, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{})
 
 	require.NoError(t, err)
-	assert.Equal(t, []int{41}, decks.linkedCards[result.DeckID])
-	type pendingLine struct {
-		name     string
-		proxy    bool
-		quantity int
-	}
-	var pending []pendingLine
-	for _, p := range decks.addedPending {
-		pending = append(pending, pendingLine{p.Name, p.Proxy, p.Quantity})
-	}
-	assert.Equal(t, []pendingLine{{"Sol Ring", false, 1}, {"Sol Ring", true, 1}, {"Duress", true, 2}}, pending)
+	assert.Equal(t, []placedLine{
+		{name: "Sol Ring", setCode: "sld", quantity: 1, board: deck.BoardMain, proxy: deck.RealOnly},
+		{name: "Sol Ring", setCode: "sld", quantity: 2, board: deck.BoardMain, proxy: deck.ProxyOnly},
+		{name: "Duress", setCode: "m19", quantity: 2, board: deck.BoardSideboard, proxy: deck.ProxyOnly},
+	}, placedLines(decks.placedPlan(t, result.DeckID)))
 }
 
 func TestDuplicateDeck_EmptyDeckGivesAnEmptyCopy(t *testing.T) {
