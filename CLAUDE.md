@@ -24,15 +24,13 @@ Run the relevant tests and the linter before calling a change done. Integration 
 
 ## Rules
 
-- **Migrations:** never edit a migration that has been delivered; add a new `NNNNN_description.sql` with `-- +goose Up` / `-- +goose Down` (wrap function bodies in `StatementBegin`/`StatementEnd`). A down migration must restore a state the previous code accepts. Extending a `CHECK` constraint means dropping and re-adding it in a new migration.
+- **Migrations:** a delivered migration stays as it is (the pre-commit hook and CI reject edits to one); add a new `NNNNN_description.sql` with `-- +goose Up` / `-- +goose Down` (wrap function bodies in `StatementBegin`/`StatementEnd`). A down migration must restore a state the previous code accepts. Extending a `CHECK` constraint means dropping and re-adding it in a new migration.
 - **Interfaces:** each consumer redeclares the narrow interface it needs instead of importing another context's concrete type. After changing a shared method's signature, grep the method name across the repo: the compiler only catches the copies whose interface you also changed.
 - **Errors:** services return sentinel errors (`var ErrX = errors.New(...)`); handlers map them with `apierr.Respond(ctx, err, apierr.Mapping{Err: ErrX, Status: http.StatusBadRequest})`.
 - **Isolation:** every repository query filters by `user_id`; cross-account ownership is also enforced by triggers.
 - **External calls:** Scryfall and SMTP are called from services, never from handlers or repositories. Scryfall goes through `internal/scryfall` (batches of 75, paced, retried on 429).
 - **Preferences and sortable data live in the database**, never in the browser.
 - **Docs:** any change to a route, a field or a validation rule updates `doc/API.md` and `doc/openapi.yaml` in the same change, and the README when it lists the feature.
-- **Comments:** names and tests carry the meaning; a comment only states a constraint the code can't show. SQL migrations keep their header comment explaining the change.
-- **Remove dead code** a change leaves behind.
 - Code, README, docs and commit messages in English.
 
 ## Commits
@@ -51,4 +49,4 @@ Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-
 
 ### Domain docs
 
-Single-context: `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Single-context: decisions in `docs/adr/`. See `docs/agents/domain.md`.

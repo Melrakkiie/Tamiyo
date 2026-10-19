@@ -50,6 +50,27 @@ jobs:
         with:
           version: v2.13.2
 
+  migrations:
+    name: Delivered migrations unchanged
+    # A migration already on main has run in production: a change adds a new
+    # one instead of editing, renaming or deleting it.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check delivered migrations
+        run: |
+          edited=$(git diff --name-only --diff-filter=MDR "origin/${{ github.base_ref }}...HEAD" -- _devops/database/migrations)
+          if [ -n "$edited" ]; then
+            echo "::error::Delivered migrations changed; add a new migration instead:"
+            echo "$edited"
+            exit 1
+          fi
+
   vulncheck:
     name: Vulnerability scan
     runs-on: ubuntu-latest
