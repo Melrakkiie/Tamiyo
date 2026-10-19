@@ -351,13 +351,6 @@ func (f *fakeDeckService) CommitPendingCards(ctx context.Context, userID string,
 	return deck.PendingCommitSummary{}, deck.ErrPendingCardNotFound
 }
 
-func (f *fakeDeckService) GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error) {
-	if f.getDeckErr != nil {
-		return nil, f.getDeckErr
-	}
-	return f.pending, nil
-}
-
 func (f *fakeDeckService) RemovePendingCard(ctx context.Context, userID string, deckID string, id int) error {
 	f.removedPending = append(f.removedPending, id)
 	return nil

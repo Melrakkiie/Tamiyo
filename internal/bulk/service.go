@@ -63,7 +63,6 @@ type deckService interface {
 	RemoveCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error
 	ClearCommander(ctx context.Context, userID string, deckID string, slot deck.CommanderSlot) error
 	GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error)
-	GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error)
 	RemovePendingCard(ctx context.Context, userID string, deckID string, id int) error
 	CommitPendingCards(ctx context.Context, userID string, deckID string, req deck.PendingCommit) (deck.PendingCommitSummary, error)
 	AddPendingCard(ctx context.Context, userID string, deckID string, p deck.PendingCard) (deck.PendingCard, error)

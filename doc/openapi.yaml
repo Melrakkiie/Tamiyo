@@ -2367,6 +2367,8 @@ paths:
         finish and with the same proxy state: ones in no deck first, then ones
         another deck uses, and pending cards for the rest. The commander stays
         the commander. The collection itself is never modified.
+        The whole change is applied in one transaction; on a failure the route
+        returns the error with no summary and nothing changes.
       requestBody:
         required: true
         content:
@@ -2423,6 +2425,8 @@ paths:
         another deck uses, and pending cards (with that proxy flag) for the
         rest. The commander stays the commander. The collection itself is
         never modified.
+        The whole change is applied in one transaction; on a failure the route
+        returns the error with no summary and nothing changes.
       requestBody:
         required: true
         content:
@@ -2480,6 +2484,8 @@ paths:
         board: owned copies in no deck first, then ones another deck uses
         (never from a storage locked against the deck), and pending cards for
         the rest. The collection itself is never modified.
+        The whole change is applied in one transaction; on a failure the route
+        returns the error with no summary and nothing changes.
       requestBody:
         required: true
         content:

@@ -1670,7 +1670,7 @@ Switch cards of a deck to the other finish, without touching the collection. Bod
 
 Each listed copy or pending card that isn't already in that finish leaves the deck (an owned copy stays in the collection, as it is) and is replaced, on the same board, by copies of the same printing in that finish and with the same proxy state: your copies in no deck first, then ones another deck uses, and pending cards for whatever you don't own. Copies in a [storage locked](#storage) against the deck are never used. A pending card of 3 copies thus becomes the owned copies you have, plus a pending card for the rest. The commander stays the commander, owned when a copy was found.
 
-**Response `200 OK`** — the [import summary](#bulk-import): `cards_linked` copies found in the collection, `cards_pending` copies left pending, `cards_removed` copies that left the deck. Cards already in that finish are ignored.
+**Response `200 OK`** — the [import summary](#bulk-import): `cards_linked` copies found in the collection, `cards_pending` copies left pending, `cards_removed` copies that left the deck. Cards already in that finish are ignored. The change is applied in one transaction, and the deck's updated date is bumped once: on a failure the route returns the error, with no summary, and the deck, its pending cards and its commander slots stay as they were.
 
 **Errors:** `400` invalid id, `foil` missing, no id at all, or an id that isn't an owned copy or a pending card of this deck · `404` deck not found
 
@@ -1680,7 +1680,7 @@ Switch cards of a deck between a real card and a proxy, without touching the col
 
 It works like `switch-foil`: each listed copy or pending card that isn't already in that proxy state leaves the deck (an owned copy stays in the collection, as it is) and is replaced, on the same board, by copies of the same printing and finish with that proxy state: your copies in no deck first, then ones another deck uses, and pending cards (with that `proxy` flag) for whatever you don't own. Each card keeps its finish, so a foil card switched to proxy looks for a foil proxy. Copies in a [storage locked](#storage) against the deck are never used. The commander stays the commander, owned when a copy was found.
 
-**Response `200 OK`** — the [import summary](#bulk-import): `cards_linked` copies found in the collection, `cards_pending` copies left pending, `cards_removed` copies that left the deck. Cards already in that proxy state are ignored.
+**Response `200 OK`** — the [import summary](#bulk-import): `cards_linked` copies found in the collection, `cards_pending` copies left pending, `cards_removed` copies that left the deck. Cards already in that proxy state are ignored. The change is applied in one transaction, and the deck's updated date is bumped once: on a failure the route returns the error, with no summary, and the deck, its pending cards and its commander slots stay as they were.
 
 **Errors:** `400` invalid id, `proxy` missing, no id at all, or an id that isn't an owned copy or a pending card of this deck · `404` deck not found
 
@@ -1699,7 +1699,7 @@ Give each copy of a card in a deck its own printing and finish, without touching
 - The copies left over leave the deck: an owned copy stays in the collection, as it is; a pending card loses those copies (and goes away at 0).
 - The remaining printings are added as [`switch-foil`](#post-deckidswitch-foil) adds them, on the same board: your copies of that printing and finish in no deck first, then ones another deck uses, and pending cards for whatever you don't own. Copies in a [storage locked](#storage) against the deck are never used.
 
-**Response `200 OK`** — the [import summary](#bulk-import): `cards_linked` copies found in the collection, `cards_pending` copies left pending, `cards_removed` copies that left the deck. Asking for the printings the copies already have changes nothing.
+**Response `200 OK`** — the [import summary](#bulk-import): `cards_linked` copies found in the collection, `cards_pending` copies left pending, `cards_removed` copies that left the deck. Asking for the printings the copies already have changes nothing. The change is applied in one transaction, and the deck's updated date is bumped once: on a failure the route returns the error, with no summary, and the deck, its pending cards and its commander slots stay as they were.
 
 **Errors:** `400` invalid id, no id at all, no printing or one without `scryfall_id`, an id that isn't an owned copy or a pending card of this deck, copies of several cards or boards, the commander among them, or not one printing per copy · `404` deck not found
 

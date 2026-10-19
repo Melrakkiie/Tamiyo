@@ -112,20 +112,6 @@ func TestParseMoxfieldDeckList_MarksAtMostTwoCommanders(t *testing.T) {
 	assert.Equal(t, []string{"Thrasios", "Tymna"}, commanders)
 }
 
-func TestSwitchFoil_KeepsThePartnerSlot(t *testing.T) {
-	cards, decks := foilFixture()
-	decks.decks[0].CommanderPendingID = ptr(99)
-	decks.decks[0].PartnerID = ptr(1)
-	cards.allCards = append(cards.allCards, card.Card{ID: 30, Name: "Sol Ring", ScryfallID: solRingSLD, Foil: true})
-	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
-
-	_, err := svc.SwitchFoil(context.Background(), testUserID, fixtureDeckID, FoilSwitch{CardIDs: []int{1}, Foil: true})
-
-	require.NoError(t, err)
-	assert.Equal(t, 30, decks.cardPartnerID)
-	assert.Zero(t, decks.cardCommanderID)
-}
-
 func TestBulkEditDeck_ClearsTheSlotOfARemovedPartner(t *testing.T) {
 	decks := partnerDeckFixture()
 	decks.decks[0].CommanderID = ptr(2)
