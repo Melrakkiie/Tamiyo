@@ -58,19 +58,11 @@ type deckService interface {
 	CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error)
 	DeleteDeck(ctx context.Context, userID string, id string) error
 	PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error
-	RemoveCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error
-	ClearCommander(ctx context.Context, userID string, deckID string, slot deck.CommanderSlot) error
 	GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error)
-	RemovePendingCard(ctx context.Context, userID string, deckID string, id int) error
 	PlaceCards(ctx context.Context, userID string, deckID string, plan deck.PlacementPlan) (deck.PlacementSummary, error)
 	CollectOwnDeck(ctx context.Context, userID string, deckID string, req deck.OwnDeckCollect) (deck.CollectSummary, error)
 	CollectSharedDeck(ctx context.Context, userID string, deckID string, req deck.SharedDeckCollect) (deck.CollectSummary, error)
-	AddPendingCard(ctx context.Context, userID string, deckID string, p deck.PendingCard) (deck.PendingCard, error)
-	SetPendingCommander(ctx context.Context, userID string, deckID string, slot deck.CommanderSlot, pendingID int) error
-	SetCardCommander(ctx context.Context, userID string, deckID string, slot deck.CommanderSlot, cardID int) error
-	SetPendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (deck.PendingCard, error)
 	GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error)
-	SetCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) (deck.TaggedCard, error)
 }
 
 type Service struct {

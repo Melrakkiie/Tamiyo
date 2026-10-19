@@ -33,20 +33,18 @@ func TestBulkEditDeck_KeepsListedCardsRemovesTheRestAndAddsNewOnes(t *testing.T)
 	summary, err := svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, strings.NewReader(list))
 
 	require.NoError(t, err)
-	assert.Equal(t, []int{1}, decks.unlinkedCards, "Sol Ring is not on the list")
-	assert.Equal(t, []int{9}, decks.removedPending, "the foil Duress being considered is not on the list")
-	assert.Equal(t, map[int]int{8: 2}, decks.pendingQuantities, "two owned Islands and two pending ones make four")
-	assert.False(t, decks.commanderCleared)
 	assert.Equal(t, 3, summary.CardsRemoved)
 	assert.Equal(t, 2, summary.CardsPending)
 	plan := decks.placedPlan(t, fixtureDeckID)
+	assert.Equal(t, []int{1}, plan.RemoveCards, "Sol Ring is not on the list")
+	assert.ElementsMatch(t, []deck.PendingQuantity{{ID: 9}, {ID: 8, Quantity: 2}}, plan.PendingQuantities, "the foil Duress being considered is not on the list; two owned Islands and two pending ones make four")
 	assert.Equal(t, []placedLine{{name: "Lightning Bolt", setCode: "m10", quantity: 2, board: deck.BoardMain, anyPrinting: true}}, placedLines(plan))
 	assert.Empty(t, plan.Tags, "bulk edit replaces the tags itself")
-	assert.Equal(t, map[string][]string{
-		"Tamiyo, Inquisitive Student": {"commander"},
-		"Island":                      {"land"},
-		"Lightning Bolt":              {"removal"},
-	}, decks.setTags)
+	assert.Equal(t, []deck.TaggedCard{
+		{Name: "Tamiyo, Inquisitive Student", Tags: []string{"commander"}},
+		{Name: "Island", Tags: []string{"land"}},
+		{Name: "Lightning Bolt", Tags: []string{"removal"}},
+	}, plan.ReplaceTags, "removals, placements and tags go in one plan")
 }
 
 func TestBulkEditDeck_TheCurrentListChangesNothing(t *testing.T) {
@@ -58,11 +56,7 @@ func TestBulkEditDeck_TheCurrentListChangesNothing(t *testing.T) {
 	summary, err := svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, &exported)
 
 	require.NoError(t, err, "nothing to add, so Scryfall isn't needed")
-	assert.Empty(t, decks.unlinkedCards)
-	assert.Empty(t, decks.removedPending)
-	assert.Empty(t, decks.pendingQuantities)
 	assert.Empty(t, decks.placed)
-	assert.Empty(t, decks.setTags)
 	assert.Zero(t, summary.CardsRemoved)
 }
 
@@ -74,8 +68,9 @@ func TestBulkEditDeck_MovesACardToAnotherBoardAndClearsTags(t *testing.T) {
 	_, err := svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, strings.NewReader(list))
 
 	require.NoError(t, err)
-	assert.Equal(t, []int{1}, decks.unlinkedCards, "Sol Ring leaves the main board")
-	assert.Equal(t, map[string][]string{"Sol Ring": {}}, decks.setTags, "Sol Ring had a tag the list no longer gives it")
+	plan := decks.placedPlan(t, fixtureDeckID)
+	assert.Equal(t, []int{1}, plan.RemoveCards, "Sol Ring leaves the main board")
+	assert.Equal(t, []deck.TaggedCard{{Name: "Sol Ring", Tags: []string{}}}, plan.ReplaceTags, "Sol Ring had a tag the list no longer gives it")
 }
 
 func TestBulkEditDeck_ClearsARemovedCommander(t *testing.T) {
@@ -90,9 +85,7 @@ func TestBulkEditDeck_ClearsARemovedCommander(t *testing.T) {
 	_, err := svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, strings.NewReader("5 Island (NEO) 294\n"))
 
 	require.NoError(t, err)
-	assert.True(t, decks.commanderCleared)
-	assert.Equal(t, deck.SlotCommander, decks.clearedSlot)
-	assert.Contains(t, decks.unlinkedCards, 1)
+	assert.Contains(t, decks.placedPlan(t, fixtureDeckID).RemoveCards, 1, "the deck module clears the slot of a removed commander")
 }
 
 func TestBulkEditDeck_Errors(t *testing.T) {
@@ -107,7 +100,7 @@ func TestBulkEditDeck_Errors(t *testing.T) {
 	svc = NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{err: assert.AnError})
 	_, err = svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, strings.NewReader("1 Lightning Bolt\n"))
 	assert.ErrorIs(t, err, ErrScryfallUnavailable)
-	assert.Empty(t, decks.unlinkedCards, "nothing is removed when the new cards can't be looked up")
+	assert.Empty(t, decks.placed, "nothing is removed when the new cards can't be looked up")
 }
 
 func TestExportDeck_MoxfieldWithTags(t *testing.T) {
@@ -162,10 +155,7 @@ func TestBulkEditDeck_TheExportOfAMergedDeckChangesNothing(t *testing.T) {
 	summary, err := svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, &exported)
 
 	require.NoError(t, err, "the export lists every card the deck has, so nothing is looked up")
-	assert.Empty(t, decks.unlinkedCards)
-	assert.Empty(t, decks.removedPending)
-	assert.Empty(t, decks.pendingQuantities)
-	assert.False(t, decks.commanderCleared)
+	assert.Empty(t, decks.placed)
 	assert.Zero(t, summary.CardsRemoved)
 }
 
@@ -179,8 +169,17 @@ func TestBulkEditDeck_ShrinksAPendingCommanderSplitAcrossEntries(t *testing.T) {
 	summary, err := svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, strings.NewReader("2 Tamiyo, Inquisitive Student (NEO) 75\n"))
 
 	require.NoError(t, err)
-	assert.Equal(t, map[int]int{7: 2}, decks.pendingQuantities, "the commander keeps its slot and one extra copy")
-	assert.Equal(t, []int{11}, decks.removedPending)
-	assert.False(t, decks.commanderCleared)
+	assert.ElementsMatch(t, []deck.PendingQuantity{{ID: 7, Quantity: 2}, {ID: 11}}, decks.placedPlan(t, fixtureDeckID).PendingQuantities, "the commander keeps its slot and one extra copy")
 	assert.Equal(t, 2, summary.CardsRemoved)
+}
+
+func TestBulkEditDeck_AFailedPlacementReportsNoPartialSummary(t *testing.T) {
+	decks := tamiyoDeckFixture()
+	decks.placeErr = assert.AnError
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, bulkEditResolver())
+
+	summary, err := svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, strings.NewReader("5 Island (NEO) 294\n"))
+
+	require.ErrorIs(t, err, assert.AnError)
+	assert.Equal(t, Summary{}, summary)
 }

@@ -300,29 +300,10 @@ func (p *placement) writeCardTags(ctx context.Context, tagged []TaggedCard, repl
 		for _, tag := range tags {
 			existing[strings.ToLower(tag)] = tag
 		}
-		if replace && sameTags(current[key], tags) {
-			continue
-		}
 		current[key] = tags
 		if err := p.store.WriteCardTags(ctx, p.userID, p.deck.ID, key, tags); err != nil {
 			return nil, fmt.Errorf("tagging %q: %w", card.Name, err)
 		}
 	}
 	return skipped, nil
-}
-
-func sameTags(a []string, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for _, tag := range a {
-		found := false
-		for _, other := range b {
-			found = found || strings.EqualFold(tag, other)
-		}
-		if !found {
-			return false
-		}
-	}
-	return true
 }

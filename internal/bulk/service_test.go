@@ -152,8 +152,7 @@ func (f *fakeStorageService) CreateStorage(ctx context.Context, userID string, s
 }
 
 type fakeDeckService struct {
-	tags    deck.DeckTags
-	setTags map[string][]string
+	tags deck.DeckTags
 
 	decks       []deck.Deck
 	nextID      int
@@ -167,26 +166,15 @@ type fakeDeckService struct {
 	pending        []deck.PendingCard
 	entries        map[string][]deck.DeckEntry
 	getContentErr  error
-	removedPending []int
 	ownCollects    []deck.OwnDeckCollect
 	sharedCollects []deck.SharedDeckCollect
 	collectResult  deck.CollectSummary
 	collectErr     error
 
-	addedPending       []deck.PendingCard
-	pendingCommanderID int
-	cardCommanderID    int
-	pendingPartnerID   int
-	cardPartnerID      int
-	pendingQuantities  map[int]int
-	linkedBoards       map[int]string
+	linkedBoards map[int]string
 
 	owners  map[string]string
 	deleted []string
-
-	unlinkedCards    []int
-	commanderCleared bool
-	clearedSlot      deck.CommanderSlot
 
 	placed       []placedPlan
 	placeSummary *deck.PlacementSummary
@@ -223,17 +211,6 @@ func (f *fakeDeckService) placedPlan(t *testing.T, deckID string) deck.Placement
 	return f.placed[0].plan
 }
 
-func (f *fakeDeckService) RemoveCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error {
-	f.unlinkedCards = append(f.unlinkedCards, cardID)
-	return nil
-}
-
-func (f *fakeDeckService) ClearCommander(ctx context.Context, userID string, deckID string, slot deck.CommanderSlot) error {
-	f.commanderCleared = true
-	f.clearedSlot = slot
-	return nil
-}
-
 func (f *fakeDeckService) DeleteDeck(ctx context.Context, userID string, id string) error {
 	f.deleted = append(f.deleted, id)
 	return nil
@@ -248,49 +225,8 @@ func (f *fakeDeckService) GetSharedDeck(ctx context.Context, id string) (string,
 	return "", deck.Deck{}, deck.ErrNotFound
 }
 
-func (f *fakeDeckService) SetPendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (deck.PendingCard, error) {
-	if f.pendingQuantities == nil {
-		f.pendingQuantities = map[int]int{}
-	}
-	f.pendingQuantities[id] = quantity
-	return deck.PendingCard{ID: id, DeckID: deckID, Quantity: quantity}, nil
-}
-
 func (f *fakeDeckService) GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error) {
 	return f.tags, nil
-}
-
-func (f *fakeDeckService) SetCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) (deck.TaggedCard, error) {
-	if f.setTags == nil {
-		f.setTags = map[string][]string{}
-	}
-	f.setTags[cardName] = tags
-	return deck.TaggedCard{Name: cardName, Tags: tags}, nil
-}
-
-func (f *fakeDeckService) SetCardCommander(ctx context.Context, userID string, deckID string, slot deck.CommanderSlot, cardID int) error {
-	if slot == deck.SlotPartner {
-		f.cardPartnerID = cardID
-		return nil
-	}
-	f.cardCommanderID = cardID
-	return nil
-}
-
-func (f *fakeDeckService) AddPendingCard(ctx context.Context, userID string, deckID string, p deck.PendingCard) (deck.PendingCard, error) {
-	p.ID = len(f.addedPending) + 100
-	p.DeckID = deckID
-	f.addedPending = append(f.addedPending, p)
-	return p, nil
-}
-
-func (f *fakeDeckService) SetPendingCommander(ctx context.Context, userID string, deckID string, slot deck.CommanderSlot, pendingID int) error {
-	if slot == deck.SlotPartner {
-		f.pendingPartnerID = pendingID
-		return nil
-	}
-	f.pendingCommanderID = pendingID
-	return nil
 }
 
 func (f *fakeDeckService) CollectOwnDeck(ctx context.Context, userID string, deckID string, req deck.OwnDeckCollect) (deck.CollectSummary, error) {
@@ -301,11 +237,6 @@ func (f *fakeDeckService) CollectOwnDeck(ctx context.Context, userID string, dec
 func (f *fakeDeckService) CollectSharedDeck(ctx context.Context, userID string, deckID string, req deck.SharedDeckCollect) (deck.CollectSummary, error) {
 	f.sharedCollects = append(f.sharedCollects, req)
 	return f.collectResult, f.collectErr
-}
-
-func (f *fakeDeckService) RemovePendingCard(ctx context.Context, userID string, deckID string, id int) error {
-	f.removedPending = append(f.removedPending, id)
-	return nil
 }
 
 func (f *fakeDeckService) GetAllDecks(ctx context.Context, userID string, filter deck.Filter) ([]deck.Deck, int, error) {
