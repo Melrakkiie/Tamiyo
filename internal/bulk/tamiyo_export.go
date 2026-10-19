@@ -103,17 +103,12 @@ func (s *Service) ExportTamiyoCollection(ctx context.Context, userID string, sto
 }
 
 func (s *Service) ExportTamiyoDeck(ctx context.Context, userID string, deckID string, withTags bool, w io.Writer) error {
-	_, err := s.writeTamiyoDeck(ctx, userID, deckID, withTags, w)
-	return err
-}
-
-func (s *Service) writeTamiyoDeck(ctx context.Context, userID string, deckID string, withTags bool, w io.Writer) (lines int, err error) {
 	content, err := s.decks.GetDeckContent(ctx, userID, deckID)
 	if err != nil {
 		if errors.Is(err, deck.ErrNotFound) {
-			return 0, ErrDeckNotFound
+			return ErrDeckNotFound
 		}
-		return 0, fmt.Errorf("loading deck content: %w", err)
+		return fmt.Errorf("loading deck content: %w", err)
 	}
 	d := content.Deck
 
@@ -130,7 +125,7 @@ func (s *Service) writeTamiyoDeck(ctx context.Context, userID string, deckID str
 	if withTags {
 		tags, err := s.decks.GetCardTags(ctx, userID, d.ID)
 		if err != nil {
-			return 0, fmt.Errorf("loading tags: %w", err)
+			return fmt.Errorf("loading tags: %w", err)
 		}
 		file.Tags = []tamiyoCardTags{}
 		for _, c := range tags.Cards {
@@ -139,5 +134,5 @@ func (s *Service) writeTamiyoDeck(ctx context.Context, userID string, deckID str
 			}
 		}
 	}
-	return len(out), writeTamiyoFile(w, file, out)
+	return writeTamiyoFile(w, file, out)
 }

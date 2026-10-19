@@ -56,7 +56,7 @@ type deckService interface {
 	GetDeckContent(ctx context.Context, userID string, deckID string) (deck.DeckContent, error)
 	GetSharedDeck(ctx context.Context, id string) (string, deck.Deck, error)
 	CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error)
-	DeleteDeck(ctx context.Context, userID string, id string) error
+	DuplicateDeck(ctx context.Context, userID string, sourceID string, req deck.DuplicateRequest) (deck.DuplicateResult, error)
 	PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error
 	RemoveCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error
 	ClearCommander(ctx context.Context, userID string, deckID string, slot deck.CommanderSlot) error
