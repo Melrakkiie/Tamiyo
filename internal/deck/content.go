@@ -73,15 +73,25 @@ func (e DeckEntry) IsCommander() bool {
 // considering), name, set code, collector number, non-foil before foil and
 // real before proxy. Callers rely on this order.
 func (s *Service) GetDeckContent(ctx context.Context, userID string, deckID string) (DeckContent, error) {
-	d, err := s.repo.FindByID(ctx, userID, deckID)
+	return readDeckContent(ctx, s.repo, userID, deckID)
+}
+
+type contentReader interface {
+	FindByID(ctx context.Context, userID string, id string) (Deck, error)
+	FindCardsByDeckID(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]DeckCard, error)
+	FindPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error)
+}
+
+func readDeckContent(ctx context.Context, r contentReader, userID string, deckID string) (DeckContent, error) {
+	d, err := r.FindByID(ctx, userID, deckID)
 	if err != nil {
 		return DeckContent{}, err
 	}
-	owned, err := s.repo.FindCardsByDeckID(ctx, userID, deckID, "added", false)
+	owned, err := r.FindCardsByDeckID(ctx, userID, deckID, "added", false)
 	if err != nil {
 		return DeckContent{}, err
 	}
-	pending, err := s.repo.FindPendingCards(ctx, userID, deckID)
+	pending, err := r.FindPendingCards(ctx, userID, deckID)
 	if err != nil {
 		return DeckContent{}, err
 	}

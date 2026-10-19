@@ -2700,8 +2700,9 @@ paths:
         stays out of any deck. On someone else's public or unlisted deck,
         "all" adds every copy and "missing" only the copies the user lacks,
         counted by card name whatever the printing, every copy of the
-        collection counting. Cards are handled one at a time: on a failure,
-        those already added stay added.
+        collection counting. Everything happens in one transaction: every
+        card is created, or none, and a failure leaves the deck, its pending
+        cards and the collection as they were. The summary has no warnings.
       requestBody:
         required: true
         content:
@@ -2725,7 +2726,7 @@ paths:
                   nullable: true
       responses:
         "200":
-          description: Cards added; cards_linked counts those also put in the deck.
+          description: All cards added; cards_linked counts those also put in the deck.
           content:
             application/json:
               schema:

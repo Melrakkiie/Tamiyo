@@ -163,124 +163,60 @@ func TestDuplicateDeck_UnknownDeck(t *testing.T) {
 	assert.Empty(t, decks.created)
 }
 
-func TestCollectDeck_PendingCommitsOnlyTheChosenBoards(t *testing.T) {
-	cards := &fakeCardService{}
+func TestCollectDeck_PendingOnOwnDeckAsksTheDeckModuleForThePendingCardsOnly(t *testing.T) {
 	decks := tamiyoDeckFixture()
+	decks.collectResult = deck.CollectSummary{CardsCreated: 4, CardsLinked: 4}
 	storages := &fakeStorageService{storages: []storage.Storage{{ID: 4, Name: "Box", Type: "box"}}}
-	svc := newTestService(cards, storages, decks, &fakeResolver{})
+	svc := newTestService(&fakeCardService{}, storages, decks, &fakeResolver{})
 
 	summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{
-		Mode: CollectPending, StorageID: ptr(4), Boards: []string{deck.BoardMain, deck.BoardSideboard},
+		Mode: CollectPending, StorageID: ptr(4), Boards: []string{deck.BoardSideboard, deck.BoardMain},
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, 4, summary.CardsCreated)
-	assert.Equal(t, 4, summary.CardsLinked)
-	assert.ElementsMatch(t, []deck.PendingCommit{
-		{StorageID: ptr(4), PendingID: ptr(7)},
-		{StorageID: ptr(4), PendingID: ptr(8)},
-	}, decks.commits)
-	assert.Empty(t, cards.created)
+	assert.Equal(t, Summary{CardsCreated: 4, CardsLinked: 4}, summary)
+	assert.Equal(t, []deck.OwnDeckCollect{{Boards: []string{deck.BoardMain, deck.BoardSideboard}, StorageID: ptr(4)}}, decks.ownCollects)
+	assert.Empty(t, decks.sharedCollects)
 }
 
-func TestCollectDeck_AllOnOwnDeckAlsoAddsCopiesOfItsCards(t *testing.T) {
-	cards := &fakeCardService{}
+func TestCollectDeck_AllOnOwnDeckAlsoAsksForCopiesOfTheOwnedCards(t *testing.T) {
 	decks := tamiyoDeckFixture()
-	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+	decks.collectResult = deck.CollectSummary{CardsCreated: 7, CardsLinked: 4}
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
-	summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{
-		Mode: CollectAll, Boards: []string{deck.BoardMain},
-	})
+	summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{Mode: CollectAll, Boards: []string{deck.BoardMain}})
 
 	require.NoError(t, err)
-	assert.Equal(t, 7, summary.CardsCreated)
-	assert.Equal(t, 4, summary.CardsLinked)
-	assert.Len(t, decks.commits, 2)
-	names := map[string]int{}
-	for _, c := range cards.created {
-		names[c.Name]++
-	}
-	assert.Equal(t, map[string]int{"Island": 2, "Sol Ring": 1}, names, "only the owned copies; pending ones are committed")
+	assert.Equal(t, Summary{CardsCreated: 7, CardsLinked: 4}, summary)
+	assert.Equal(t, []deck.OwnDeckCollect{{Boards: []string{deck.BoardMain}, OwnedCopies: true}}, decks.ownCollects)
 }
 
-func TestCollectDeck_AllOnSomeoneElsesDeckCreatesEveryCopy(t *testing.T) {
-	cards := &fakeCardService{}
-	decks := sharedDeckFixture()
-	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+func TestCollectDeck_OnSomeoneElsesDeckUsesTheSharedCollect(t *testing.T) {
+	for mode, missingOnly := range map[string]bool{CollectAll: false, CollectMissing: true} {
+		decks := sharedDeckFixture()
+		decks.collectResult = deck.CollectSummary{CardsCreated: 9}
+		svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
-	summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{
-		Mode: CollectAll, Boards: []string{deck.BoardMain, deck.BoardSideboard, deck.BoardConsidering},
-	})
+		summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{
+			Mode: mode, Boards: []string{deck.BoardConsidering, deck.BoardMain},
+		})
 
-	require.NoError(t, err)
-	assert.Equal(t, 9, summary.CardsCreated)
-	assert.Zero(t, summary.CardsLinked)
-	assert.Empty(t, decks.linkedCards)
-	assert.Empty(t, decks.removedPending)
-	require.NotEmpty(t, cards.created)
-	assert.Equal(t, islandNEO, cardNamed(cards, "Island").ScryfallID)
+		require.NoError(t, err)
+		assert.Equal(t, Summary{CardsCreated: 9}, summary)
+		assert.Equal(t, []deck.SharedDeckCollect{{Boards: []string{deck.BoardMain, deck.BoardConsidering}, MissingOnly: missingOnly}}, decks.sharedCollects)
+		assert.Empty(t, decks.ownCollects)
+	}
 }
 
-func TestCollectDeck_PendingCommitsASplitPendingCommanderOnce(t *testing.T) {
-	cards := &fakeCardService{}
-	decks := &fakeDeckService{
-		decks:   []deck.Deck{{ID: fixtureDeckID, Name: "Relentless", Format: "commander", CommanderPendingID: ptr(7)}},
-		pending: []deck.PendingCard{{ID: 7, Name: "Relentless Rats", ScryfallID: solRingSLD, Quantity: 3, Board: deck.BoardMain}},
-		entries: map[string][]deck.DeckEntry{fixtureDeckID: {
-			{Name: "Relentless Rats", ScryfallID: solRingSLD, Board: deck.BoardMain, Slot: deck.SlotCommander, Pending: []deck.PendingPart{{ID: 7, Quantity: 1}}},
-			{Name: "Relentless Rats", ScryfallID: solRingSLD, Board: deck.BoardMain, Pending: []deck.PendingPart{{ID: 7, Quantity: 2}}},
-		}},
-	}
-	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
+func TestCollectDeck_ReturnsTheDeckModuleFailureWithoutASummary(t *testing.T) {
+	decks := tamiyoDeckFixture()
+	decks.collectErr = errors.New("boom")
+	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
-	summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{Mode: CollectPending, Boards: []string{deck.BoardMain}})
+	summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{Mode: CollectAll, Boards: []string{deck.BoardMain}})
 
-	require.NoError(t, err)
-	assert.Equal(t, 3, summary.CardsCreated)
-	assert.Equal(t, []deck.PendingCommit{{PendingID: ptr(7)}}, decks.commits)
-}
-
-func TestCollectDeck_AllCreatesProxiesForOwnedAndPendingProxies(t *testing.T) {
-	cards := &fakeCardService{}
-	decks := proxyDeckFixture()
-	decks.owners = map[string]string{fixtureDeckID: otherUserID}
-	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
-
-	summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{
-		Mode: CollectAll, Boards: []string{deck.BoardMain, deck.BoardSideboard},
-	})
-
-	require.NoError(t, err)
-	assert.Equal(t, 5, summary.CardsCreated)
-	type created struct {
-		name  string
-		proxy bool
-	}
-	got := map[created]int{}
-	for _, c := range cards.created {
-		got[created{c.Name, c.Proxy}]++
-	}
-	assert.Equal(t, map[created]int{{"Sol Ring", false}: 1, {"Sol Ring", true}: 2, {"Duress", true}: 2}, got)
-}
-
-func TestCollectDeck_MissingSkipsCopiesAlreadyOwnedInAnyPrinting(t *testing.T) {
-	cards := &fakeCardService{}
-	decks := sharedDeckFixture()
-	decks.ownedCopies = map[string]int{"island": 4, "duress": 1}
-	svc := newTestService(cards, &fakeStorageService{}, decks, &fakeResolver{})
-
-	summary, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{
-		Mode: CollectMissing, Boards: []string{deck.BoardMain, deck.BoardSideboard, deck.BoardConsidering},
-	})
-
-	require.NoError(t, err)
-	assert.Equal(t, 4, summary.CardsCreated)
-	names := map[string]int{}
-	for _, c := range cards.created {
-		names[c.Name]++
-	}
-	assert.Equal(t, map[string]int{"Sol Ring": 1, "Island": 1, "Duress": 1, "Tamiyo, Inquisitive Student": 1}, names)
-	assert.True(t, cardNamed(cards, "Duress").Foil)
+	assert.ErrorIs(t, err, decks.collectErr)
+	assert.Equal(t, Summary{}, summary)
 }
 
 func TestCollectDeck_RejectsBadRequests(t *testing.T) {
@@ -306,15 +242,6 @@ func TestCollectDeck_RejectsBadRequests(t *testing.T) {
 }
 
 func ptrString(s string) *string { return &s }
-
-func cardNamed(cards *fakeCardService, name string) card.Card {
-	for _, c := range cards.created {
-		if c.Name == name {
-			return c
-		}
-	}
-	return card.Card{}
-}
 
 func postJSON(router http.Handler, path string, body string) *httptest.ResponseRecorder {
 	var reader io.Reader

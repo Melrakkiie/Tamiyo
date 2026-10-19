@@ -968,9 +968,9 @@ Add the cards of a deck to your collection, one card per copy, in the exact prin
 
 `boards` lists at least one of `main`, `sideboard`, `considering`.
 
-**Response `200 OK`** — the [import summary](#bulk-import): `cards_created`, and `cards_linked` for the pending cards also put in the deck. Cards are handled one by one: on a failure, those already added stay added, and a pending card that fails is reported in `warnings`.
+**Response `200 OK`** — the [import summary](#bulk-import): `cards_created`, and `cards_linked` for the pending cards also put in the deck. The whole operation is one transaction: every card is created, or none, and a failure leaves the deck, its pending cards and your collection as they were. The response has no `warnings`.
 
-**Errors:** `400` invalid id or body, unknown `mode` or board, `pending` on someone else's deck or `missing` on yours, unknown `storage_id` · `404` unknown deck, or someone else's private deck
+**Errors:** `400` invalid id or body, unknown `mode` or board, `pending` on someone else's deck or `missing` on yours, unknown `storage_id` · `404` unknown deck, or someone else's private deck · `500` a card could not be created, nothing was changed
 
 ---
 

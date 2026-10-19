@@ -13,7 +13,6 @@ import (
 
 	"Melrakkiie/Tamiyo/internal/apierr"
 	"Melrakkiie/Tamiyo/internal/auth"
-	"Melrakkiie/Tamiyo/internal/card"
 	"Melrakkiie/Tamiyo/internal/deck"
 	"Melrakkiie/Tamiyo/internal/storage"
 )
@@ -155,13 +154,6 @@ func (s *Service) entriesInBoards(ctx context.Context, ownerID string, deckID st
 	return entries, nil
 }
 
-func entryCard(e deck.DeckEntry, storageID *int) card.Card {
-	return card.Card{
-		Name: e.Name, ScryfallID: e.ScryfallID, SetCode: e.SetCode, CollectorNumber: e.CollectorNumber, Foil: e.Foil, Proxy: e.Proxy,
-		StorageID: storageID, ManaValue: e.ManaValue, Colors: e.Colors, CardType: e.CardType, ColorIdentity: e.ColorIdentity,
-	}
-}
-
 func (s *Service) CollectDeck(ctx context.Context, userID string, deckID string, req CollectRequest) (Summary, error) {
 	if req.Mode != CollectAll && req.Mode != CollectMissing && req.Mode != CollectPending {
 		return Summary{}, ErrUnknownCollectMode
@@ -186,71 +178,27 @@ func (s *Service) CollectDeck(ctx context.Context, userID string, deckID string,
 		}
 	}
 
-	entries, err := s.entriesInBoards(ctx, source.ownerID, source.deck.ID, boards)
+	chosen := make([]string, 0, len(boards))
+	for _, b := range []string{deck.BoardMain, deck.BoardSideboard, deck.BoardConsidering} {
+		if boards[b] {
+			chosen = append(chosen, b)
+		}
+	}
+
+	var result deck.CollectSummary
+	if source.mine {
+		result, err = s.decks.CollectOwnDeck(ctx, userID, deckID, deck.OwnDeckCollect{
+			Boards: chosen, StorageID: req.StorageID, OwnedCopies: req.Mode == CollectAll,
+		})
+	} else {
+		result, err = s.decks.CollectSharedDeck(ctx, userID, deckID, deck.SharedDeckCollect{
+			Boards: chosen, StorageID: req.StorageID, MissingOnly: req.Mode == CollectMissing,
+		})
+	}
 	if err != nil {
 		return Summary{}, err
 	}
-
-	collected := make([]collectedEntry, len(entries))
-	for i, e := range entries {
-		collected[i] = collectedEntry{entry: e, copies: e.Quantity()}
-		if source.mine {
-			collected[i].copies = e.OwnedQuantity()
-		}
-	}
-	if req.Mode == CollectMissing {
-		if err = s.withoutOwnedCopies(ctx, userID, collected); err != nil {
-			return Summary{}, err
-		}
-	}
-
-	var summary Summary
-	if source.mine {
-		s.commitEntriesPending(ctx, userID, source.deck.ID, req.StorageID, entries, &summary)
-	}
-	if req.Mode == CollectPending {
-		return summary, nil
-	}
-	for _, c := range collected {
-		for range c.copies {
-			if _, err := s.cards.CreateCard(ctx, userID, entryCard(c.entry, req.StorageID)); err != nil {
-				summary.CardsSkipped++
-				summary.Warnings = append(summary.Warnings, fmt.Sprintf("could not create %q: %v", c.entry.Name, err))
-				continue
-			}
-			summary.CardsCreated++
-		}
-	}
-	return summary, nil
-}
-
-type collectedEntry struct {
-	entry  deck.DeckEntry
-	copies int
-}
-
-func (s *Service) withoutOwnedCopies(ctx context.Context, userID string, collected []collectedEntry) error {
-	keys := make([]string, 0, len(collected))
-	seen := make(map[string]bool)
-	for _, c := range collected {
-		key := deck.CardNameKey(c.entry.Name)
-		if !seen[key] {
-			seen[key] = true
-			keys = append(keys, key)
-		}
-	}
-	owned, err := s.decks.CountCopiesByName(ctx, userID, keys)
-	if err != nil {
-		return fmt.Errorf("counting owned copies: %w", err)
-	}
-
-	for i := range collected {
-		key := deck.CardNameKey(collected[i].entry.Name)
-		covered := min(owned[key], collected[i].copies)
-		owned[key] -= covered
-		collected[i].copies -= covered
-	}
-	return nil
+	return Summary{CardsCreated: result.CardsCreated, CardsLinked: result.CardsLinked}, nil
 }
 
 func (h *Handler) duplicateDeck(ctx *gin.Context) {
@@ -326,6 +274,7 @@ func (h *Handler) collectDeck(ctx *gin.Context) {
 			apierr.Mapping{Err: ErrCollectModeNotHere, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrNoBoards, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrTargetStorageNotFound, Status: http.StatusBadRequest, Message: "storage_id does not reference an existing storage"},
+			apierr.Mapping{Err: deck.ErrTargetStorageNotFound, Status: http.StatusBadRequest, Message: "storage_id does not reference an existing storage"},
 		)
 		return
 	}

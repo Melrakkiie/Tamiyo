@@ -171,7 +171,10 @@ type fakeDeckService struct {
 	entries        map[string][]deck.DeckEntry
 	getContentErr  error
 	removedPending []int
-	commits        []deck.PendingCommit
+	ownCollects    []deck.OwnDeckCollect
+	sharedCollects []deck.SharedDeckCollect
+	collectResult  deck.CollectSummary
+	collectErr     error
 
 	addedPending       []deck.PendingCard
 	addPendingErr      error
@@ -182,9 +185,8 @@ type fakeDeckService struct {
 	pendingQuantities  map[int]int
 	linkedBoards       map[int]string
 
-	owners      map[string]string
-	ownedCopies map[string]int
-	deleted     []string
+	owners  map[string]string
+	deleted []string
 
 	unlinkedCards    []int
 	commanderCleared bool
@@ -280,16 +282,6 @@ func (f *fakeDeckService) lockedAgainst(storageID *int, deckID string) bool {
 	return false
 }
 
-func (f *fakeDeckService) CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error) {
-	counts := make(map[string]int, len(nameKeys))
-	for _, key := range nameKeys {
-		if n := f.ownedCopies[key]; n > 0 {
-			counts[key] = n
-		}
-	}
-	return counts, nil
-}
-
 func (f *fakeDeckService) SetPendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (deck.PendingCard, error) {
 	if f.pendingQuantities == nil {
 		f.pendingQuantities = map[int]int{}
@@ -341,14 +333,14 @@ func (f *fakeDeckService) SetPendingCommander(ctx context.Context, userID string
 	return nil
 }
 
-func (f *fakeDeckService) CommitPendingCards(ctx context.Context, userID string, deckID string, req deck.PendingCommit) (deck.PendingCommitSummary, error) {
-	f.commits = append(f.commits, req)
-	for _, p := range f.pending {
-		if req.PendingID != nil && p.ID == *req.PendingID {
-			return deck.PendingCommitSummary{CardsCreated: p.Quantity}, nil
-		}
-	}
-	return deck.PendingCommitSummary{}, deck.ErrPendingCardNotFound
+func (f *fakeDeckService) CollectOwnDeck(ctx context.Context, userID string, deckID string, req deck.OwnDeckCollect) (deck.CollectSummary, error) {
+	f.ownCollects = append(f.ownCollects, req)
+	return f.collectResult, f.collectErr
+}
+
+func (f *fakeDeckService) CollectSharedDeck(ctx context.Context, userID string, deckID string, req deck.SharedDeckCollect) (deck.CollectSummary, error) {
+	f.sharedCollects = append(f.sharedCollects, req)
+	return f.collectResult, f.collectErr
 }
 
 func (f *fakeDeckService) RemovePendingCard(ctx context.Context, userID string, deckID string, id int) error {
