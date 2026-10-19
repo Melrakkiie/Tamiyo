@@ -74,22 +74,31 @@ type SkippedTags struct {
 func (s *Service) PlaceCards(ctx context.Context, userID string, deckID string, plan PlacementPlan) (PlacementSummary, error) {
 	var summary PlacementSummary
 	err := s.repo.Compose(ctx, userID, deckID, func(store CompositionStore) error {
-		summary = PlacementSummary{}
-		p, err := newPlacement(ctx, store, userID, deckID, plan)
-		if err != nil {
-			return err
-		}
-		for _, line := range plan.Lines {
-			if err := p.placeLine(ctx, line, &summary); err != nil {
-				return err
-			}
-		}
-		if err := p.saveCommanders(ctx); err != nil {
-			return err
-		}
-		summary.SkippedTags, err = p.addTags(ctx, plan.Tags)
+		var err error
+		summary, err = placeCards(ctx, store, userID, deckID, plan)
 		return err
 	})
+	if err != nil {
+		return PlacementSummary{}, err
+	}
+	return summary, nil
+}
+
+func placeCards(ctx context.Context, store CompositionStore, userID string, deckID string, plan PlacementPlan) (PlacementSummary, error) {
+	var summary PlacementSummary
+	p, err := newPlacement(ctx, store, userID, deckID, plan)
+	if err != nil {
+		return PlacementSummary{}, err
+	}
+	for _, line := range plan.Lines {
+		if err := p.placeLine(ctx, line, &summary); err != nil {
+			return PlacementSummary{}, err
+		}
+	}
+	if err := p.saveCommanders(ctx); err != nil {
+		return PlacementSummary{}, err
+	}
+	summary.SkippedTags, err = p.addTags(ctx, plan.Tags)
 	if err != nil {
 		return PlacementSummary{}, err
 	}
