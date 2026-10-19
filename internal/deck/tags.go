@@ -70,12 +70,16 @@ func (s *Service) deckCardNames(ctx context.Context, userID string, deckID strin
 	if err != nil {
 		return nil, err
 	}
-	groups := GroupByCardName(content.Entries)
+	return cardNames(content.Entries), nil
+}
+
+func cardNames(entries []DeckEntry) map[string]string {
+	groups := GroupByCardName(entries)
 	names := make(map[string]string, len(groups))
 	for _, g := range groups {
 		names[CardNameKey(g[0].Name)] = g[0].Name
 	}
-	return names, nil
+	return names
 }
 
 func (s *Service) GetCardTags(ctx context.Context, userID string, deckID string) (DeckTags, error) {
@@ -127,29 +131,13 @@ func (s *Service) SetCardTags(ctx context.Context, userID string, deckID string,
 		return TaggedCard{}, ErrCardNotInDeck
 	}
 
-	existing, err := s.existingTags(ctx, userID, deckID)
+	existing, err := existingTags(ctx, s.repo, userID, deckID)
 	if err != nil {
 		return TaggedCard{}, err
 	}
-
-	tags := make([]string, 0, len(rawTags))
-	seen := make(map[string]bool)
-	for _, raw := range rawTags {
-		tag, err := cleanTag(raw)
-		if err != nil {
-			return TaggedCard{}, err
-		}
-		if canonical, ok := existing[strings.ToLower(tag)]; ok {
-			tag = canonical
-		}
-		if seen[strings.ToLower(tag)] {
-			continue
-		}
-		seen[strings.ToLower(tag)] = true
-		tags = append(tags, tag)
-	}
-	if len(tags) > maxTagsPerCard {
-		return TaggedCard{}, ErrTooManyTags
+	tags, err := cleanCardTags(existing, rawTags)
+	if err != nil {
+		return TaggedCard{}, err
 	}
 
 	if err := s.repo.ReplaceCardTags(ctx, userID, deckID, key, tags); err != nil {
@@ -168,7 +156,7 @@ func (s *Service) CreateTag(ctx context.Context, userID string, deckID string, r
 	if err != nil {
 		return "", err
 	}
-	existing, err := s.existingTags(ctx, userID, deckID)
+	existing, err := existingTags(ctx, s.repo, userID, deckID)
 	if err != nil {
 		return "", err
 	}
@@ -189,7 +177,7 @@ func (s *Service) RenameTag(ctx context.Context, userID string, deckID string, f
 	if err != nil {
 		return err
 	}
-	existing, err := s.existingTags(ctx, userID, deckID)
+	existing, err := existingTags(ctx, s.repo, userID, deckID)
 	if err != nil {
 		return err
 	}
@@ -210,7 +198,7 @@ func (s *Service) DeleteTag(ctx context.Context, userID string, deckID string, t
 	if _, err := s.repo.FindByID(ctx, userID, deckID); err != nil {
 		return err
 	}
-	existing, err := s.existingTags(ctx, userID, deckID)
+	existing, err := existingTags(ctx, s.repo, userID, deckID)
 	if err != nil {
 		return err
 	}
@@ -221,12 +209,42 @@ func (s *Service) DeleteTag(ctx context.Context, userID string, deckID string, t
 	return s.repo.DeleteTag(ctx, userID, deckID, current)
 }
 
-func (s *Service) existingTags(ctx context.Context, userID string, deckID string) (map[string]string, error) {
-	rows, err := s.repo.FindCardTags(ctx, userID, deckID)
+// cleanCardTags cleans and dedupes a card's tags, reusing the spelling of
+// existing (keyed by lowercase tag).
+func cleanCardTags(existing map[string]string, rawTags []string) ([]string, error) {
+	tags := make([]string, 0, len(rawTags))
+	seen := make(map[string]bool)
+	for _, raw := range rawTags {
+		tag, err := cleanTag(raw)
+		if err != nil {
+			return nil, err
+		}
+		if canonical, ok := existing[strings.ToLower(tag)]; ok {
+			tag = canonical
+		}
+		if seen[strings.ToLower(tag)] {
+			continue
+		}
+		seen[strings.ToLower(tag)] = true
+		tags = append(tags, tag)
+	}
+	if len(tags) > maxTagsPerCard {
+		return nil, ErrTooManyTags
+	}
+	return tags, nil
+}
+
+type tagReader interface {
+	FindCardTags(ctx context.Context, userID string, deckID string) ([]CardTag, error)
+	FindDeckTags(ctx context.Context, userID string, deckID string) ([]string, error)
+}
+
+func existingTags(ctx context.Context, repo tagReader, userID string, deckID string) (map[string]string, error) {
+	rows, err := repo.FindCardTags(ctx, userID, deckID)
 	if err != nil {
 		return nil, err
 	}
-	declared, err := s.repo.FindDeckTags(ctx, userID, deckID)
+	declared, err := repo.FindDeckTags(ctx, userID, deckID)
 	if err != nil {
 		return nil, err
 	}

@@ -85,18 +85,36 @@ func (r *PostgresRepository) ReplaceCardTags(ctx context.Context, userID string,
 		return ErrNotFound
 	}
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM tamiyo.deck_card_tags WHERE deck_id = $1 AND card_name = $2`, deckID, cardName); err != nil {
+	if err := writeCardTags(ctx, tx, userID, deckID, cardName, tags); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// WriteCardTags replaces a card's tags without a transaction of its own, for
+// a composition (see Compose).
+func (r *PostgresRepository) WriteCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) error {
+	return writeCardTags(ctx, r.db, userID, deckID, cardName, tags)
+}
+
+func writeCardTags(ctx context.Context, db execer, userID string, deckID string, cardName string, tags []string) error {
+	if _, err := db.ExecContext(ctx, `
+		DELETE FROM tamiyo.deck_card_tags t
+		USING tamiyo.deck d
+		WHERE d.id = t.deck_id AND d.user_id = $1 AND t.deck_id = $2 AND t.card_name = $3
+	`, userID, deckID, cardName); err != nil {
 		return err
 	}
 	for _, tag := range tags {
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO tamiyo.deck_card_tags (deck_id, card_name, tag) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
-			deckID, cardName, tag,
-		); err != nil {
+		if _, err := db.ExecContext(ctx, `
+			INSERT INTO tamiyo.deck_card_tags (deck_id, card_name, tag)
+			SELECT d.id, $3, $4 FROM tamiyo.deck d WHERE d.id = $2 AND d.user_id = $1
+			ON CONFLICT DO NOTHING
+		`, userID, deckID, cardName, tag); err != nil {
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 func (r *PostgresRepository) RenameTag(ctx context.Context, userID string, deckID string, from string, to string) error {

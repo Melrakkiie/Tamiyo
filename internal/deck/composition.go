@@ -15,6 +15,14 @@ type CompositionStore interface {
 
 	LinkCardToDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error
 
+	CreatePendingCard(ctx context.Context, userID string, p PendingCard) (PendingCard, error)
+	FindOwnedCopies(ctx context.Context, userID string, targetDeckID string, scryfallIDs []string, nameKeys []string) ([]OwnedCopy, error)
+
+	FindCardsByDeckID(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]DeckCard, error)
+	FindCardTags(ctx context.Context, userID string, deckID string) ([]CardTag, error)
+	FindDeckTags(ctx context.Context, userID string, deckID string) ([]string, error)
+	WriteCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) error
+
 	StorageExists(ctx context.Context, userID string, storageID int) (bool, error)
 	CreateCollectionCard(ctx context.Context, userID string, c DeckCard) (int, error)
 }
