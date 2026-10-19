@@ -24,10 +24,6 @@ type OwnedCopy struct {
 	LockedAgainstTarget bool
 }
 
-func (s *Service) FindOwnedCopies(ctx context.Context, userID string, targetDeckID string, wanted CopiesWanted) ([]OwnedCopy, error) {
-	return findOwnedCopies(ctx, s.repo, userID, targetDeckID, wanted)
-}
-
 type ownedCopyFinder interface {
 	FindOwnedCopies(ctx context.Context, userID string, targetDeckID string, scryfallIDs []string, nameKeys []string) ([]OwnedCopy, error)
 }

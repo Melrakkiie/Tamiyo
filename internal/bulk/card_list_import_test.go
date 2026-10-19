@@ -22,7 +22,7 @@ func cardListResolver() *fakeResolver {
 
 func TestImportCardList_StoresTheEnglishScryfallName(t *testing.T) {
 	cards := &fakeCardService{}
-	svc := newTestService(cards, &fakeStorageService{}, &fakeDeckService{}, cardListResolver())
+	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, cardListResolver())
 
 	_, err := svc.ImportCardList(context.Background(), testUserID, nil, strings.NewReader("1 Anneau solaire (SLD) 1011\n"))
 
@@ -34,7 +34,7 @@ func TestImportCardList_StoresTheEnglishScryfallName(t *testing.T) {
 func TestImportCardList_CreatesOneCardPerCopyInTheStorage(t *testing.T) {
 	cards := &fakeCardService{}
 	storages := &fakeStorageService{storages: []storage.Storage{{ID: 4, Name: "Box", Type: "box"}}}
-	svc := newTestService(cards, storages, &fakeDeckService{}, cardListResolver())
+	svc := NewService(cards, storages, &fakeDeckService{}, cardListResolver())
 
 	summary, err := svc.ImportCardList(context.Background(), testUserID, ptr(4), strings.NewReader("Deck\n2 Sol Ring (SLD) 1011 *F*\n1 Fire / Ice\n"))
 
@@ -64,7 +64,7 @@ func TestImportCardList_CreatesOneCardPerCopyInTheStorage(t *testing.T) {
 
 func TestImportCardList_WithoutStorage(t *testing.T) {
 	cards := &fakeCardService{}
-	svc := newTestService(cards, &fakeStorageService{}, &fakeDeckService{}, cardListResolver())
+	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, cardListResolver())
 
 	summary, err := svc.ImportCardList(context.Background(), testUserID, nil, strings.NewReader("1 Sol Ring\n"))
 
@@ -76,7 +76,7 @@ func TestImportCardList_WithoutStorage(t *testing.T) {
 
 func TestImportCardList_SkipsUnknownCards(t *testing.T) {
 	cards := &fakeCardService{}
-	svc := newTestService(cards, &fakeStorageService{}, &fakeDeckService{}, cardListResolver())
+	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, cardListResolver())
 
 	summary, err := svc.ImportCardList(context.Background(), testUserID, nil, strings.NewReader("3 Not A Real Card\n1 Sol Ring\n"))
 
@@ -89,7 +89,7 @@ func TestImportCardList_SkipsUnknownCards(t *testing.T) {
 
 func TestImportCardList_WarnsWhenACardCannotBeCreated(t *testing.T) {
 	cards := &fakeCardService{createErr: errors.New("insert failed")}
-	svc := newTestService(cards, &fakeStorageService{}, &fakeDeckService{}, cardListResolver())
+	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, cardListResolver())
 
 	summary, err := svc.ImportCardList(context.Background(), testUserID, nil, strings.NewReader("2 Sol Ring\n"))
 
@@ -114,7 +114,7 @@ func TestImportCardList_Errors(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			cards := &fakeCardService{}
-			svc := newTestService(cards, tc.storages, &fakeDeckService{}, tc.resolver)
+			svc := NewService(cards, tc.storages, &fakeDeckService{}, tc.resolver)
 
 			_, err := svc.ImportCardList(context.Background(), testUserID, tc.storageID, strings.NewReader(tc.list))
 

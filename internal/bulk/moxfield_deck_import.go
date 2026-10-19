@@ -11,34 +11,6 @@ import (
 	"Melrakkiie/Tamiyo/internal/deck"
 )
 
-type ownedCopies struct {
-	byPrinting map[string][]deck.OwnedCopy
-	inDeck     map[int]bool
-	used       map[int]bool
-}
-
-func (s *Service) loadOwnedCopies(ctx context.Context, userID string, targetDeckID string, wanted deck.CopiesWanted) (*ownedCopies, error) {
-	copies, err := s.decks.FindOwnedCopies(ctx, userID, targetDeckID, wanted)
-	if err != nil {
-		return nil, fmt.Errorf("finding owned copies: %w", err)
-	}
-	owned := &ownedCopies{
-		byPrinting: make(map[string][]deck.OwnedCopy),
-		inDeck:     make(map[int]bool),
-		used:       make(map[int]bool),
-	}
-	for _, c := range copies {
-		if c.LockedAgainstTarget {
-			continue
-		}
-		owned.inDeck[c.ID] = c.InDeck
-		owned.used[c.ID] = c.InTargetDeck
-		key := strings.ToLower(c.ScryfallID)
-		owned.byPrinting[key] = append(owned.byPrinting[key], c)
-	}
-	return owned, nil
-}
-
 func scryfallName(name string) string {
 	if strings.Contains(name, "//") {
 		return name

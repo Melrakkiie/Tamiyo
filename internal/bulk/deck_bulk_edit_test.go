@@ -23,7 +23,7 @@ func bulkEditResolver() *fakeResolver {
 
 func TestBulkEditDeck_KeepsListedCardsRemovesTheRestAndAddsNewOnes(t *testing.T) {
 	decks := tamiyoDeckFixture()
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, bulkEditResolver())
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, bulkEditResolver())
 	list := "1 Tamiyo, Inquisitive Student (NEO) 75 #commander\n" +
 		"4 Island (NEO) 294 #land\n" +
 		"2 Lightning Bolt #removal\n" +
@@ -51,7 +51,7 @@ func TestBulkEditDeck_KeepsListedCardsRemovesTheRestAndAddsNewOnes(t *testing.T)
 
 func TestBulkEditDeck_TheCurrentListChangesNothing(t *testing.T) {
 	decks := tamiyoDeckFixture()
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{err: assert.AnError})
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{err: assert.AnError})
 	var exported bytes.Buffer
 	require.NoError(t, svc.ExportDeck(context.Background(), testUserID, fixtureDeckID, DeckExportOptions{Format: DeckExportMoxfield, WithTags: true}, &exported))
 
@@ -68,7 +68,7 @@ func TestBulkEditDeck_TheCurrentListChangesNothing(t *testing.T) {
 
 func TestBulkEditDeck_MovesACardToAnotherBoardAndClearsTags(t *testing.T) {
 	decks := tamiyoDeckFixture()
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, bulkEditResolver())
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, bulkEditResolver())
 	list := "1 Tamiyo, Inquisitive Student (NEO) 75\n5 Island (NEO) 294\nSIDEBOARD:\n1 Sol Ring\n1 Duress (M19) 94\nMAYBEBOARD:\n1 Duress (M19) 94 *F*\n"
 
 	_, err := svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, strings.NewReader(list))
@@ -85,7 +85,7 @@ func TestBulkEditDeck_ClearsARemovedCommander(t *testing.T) {
 	entries := decks.entries[fixtureDeckID]
 	entries[0].Slot = deck.SlotNone
 	entries[2].Slot = deck.SlotCommander
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, bulkEditResolver())
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, bulkEditResolver())
 
 	_, err := svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, strings.NewReader("5 Island (NEO) 294\n"))
 
@@ -96,7 +96,7 @@ func TestBulkEditDeck_ClearsARemovedCommander(t *testing.T) {
 }
 
 func TestBulkEditDeck_Errors(t *testing.T) {
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{err: assert.AnError})
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{err: assert.AnError})
 
 	_, err := svc.BulkEditDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000099", strings.NewReader("1 Island\n"))
 	assert.ErrorIs(t, err, ErrDeckNotFound)
@@ -104,14 +104,14 @@ func TestBulkEditDeck_Errors(t *testing.T) {
 	assert.ErrorIs(t, err, ErrInvalidFile)
 
 	decks := tamiyoDeckFixture()
-	svc = newTestService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{err: assert.AnError})
+	svc = NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{err: assert.AnError})
 	_, err = svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, strings.NewReader("1 Lightning Bolt\n"))
 	assert.ErrorIs(t, err, ErrScryfallUnavailable)
 	assert.Empty(t, decks.unlinkedCards, "nothing is removed when the new cards can't be looked up")
 }
 
 func TestExportDeck_MoxfieldWithTags(t *testing.T) {
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{})
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{})
 
 	var buf bytes.Buffer
 	require.NoError(t, svc.ExportDeck(context.Background(), testUserID, fixtureDeckID, DeckExportOptions{Format: DeckExportMoxfield, WithTags: true}, &buf))
@@ -155,7 +155,7 @@ func mergedContentDeck() *fakeDeckService {
 
 func TestBulkEditDeck_TheExportOfAMergedDeckChangesNothing(t *testing.T) {
 	decks := mergedContentDeck()
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{err: assert.AnError})
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{err: assert.AnError})
 	var exported bytes.Buffer
 	require.NoError(t, svc.ExportDeck(context.Background(), testUserID, fixtureDeckID, DeckExportOptions{Format: DeckExportMoxfield}, &exported))
 
@@ -174,7 +174,7 @@ func TestBulkEditDeck_ShrinksAPendingCommanderSplitAcrossEntries(t *testing.T) {
 	extra := pendingExportEntry("Tamiyo, Inquisitive Student", "neo", "75", 7, 2)
 	extra.Pending = append(extra.Pending, deck.PendingPart{ID: 11, Quantity: 1})
 	decks := contentDeck(deck.Deck{Name: "Tamiyo", Format: "commander", CommanderPendingID: ptr(7)}, commander, extra)
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{err: assert.AnError})
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{err: assert.AnError})
 
 	summary, err := svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, strings.NewReader("2 Tamiyo, Inquisitive Student (NEO) 75\n"))
 

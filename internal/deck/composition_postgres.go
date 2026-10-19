@@ -31,6 +31,21 @@ func (r *PostgresRepository) Compose(ctx context.Context, userID string, deckID 
 	return tx.Commit()
 }
 
+func (r *PostgresRepository) ComposeCollection(ctx context.Context, apply func(CompositionStore) error) error {
+	tx, err := r.pool.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	if err := apply(&PostgresRepository{db: tx}); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (r *PostgresRepository) StorageExists(ctx context.Context, userID string, storageID int) (bool, error) {
 	var exists bool
 	err := r.db.GetContext(ctx, &exists, `SELECT EXISTS (SELECT 1 FROM tamiyo.storage WHERE id = $1 AND user_id = $2)`, storageID, userID)

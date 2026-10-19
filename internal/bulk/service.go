@@ -55,18 +55,16 @@ type deckService interface {
 	GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error)
 	GetDeckContent(ctx context.Context, userID string, deckID string) (deck.DeckContent, error)
 	GetSharedDeck(ctx context.Context, id string) (string, deck.Deck, error)
-	CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error)
-	FindOwnedCopies(ctx context.Context, userID string, targetDeckID string, wanted deck.CopiesWanted) ([]deck.OwnedCopy, error)
 	CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error)
 	DeleteDeck(ctx context.Context, userID string, id string) error
 	PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error
 	RemoveCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error
 	ClearCommander(ctx context.Context, userID string, deckID string, slot deck.CommanderSlot) error
 	GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error)
-	GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error)
 	RemovePendingCard(ctx context.Context, userID string, deckID string, id int) error
-	CommitPendingCards(ctx context.Context, userID string, deckID string, req deck.PendingCommit) (deck.PendingCommitSummary, error)
 	PlaceCards(ctx context.Context, userID string, deckID string, plan deck.PlacementPlan) (deck.PlacementSummary, error)
+	CollectOwnDeck(ctx context.Context, userID string, deckID string, req deck.OwnDeckCollect) (deck.CollectSummary, error)
+	CollectSharedDeck(ctx context.Context, userID string, deckID string, req deck.SharedDeckCollect) (deck.CollectSummary, error)
 	AddPendingCard(ctx context.Context, userID string, deckID string, p deck.PendingCard) (deck.PendingCard, error)
 	SetPendingCommander(ctx context.Context, userID string, deckID string, slot deck.CommanderSlot, pendingID int) error
 	SetCardCommander(ctx context.Context, userID string, deckID string, slot deck.CommanderSlot, cardID int) error

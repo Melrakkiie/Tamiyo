@@ -21,6 +21,11 @@ type collectionCard struct {
 
 func (f contentFixture) collection(t *testing.T) []collectionCard {
 	t.Helper()
+	return f.collectionOf(t, f.userID)
+}
+
+func (f contentFixture) collectionOf(t *testing.T, userID string) []collectionCard {
+	t.Helper()
 	var rows []struct {
 		Name       string `db:"name"`
 		ScryfallID string `db:"scryfall_id"`
@@ -30,7 +35,7 @@ func (f contentFixture) collection(t *testing.T) []collectionCard {
 	}
 	require.NoError(t, f.db.Select(&rows, `
 		SELECT name, scryfall_id, foil, proxy, storage_id FROM tamiyo.cards WHERE user_id = $1 ORDER BY id
-	`, f.userID))
+	`, userID))
 	cards := make([]collectionCard, 0, len(rows))
 	for _, r := range rows {
 		cards = append(cards, collectionCard{r.Name, r.ScryfallID, r.Foil, r.Proxy, r.StorageID})

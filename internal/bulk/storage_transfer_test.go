@@ -20,7 +20,7 @@ func transferFixture() (*fakeCardService, *fakeStorageService) {
 
 func TestTransferStorage_MovesEveryCardOfTheSource(t *testing.T) {
 	cards, storages := transferFixture()
-	svc := newTestService(cards, storages, &fakeDeckService{}, &fakeResolver{})
+	svc := NewService(cards, storages, &fakeDeckService{}, &fakeResolver{})
 
 	summary, err := svc.TransferStorage(context.Background(), testUserID, 4, 5)
 
@@ -33,7 +33,7 @@ func TestTransferStorage_MovesEveryCardOfTheSource(t *testing.T) {
 func TestTransferStorage_RejectsBadRequests(t *testing.T) {
 	ctx := context.Background()
 	cards, storages := transferFixture()
-	svc := newTestService(cards, storages, &fakeDeckService{}, &fakeResolver{})
+	svc := NewService(cards, storages, &fakeDeckService{}, &fakeResolver{})
 
 	_, err := svc.TransferStorage(ctx, testUserID, 4, 4)
 	assert.ErrorIs(t, err, ErrSameStorage)

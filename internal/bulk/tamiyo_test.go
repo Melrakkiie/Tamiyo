@@ -63,7 +63,7 @@ func decodeTamiyo(t *testing.T, data []byte) map[string]any {
 
 func TestExportTamiyoCollection_GroupsCopiesWithTheirStorage(t *testing.T) {
 	cards, storages := collectionFixture()
-	svc := newTestService(cards, storages, &fakeDeckService{}, &fakeResolver{})
+	svc := NewService(cards, storages, &fakeDeckService{}, &fakeResolver{})
 
 	var buf bytes.Buffer
 	require.NoError(t, svc.ExportTamiyoCollection(context.Background(), testUserID, nil, &buf))
@@ -85,7 +85,7 @@ func TestExportTamiyoCollection_GroupsCopiesWithTheirStorage(t *testing.T) {
 
 func TestExportTamiyoCollection_OneStorage(t *testing.T) {
 	cards, storages := collectionFixture()
-	svc := newTestService(cards, storages, &fakeDeckService{}, &fakeResolver{})
+	svc := NewService(cards, storages, &fakeDeckService{}, &fakeResolver{})
 
 	var buf bytes.Buffer
 	require.NoError(t, svc.ExportTamiyoCollection(context.Background(), testUserID, ptr(3), &buf))
@@ -101,11 +101,11 @@ func TestExportTamiyoCollection_OneStorage(t *testing.T) {
 func TestTamiyoCollection_RoundTrip(t *testing.T) {
 	cards, storages := collectionFixture()
 	var buf bytes.Buffer
-	require.NoError(t, newTestService(cards, storages, &fakeDeckService{}, &fakeResolver{}).ExportTamiyoCollection(context.Background(), testUserID, nil, &buf))
+	require.NoError(t, NewService(cards, storages, &fakeDeckService{}, &fakeResolver{}).ExportTamiyoCollection(context.Background(), testUserID, nil, &buf))
 
 	imported := &fakeCardService{}
 	targetStorages := &fakeStorageService{storages: []storage.Storage{{ID: 1, Name: "Classeur bleu", Type: "binder"}}, nextID: 1}
-	summary, err := newTestService(imported, targetStorages, &fakeDeckService{}, tamiyoResolver()).ImportTamiyoCollection(context.Background(), testUserID, nil, &buf)
+	summary, err := NewService(imported, targetStorages, &fakeDeckService{}, tamiyoResolver()).ImportTamiyoCollection(context.Background(), testUserID, nil, &buf)
 
 	require.NoError(t, err)
 	assert.Equal(t, 5, summary.CardsCreated)
@@ -132,11 +132,11 @@ func TestTamiyoCollection_RoundTrip(t *testing.T) {
 func TestImportTamiyoCollection_IntoOneStorage(t *testing.T) {
 	cards, storages := collectionFixture()
 	var buf bytes.Buffer
-	require.NoError(t, newTestService(cards, storages, &fakeDeckService{}, &fakeResolver{}).ExportTamiyoCollection(context.Background(), testUserID, nil, &buf))
+	require.NoError(t, NewService(cards, storages, &fakeDeckService{}, &fakeResolver{}).ExportTamiyoCollection(context.Background(), testUserID, nil, &buf))
 
 	imported := &fakeCardService{}
 	target := &fakeStorageService{storages: []storage.Storage{{ID: 9, Name: "Vrac", Type: "box"}}}
-	summary, err := newTestService(imported, target, &fakeDeckService{}, tamiyoResolver()).ImportTamiyoCollection(context.Background(), testUserID, ptr(9), &buf)
+	summary, err := NewService(imported, target, &fakeDeckService{}, tamiyoResolver()).ImportTamiyoCollection(context.Background(), testUserID, ptr(9), &buf)
 
 	require.NoError(t, err)
 	assert.Equal(t, 5, summary.CardsCreated)
@@ -153,7 +153,7 @@ func TestImportTamiyoCollection_SkipsUnknownCards(t *testing.T) {
 	]}`
 	imported := &fakeCardService{}
 
-	summary, err := newTestService(imported, &fakeStorageService{}, &fakeDeckService{}, tamiyoResolver()).ImportTamiyoCollection(context.Background(), testUserID, nil, strings.NewReader(file))
+	summary, err := NewService(imported, &fakeStorageService{}, &fakeDeckService{}, tamiyoResolver()).ImportTamiyoCollection(context.Background(), testUserID, nil, strings.NewReader(file))
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, summary.CardsCreated)
@@ -175,7 +175,7 @@ func TestImportTamiyoCollection_RejectsInvalidFiles(t *testing.T) {
 	for name, content := range cases {
 		t.Run(name, func(t *testing.T) {
 			imported := &fakeCardService{}
-			_, err := newTestService(imported, &fakeStorageService{}, &fakeDeckService{}, tamiyoResolver()).ImportTamiyoCollection(context.Background(), testUserID, nil, strings.NewReader(content))
+			_, err := NewService(imported, &fakeStorageService{}, &fakeDeckService{}, tamiyoResolver()).ImportTamiyoCollection(context.Background(), testUserID, nil, strings.NewReader(content))
 			assert.ErrorIs(t, err, ErrInvalidFile)
 			assert.Empty(t, imported.created)
 		})
@@ -183,7 +183,7 @@ func TestImportTamiyoCollection_RejectsInvalidFiles(t *testing.T) {
 }
 
 func TestImportTamiyoCollection_RefusesADeckFile(t *testing.T) {
-	_, err := newTestService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, tamiyoResolver()).ImportTamiyoCollection(context.Background(), testUserID, nil, strings.NewReader(`{"tamiyo": 1, "kind": "deck", "cards": []}`))
+	_, err := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, tamiyoResolver()).ImportTamiyoCollection(context.Background(), testUserID, nil, strings.NewReader(`{"tamiyo": 1, "kind": "deck", "cards": []}`))
 
 	assert.ErrorIs(t, err, ErrTamiyoDeckFile)
 }
@@ -215,7 +215,7 @@ func tamiyoDeckFixture() *fakeDeckService {
 }
 
 func TestExportTamiyoDeck_WritesBoardsCommanderAndTags(t *testing.T) {
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{})
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{})
 
 	var buf bytes.Buffer
 	require.NoError(t, svc.ExportTamiyoDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", true, &buf))
@@ -246,7 +246,7 @@ func proxyDeckFixture() *fakeDeckService {
 }
 
 func TestExportTamiyoDeck_WritesEachLinesProxyState(t *testing.T) {
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, proxyDeckFixture(), &fakeResolver{})
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, proxyDeckFixture(), &fakeResolver{})
 
 	var buf bytes.Buffer
 	require.NoError(t, svc.ExportTamiyoDeck(context.Background(), testUserID, fixtureDeckID, false, &buf))
@@ -262,7 +262,7 @@ func TestExportTamiyoDeck_WritesEachLinesProxyState(t *testing.T) {
 }
 
 func TestExportTamiyoDeck_WithoutTags(t *testing.T) {
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{})
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{})
 
 	var buf bytes.Buffer
 	require.NoError(t, svc.ExportTamiyoDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", false, &buf))
@@ -273,9 +273,9 @@ func TestExportTamiyoDeck_WithoutTags(t *testing.T) {
 
 func TestImportIntoDeck_ReadsATamiyoDeckFile(t *testing.T) {
 	var exported bytes.Buffer
-	require.NoError(t, newTestService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{}).ExportTamiyoDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", true, &exported))
+	require.NoError(t, NewService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{}).ExportTamiyoDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", true, &exported))
 	decks := withTargetDeck(&fakeDeckService{placeSummary: &deck.PlacementSummary{CardsLinked: 2, CardsPending: 7}})
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
 
 	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, &exported)
 
@@ -293,7 +293,7 @@ func TestImportIntoDeck_ReadsATamiyoDeckFile(t *testing.T) {
 }
 
 func TestImportIntoDeck_RefusesATamiyoCollectionFile(t *testing.T) {
-	svc := newTestService(&fakeCardService{}, &fakeStorageService{}, withTargetDeck(&fakeDeckService{}), tamiyoResolver())
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, withTargetDeck(&fakeDeckService{}), tamiyoResolver())
 
 	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader(`{"tamiyo": 1, "kind": "storage", "cards": []}`))
 	assert.ErrorIs(t, err, ErrTamiyoCollectionFile)
@@ -304,10 +304,10 @@ func TestImportIntoDeck_RefusesATamiyoCollectionFile(t *testing.T) {
 
 func TestTamiyoDeck_RoundTripKeepsEachLinesProxyState(t *testing.T) {
 	var exported bytes.Buffer
-	require.NoError(t, newTestService(&fakeCardService{}, &fakeStorageService{}, proxyDeckFixture(), &fakeResolver{}).ExportTamiyoDeck(context.Background(), testUserID, fixtureDeckID, false, &exported))
+	require.NoError(t, NewService(&fakeCardService{}, &fakeStorageService{}, proxyDeckFixture(), &fakeResolver{}).ExportTamiyoDeck(context.Background(), testUserID, fixtureDeckID, false, &exported))
 	decks := withTargetDeck(&fakeDeckService{})
 
-	_, err := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver()).ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, &exported)
+	_, err := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver()).ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, &exported)
 
 	require.NoError(t, err)
 	assert.Equal(t, []placedLine{
@@ -321,7 +321,7 @@ func TestImportIntoDeck_AnOlderTamiyoFileWithoutProxyImportsRealCards(t *testing
 	file := `{"tamiyo": 1, "kind": "deck", "cards": [{"name": "Sol Ring", "scryfall_id": "` + solRingSLD + `", "set_code": "sld", "collector_number": "1011", "quantity": 2, "board": "main"}]}`
 	decks := withTargetDeck(&fakeDeckService{})
 
-	_, err := newTestService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver()).ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader(file))
+	_, err := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver()).ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader(file))
 
 	require.NoError(t, err)
 	assert.Equal(t, deck.RealOnly, decks.placedPlan(t, targetDeckID).Lines[0].Proxy)

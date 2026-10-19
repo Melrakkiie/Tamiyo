@@ -123,6 +123,10 @@ func (f *fakeRepository) Compose(ctx context.Context, userID string, deckID stri
 	return errors.New("compositions are tested against Postgres")
 }
 
+func (f *fakeRepository) ComposeCollection(ctx context.Context, apply func(CompositionStore) error) error {
+	return errors.New("compositions are tested against Postgres")
+}
+
 func (f *fakeRepository) FindPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error) {
 	f.lastUserID = userID
 	return f.pending, nil
