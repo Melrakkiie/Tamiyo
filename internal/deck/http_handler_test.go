@@ -67,6 +67,8 @@ type fakeService struct {
 	commitSummary PendingCommitSummary
 	commitErr     error
 	lastCommit    *PendingCommit
+
+	fakeSwitches
 }
 
 func (f *fakeService) GetView(ctx context.Context, userID string, deckID string) (View, error) {

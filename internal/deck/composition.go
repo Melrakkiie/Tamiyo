@@ -17,6 +17,11 @@ type CompositionStore interface {
 
 	StorageExists(ctx context.Context, userID string, storageID int) (bool, error)
 	CreateCollectionCard(ctx context.Context, userID string, c DeckCard) (int, error)
+
+	FindCardsByDeckID(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]DeckCard, error)
+	FindOwnedCopies(ctx context.Context, userID string, targetDeckID string, scryfallIDs []string, nameKeys []string) ([]OwnedCopy, error)
+	UnlinkCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error
+	CreatePendingCard(ctx context.Context, userID string, p PendingCard) (PendingCard, error)
 }
 
 // Composer applies a change to one of the user's decks in a single
