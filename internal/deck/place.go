@@ -20,11 +20,26 @@ type Printing struct {
 }
 
 // PlacementPlan is a change PlaceCards applies to a deck in one transaction.
-// Tags are added to those the deck's cards already have, by card name.
+// Removals apply first, then the placements. Tags are added to those the
+// deck's cards already have, by card name; ReplaceTags sets a card's tags
+// exactly (none clears them) once the deck holds its final cards.
 type PlacementPlan struct {
 	Lines                 []PlacementLine
 	Tags                  []TaggedCard
 	IncludeLockedStorages bool
+
+	// RemoveCards are owned copies taken out of the deck. They stay in the
+	// collection, and a removed commander leaves its slot.
+	RemoveCards []int
+	// PendingQuantities lower pending cards of the deck to a quantity, or
+	// remove them at zero.
+	PendingQuantities []PendingQuantity
+	ReplaceTags       []TaggedCard
+}
+
+type PendingQuantity struct {
+	ID       int
+	Quantity int
 }
 
 // PlacementLine asks for Quantity copies of a printing on a board. Owned
@@ -75,6 +90,9 @@ func (s *Service) PlaceCards(ctx context.Context, userID string, deckID string, 
 	var summary PlacementSummary
 	err := s.repo.Compose(ctx, userID, deckID, func(store CompositionStore) error {
 		summary = PlacementSummary{}
+		if err := applyRemovals(ctx, store, userID, deckID, plan); err != nil {
+			return err
+		}
 		p, err := newPlacement(ctx, store, userID, deckID, plan)
 		if err != nil {
 			return err
@@ -87,7 +105,7 @@ func (s *Service) PlaceCards(ctx context.Context, userID string, deckID string, 
 		if err := p.saveCommanders(ctx); err != nil {
 			return err
 		}
-		summary.SkippedTags, err = p.addTags(ctx, plan.Tags)
+		summary.SkippedTags, err = p.writeTags(ctx, plan)
 		return err
 	})
 	if err != nil {
@@ -229,7 +247,19 @@ func (p *placement) replacePending(updated PendingCard) {
 	}
 }
 
-func (p *placement) addTags(ctx context.Context, tagged []TaggedCard) ([]SkippedTags, error) {
+func (p *placement) writeTags(ctx context.Context, plan PlacementPlan) ([]SkippedTags, error) {
+	added, err := p.writeCardTags(ctx, plan.Tags, false)
+	if err != nil {
+		return nil, err
+	}
+	replaced, err := p.writeCardTags(ctx, plan.ReplaceTags, true)
+	if err != nil {
+		return nil, err
+	}
+	return append(added, replaced...), nil
+}
+
+func (p *placement) writeCardTags(ctx context.Context, tagged []TaggedCard, replace bool) ([]SkippedTags, error) {
 	if len(tagged) == 0 {
 		return nil, nil
 	}
@@ -258,7 +288,11 @@ func (p *placement) addTags(ctx context.Context, tagged []TaggedCard) ([]Skipped
 			skipped = append(skipped, SkippedTags{CardName: card.Name, Err: ErrCardNotInDeck})
 			continue
 		}
-		tags, err := cleanCardTags(existing, append(append([]string{}, current[key]...), card.Tags...))
+		raw := card.Tags
+		if !replace {
+			raw = append(append([]string{}, current[key]...), card.Tags...)
+		}
+		tags, err := cleanCardTags(existing, raw)
 		if err != nil {
 			skipped = append(skipped, SkippedTags{CardName: card.Name, Err: err})
 			continue
@@ -266,10 +300,29 @@ func (p *placement) addTags(ctx context.Context, tagged []TaggedCard) ([]Skipped
 		for _, tag := range tags {
 			existing[strings.ToLower(tag)] = tag
 		}
+		if replace && sameTags(current[key], tags) {
+			continue
+		}
 		current[key] = tags
 		if err := p.store.WriteCardTags(ctx, p.userID, p.deck.ID, key, tags); err != nil {
 			return nil, fmt.Errorf("tagging %q: %w", card.Name, err)
 		}
 	}
 	return skipped, nil
+}
+
+func sameTags(a []string, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for _, tag := range a {
+		found := false
+		for _, other := range b {
+			found = found || strings.EqualFold(tag, other)
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
