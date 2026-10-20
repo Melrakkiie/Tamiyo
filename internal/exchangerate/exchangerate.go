@@ -55,14 +55,6 @@ func (s *Service) Current(ctx context.Context) (Rate, bool, error) {
 	return s.repo.Find(ctx, USD)
 }
 
-func (s *Service) USDPerEUR(ctx context.Context) (float64, error) {
-	rate, found, err := s.repo.Find(ctx, USD)
-	if err != nil || !found {
-		return 0, err
-	}
-	return rate.PerEUR, nil
-}
-
 type Refresher struct {
 	repo            Repository
 	source          Source

@@ -274,22 +274,6 @@ func TestRefresher_RunStopsWithItsContext(t *testing.T) {
 	}
 }
 
-func TestService_USDPerEURIsZeroWithoutARate(t *testing.T) {
-	rate, err := NewService(&fakeRepo{}).USDPerEUR(context.Background())
-
-	require.NoError(t, err)
-	assert.Zero(t, rate)
-}
-
-func TestService_USDPerEURReturnsTheSavedRate(t *testing.T) {
-	repo := &fakeRepo{rates: map[string]Rate{USD: {Currency: USD, PerEUR: 1.0876}}}
-
-	rate, err := NewService(repo).USDPerEUR(context.Background())
-
-	require.NoError(t, err)
-	assert.Equal(t, 1.0876, rate)
-}
-
 func serve(t *testing.T, repo Repository) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
