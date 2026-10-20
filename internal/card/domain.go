@@ -101,6 +101,12 @@ var comparisonOperators = map[string]string{
 	"gte": ">=",
 }
 
+// IsLegalFormat reports whether format is one of the Scryfall formats a card
+// can be legal in.
+func IsLegalFormat(format string) bool {
+	return legalFormats[format]
+}
+
 var legalFormats = map[string]bool{
 	"standard": true, "future": true, "historic": true, "timeless": true, "gladiator": true,
 	"pioneer": true, "explorer": true, "modern": true, "legacy": true, "pauper": true,

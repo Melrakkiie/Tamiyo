@@ -182,6 +182,5 @@ func (h *Handler) respondError(ctx *gin.Context, err error) {
 		apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 		apierr.Mapping{Err: deckinsights.ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 		apierr.Mapping{Err: deckinsights.ErrUnknownFormat, Status: http.StatusBadRequest},
-		apierr.Mapping{Err: deckinsights.ErrScryfallUnavailable, Status: http.StatusBadGateway},
 	)
 }
