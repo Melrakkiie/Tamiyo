@@ -1249,13 +1249,13 @@ How the owner last displayed the deck's cards, so the deck page opens the same w
 
 ## Deck Insights
 
-Two read-only routes analyze a deck's cards — nothing here persists anything, every call is computed fresh from Scryfall data at request time. Both are purely about playing the game: there's no notion of card price or collection value anywhere in Tamiyo.
+Two read-only routes analyze a deck's cards; nothing here persists anything. Statistics are computed from the printings Tamiyo stores and refreshes daily (see [Prices and values](#prices-and-values)), so they can be up to a day behind Scryfall; legality is checked against Scryfall at request time.
 
 **Errors common to both**
-- `400` — `:id` is not a UUID, or the deck's own `format` field isn't a format Scryfall recognizes (so legality/stats can't be computed against it)
+- `400` — `:id` is not a UUID, or (legality only) the deck's own `format` field isn't a format Scryfall recognizes
 - `401` — unauthenticated
 - `404` — no deck with that id exists for this account
-- `502` — Scryfall couldn't be reached
+- `502` — (legality only) Scryfall couldn't be reached
 - `500` — unexpected failure
 
 ---
@@ -1291,7 +1291,7 @@ Pending cards (see `GET /deck/:id/pending-cards`) are checked like the deck's ow
 
 ### `GET /deck/:id/stats`
 
-Summarizes the deck's composition: mana curve, color breakdown, and primary card types — all computed from Scryfall data, nothing stored by Tamiyo itself. Lands are excluded from the mana curve, color breakdown, and average mana value (a land's mana value is always 0 and it has no casting colors, so including it would just dilute what the deck actually casts) but are still counted in `card_count`, `land_count`, and `type_breakdown`. Pending cards are included with all their copies, as if they were already in the deck.
+Summarizes the deck's composition: mana curve, color breakdown, and primary card types — computed from the stored printing of each card (type line, mana value, colors), without calling Scryfall. A card whose printing isn't stored yet (just added, picked up by the background refresh within minutes) or that Scryfall doesn't know counts as `Unknown` in `type_breakdown` and in `card_count`, and nowhere else. Lands are excluded from the mana curve, color breakdown, and average mana value (a land's mana value is always 0 and it has no casting colors, so including it would just dilute what the deck actually casts) but are still counted in `card_count`, `land_count`, and `type_breakdown`. Pending cards are included with all their copies, as if they were already in the deck.
 
 **Response `200 OK`**
 ```json
@@ -1449,7 +1449,7 @@ Same report as [`GET /deck/:id/legality`](#get-deckidlegality), without `card_id
 
 Same statistics as [`GET /deck/:id/stats`](#get-deckidstats).
 
-**Errors:** `400` the deck's format isn't one Scryfall recognizes · `404` as above · `429` rate limit exceeded · `502` Scryfall unreachable
+**Errors:** `404` as above · `429` rate limit exceeded
 
 ### `GET /shared/decks/:id/export`
 
