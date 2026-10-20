@@ -75,13 +75,7 @@ func applyRemovals(ctx context.Context, store CompositionStore, userID string, d
 		}
 	}
 	for _, id := range touched {
-		left := remaining[id]
-		if left == 0 {
-			err = store.DeletePendingCard(ctx, userID, deckID, id)
-		} else {
-			_, err = store.UpdatePendingQuantity(ctx, userID, deckID, id, left)
-		}
-		if err != nil {
+		if err := setPendingQuantity(ctx, store, userID, deckID, id, remaining[id]); err != nil {
 			return fmt.Errorf("removing a pending card from the deck: %w", err)
 		}
 	}

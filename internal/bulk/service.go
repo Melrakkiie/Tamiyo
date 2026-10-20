@@ -54,6 +54,7 @@ type deckService interface {
 	GetAllDecks(ctx context.Context, userID string, filter deck.Filter) ([]deck.Deck, int, error)
 	GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error)
 	GetDeckContent(ctx context.Context, userID string, deckID string) (deck.DeckContent, error)
+	GetVisibleDeck(ctx context.Context, userID string, id string) (deck.VisibleDeck, error)
 	GetSharedDeck(ctx context.Context, id string) (string, deck.Deck, error)
 	CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error)
 	DuplicateDeck(ctx context.Context, userID string, sourceID string, req deck.DuplicateRequest) (deck.DuplicateResult, error)

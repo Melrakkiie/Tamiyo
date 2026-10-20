@@ -84,13 +84,7 @@ func (c *composition) removeUnkept(copies []DeckCard, keptCopies map[int]bool, p
 		if kept == p.Quantity {
 			continue
 		}
-		var err error
-		if kept == 0 {
-			err = c.store.DeletePendingCard(c.ctx, c.userID, c.deck.ID, p.ID)
-		} else {
-			_, err = c.store.UpdatePendingQuantity(c.ctx, c.userID, c.deck.ID, p.ID, kept)
-		}
-		if err != nil {
+		if err := setPendingQuantity(c.ctx, c.store, c.userID, c.deck.ID, p.ID, kept); err != nil {
 			return fmt.Errorf("updating the pending %q: %w", p.Name, err)
 		}
 		c.summary.CardsRemoved += p.Quantity - kept

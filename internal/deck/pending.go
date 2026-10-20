@@ -65,6 +65,21 @@ func (s *Service) AddPendingCard(ctx context.Context, userID string, deckID stri
 	return s.repo.CreatePendingCard(ctx, userID, p)
 }
 
+type pendingQuantityWriter interface {
+	UpdatePendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (PendingCard, error)
+	DeletePendingCard(ctx context.Context, userID string, deckID string, id int) error
+}
+
+// setPendingQuantity sets a pending card's quantity, and deletes the card
+// when none is left.
+func setPendingQuantity(ctx context.Context, store pendingQuantityWriter, userID string, deckID string, id int, quantity int) error {
+	if quantity <= 0 {
+		return store.DeletePendingCard(ctx, userID, deckID, id)
+	}
+	_, err := store.UpdatePendingQuantity(ctx, userID, deckID, id, quantity)
+	return err
+}
+
 type pendingWriter interface {
 	UpdatePendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (PendingCard, error)
 	CreatePendingCard(ctx context.Context, userID string, p PendingCard) (PendingCard, error)

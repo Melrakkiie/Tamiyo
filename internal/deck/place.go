@@ -164,10 +164,7 @@ func newPlacement(ctx context.Context, store CompositionStore, userID string, de
 }
 
 func (p *placement) placeLine(ctx context.Context, line PlacementLine, summary *PlacementSummary) error {
-	board := line.Board
-	if board == "" {
-		board = BoardMain
-	}
+	board := BoardOrMain(line.Board)
 	commander := line.Commander && p.nextSlot != SlotNone
 	if commander && !InMainBoard(board) {
 		return ErrCommanderBoard

@@ -233,6 +233,21 @@ func (f *fakeDeckService) GetSharedDeck(ctx context.Context, id string) (string,
 	return "", deck.Deck{}, deck.ErrNotFound
 }
 
+func (f *fakeDeckService) GetVisibleDeck(ctx context.Context, userID string, id string) (deck.VisibleDeck, error) {
+	d, err := f.GetDeck(ctx, userID, id)
+	if err == nil {
+		return deck.VisibleDeck{OwnerID: userID, Deck: d, Mine: true}, nil
+	}
+	if !errors.Is(err, deck.ErrNotFound) {
+		return deck.VisibleDeck{}, err
+	}
+	ownerID, shared, err := f.GetSharedDeck(ctx, id)
+	if err != nil {
+		return deck.VisibleDeck{}, err
+	}
+	return deck.VisibleDeck{OwnerID: ownerID, Deck: shared}, nil
+}
+
 func (f *fakeDeckService) GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error) {
 	return f.tags, nil
 }

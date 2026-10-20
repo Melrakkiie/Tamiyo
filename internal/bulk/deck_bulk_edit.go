@@ -30,7 +30,7 @@ type pendingMatch struct {
 }
 
 func lineMatches(line moxfieldDeckLine, e deck.DeckEntry) bool {
-	if boardOf(e.Board) != line.Board {
+	if deck.BoardOrMain(e.Board) != line.Board {
 		return false
 	}
 	if line.SetCode != "" {

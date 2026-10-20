@@ -45,7 +45,7 @@ func (s *Service) StoreDeck(ctx context.Context, userID string, deckID string, s
 	}
 	var ids []int
 	for _, c := range cards {
-		if !wanted[boardOf(c.Board)] || (c.StorageID != nil && *c.StorageID == storageID) {
+		if !wanted[deck.BoardOrMain(c.Board)] || (c.StorageID != nil && *c.StorageID == storageID) {
 			continue
 		}
 		ids = append(ids, c.ID)

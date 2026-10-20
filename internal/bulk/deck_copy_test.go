@@ -141,8 +141,6 @@ func TestCollectDeck_RejectsBadRequests(t *testing.T) {
 	assert.ErrorIs(t, err, ErrCollectModeNotHere)
 	_, err = shared.CollectDeck(ctx, testUserID, fixtureDeckID, CollectRequest{Mode: CollectPending, Boards: main})
 	assert.ErrorIs(t, err, ErrCollectModeNotHere)
-	_, err = own.CollectDeck(ctx, testUserID, fixtureDeckID, CollectRequest{Mode: CollectAll, Boards: main, StorageID: ptr(9)})
-	assert.ErrorIs(t, err, ErrTargetStorageNotFound)
 	_, err = own.CollectDeck(ctx, testUserID, "00000000-0000-0000-0000-000000000099", CollectRequest{Mode: CollectAll, Boards: main})
 	assert.ErrorIs(t, err, ErrDeckNotFound)
 }
@@ -213,11 +211,11 @@ func TestHandler_CollectDeck_RejectsBadInput(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, postJSON(router, "/deck/00000000-0000-0000-0000-000000000009/collect", `{"mode": "all", "storage_id": 0, "boards": ["main"]}`).Code)
 
 	cases := map[error]int{
-		ErrDeckNotFound:          http.StatusNotFound,
-		ErrUnknownCollectMode:    http.StatusBadRequest,
-		ErrCollectModeNotHere:    http.StatusBadRequest,
-		ErrNoBoards:              http.StatusBadRequest,
-		ErrTargetStorageNotFound: http.StatusBadRequest,
+		ErrDeckNotFound:               http.StatusNotFound,
+		ErrUnknownCollectMode:         http.StatusBadRequest,
+		ErrCollectModeNotHere:         http.StatusBadRequest,
+		ErrNoBoards:                   http.StatusBadRequest,
+		deck.ErrTargetStorageNotFound: http.StatusBadRequest,
 	}
 	for collectErr, expected := range cases {
 		w := postJSON(setupRouter(&fakeImportService{err: collectErr}), "/deck/00000000-0000-0000-0000-000000000009/collect", `{"mode": "all", "boards": ["main"]}`)

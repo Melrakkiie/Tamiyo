@@ -277,7 +277,7 @@ func copyTemplate(dc DeckCard) PendingCard {
 		Name: dc.Name, ScryfallID: dc.ScryfallID, SetCode: dc.SetCode, CollectorNumber: dc.CollectorNumber,
 		Foil: dc.Foil, Proxy: dc.Proxy,
 		ManaValue: dc.ManaValue, Colors: dc.Colors, CardType: dc.CardType, ColorIdentity: dc.ColorIdentity,
-		Quantity: 1, Board: boardOrMain(dc.Board),
+		Quantity: 1, Board: BoardOrMain(dc.Board),
 	}
 }
 
@@ -286,11 +286,12 @@ func pendingTemplate(p PendingCard) PendingCard {
 		Name: p.Name, ScryfallID: p.ScryfallID, SetCode: p.SetCode, CollectorNumber: p.CollectorNumber,
 		Foil: p.Foil, Proxy: p.Proxy,
 		ManaValue: p.ManaValue, Colors: p.Colors, CardType: p.CardType, ColorIdentity: p.ColorIdentity,
-		Quantity: p.Quantity, Board: boardOrMain(p.Board),
+		Quantity: p.Quantity, Board: BoardOrMain(p.Board),
 	}
 }
 
-func boardOrMain(board string) string {
+// BoardOrMain is the board a card with no board is on.
+func BoardOrMain(board string) string {
 	if board == "" {
 		return BoardMain
 	}

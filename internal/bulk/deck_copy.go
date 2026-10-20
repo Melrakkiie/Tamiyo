@@ -12,7 +12,6 @@ import (
 	"Melrakkiie/Tamiyo/internal/apierr"
 	"Melrakkiie/Tamiyo/internal/auth"
 	"Melrakkiie/Tamiyo/internal/deck"
-	"Melrakkiie/Tamiyo/internal/storage"
 )
 
 const (
@@ -27,28 +26,12 @@ var (
 	ErrNoBoards           = errors.New("boards must list at least one of: main, sideboard, considering")
 )
 
-type visibleDeck struct {
-	ownerID string
-	deck    deck.Deck
-	mine    bool
-}
-
-func (s *Service) visibleDeck(ctx context.Context, userID string, deckID string) (visibleDeck, error) {
-	d, err := s.decks.GetDeck(ctx, userID, deckID)
-	if err == nil {
-		return visibleDeck{ownerID: userID, deck: d, mine: true}, nil
+func (s *Service) visibleDeck(ctx context.Context, userID string, deckID string) (deck.VisibleDeck, error) {
+	visible, err := s.decks.GetVisibleDeck(ctx, userID, deckID)
+	if errors.Is(err, deck.ErrNotFound) {
+		return deck.VisibleDeck{}, ErrDeckNotFound
 	}
-	if !errors.Is(err, deck.ErrNotFound) {
-		return visibleDeck{}, err
-	}
-	ownerID, shared, err := s.decks.GetSharedDeck(ctx, deckID)
-	if err != nil {
-		if errors.Is(err, deck.ErrNotFound) {
-			return visibleDeck{}, ErrDeckNotFound
-		}
-		return visibleDeck{}, err
-	}
-	return visibleDeck{ownerID: ownerID, deck: shared}, nil
+	return visible, err
 }
 
 type DuplicateRequest struct {
@@ -101,11 +84,15 @@ func wantedBoards(boards []string) (map[string]bool, error) {
 	return wanted, nil
 }
 
-func boardOf(board string) string {
-	if board == "" {
-		return deck.BoardMain
+// boardList lists the wanted boards in display order.
+func boardList(wanted map[string]bool) []string {
+	var boards []string
+	for _, b := range []string{deck.BoardMain, deck.BoardSideboard, deck.BoardConsidering} {
+		if wanted[b] {
+			boards = append(boards, b)
+		}
 	}
-	return board
+	return boards
 }
 
 func (s *Service) entriesInBoards(ctx context.Context, ownerID string, deckID string, boards map[string]bool) ([]deck.DeckEntry, error) {
@@ -113,13 +100,7 @@ func (s *Service) entriesInBoards(ctx context.Context, ownerID string, deckID st
 	if err != nil {
 		return nil, fmt.Errorf("loading deck content: %w", err)
 	}
-	entries := make([]deck.DeckEntry, 0, len(content.Entries))
-	for _, e := range content.Entries {
-		if boards[boardOf(e.Board)] {
-			entries = append(entries, e)
-		}
-	}
-	return entries, nil
+	return deck.EntriesInBoards(content.Entries, boardList(boards)), nil
 }
 
 func (s *Service) CollectDeck(ctx context.Context, userID string, deckID string, req CollectRequest) (Summary, error) {
@@ -134,27 +115,13 @@ func (s *Service) CollectDeck(ctx context.Context, userID string, deckID string,
 	if err != nil {
 		return Summary{}, err
 	}
-	if (req.Mode == CollectPending && !source.mine) || (req.Mode == CollectMissing && source.mine) {
+	if (req.Mode == CollectPending && !source.Mine) || (req.Mode == CollectMissing && source.Mine) {
 		return Summary{}, ErrCollectModeNotHere
 	}
-	if req.StorageID != nil {
-		if _, err := s.storages.GetStorage(ctx, userID, *req.StorageID); err != nil {
-			if errors.Is(err, storage.ErrNotFound) {
-				return Summary{}, ErrTargetStorageNotFound
-			}
-			return Summary{}, err
-		}
-	}
-
-	chosen := make([]string, 0, len(boards))
-	for _, b := range []string{deck.BoardMain, deck.BoardSideboard, deck.BoardConsidering} {
-		if boards[b] {
-			chosen = append(chosen, b)
-		}
-	}
+	chosen := boardList(boards)
 
 	var result deck.CollectSummary
-	if source.mine {
+	if source.Mine {
 		result, err = s.decks.CollectOwnDeck(ctx, userID, deckID, deck.OwnDeckCollect{
 			Boards: chosen, StorageID: req.StorageID, OwnedCopies: req.Mode == CollectAll,
 		})
@@ -240,7 +207,6 @@ func (h *Handler) collectDeck(ctx *gin.Context) {
 			apierr.Mapping{Err: ErrUnknownCollectMode, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrCollectModeNotHere, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrNoBoards, Status: http.StatusBadRequest},
-			apierr.Mapping{Err: ErrTargetStorageNotFound, Status: http.StatusBadRequest, Message: "storage_id does not reference an existing storage"},
 			apierr.Mapping{Err: deck.ErrTargetStorageNotFound, Status: http.StatusBadRequest, Message: "storage_id does not reference an existing storage"},
 		)
 		return

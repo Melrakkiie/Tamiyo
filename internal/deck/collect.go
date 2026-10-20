@@ -36,7 +36,7 @@ func (s *Service) CollectOwnDeck(ctx context.Context, userID string, deckID stri
 		if err != nil {
 			return err
 		}
-		entries := entriesInBoards(content.Entries, req.Boards)
+		entries := EntriesInBoards(content.Entries, req.Boards)
 		pending, err := store.FindPendingCards(ctx, userID, deckID)
 		if err != nil {
 			return err
@@ -96,7 +96,7 @@ func (s *Service) CollectSharedDeck(ctx context.Context, userID string, deckID s
 		if err != nil {
 			return err
 		}
-		entries := entriesInBoards(content.Entries, req.Boards)
+		entries := EntriesInBoards(content.Entries, req.Boards)
 		copies := make([]int, len(entries))
 		for i, e := range entries {
 			copies[i] = e.Quantity()
@@ -182,10 +182,11 @@ func requireStorage(ctx context.Context, store CompositionStore, userID string, 
 	return nil
 }
 
-func entriesInBoards(entries []DeckEntry, boards []string) []DeckEntry {
+// EntriesInBoards keeps the entries on one of the boards.
+func EntriesInBoards(entries []DeckEntry, boards []string) []DeckEntry {
 	kept := make([]DeckEntry, 0, len(entries))
 	for _, e := range entries {
-		if slices.Contains(boards, e.Board) {
+		if slices.Contains(boards, BoardOrMain(e.Board)) {
 			kept = append(kept, e)
 		}
 	}

@@ -29,14 +29,8 @@ func (s *Service) CommitPendingCards(ctx context.Context, userID string, deckID 
 	var summary PendingCommitSummary
 	err := s.repo.Compose(ctx, userID, deckID, func(store CompositionStore) error {
 		summary = PendingCommitSummary{}
-		if req.StorageID != nil {
-			exists, err := store.StorageExists(ctx, userID, *req.StorageID)
-			if err != nil {
-				return err
-			}
-			if !exists {
-				return ErrTargetStorageNotFound
-			}
+		if err := requireStorage(ctx, store, userID, req.StorageID); err != nil {
+			return err
 		}
 		d, err := store.FindByID(ctx, userID, deckID)
 		if err != nil {
@@ -84,14 +78,8 @@ func commitPendingCard(ctx context.Context, store CompositionStore, userID strin
 			}
 		}
 	}
-	if count < p.Quantity {
-		if _, err := store.UpdatePendingQuantity(ctx, userID, d.ID, p.ID, p.Quantity-count); err != nil {
-			return d, fmt.Errorf("updating %q in the pending list: %w", p.Name, err)
-		}
-		return d, nil
-	}
-	if err := store.DeletePendingCard(ctx, userID, d.ID, p.ID); err != nil {
-		return d, fmt.Errorf("clearing %q from the pending list: %w", p.Name, err)
+	if err := setPendingQuantity(ctx, store, userID, d.ID, p.ID, p.Quantity-count); err != nil {
+		return d, fmt.Errorf("updating %q in the pending list: %w", p.Name, err)
 	}
 	return d, nil
 }
