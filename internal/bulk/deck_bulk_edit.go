@@ -135,7 +135,7 @@ func (s *Service) BulkEditDeck(ctx context.Context, userID string, deckID string
 		summary.CardsSkipped += unresolved.CardsSkipped
 		summary.Warnings = append(summary.Warnings, unresolved.Warnings...)
 	}
-	if len(plan.Lines)+len(plan.RemoveCards)+len(plan.PendingQuantities)+len(plan.ReplaceTags) == 0 {
+	if len(plan.Lines)+len(plan.RemoveCards)+len(plan.PendingRemovals)+len(plan.ReplaceTags) == 0 {
 		return summary, nil
 	}
 	if err := s.placeLines(ctx, userID, d.ID, plan, &summary); err != nil {
@@ -160,7 +160,7 @@ func planRemovals(plan *deck.PlacementPlan, entries []deck.DeckEntry, copies []*
 	}
 	for _, p := range deck.PendingTotals(entries) {
 		if gone := p.Quantity - kept[p.ID]; gone != 0 {
-			plan.PendingQuantities = append(plan.PendingQuantities, deck.PendingQuantity{ID: p.ID, Quantity: kept[p.ID]})
+			plan.PendingRemovals = append(plan.PendingRemovals, deck.PendingRemoval{ID: p.ID, Count: gone})
 			removed += gone
 		}
 	}

@@ -37,7 +37,7 @@ func TestBulkEditDeck_KeepsListedCardsRemovesTheRestAndAddsNewOnes(t *testing.T)
 	assert.Equal(t, 2, summary.CardsPending)
 	plan := decks.placedPlan(t, fixtureDeckID)
 	assert.Equal(t, []int{1}, plan.RemoveCards, "Sol Ring is not on the list")
-	assert.ElementsMatch(t, []deck.PendingQuantity{{ID: 9}, {ID: 8, Quantity: 2}}, plan.PendingQuantities, "the foil Duress being considered is not on the list; two owned Islands and two pending ones make four")
+	assert.ElementsMatch(t, []deck.PendingRemoval{{ID: 9, Count: 1}, {ID: 8, Count: 1}}, plan.PendingRemovals, "the foil Duress being considered is not on the list; two owned Islands and two pending ones make four")
 	assert.Equal(t, []placedLine{{name: "Lightning Bolt", setCode: "m10", quantity: 2, board: deck.BoardMain, anyPrinting: true}}, placedLines(plan))
 	assert.Empty(t, plan.Tags, "bulk edit replaces the tags itself")
 	assert.Equal(t, []deck.TaggedCard{
@@ -169,7 +169,7 @@ func TestBulkEditDeck_ShrinksAPendingCommanderSplitAcrossEntries(t *testing.T) {
 	summary, err := svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, strings.NewReader("2 Tamiyo, Inquisitive Student (NEO) 75\n"))
 
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []deck.PendingQuantity{{ID: 7, Quantity: 2}, {ID: 11}}, decks.placedPlan(t, fixtureDeckID).PendingQuantities, "the commander keeps its slot and one extra copy")
+	assert.ElementsMatch(t, []deck.PendingRemoval{{ID: 7, Count: 1}, {ID: 11, Count: 1}}, decks.placedPlan(t, fixtureDeckID).PendingRemovals, "the commander keeps its slot and one extra copy")
 	assert.Equal(t, 2, summary.CardsRemoved)
 }
 

@@ -8,7 +8,7 @@ import (
 // applyRemovals takes the plan's copies and pending cards out of the deck,
 // clearing the commander slots they held.
 func applyRemovals(ctx context.Context, store CompositionStore, userID string, deckID string, plan PlacementPlan) error {
-	if len(plan.RemoveCards) == 0 && len(plan.PendingQuantities) == 0 {
+	if len(plan.RemoveCards) == 0 && len(plan.PendingRemovals) == 0 {
 		return nil
 	}
 	d, err := store.FindByID(ctx, userID, deckID)
@@ -24,6 +24,28 @@ func applyRemovals(ctx context.Context, store CompositionStore, userID string, d
 		inDeck[c.ID] = true
 	}
 
+	pending, err := store.FindPendingCards(ctx, userID, deckID)
+	if err != nil {
+		return err
+	}
+	held := make(map[int]int, len(pending))
+	for _, p := range pending {
+		held[p.ID] = p.Quantity
+	}
+	remaining := make(map[int]int, len(plan.PendingRemovals))
+	var touched []int
+	for _, p := range plan.PendingRemovals {
+		current, ok := remaining[p.ID]
+		if !ok {
+			current = held[p.ID]
+			touched = append(touched, p.ID)
+		}
+		if p.Count > current {
+			return ErrCardNotInDeck
+		}
+		remaining[p.ID] = current - p.Count
+	}
+
 	slotsCleared := false
 	for _, id := range plan.RemoveCards {
 		if !inDeck[id] {
@@ -34,8 +56,9 @@ func applyRemovals(ctx context.Context, store CompositionStore, userID string, d
 			slotsCleared = true
 		}
 	}
-	for _, p := range plan.PendingQuantities {
-		if slot, ok := d.PendingSlot(p.ID); ok && p.Quantity <= 0 {
+	for _, id := range touched {
+		left := remaining[id]
+		if slot, ok := d.PendingSlot(id); ok && left == 0 {
 			d.clearSlot(slot)
 			slotsCleared = true
 		}
@@ -51,11 +74,12 @@ func applyRemovals(ctx context.Context, store CompositionStore, userID string, d
 			return fmt.Errorf("removing a card from the deck: %w", err)
 		}
 	}
-	for _, p := range plan.PendingQuantities {
-		if p.Quantity <= 0 {
-			err = store.DeletePendingCard(ctx, userID, deckID, p.ID)
+	for _, id := range touched {
+		left := remaining[id]
+		if left == 0 {
+			err = store.DeletePendingCard(ctx, userID, deckID, id)
 		} else {
-			_, err = store.UpdatePendingQuantity(ctx, userID, deckID, p.ID, p.Quantity)
+			_, err = store.UpdatePendingQuantity(ctx, userID, deckID, id, left)
 		}
 		if err != nil {
 			return fmt.Errorf("removing a pending card from the deck: %w", err)

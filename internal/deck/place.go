@@ -31,15 +31,16 @@ type PlacementPlan struct {
 	// RemoveCards are owned copies taken out of the deck. They stay in the
 	// collection, and a removed commander leaves its slot.
 	RemoveCards []int
-	// PendingQuantities lower pending cards of the deck to a quantity, or
-	// remove them at zero.
-	PendingQuantities []PendingQuantity
-	ReplaceTags       []TaggedCard
+	// PendingRemovals take copies off pending cards of the deck, and remove
+	// a card that reaches zero. Counts are relative so that a change made
+	// since the plan was drawn up is kept rather than overwritten.
+	PendingRemovals []PendingRemoval
+	ReplaceTags     []TaggedCard
 }
 
-type PendingQuantity struct {
-	ID       int
-	Quantity int
+type PendingRemoval struct {
+	ID    int
+	Count int
 }
 
 // PlacementLine asks for Quantity copies of a printing on a board. Owned

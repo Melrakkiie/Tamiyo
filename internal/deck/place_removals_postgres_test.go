@@ -21,10 +21,10 @@ func TestPlaceCards_AppliesRemovalsPlacementsAndTagReplacementTogether(t *testin
 	before := f.content(t).Deck.Updated
 
 	summary := f.place(t, PlacementPlan{
-		Lines:             []PlacementLine{line(tymna, 2)},
-		RemoveCards:       []int{dropped},
-		PendingQuantities: []PendingQuantity{{ID: gone, Quantity: 0}, {ID: lowered, Quantity: 1}},
-		ReplaceTags:       []TaggedCard{{Name: bolt.name, Tags: []string{"Removal"}}},
+		Lines:           []PlacementLine{line(tymna, 2)},
+		RemoveCards:     []int{dropped},
+		PendingRemovals: []PendingRemoval{{ID: gone, Count: 1}, {ID: lowered, Count: 2}},
+		ReplaceTags:     []TaggedCard{{Name: bolt.name, Tags: []string{"Removal"}}},
 	})
 
 	assert.Equal(t, PlacementSummary{CardsPending: 2}, summary)
@@ -61,7 +61,7 @@ func TestPlaceCards_ClearsTheCommanderSlotOfARemovedPendingCard(t *testing.T) {
 	pending := f.pendingCard(t, atraxa, 1, copyOptions{})
 	f.setCommanders(t, nil, &pending, nil, nil)
 
-	f.place(t, PlacementPlan{PendingQuantities: []PendingQuantity{{ID: pending}}})
+	f.place(t, PlacementPlan{PendingRemovals: []PendingRemoval{{ID: pending, Count: 1}}})
 
 	content := f.content(t)
 	assert.Nil(t, content.Deck.CommanderPendingID)
@@ -89,8 +89,8 @@ func TestPlaceCards_RemovesNothingOfAnotherUsersDeck(t *testing.T) {
 
 	f.assertRolledBack(t, func() error {
 		_, err := f.service.PlaceCards(context.Background(), bobID, contentDeckID, PlacementPlan{
-			RemoveCards:       []int{copyID},
-			PendingQuantities: []PendingQuantity{{ID: pendingID}},
+			RemoveCards:     []int{copyID},
+			PendingRemovals: []PendingRemoval{{ID: pendingID, Count: 2}},
 		})
 		assert.ErrorIs(t, err, ErrNotFound)
 		return err
@@ -121,10 +121,10 @@ func TestPlaceCards_LeavesTheDeckAsBeforeWhenARemovalFails(t *testing.T) {
 
 	f.assertRolledBack(t, func() error {
 		_, err := f.service.PlaceCards(context.Background(), f.userID, contentDeckID, PlacementPlan{
-			Lines:             []PlacementLine{line(tymna, 1)},
-			RemoveCards:       []int{commander, second},
-			PendingQuantities: []PendingQuantity{{ID: pending, Quantity: 1}},
-			ReplaceTags:       []TaggedCard{{Name: island.name, Tags: []string{"Land"}}},
+			Lines:           []PlacementLine{line(tymna, 1)},
+			RemoveCards:     []int{commander, second},
+			PendingRemovals: []PendingRemoval{{ID: pending, Count: 2}},
+			ReplaceTags:     []TaggedCard{{Name: island.name, Tags: []string{"Land"}}},
 		})
 		return err
 	})
@@ -141,6 +141,30 @@ func TestPlaceCards_LeavesTheDeckAsBeforeWhenTheTagReplacementFails(t *testing.T
 			RemoveCards: []int{copyID},
 			ReplaceTags: []TaggedCard{{Name: island.name, Tags: []string{"Land"}}},
 		})
+		return err
+	})
+}
+
+func TestPlaceCards_RemovesFromAPendingCardWhatItHoldsNow(t *testing.T) {
+	f := newContentFixture(t)
+	pending := f.pendingCard(t, island, 3, copyOptions{})
+	_, err := f.service.PlaceCards(context.Background(), f.userID, contentDeckID, PlacementPlan{Lines: []PlacementLine{line(island, 2)}})
+	require.NoError(t, err)
+
+	f.place(t, PlacementPlan{PendingRemovals: []PendingRemoval{{ID: pending, Count: 1}}})
+
+	assert.Equal(t, []entrySummary{{name: island.name, board: BoardMain, pending: 4, quantity: 4}}, summarize(f.content(t).Entries), "a copy added since the plan was made stays")
+}
+
+func TestPlaceCards_RejectsRemovingMoreFromAPendingCardThanItHolds(t *testing.T) {
+	f := newContentFixture(t)
+	pending := f.pendingCard(t, island, 1, copyOptions{})
+
+	f.assertRolledBack(t, func() error {
+		_, err := f.service.PlaceCards(context.Background(), f.userID, contentDeckID, PlacementPlan{
+			PendingRemovals: []PendingRemoval{{ID: pending, Count: 2}},
+		})
+		assert.ErrorIs(t, err, ErrCardNotInDeck)
 		return err
 	})
 }
