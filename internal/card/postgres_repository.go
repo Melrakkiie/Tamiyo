@@ -125,12 +125,6 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 	if filter.Toughness != nil {
 		add(printingStatCondition("toughnesses", comparisonOperators[filter.ToughnessOp], "$%d"), *filter.Toughness)
 	}
-	if filter.Type != "" {
-		add(`(card_type = $%d OR EXISTS (
-			SELECT 1 FROM tamiyo.printings p
-			WHERE p.scryfall_id = cards.scryfall_id AND split_part(p.type_line, '—', 1) ~* ('\m' || $%d || '\M')
-		))`, filter.Type, filter.Type)
-	}
 	if filter.Subtype != "" {
 		add(`EXISTS (
 			SELECT 1 FROM tamiyo.printings p

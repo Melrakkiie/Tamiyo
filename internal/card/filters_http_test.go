@@ -29,7 +29,6 @@ func TestHandler_GetCards_PassesAdvancedFilters(t *testing.T) {
 	require.NotNil(t, f.Toughness)
 	assert.Equal(t, 0.5, *f.Toughness)
 	assert.Equal(t, "lt", f.ToughnessOp)
-	assert.Equal(t, "Creature", f.Type)
 	assert.Equal(t, "Elf", f.Subtype)
 	assert.Equal(t, "deckbox", f.StorageType)
 	require.NotNil(t, f.OpenToDeck)
@@ -158,6 +157,11 @@ func TestHandler_GetCards_TranslatesFoilIntoCriteria(t *testing.T) {
 
 func TestHandler_GetCards_TranslatesLegalFormatIntoCriteria(t *testing.T) {
 	assert.Equal(t, `format="commander"`, describe(advancedQuery(t, "legal_in=commander")))
+}
+
+func TestHandler_GetCards_TranslatesTypeIntoCriteria(t *testing.T) {
+	assert.Equal(t, `type="Creature"`, describe(advancedQuery(t, "type=Creature")))
+	assert.Equal(t, `(type="Artifact" and type="elf")`, describe(advancedQuery(t, "type=Artifact&q=t%3Aelf")))
 }
 
 func TestHandler_GetCards_JoinsAdvancedCriteriaWithTheSearchQuery(t *testing.T) {

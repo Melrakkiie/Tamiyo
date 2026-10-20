@@ -365,7 +365,6 @@ func (h *Handler) getCards(ctx *gin.Context) {
 		PowerOp:       advanced.PowerOp,
 		Toughness:     advanced.Toughness,
 		ToughnessOp:   advanced.ToughnessOp,
-		Type:          advanced.Type,
 		Subtype:       advanced.Subtype,
 		StorageType:   advanced.StorageType,
 		OpenToDeck:    advanced.OpenToDeck,

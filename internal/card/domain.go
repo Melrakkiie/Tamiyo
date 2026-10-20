@@ -42,7 +42,6 @@ type CardFilter struct {
 	PowerOp     string
 	Toughness   *float64
 	ToughnessOp string
-	Type        string
 	Subtype     string
 	StorageType string
 	OpenToDeck  *string
