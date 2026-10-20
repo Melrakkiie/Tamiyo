@@ -359,7 +359,6 @@ func (h *Handler) getCards(ctx *gin.Context) {
 		Stack:         stack,
 		Name:          ctx.Query("name"),
 		Query:         advanced.Query,
-		Type:          advanced.Type,
 		OpenToDeck:    advanced.OpenToDeck,
 		GroupBy:       groupBy,
 		SortField:     sortField,

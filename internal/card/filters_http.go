@@ -81,7 +81,7 @@ func parseAdvancedFilters(query url.Values) (CardFilter, error) {
 		if !scryfall.IsPrimaryType(raw) || raw == "Other" {
 			return filter, errInvalidTypeFilter
 		}
-		filter.Type = raw
+		criteria = append(criteria, term(fieldType, "=", raw, 0))
 	}
 
 	if raw := strings.TrimSpace(query.Get("subtype")); raw != "" {

@@ -116,12 +116,6 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		args = append(args, values...)
 	}
 
-	if filter.Type != "" {
-		add(`(card_type = $%d OR EXISTS (
-			SELECT 1 FROM tamiyo.printings p
-			WHERE p.scryfall_id = cards.scryfall_id AND split_part(p.type_line, '—', 1) ~* ('\m' || $%d || '\M')
-		))`, filter.Type, filter.Type)
-	}
 	if filter.OpenToDeck != nil {
 		add(`(storage_id IS NULL OR NOT EXISTS (
 			SELECT 1 FROM tamiyo.storage s

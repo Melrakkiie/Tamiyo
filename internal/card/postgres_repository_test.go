@@ -1022,8 +1022,6 @@ func TestPostgresRepository_FindAll_AdvancedFilters(t *testing.T) {
 	}
 	str := func(s string) *string { return &s }
 
-	assert.Equal(t, []string{"Esika's Chariot", "Sol Ring"}, names(CardFilter{Type: "Artifact"}))
-
 	var allowedDeck, otherDeck string
 	require.NoError(t, db.Get(&allowedDeck, `INSERT INTO tamiyo.deck (user_id, name, format) VALUES ($1, 'Allowed', 'commander') RETURNING id`, userID))
 	require.NoError(t, db.Get(&otherDeck, `INSERT INTO tamiyo.deck (user_id, name, format) VALUES ($1, 'Other', 'commander') RETURNING id`, userID))

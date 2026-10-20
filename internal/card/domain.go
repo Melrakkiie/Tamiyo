@@ -36,7 +36,6 @@ type CardFilter struct {
 	ColorIdentity *string
 	Stack         bool
 
-	Type       string
 	OpenToDeck *string
 
 	GroupBy   string

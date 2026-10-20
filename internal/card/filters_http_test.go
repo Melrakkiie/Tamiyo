@@ -20,7 +20,6 @@ func TestHandler_GetCards_PassesAdvancedFilters(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	f := service.lastFilter
-	assert.Equal(t, "Creature", f.Type)
 	require.NotNil(t, f.OpenToDeck)
 	assert.Equal(t, "0a0a0a0a-0000-0000-0000-000000000001", *f.OpenToDeck)
 	assert.Equal(t, "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", f.ScryfallID)
@@ -187,6 +186,11 @@ func TestParseSearchQuery_HasNoKeywordForInternalCriteria(t *testing.T) {
 
 func TestHandler_GetCards_TranslatesLegalFormatIntoCriteria(t *testing.T) {
 	assert.Equal(t, `format="commander"`, describe(advancedQuery(t, "legal_in=commander")))
+}
+
+func TestHandler_GetCards_TranslatesTypeIntoCriteria(t *testing.T) {
+	assert.Equal(t, `type="Creature"`, describe(advancedQuery(t, "type=Creature")))
+	assert.Equal(t, `(type="Artifact" and type="elf")`, describe(advancedQuery(t, "type=Artifact&q=t%3Aelf")))
 }
 
 func TestHandler_GetCards_JoinsAdvancedCriteriaWithTheSearchQuery(t *testing.T) {
