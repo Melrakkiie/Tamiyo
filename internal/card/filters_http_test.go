@@ -30,7 +30,6 @@ func TestHandler_GetCards_PassesAdvancedFilters(t *testing.T) {
 	assert.Equal(t, "lt", f.ToughnessOp)
 	assert.Equal(t, "Creature", f.Type)
 	assert.Equal(t, "Elf", f.Subtype)
-	assert.Equal(t, "commander", f.LegalIn)
 	assert.Equal(t, "deckbox", f.StorageType)
 	require.NotNil(t, f.OpenToDeck)
 	assert.Equal(t, "0a0a0a0a-0000-0000-0000-000000000001", *f.OpenToDeck)
@@ -145,6 +144,16 @@ func TestHandler_GetCards_TranslatesFoilIntoCriteria(t *testing.T) {
 			assert.Equal(t, tc.want, describe(node))
 		})
 	}
+}
+
+func TestHandler_GetCards_TranslatesLegalFormatIntoCriteria(t *testing.T) {
+	assert.Equal(t, `format="commander"`, describe(advancedQuery(t, "legal_in=commander")))
+}
+
+func TestHandler_GetCards_JoinsAdvancedCriteriaWithTheSearchQuery(t *testing.T) {
+	node := advancedQuery(t, "colors=gw&color_mode=within&legal_in=commander&color_count=2&foil=true&q=t%3Aelf%20or%20t%3Awarrior")
+	require.NotNil(t, node)
+	assert.Equal(t, `(color<="WG" and format="commander" and color_count=2 and is="foil" and (type="elf" or type="warrior"))`, describe(node))
 }
 
 func TestHandler_GetCards_ParsesTheSearchQuery(t *testing.T) {

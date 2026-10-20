@@ -88,7 +88,7 @@ func parseAdvancedFilters(query url.Values) (CardFilter, error) {
 		if !legalFormats[raw] {
 			return filter, errInvalidLegalIn
 		}
-		filter.LegalIn = raw
+		criteria = append(criteria, term(fieldFormat, "=", raw, 0))
 	}
 
 	if raw := query.Get("color_count"); raw != "" {

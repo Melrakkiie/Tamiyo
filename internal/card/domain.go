@@ -44,7 +44,6 @@ type CardFilter struct {
 	ToughnessOp string
 	Type        string
 	Subtype     string
-	LegalIn     string
 	StorageType string
 	OpenToDeck  *string
 

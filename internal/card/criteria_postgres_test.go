@@ -194,6 +194,18 @@ var criterionCases = []criterionCase{
 	{"nonfoil", url.Values{"foil": {"false"}}, "is:nonfoil",
 		[]string{"Delver of Secrets", "Eidolon of Blossoms", "Grist, the Hunger Tide", "Half Squirrel", "Lightning Helix",
 			"Llanowar Elves", "Mystery Elf", "Sol Ring", "Solemn Simulacrum", "Tarmogoyf", "Unknown"}},
+	{"legal format", url.Values{"legal_in": {"pioneer"}}, "f:pioneer",
+		[]string{"Delver of Secrets", "Eidolon of Blossoms", "Esika's Chariot"}},
+	{"legal format commander", url.Values{"legal_in": {"commander"}}, "f:commander",
+		[]string{"Eidolon of Blossoms", "Esika's Chariot", "Lightning Helix", "Lightning Helix", "Llanowar Elves",
+			"Sol Ring", "Solemn Simulacrum", "Tarmogoyf"}},
+	{"colors, color count, foil and format with a search", url.Values{
+		"colors": {"w"}, "color_mode": {"include"}, "color_count": {"2"}, "foil": {"true"}, "legal_in": {"modern"}, "q": {"t:instant"},
+	}, "c>=w c:2 is:foil f:modern t:instant",
+		[]string{"Lightning Helix"}},
+	{"format and nonfoil with a search", url.Values{"legal_in": {"modern"}, "foil": {"false"}, "q": {"t:creature or t:planeswalker"}},
+		"f:modern is:nonfoil (t:creature or t:planeswalker)",
+		[]string{"Delver of Secrets", "Eidolon of Blossoms", "Grist, the Hunger Tide", "Llanowar Elves", "Solemn Simulacrum", "Tarmogoyf"}},
 }
 
 func TestPostgresRepository_FindAll_Criteria(t *testing.T) {
