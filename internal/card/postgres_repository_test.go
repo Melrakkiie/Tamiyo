@@ -1022,23 +1022,14 @@ func TestPostgresRepository_FindAll_AdvancedFilters(t *testing.T) {
 	}
 	str := func(s string) *string { return &s }
 	num := func(f float64) *float64 { return &f }
-	count := func(i int) *int { return &i }
-	yes := true
 
-	assert.Equal(t, []string{"Esika's Chariot", "Llanowar Elves"}, names(CardFilter{Colors: str("G"), ColorMode: ColorModeExact}))
-	assert.Equal(t, []string{"Esika's Chariot", "Grist, the Hunger Tide", "Llanowar Elves"}, names(CardFilter{Colors: str("G"), ColorMode: ColorModeInclude}))
-	assert.Equal(t, []string{"Esika's Chariot", "Llanowar Elves", "Sol Ring"}, names(CardFilter{Colors: str("G"), ColorMode: ColorModeWithin}))
-	assert.Equal(t, []string{"Sol Ring"}, names(CardFilter{Colors: str(""), ColorMode: ColorModeExact}))
 	assert.Equal(t, []string{"Esika's Chariot", "Grist, the Hunger Tide", "Unknown"}, names(CardFilter{ManaValue: num(3), ManaValueOp: "gte"}))
 	assert.Equal(t, []string{"Llanowar Elves", "Sol Ring"}, names(CardFilter{ManaValue: num(1), ManaValueOp: "eq"}))
 	assert.Equal(t, []string{"Esika's Chariot", "Sol Ring"}, names(CardFilter{Type: "Artifact"}))
 	assert.Equal(t, []string{"Llanowar Elves"}, names(CardFilter{Subtype: "elf"}))
 	assert.Equal(t, []string{"Esika's Chariot"}, names(CardFilter{Subtype: "vehicle", Type: "Artifact"}))
-	assert.Equal(t, []string{"Esika's Chariot"}, names(CardFilter{LegalIn: "pioneer"}))
-	assert.Equal(t, []string{"Grist, the Hunger Tide", "Lightning Helix"}, names(CardFilter{ColorCount: count(2)}))
-	assert.Equal(t, []string{"Esika's Chariot", "Lightning Helix"}, names(CardFilter{Foil: &yes}))
 	assert.Equal(t, []string{"Lightning Helix", "Sol Ring"}, names(CardFilter{StorageType: "deckbox"}))
-	assert.Equal(t, []string{"Lightning Helix"}, names(CardFilter{StorageType: "deckbox", LegalIn: "modern", Stack: true}))
+	assert.Equal(t, []string{"Lightning Helix"}, names(CardFilter{StorageType: "deckbox", Query: term(fieldFormat, "=", "modern", 0), Stack: true}))
 
 	var allowedDeck, otherDeck string
 	require.NoError(t, db.Get(&allowedDeck, `INSERT INTO tamiyo.deck (user_id, name, format) VALUES ($1, 'Allowed', 'commander') RETURNING id`, userID))
@@ -1051,7 +1042,7 @@ func TestPostgresRepository_FindAll_AdvancedFilters(t *testing.T) {
 	everything := []string{"Esika's Chariot", "Grist, the Hunger Tide", "Lightning Helix", "Llanowar Elves", "Sol Ring", "Unknown"}
 	assert.Equal(t, everything, names(CardFilter{OpenToDeck: str(allowedDeck)}))
 	assert.Equal(t, []string{"Esika's Chariot", "Grist, the Hunger Tide", "Llanowar Elves", "Unknown"}, names(CardFilter{OpenToDeck: str(otherDeck)}))
-	assert.Equal(t, []string{"Esika's Chariot", "Llanowar Elves"}, names(CardFilter{OpenToDeck: str(otherDeck), Colors: str("G"), ColorMode: ColorModeExact, Stack: true}))
+	assert.Equal(t, []string{"Esika's Chariot", "Llanowar Elves"}, names(CardFilter{OpenToDeck: str(otherDeck), Query: term(fieldColor, "=", "G", 0), Stack: true}))
 	assert.Equal(t, everything, names(CardFilter{}))
 }
 

@@ -36,8 +36,6 @@ type CardFilter struct {
 	ColorIdentity *string
 	Stack         bool
 
-	Colors      *string
-	ColorMode   string
 	ManaValue   *float64
 	ManaValueOp string
 	Power       *float64
@@ -46,9 +44,6 @@ type CardFilter struct {
 	ToughnessOp string
 	Type        string
 	Subtype     string
-	LegalIn     string
-	ColorCount  *int
-	Foil        *bool
 	StorageType string
 	OpenToDeck  *string
 
@@ -86,12 +81,6 @@ type Details struct {
 	ColorIdentity string
 	ManaValue     float64
 }
-
-const (
-	ColorModeExact   = "exact"
-	ColorModeInclude = "include"
-	ColorModeWithin  = "within"
-)
 
 var comparisonOperators = map[string]string{
 	"eq":  "=",

@@ -116,16 +116,6 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		args = append(args, values...)
 	}
 
-	if filter.Colors != nil {
-		switch filter.ColorMode {
-		case ColorModeInclude:
-			add("colors IS NOT NULL AND translate($%d, colors, '') = ''", *filter.Colors)
-		case ColorModeWithin:
-			add("colors IS NOT NULL AND translate(colors, $%d, '') = ''", *filter.Colors)
-		default:
-			add("colors = $%d", *filter.Colors)
-		}
-	}
 	if filter.ManaValue != nil {
 		add("mana_value "+comparisonOperators[filter.ManaValueOp]+" $%d", *filter.ManaValue)
 	}
@@ -146,15 +136,6 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 			SELECT 1 FROM tamiyo.printings p
 			WHERE p.scryfall_id = cards.scryfall_id AND split_part(p.type_line, '—', 2) ILIKE $%d
 		)`, "%"+filter.Subtype+"%")
-	}
-	if filter.LegalIn != "" {
-		add("EXISTS (SELECT 1 FROM tamiyo.printings p WHERE p.scryfall_id = cards.scryfall_id AND $%d = ANY(p.legal_formats))", filter.LegalIn)
-	}
-	if filter.ColorCount != nil {
-		add("colors IS NOT NULL AND length(colors) = $%d", *filter.ColorCount)
-	}
-	if filter.Foil != nil {
-		add("foil = $%d", *filter.Foil)
 	}
 	if filter.StorageType != "" {
 		add("storage_id IN (SELECT s.id FROM tamiyo.storage s WHERE s.user_id = $1 AND lower(trim(s.type)) = lower(trim($%d)))", filter.StorageType)
