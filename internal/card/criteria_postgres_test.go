@@ -133,10 +133,7 @@ func (f criterionFixture) names(t *testing.T, filter CardFilter) []string {
 	filter.Page, filter.Limit, filter.SortField = 1, 100, "name"
 	result, _, err := f.repo.FindAll(context.Background(), f.userID, filter)
 	require.NoError(t, err)
-	out := make([]string, len(result))
-	for i, c := range result {
-		out[i] = c.Name
-	}
+	out := cardNames(result)
 	sort.Strings(out)
 	return out
 }
@@ -419,24 +416,17 @@ func TestPostgresRepository_FindAll_ListShapeWithCriteria(t *testing.T) {
 		require.NoError(t, err)
 		return cards, total
 	}
-	namesOf := func(cards []Card) []string {
-		out := make([]string, len(cards))
-		for i, c := range cards {
-			out[i] = c.Name
-		}
-		return out
-	}
 
 	t.Run("sorted by name, descending, one page", func(t *testing.T) {
 		cards, total := list(t, CardFilter{SortField: "name", SortDesc: true, Page: 2, Limit: 4})
 		assert.Equal(t, 9, total)
-		assert.Equal(t, []string{"Invasion of Zendikar", "Grist, the Hunger Tide", "Esika's Chariot", "Eidolon of Blossoms"}, namesOf(cards))
+		assert.Equal(t, []string{"Invasion of Zendikar", "Grist, the Hunger Tide", "Esika's Chariot", "Eidolon of Blossoms"}, cardNames(cards))
 	})
 	t.Run("sorted by mana value", func(t *testing.T) {
 		cards, total := list(t, CardFilter{SortField: "mana_value"})
 		assert.Equal(t, 9, total)
 		assert.Equal(t, []string{"Dryad Arbor", "Llanowar Elves", "Llanowar Elves", "Tarmogoyf", "Rampant Growth",
-			"Grist, the Hunger Tide", "Esika's Chariot", "Eidolon of Blossoms", "Invasion of Zendikar"}, namesOf(cards))
+			"Grist, the Hunger Tide", "Esika's Chariot", "Eidolon of Blossoms", "Invasion of Zendikar"}, cardNames(cards))
 	})
 	t.Run("stacked", func(t *testing.T) {
 		cards, total := list(t, CardFilter{Stack: true, SortField: "name"})
@@ -453,7 +443,7 @@ func TestPostgresRepository_FindAll_ListShapeWithCriteria(t *testing.T) {
 	t.Run("stacked and paged", func(t *testing.T) {
 		cards, total := list(t, CardFilter{Stack: true, SortField: "name", Page: 2, Limit: 3})
 		assert.Equal(t, 8, total)
-		assert.Equal(t, []string{"Grist, the Hunger Tide", "Invasion of Zendikar", "Llanowar Elves"}, namesOf(cards))
+		assert.Equal(t, []string{"Grist, the Hunger Tide", "Invasion of Zendikar", "Llanowar Elves"}, cardNames(cards))
 	})
 	t.Run("grouped by subtype", func(t *testing.T) {
 		cards, total := list(t, CardFilter{Stack: true, GroupBy: "subtype", SortField: "name"})

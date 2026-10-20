@@ -715,11 +715,7 @@ func TestPostgresRepository_FindAll_SortsWithinGroups(t *testing.T) {
 		filter.Page, filter.Limit = 1, 25
 		result, _, err := repo.FindAll(context.Background(), userID, filter)
 		require.NoError(t, err)
-		out := make([]string, len(result))
-		for i, c := range result {
-			out[i] = c.Name
-		}
-		return out
+		return cardNames(result)
 	}
 
 	assert.Equal(t,
@@ -1028,11 +1024,7 @@ func TestPostgresRepository_FindAll_SearchQuery(t *testing.T) {
 		require.NoError(t, err)
 		result, _, err := repo.FindAll(ctx, userID, CardFilter{Query: node, Stack: stack, Page: 1, Limit: 25, SortField: "name"})
 		require.NoError(t, err)
-		out := make([]string, len(result))
-		for i, c := range result {
-			out[i] = c.Name
-		}
-		return out
+		return cardNames(result)
 	}
 
 	for _, tc := range []struct {
@@ -1154,11 +1146,7 @@ func TestPostgresRepository_FindAll_SortsByPriceInThePreferredCurrency(t *testin
 		filter.Page, filter.Limit, filter.SortField = 1, 25, "price"
 		cards, _, err := repo.FindAll(context.Background(), alice, filter)
 		require.NoError(t, err)
-		out := make([]string, 0, len(cards))
-		for _, c := range cards {
-			out = append(out, c.Name)
-		}
-		return out
+		return cardNames(cards)
 	}
 
 	assert.Equal(t, []string{"Cheap", "Dollars", "Cheap Foil", "Unknown", "Unpriced"}, names(CardFilter{}))
@@ -1276,4 +1264,13 @@ func TestPostgresRepository_MoveStorageCards_ReturnsErrStorageNotFound(t *testin
 	_, err = repo.MoveStorageCards(ctx, userB, bobStorage, aliceStorage)
 
 	assert.ErrorIs(t, err, ErrStorageNotFound)
+}
+
+// cardNames lists the names of cards in the order given, never nil.
+func cardNames(cards []Card) []string {
+	out := make([]string, len(cards))
+	for i, c := range cards {
+		out[i] = c.Name
+	}
+	return out
 }
