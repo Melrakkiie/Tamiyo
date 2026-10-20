@@ -23,7 +23,7 @@ tamiyo/
 │   ├── bulk/             # bulk import/export routes (ManaBox, Moxfield)
 │   ├── deckinsights/     # deck legality + stats routes
 │   ├── deckshare/        # public, read-only shared deck routes
-│   ├── scryfall/         # shared Scryfall API client (used by bulk and deckinsights)
+│   ├── scryfall/         # shared Scryfall API client (used by bulk and the printing refresher)
 │   ├── printing/         # background refresh of printings' names, mana values, type lines, legalities, power and toughness
 │   ├── follow/           # users following each other
 │   └── config/           # environment configuration
@@ -120,7 +120,7 @@ CORS_ALLOWED_ORIGINS=http://localhost:5173
 
 ## Card search
 
-`GET /cards` filters by name, storage, storage type, colors (exactly / at least / at most), mana value, power and toughness (`=`, `<`, `<=`, `>`, `>=`), card type, subtype, format legality, number of colors, commander color identity, foil, and the storages open to a given deck. Its `q` parameter takes common Scryfall search syntax (`t:creature c:g mv<=3`, `o:"draw a card" -t:land`, `r>=rare or is:foil`), evaluated in SQL against the user's own cards. Type lines, oracle texts, mana costs, rarities, keywords, legalities, power and toughness come from Scryfall: the API keeps them in `tamiyo.printings`, fetching new printings within a few minutes and refreshing every printing once a day in a background job, so a ban shows up the next day. See [`doc/API.md`](./doc/API.md#get-cards).
+`GET /cards` filters by name, storage, storage type, colors (exactly / at least / at most), mana value, power and toughness (`=`, `<`, `<=`, `>`, `>=`), card type, subtype, format legality, number of colors, commander color identity, foil, and the storages open to a given deck. Its `q` parameter takes common Scryfall search syntax (`t:creature c:g mv<=3`, `o:"draw a card" -t:land`, `r>=rare or is:foil`), evaluated in SQL against the user's own cards. Type lines, oracle texts, mana costs, rarities, keywords, legalities, power and toughness come from Scryfall: the API keeps them in `tamiyo.printings`, fetching new printings within a few minutes and refreshing every printing once a day in a background job, so a ban shows up the next day. Deck legality and statistics read the same table. See [`doc/API.md`](./doc/API.md#get-cards).
 
 ## Locked storages
 
@@ -128,7 +128,7 @@ A storage can be locked so decks stop drawing from it (a collection binder, a tr
 
 ## Prices
 
-Prices show by default, in euros: the `show_prices` preference turns them off and `price_currency` picks euros (Cardmarket) or US dollars (TCGplayer), both from Scryfall. `GET /cards/value`, each storage's `value` and the `value` of `GET /deck/:id/stats` sum the prices in both currencies, foil prices for foil cards, proxies left out; the client shows the one the user picked. Etched foils with only an etched dollar price count it as their foil dollar price. A card with no euro price counts its dollar price converted at the European Central Bank's rate, fetched every 6 hours (from the ECB, or from Frankfurter, which republishes the same rates, when the ECB cannot be reached) and exposed by `GET /exchange-rate`. Collection and storage values use the prices kept in `tamiyo.printings` and refreshed daily, deck values Scryfall's current prices. See [`doc/API.md`](./doc/API.md#prices-and-values).
+Prices show by default, in euros: the `show_prices` preference turns them off and `price_currency` picks euros (Cardmarket) or US dollars (TCGplayer), both from Scryfall. `GET /cards/value`, each storage's `value` and the `value` of `GET /deck/:id/stats` sum the prices in both currencies, foil prices for foil cards, proxies left out; the client shows the one the user picked. Etched foils with only an etched dollar price count it as their foil dollar price. A card with no euro price counts its dollar price converted at the European Central Bank's rate, fetched every 6 hours (from the ECB, or from Frankfurter, which republishes the same rates, when the ECB cannot be reached) and exposed by `GET /exchange-rate`. Collection, storage and deck values use the prices kept in `tamiyo.printings` and refreshed daily, the same ones card lists show. See [`doc/API.md`](./doc/API.md#prices-and-values).
 
 ## API Documentation
 

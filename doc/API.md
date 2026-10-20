@@ -361,7 +361,7 @@ The value of the collection ([`GET /cards/value`](#get-cardsvalue)), of a storag
 { "eur": 12.34, "usd": 15.6 }
 ```
 
-Each card counts its printing's price: its foil price when it is foil, its regular price otherwise, and the other one when that price is missing. The foil dollar price falls back to Scryfall's etched price (`usd_etched`), the only price of etched-only printings. A card with no euro price counts its dollar price converted to euros, with the dollar price of its own finish tried before the euro price of the other. A card with no price at all counts `0`. Proxies never count. The collection and storage values use the prices stored with the printings, refreshed in the background once a day; deck values use Scryfall's current prices.
+Each card counts its printing's price: its foil price when it is foil, its regular price otherwise, and the other one when that price is missing. The foil dollar price falls back to Scryfall's etched price (`usd_etched`), the only price of etched-only printings. A card with no euro price counts its dollar price converted to euros, with the dollar price of its own finish tried before the euro price of the other. A card with no price at all counts `0`. Proxies never count. The collection, storage and deck values use the prices stored with the printings, refreshed in the background once a day: the same prices card lists show.
 
 The `price` sort of the [cards](#get-cards) and of a [deck's cards](#get-deckidcards), and the `price` of deck and pending cards, use the same stored prices and fallbacks for one copy, in the `price_currency` preference only: in dollars, a card with no dollar price has no price (`null`), and proxies have their printing's price.
 
@@ -1249,20 +1249,19 @@ How the owner last displayed the deck's cards, so the deck page opens the same w
 
 ## Deck Insights
 
-Two read-only routes analyze a deck's cards — nothing here persists anything, every call is computed fresh from Scryfall data at request time. Both are purely about playing the game: there's no notion of card price or collection value anywhere in Tamiyo.
+Two read-only routes analyze a deck's cards; nothing here persists anything. Legality and statistics are both computed from the printings Tamiyo stores and refreshes daily (see [Prices and values](#prices-and-values)), so they can be up to a day behind Scryfall, like card search.
 
 **Errors common to both**
-- `400` — `:id` is not a UUID, or the deck's own `format` field isn't a format Scryfall recognizes (so legality/stats can't be computed against it)
+- `400` — `:id` is not a UUID, or (legality only) the deck's own `format` field isn't a format Scryfall recognizes
 - `401` — unauthenticated
 - `404` — no deck with that id exists for this account
-- `502` — Scryfall couldn't be reached
 - `500` — unexpected failure
 
 ---
 
 ### `GET /deck/:id/legality`
 
-Checks every card in the deck against the deck's own `format` (lowercased, matched against Scryfall's per-card `legalities`). A card that's `not_legal`, `restricted` or `banned` for that format is reported as an issue; a card whose Scryfall ID can't be resolved is reported too (legality can't be verified), rather than silently ignored.
+Checks every card in the deck against the deck's own `format` (lowercased, matched against the format lists stored with each card's printing). A card that's restricted, banned or in none of the legal lists (not legal) for that format is reported as an issue; a card whose printing isn't stored yet (just added, picked up by the background refresh within minutes) is reported too (legality can't be verified), rather than silently ignored.
 
 For the `commander` format specifically, two deck-construction rules Scryfall's per-card legality can't express are checked as well:
 - **Singleton** — at most one copy of each card by name, except basic lands.
@@ -1291,7 +1290,7 @@ Pending cards (see `GET /deck/:id/pending-cards`) are checked like the deck's ow
 
 ### `GET /deck/:id/stats`
 
-Summarizes the deck's composition: mana curve, color breakdown, and primary card types — all computed from Scryfall data, nothing stored by Tamiyo itself. Lands are excluded from the mana curve, color breakdown, and average mana value (a land's mana value is always 0 and it has no casting colors, so including it would just dilute what the deck actually casts) but are still counted in `card_count`, `land_count`, and `type_breakdown`. Pending cards are included with all their copies, as if they were already in the deck.
+Summarizes the deck's composition: mana curve, color breakdown, and primary card types — computed from the stored printing of each card (type line, mana value, colors), without calling Scryfall. A card whose printing isn't stored yet (just added, picked up by the background refresh within minutes) or that Scryfall doesn't know counts as `Unknown` in `type_breakdown` and in `card_count`, and nowhere else. Lands are excluded from the mana curve, color breakdown, and average mana value (a land's mana value is always 0 and it has no casting colors, so including it would just dilute what the deck actually casts) but are still counted in `card_count`, `land_count`, and `type_breakdown`. Pending cards are included with all their copies, as if they were already in the deck.
 
 **Response `200 OK`**
 ```json
@@ -1331,7 +1330,7 @@ Each `mana_curve` bucket splits its `count` into `permanents` and `non_permanent
 
 A multicolor card counts once per color it has in `color_breakdown`; a dual-typed permanent (e.g. "Artifact Creature") counts once under a single primary type in `type_breakdown` — Creature takes precedence over Artifact/Enchantment, matching how most deckbuilding sites categorize it. A double-faced or split card counts under the type of its front face (a creature with a land on its back is a creature). `back_face_lands` lists those cards with a land on their back face, by name with their number of copies: they aren't in `land_count`, but a client can show them as extra lands.
 
-`value` is the [value](#prices-and-values) of the `main` board, owned and pending cards, proxies left out, from Scryfall's current prices, rounded to the cent. `owned_value` and `pending_value` split it between the cards the deck holds and its [pending cards](#pending-cards-deckidpending); each is rounded on its own, so their sum can differ from `value` by a cent. `board_values` gives the value of the `sideboard` and `considering` boards the same way, owned and pending cards together, proxies left out.
+`value` is the [value](#prices-and-values) of the `main` board, owned and pending cards, proxies left out, from the stored printing prices the deck's card list shows, rounded to the cent. `owned_value` and `pending_value` split it between the cards the deck holds and its [pending cards](#pending-cards-deckidpending); each is rounded on its own, so their sum can differ from `value` by a cent. `board_values` gives the value of the `sideboard` and `considering` boards the same way, owned and pending cards together, proxies left out.
 
 ---
 
@@ -1443,13 +1442,13 @@ The owner's copies and the deck's pending cards are merged into one list, one en
 
 Same report as [`GET /deck/:id/legality`](#get-deckidlegality), without `card_id` on the issues.
 
-**Errors:** `400` the deck's format isn't one Scryfall recognizes · `404` as above · `429` rate limit exceeded · `502` Scryfall unreachable
+**Errors:** `400` the deck's format isn't one Scryfall recognizes · `404` as above · `429` rate limit exceeded
 
 ### `GET /shared/decks/:id/stats`
 
 Same statistics as [`GET /deck/:id/stats`](#get-deckidstats).
 
-**Errors:** `400` the deck's format isn't one Scryfall recognizes · `404` as above · `429` rate limit exceeded · `502` Scryfall unreachable
+**Errors:** `404` as above · `429` rate limit exceeded
 
 ### `GET /shared/decks/:id/export`
 
@@ -1804,7 +1803,7 @@ All error responses share the same shape:
 | `409 Conflict` | Email already registered (`/auth/register`). |
 | `429 Too Many Requests` | Rate limit exceeded on `/auth/register` or `/auth/login` (see [rate limiting](#rate-limiting)). |
 | `500 Internal Server Error` | Unexpected failure (database unreachable, etc). |
-| `502 Bad Gateway` | A bulk import (see [Bulk Import](#bulk-import)) or deck insight (see [Deck Insights](#deck-insights)) couldn't reach or parse a response from the Scryfall API. |
+| `502 Bad Gateway` | A bulk import (see [Bulk Import](#bulk-import)) couldn't reach or parse a response from the Scryfall API. |
 
 ### Validation rules summary
 

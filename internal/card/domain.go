@@ -81,6 +81,10 @@ var comparisonOperators = map[string]string{
 	"gte": ">=",
 }
 
+func IsLegalFormat(format string) bool {
+	return legalFormats[format]
+}
+
 var legalFormats = map[string]bool{
 	"standard": true, "future": true, "historic": true, "timeless": true, "gladiator": true,
 	"pioneer": true, "explorer": true, "modern": true, "legacy": true, "pauper": true,

@@ -9,7 +9,7 @@ import (
 	"Melrakkiie/Tamiyo/internal/scryfall"
 )
 
-func computeStats(entries []deck.DeckEntry, scryfallByID map[string]scryfall.Card, usdPerEUR float64) DeckStats {
+func computeStats(entries []deck.DeckEntry, printings map[string]Printing) DeckStats {
 	stats := DeckStats{
 		ManaCurve:      []ManaCurveBucket{},
 		BackFaceLands:  []BackFaceCard{},
@@ -27,21 +27,13 @@ func computeStats(entries []deck.DeckEntry, scryfallByID map[string]scryfall.Car
 		quantity := e.Quantity()
 		stats.CardCount += quantity
 
-		sc, ok := scryfallByID[e.ScryfallID]
+		p, ok := printings[e.ScryfallID]
 		if !ok {
 			stats.TypeBreakdown["Unknown"] += quantity
 			continue
 		}
 
-		if !e.Proxy {
-			eur, usd := sc.Prices.For(e.Foil, usdPerEUR)
-			stats.OwnedValue.EUR += eur * float64(e.OwnedQuantity())
-			stats.OwnedValue.USD += usd * float64(e.OwnedQuantity())
-			stats.PendingValue.EUR += eur * float64(e.PendingQuantity())
-			stats.PendingValue.USD += usd * float64(e.PendingQuantity())
-		}
-
-		t := scryfall.PrimaryType(sc.TypeLine)
+		t := scryfall.PrimaryType(p.TypeLine)
 		stats.TypeBreakdown[t] += quantity
 
 		if t == "Land" {
@@ -50,7 +42,7 @@ func computeStats(entries []deck.DeckEntry, scryfallByID map[string]scryfall.Car
 		}
 
 		nonlandCount += quantity
-		if _, back, ok := strings.Cut(sc.TypeLine, "//"); ok && scryfall.PrimaryType(back) == scryfall.TypeLand {
+		if _, back, ok := strings.Cut(p.TypeLine, "//"); ok && scryfall.PrimaryType(back) == scryfall.TypeLand {
 			if i, seen := backFaceIndex[e.Name]; seen {
 				stats.BackFaceLands[i].Quantity += quantity
 			} else {
@@ -58,24 +50,18 @@ func computeStats(entries []deck.DeckEntry, scryfallByID map[string]scryfall.Car
 				stats.BackFaceLands = append(stats.BackFaceLands, BackFaceCard{Name: e.Name, ScryfallID: e.ScryfallID, Quantity: quantity})
 			}
 		}
-		totalManaValue += sc.CMC * float64(quantity)
-		addToCurve(curve, cardIndex, int(sc.CMC), e, t, isPermanent(sc.TypeLine))
+		totalManaValue += p.ManaValue * float64(quantity)
+		addToCurve(curve, cardIndex, int(p.ManaValue), e, t, isPermanent(p.TypeLine))
 
-		if len(sc.Colors) == 0 {
+		if len(p.Colors) == 0 {
 			stats.ColorBreakdown["C"] += quantity
 		} else {
-			for _, color := range sc.Colors {
+			for _, color := range p.Colors {
 				stats.ColorBreakdown[color] += quantity
 			}
 		}
 	}
 
-	stats.Value = Value{
-		EUR: roundToCents(stats.OwnedValue.EUR + stats.PendingValue.EUR),
-		USD: roundToCents(stats.OwnedValue.USD + stats.PendingValue.USD),
-	}
-	stats.OwnedValue = Value{EUR: roundToCents(stats.OwnedValue.EUR), USD: roundToCents(stats.OwnedValue.USD)}
-	stats.PendingValue = Value{EUR: roundToCents(stats.PendingValue.EUR), USD: roundToCents(stats.PendingValue.USD)}
 	stats.NonlandCount = nonlandCount
 	if nonlandCount > 0 {
 		stats.AverageManaValue = totalManaValue / float64(nonlandCount)
@@ -101,22 +87,8 @@ func computeStats(entries []deck.DeckEntry, scryfallByID map[string]scryfall.Car
 	return stats
 }
 
-func entriesValue(entries []deck.DeckEntry, scryfallByID map[string]scryfall.Card, usdPerEUR float64) Value {
-	var total Value
-	for _, e := range entries {
-		sc, ok := scryfallByID[e.ScryfallID]
-		if !ok || e.Proxy {
-			continue
-		}
-		eur, usd := sc.Prices.For(e.Foil, usdPerEUR)
-		total.EUR += eur * float64(e.Quantity())
-		total.USD += usd * float64(e.Quantity())
-	}
-	return Value{EUR: roundToCents(total.EUR), USD: roundToCents(total.USD)}
-}
-
-func roundToCents(amount float64) float64 {
-	return math.Round(amount*100) / 100
+func roundToCents(v Value) Value {
+	return Value{EUR: math.Round(v.EUR*100) / 100, USD: math.Round(v.USD*100) / 100}
 }
 
 func isPermanent(typeLine string) bool {

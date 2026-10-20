@@ -3,8 +3,10 @@ package deckinsights
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
+	"Melrakkiie/Tamiyo/internal/card"
 	"Melrakkiie/Tamiyo/internal/deck"
 	"Melrakkiie/Tamiyo/internal/scryfall"
 )
@@ -61,52 +63,67 @@ func checkDeckSize(report *LegalityReport, format string, cardCount int) {
 	report.Legal = false
 }
 
-func checkLegality(d deck.Deck, entries []deck.DeckEntry, scryfallByID map[string]scryfall.Card) (LegalityReport, error) {
+func checkLegality(d deck.Deck, entries []deck.DeckEntry, printings map[string]Printing) (LegalityReport, error) {
 	format := strings.ToLower(strings.TrimSpace(d.Format))
 	report := LegalityReport{Format: d.Format, Legal: true}
 
 	anyCardFound := false
-	formatRecognized := false
 	for _, e := range entries {
-		sc, ok := scryfallByID[e.ScryfallID]
+		p, ok := printings[e.ScryfallID]
 		if !ok {
 			report.addIssue(e, "could not verify legality: not found on scryfall")
 			continue
 		}
 		anyCardFound = true
 
-		status, known := sc.Legalities[format]
-		if !known {
-			continue
-		}
-		formatRecognized = true
-
-		switch status {
-		case "legal":
-			// nothing to report
-		case "not_legal":
+		switch formatStatus(p, format) {
+		case statusNotLegal:
 			report.addIssue(e, fmt.Sprintf("not legal in %s", d.Format))
-		case "restricted":
+		case statusRestricted:
 			report.addIssue(e, fmt.Sprintf("restricted in %s", d.Format))
-		case "banned":
+		case statusBanned:
 			report.addIssue(e, fmt.Sprintf("banned in %s", d.Format))
 		}
 	}
 
-	if !formatRecognized && anyCardFound {
+	if anyCardFound && !card.IsLegalFormat(format) {
 		return LegalityReport{}, ErrUnknownFormat
 	}
 
 	main := mainBoard(entries)
 	if format == commanderFormat {
-		checkSingleton(&report, main, scryfallByID)
-		checkColorIdentity(&report, entries, scryfallByID)
-		checkPartnerPair(&report, entries, scryfallByID)
+		checkSingleton(&report, main, printings)
+		checkColorIdentity(&report, entries, printings)
+		checkPartnerPair(&report, entries, printings)
 	}
 
 	checkDeckSize(&report, format, deck.EntryGroup(main).Quantity())
 
 	return report, nil
+}
+
+type legalityStatus int
+
+const (
+	statusLegal legalityStatus = iota
+	statusNotLegal
+	statusRestricted
+	statusBanned
+)
+
+// formatStatus reads a printing's status in format from its stored lists.
+// Restricted comes first because a restricted card is also in the legal list;
+// a card in none of the lists is not legal.
+func formatStatus(p Printing, format string) legalityStatus {
+	switch {
+	case slices.Contains(p.RestrictedFormats, format):
+		return statusRestricted
+	case slices.Contains(p.BannedFormats, format):
+		return statusBanned
+	case slices.Contains(p.LegalFormats, format):
+		return statusLegal
+	}
+	return statusNotLegal
 }
 
 func (r *LegalityReport) addIssue(e deck.DeckEntry, reason string) {
@@ -118,10 +135,10 @@ func (r *LegalityReport) addIssue(e deck.DeckEntry, reason string) {
 	r.Legal = false
 }
 
-func checkSingleton(report *LegalityReport, entries []deck.DeckEntry, scryfallByID map[string]scryfall.Card) {
+func checkSingleton(report *LegalityReport, entries []deck.DeckEntry, printings map[string]Printing) {
 	counts := make(map[string]int)
 	for _, e := range entries {
-		if sc, ok := scryfallByID[e.ScryfallID]; ok && isBasicLand(sc.TypeLine) {
+		if printing, ok := printings[e.ScryfallID]; ok && isBasicLand(printing.TypeLine) {
 			continue
 		}
 		counts[e.Name] += e.Quantity()
@@ -147,19 +164,19 @@ func entryInSlot(entries []deck.DeckEntry, slot deck.CommanderSlot) (deck.DeckEn
 	return deck.DeckEntry{}, false
 }
 
-func checkColorIdentity(report *LegalityReport, entries []deck.DeckEntry, scryfallByID map[string]scryfall.Card) {
+func checkColorIdentity(report *LegalityReport, entries []deck.DeckEntry, printings map[string]Printing) {
 	commander, ok := entryInSlot(entries, deck.SlotCommander)
 	if !ok {
 		return
 	}
-	commanderScryfall, ok := scryfallByID[commander.ScryfallID]
+	commanderPrinting, ok := printings[commander.ScryfallID]
 	if !ok {
 		return
 	}
 
-	identity := append([]string(nil), commanderScryfall.ColorIdentity...)
+	identity := append([]string(nil), commanderPrinting.ColorIdentity...)
 	if partner, ok := entryInSlot(entries, deck.SlotPartner); ok {
-		identity = append(identity, scryfallByID[partner.ScryfallID].ColorIdentity...)
+		identity = append(identity, printings[partner.ScryfallID].ColorIdentity...)
 	}
 	allowed := make(map[string]bool, len(identity))
 	for _, color := range identity {
@@ -168,15 +185,15 @@ func checkColorIdentity(report *LegalityReport, entries []deck.DeckEntry, scryfa
 	commanderIdentity := scryfall.ColorCode(identity)
 
 	for _, e := range entries {
-		sc, ok := scryfallByID[e.ScryfallID]
+		printing, ok := printings[e.ScryfallID]
 		if !ok {
 			continue
 		}
-		for _, color := range sc.ColorIdentity {
+		for _, color := range printing.ColorIdentity {
 			if !allowed[color] {
 				report.addIssue(e, fmt.Sprintf(
 					"outside commander's color identity (card: %s, commander: %s)",
-					strings.Join(sc.ColorIdentity, ""), commanderIdentity,
+					strings.Join(printing.ColorIdentity, ""), commanderIdentity,
 				))
 				break
 			}
@@ -184,7 +201,7 @@ func checkColorIdentity(report *LegalityReport, entries []deck.DeckEntry, scryfa
 	}
 }
 
-func checkPartnerPair(report *LegalityReport, entries []deck.DeckEntry, scryfallByID map[string]scryfall.Card) {
+func checkPartnerPair(report *LegalityReport, entries []deck.DeckEntry, printings map[string]Printing) {
 	commanderEntry, ok := entryInSlot(entries, deck.SlotCommander)
 	if !ok {
 		return
@@ -193,11 +210,11 @@ func checkPartnerPair(report *LegalityReport, entries []deck.DeckEntry, scryfall
 	if !ok {
 		return
 	}
-	commander, ok := scryfallByID[commanderEntry.ScryfallID]
+	commander, ok := printings[commanderEntry.ScryfallID]
 	if !ok {
 		return
 	}
-	partner, ok := scryfallByID[partnerEntry.ScryfallID]
+	partner, ok := printings[partnerEntry.ScryfallID]
 	if !ok {
 		return
 	}
@@ -226,7 +243,7 @@ func frontFace(text string, separator string) string {
 	return strings.TrimSpace(front)
 }
 
-func abilitiesOf(c scryfall.Card) pairingAbilities {
+func abilitiesOf(c Printing) pairingAbilities {
 	abilities := pairingAbilities{frontFaceName: frontFace(c.Name, "//")}
 
 	typeLine := frontFace(c.TypeLine, "//")
@@ -263,7 +280,7 @@ func abilitiesOf(c scryfall.Card) pairingAbilities {
 	return abilities
 }
 
-func canPair(first, second scryfall.Card) bool {
+func canPair(first, second Printing) bool {
 	a, b := abilitiesOf(first), abilitiesOf(second)
 	switch {
 	case a.partner && b.partner:
@@ -290,16 +307,6 @@ func mainBoard(entries []deck.DeckEntry) []deck.DeckEntry {
 		}
 	}
 	return main
-}
-
-func inBoard(entries []deck.DeckEntry, board string) []deck.DeckEntry {
-	var matching []deck.DeckEntry
-	for _, e := range entries {
-		if e.Board == board {
-			matching = append(matching, e)
-		}
-	}
-	return matching
 }
 
 func isBasicLand(typeLine string) bool {

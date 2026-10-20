@@ -218,14 +218,6 @@ func TestGetSharedDeckStats_ReturnsStats(t *testing.T) {
 	assert.Equal(t, 100, got.CardCount)
 }
 
-func TestGetSharedDeckStats_ScryfallDownReturnsBadGateway(t *testing.T) {
-	router := setupRouter(&fakeSharedService{err: deckinsights.ErrScryfallUnavailable})
-
-	w := get(router, "/shared/decks/"+deckID+"/stats")
-
-	assert.Equal(t, http.StatusBadGateway, w.Code)
-}
-
 func TestGetSharedDeck_CountsOnlyTheMainBoard(t *testing.T) {
 	service := &fakeSharedService{shared: SharedDeck{
 		Deck: deck.Deck{ID: deckID, Name: "Otters", Added: time.Now(), Updated: time.Now()},
