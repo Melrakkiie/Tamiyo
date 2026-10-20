@@ -215,3 +215,79 @@ func TestSwitchProxy_LeavesEverythingAsBeforeWhenAPendingCardCantBeAdded(t *test
 		return err
 	})
 }
+
+func (f contentFixture) switchToProxy(t *testing.T, cards CardSelection) SwitchSummary {
+	t.Helper()
+	summary, err := f.service.SwitchProxy(context.Background(), f.userID, contentDeckID, cards, true)
+	require.NoError(t, err)
+	return summary
+}
+
+func TestSwitchProxy_SwapsCopiesForFreeProxiesFirstThenOnesAnotherDeckUses(t *testing.T) {
+	f := newContentFixture(t)
+	first := f.ownedCopy(t, island, copyOptions{})
+	second := f.ownedCopy(t, island, copyOptions{})
+	usedElsewhere := f.collectionCopy(t, collectionCopy{printing: island, proxy: true})
+	f.putInDeck(t, usedElsewhere, otherDeckID)
+	free := f.collectionCopy(t, collectionCopy{printing: island, proxy: true})
+
+	summary := f.switchToProxy(t, CardSelection{CardIDs: []int{first, second}})
+
+	assert.Equal(t, SwitchSummary{CardsLinked: 2, CardsRemoved: 2}, summary)
+	assert.Equal(t, []int{usedElsewhere, free}, f.ownedIDs(t))
+	assert.Equal(t, []entrySummary{{name: island.name, board: BoardMain, proxy: true, owned: 2, quantity: 2}}, summarize(f.content(t).Entries))
+}
+
+func TestSwitchProxy_KeepsTheCommanderAndSecondCommanderInTheirSlots(t *testing.T) {
+	f := newContentFixture(t)
+	commander := f.ownedCopy(t, atraxa, copyOptions{})
+	partner := f.ownedCopy(t, tymna, copyOptions{})
+	f.setCommanders(t, &commander, nil, &partner, nil)
+	proxyAtraxa := f.collectionCopy(t, collectionCopy{printing: atraxa, proxy: true})
+
+	summary := f.switchToProxy(t, CardSelection{CardIDs: []int{commander, partner}})
+
+	assert.Equal(t, SwitchSummary{CardsLinked: 1, CardsPending: 1, CardsRemoved: 2}, summary)
+	content := f.content(t)
+	assert.Equal(t, &proxyAtraxa, content.Deck.CommanderID)
+	assert.Nil(t, content.Deck.PartnerID)
+	assert.NotNil(t, content.Deck.PartnerPendingID, "the second commander stays in its slot as a pending card")
+	assert.Equal(t, []entrySummary{
+		{name: atraxa.name, board: BoardMain, proxy: true, slot: SlotCommander, owned: 1, quantity: 1},
+		{name: tymna.name, board: BoardMain, proxy: true, slot: SlotPartner, pending: 1, quantity: 1},
+	}, summarize(content.Entries))
+}
+
+func TestSwitchProxy_APendingCommanderThatFindsACopyBecomesTheOwnedCommander(t *testing.T) {
+	f := newContentFixture(t)
+	commander := f.pendingCard(t, atraxa, 1, copyOptions{})
+	f.setCommanders(t, nil, &commander, nil, nil)
+	proxyAtraxa := f.collectionCopy(t, collectionCopy{printing: atraxa, proxy: true})
+
+	summary := f.switchToProxy(t, CardSelection{PendingIDs: []int{commander}})
+
+	assert.Equal(t, SwitchSummary{CardsLinked: 1, CardsRemoved: 1}, summary)
+	content := f.content(t)
+	assert.Equal(t, &proxyAtraxa, content.Deck.CommanderID)
+	assert.Nil(t, content.Deck.CommanderPendingID)
+}
+
+func TestSwitchProxy_IsIsolatedFromAnotherUser(t *testing.T) {
+	f := newContentFixture(t)
+	copyID := f.ownedCopy(t, island, copyOptions{})
+	bob := seedUser(t, f.db, "bob@example.com")
+	_, err := f.db.Exec(`
+		INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, proxy, mana_value)
+		VALUES ($1, $2, $3, $4, $5, false, true, 1)
+	`, bob, island.name, island.scryfallID, island.setCode, island.collectorNumber)
+	require.NoError(t, err)
+
+	f.assertRolledBack(t, func() error {
+		_, err := f.service.SwitchProxy(context.Background(), bob, contentDeckID, CardSelection{CardIDs: []int{copyID}}, true)
+		assert.ErrorIs(t, err, ErrNotFound)
+		return err
+	})
+
+	summary := f.switchToProxy(t, CardSelection{CardIDs: []int{copyID}})
+	assert.Equal(t, SwitchSummary{CardsPending: 1, CardsRemoved: 1}, summary, "Bob's proxy Island is not Alice's")
+}

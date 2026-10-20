@@ -169,3 +169,18 @@ func TestSplitPrintings_AppliesEveryPrintingOrNone(t *testing.T) {
 		return err
 	})
 }
+
+func TestSplitPrintings_TakesFreeCopiesBeforeOnesAnotherDeckUses(t *testing.T) {
+	f := newContentFixture(t)
+	first := f.ownedCopy(t, island, copyOptions{})
+	second := f.ownedCopy(t, island, copyOptions{})
+	usedElsewhere := f.collectionCopy(t, collectionCopy{printing: islandONE})
+	f.putInDeck(t, usedElsewhere, otherDeckID)
+	free := f.collectionCopy(t, collectionCopy{printing: islandONE})
+
+	summary := f.split(t, CardSelection{CardIDs: []int{first, second}}, repeatChoice(choice(islandONE, false), 2))
+
+	assert.Equal(t, SwitchSummary{CardsLinked: 2, CardsRemoved: 2}, summary)
+	assert.Equal(t, []int{usedElsewhere, free}, f.ownedIDs(t))
+	assert.Len(t, f.collection(t), 4, "the collection is never modified")
+}
