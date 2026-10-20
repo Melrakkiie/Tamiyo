@@ -118,15 +118,20 @@ type queryer interface {
 	PrepareNamedContext(ctx context.Context, query string) (*sqlx.NamedStmt, error)
 }
 
-// PostgresRepository runs its queries on db: the pool, or the transaction of
-// a composition (see Compose), whose repository has no pool to begin another.
+// compositionQueries are the queries of CompositionStore. They run on the pool
+// or, inside Compose, on its transaction, which has no pool to begin another.
+type compositionQueries struct {
+	db queryer
+}
+
+// PostgresRepository runs its queries on the pool.
 type PostgresRepository struct {
-	db   queryer
+	*compositionQueries
 	pool *sqlx.DB
 }
 
 func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
-	return &PostgresRepository{db: db, pool: db}
+	return &PostgresRepository{compositionQueries: &compositionQueries{db: db}, pool: db}
 }
 
 func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter Filter) ([]Deck, int, error) {
@@ -244,7 +249,7 @@ func priceColumn(table string) string {
 	), 'eur')) AS float8) AS price`
 }
 
-func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id string) (Deck, error) {
+func (r *compositionQueries) FindByID(ctx context.Context, userID string, id string) (Deck, error) {
 	query := `
 		SELECT
 		    d.id AS id,
@@ -323,7 +328,7 @@ func (r *PostgresRepository) FindShared(ctx context.Context, id string) (string,
 	return row.UserID, row.toDomain(), nil
 }
 
-func (r *PostgresRepository) Create(ctx context.Context, userID string, d Deck) (Deck, error) {
+func (r *compositionQueries) Create(ctx context.Context, userID string, d Deck) (Deck, error) {
 	row := toDeckRow(userID, d)
 	query := `
     	INSERT INTO tamiyo.deck (user_id, name, format, commander_id, partner_id, background_scryfall_id, visibility, bracket, folder_id)
@@ -355,7 +360,7 @@ func (r *PostgresRepository) Create(ctx context.Context, userID string, d Deck) 
 	return created.toDomain(), nil
 }
 
-func (r *PostgresRepository) Update(ctx context.Context, userID string, d Deck) (Deck, error) {
+func (r *compositionQueries) Update(ctx context.Context, userID string, d Deck) (Deck, error) {
 	row := toDeckRow(userID, d)
 	query := `
 		UPDATE tamiyo.deck
@@ -410,7 +415,7 @@ func (r *PostgresRepository) Delete(ctx context.Context, userID string, id strin
 	return nil
 }
 
-func (r *PostgresRepository) FindCardsByDeckID(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]DeckCard, error) {
+func (r *compositionQueries) FindCardsByDeckID(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]DeckCard, error) {
 	query := `
 		SELECT c.id, c.name, c.scryfall_id, c.set_code, c.collector_number, c.foil, c.proxy, c.storage_id, c.mana_value, c.colors, c.card_type, c.color_identity, cd.board, c.added, c.updated,
 		    ` + priceColumn("c") + `
@@ -432,7 +437,7 @@ func (r *PostgresRepository) FindCardsByDeckID(ctx context.Context, userID strin
 	return deckCards, nil
 }
 
-func (r *PostgresRepository) LinkCardToDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error {
+func (r *compositionQueries) LinkCardToDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error {
 	var exists bool
 	checkQuery := `SELECT EXISTS(SELECT 1 FROM tamiyo.cards WHERE id = $1 AND user_id = $2)`
 	if err := r.db.GetContext(ctx, &exists, checkQuery, cardID, userID); err != nil {
@@ -452,7 +457,7 @@ func (r *PostgresRepository) LinkCardToDeck(ctx context.Context, userID string, 
 	return err
 }
 
-func (r *PostgresRepository) UnlinkCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error {
+func (r *compositionQueries) UnlinkCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error {
 	query := `
 		DELETE FROM tamiyo.card_deck cd
 		USING tamiyo.deck d

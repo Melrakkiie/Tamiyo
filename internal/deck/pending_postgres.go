@@ -58,7 +58,7 @@ func pendingColumns(table string) string {
 	return `id, deck_id, name, scryfall_id, set_code, collector_number, foil, proxy, quantity, mana_value, colors, card_type, color_identity, board, added, ` + priceColumn(table)
 }
 
-func (r *PostgresRepository) FindPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error) {
+func (r *compositionQueries) FindPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error) {
 	var rows []pendingRow
 	query := `
 		WITH available AS (
@@ -92,7 +92,7 @@ func normalizedNameSQL(column string) string {
 	return `lower(btrim(regexp_replace(replace(` + column + `, '//', '/'), '\s+', ' ', 'g')))`
 }
 
-func (r *PostgresRepository) CreatePendingCard(ctx context.Context, userID string, p PendingCard) (PendingCard, error) {
+func (r *compositionQueries) CreatePendingCard(ctx context.Context, userID string, p PendingCard) (PendingCard, error) {
 	row := pendingRow{
 		UserID:          userID,
 		DeckID:          p.DeckID,
@@ -132,7 +132,7 @@ func (r *PostgresRepository) CreatePendingCard(ctx context.Context, userID strin
 	return created.toDomain(), nil
 }
 
-func (r *PostgresRepository) UpdatePendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (PendingCard, error) {
+func (r *compositionQueries) UpdatePendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (PendingCard, error) {
 	var row pendingRow
 	query := `UPDATE tamiyo.deck_pending_cards SET quantity = $1 WHERE id = $2 AND deck_id = $3 AND user_id = $4 RETURNING ` + pendingColumns("deck_pending_cards")
 	if err := r.db.GetContext(ctx, &row, query, quantity, id, deckID, userID); err != nil {
@@ -156,7 +156,7 @@ func (r *PostgresRepository) UpdatePendingBoard(ctx context.Context, userID stri
 	return row.toDomain(), nil
 }
 
-func (r *PostgresRepository) DeletePendingCard(ctx context.Context, userID string, deckID string, id int) error {
+func (r *compositionQueries) DeletePendingCard(ctx context.Context, userID string, deckID string, id int) error {
 	result, err := r.db.ExecContext(ctx, `DELETE FROM tamiyo.deck_pending_cards WHERE id = $1 AND deck_id = $2 AND user_id = $3`, id, deckID, userID)
 	if err != nil {
 		return err

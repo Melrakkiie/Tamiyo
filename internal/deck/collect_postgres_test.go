@@ -243,3 +243,15 @@ func TestCollectSharedDeck_IsIsolatedFromAPrivateDeckAndAnotherUsersStorage(t *t
 	assert.ErrorIs(t, err, ErrTargetStorageNotFound)
 	assert.Empty(t, f.collectionOf(t, bob))
 }
+
+func TestCollectOwnDeck_LeavesTheUpdatedDateAloneWhenThereIsNothingToCollect(t *testing.T) {
+	f := newContentFixture(t)
+	f.ownedCopy(t, island, copyOptions{})
+	f.pendingCard(t, atraxa, 1, copyOptions{board: BoardConsidering})
+	before := f.content(t).Deck.Updated
+
+	summary := f.collectOwn(t, OwnDeckCollect{Boards: []string{BoardMain}})
+
+	assert.Equal(t, CollectSummary{}, summary)
+	assert.Equal(t, before, f.content(t).Deck.Updated)
+}

@@ -5,7 +5,7 @@ import (
 	"database/sql"
 )
 
-func (r *PostgresRepository) FindCardTags(ctx context.Context, userID string, deckID string) ([]CardTag, error) {
+func (r *compositionQueries) FindCardTags(ctx context.Context, userID string, deckID string) ([]CardTag, error) {
 	var rows []struct {
 		CardName string `db:"card_name"`
 		Tag      string `db:"tag"`
@@ -27,7 +27,7 @@ func (r *PostgresRepository) FindCardTags(ctx context.Context, userID string, de
 	return tags, nil
 }
 
-func (r *PostgresRepository) FindDeckTags(ctx context.Context, userID string, deckID string) ([]string, error) {
+func (r *compositionQueries) FindDeckTags(ctx context.Context, userID string, deckID string) ([]string, error) {
 	tags := []string{}
 	query := `
 		SELECT t.tag
@@ -93,7 +93,7 @@ func (r *PostgresRepository) ReplaceCardTags(ctx context.Context, userID string,
 
 // WriteCardTags replaces a card's tags without a transaction of its own, for
 // a composition (see Compose).
-func (r *PostgresRepository) WriteCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) error {
+func (r *compositionQueries) WriteCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) error {
 	return writeCardTags(ctx, r.db, userID, deckID, cardName, tags)
 }
 

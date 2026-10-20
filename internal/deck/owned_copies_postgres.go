@@ -18,7 +18,7 @@ type ownedCopyRow struct {
 	LockedAgainstTarget bool `db:"locked_against_target"`
 }
 
-func (r *PostgresRepository) FindOwnedCopies(ctx context.Context, userID string, targetDeckID string, scryfallIDs []string, nameKeys []string) ([]OwnedCopy, error) {
+func (r *compositionQueries) FindOwnedCopies(ctx context.Context, userID string, targetDeckID string, scryfallIDs []string, nameKeys []string) ([]OwnedCopy, error) {
 	var rows []ownedCopyRow
 	query := `
 		SELECT c.id, c.name, c.scryfall_id, c.foil, c.proxy,

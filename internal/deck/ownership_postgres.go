@@ -6,7 +6,7 @@ import (
 	"github.com/lib/pq"
 )
 
-func (r *PostgresRepository) CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error) {
+func (r *compositionQueries) CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error) {
 	counts := make(map[string]int, len(nameKeys))
 	if len(nameKeys) == 0 {
 		return counts, nil
