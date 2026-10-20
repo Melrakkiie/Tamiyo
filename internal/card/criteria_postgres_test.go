@@ -392,3 +392,84 @@ func TestPostgresRepository_FindAll_StorageTypeStaysWithinTheUser(t *testing.T) 
 	binder.Stack = true
 	assert.Equal(t, []string{}, bob.names(t, binder))
 }
+
+// A criterion narrows the cards before the list shape is applied: the same
+// filtered cards stack, group, sort and page as an unfiltered list would.
+func TestPostgresRepository_FindAll_ListShapeWithCriteria(t *testing.T) {
+	f := seedCriterionFixture(t)
+	// A second, identical copy of Llanowar Elves so that stacking has something to merge.
+	_, err := f.repo.Create(context.Background(), f.userID, Card{
+		Name: "Llanowar Elves", ScryfallID: "11111111-1111-1111-1111-111111111111", SetCode: "tst", CollectorNumber: "1",
+		StorageID: &f.binderID, ManaValue: 1, Colors: strPtr("G"), CardType: strPtr("Creature"), ColorIdentity: strPtr("G"),
+	})
+	require.NoError(t, err)
+
+	greens, err := parseAdvancedFilters(url.Values{"colors": {"g"}, "color_mode": {"include"}})
+	require.NoError(t, err)
+
+	list := func(t *testing.T, shape CardFilter) ([]Card, int) {
+		t.Helper()
+		filter := greens
+		filter.Stack, filter.GroupBy, filter.SortField, filter.SortDesc = shape.Stack, shape.GroupBy, shape.SortField, shape.SortDesc
+		filter.Page, filter.Limit = shape.Page, shape.Limit
+		if filter.Limit == 0 {
+			filter.Page, filter.Limit = 1, 25
+		}
+		cards, total, err := f.repo.FindAll(context.Background(), f.userID, filter)
+		require.NoError(t, err)
+		return cards, total
+	}
+	namesOf := func(cards []Card) []string {
+		out := make([]string, len(cards))
+		for i, c := range cards {
+			out[i] = c.Name
+		}
+		return out
+	}
+
+	t.Run("sorted by name, descending, one page", func(t *testing.T) {
+		cards, total := list(t, CardFilter{SortField: "name", SortDesc: true, Page: 2, Limit: 4})
+		assert.Equal(t, 9, total)
+		assert.Equal(t, []string{"Invasion of Zendikar", "Grist, the Hunger Tide", "Esika's Chariot", "Eidolon of Blossoms"}, namesOf(cards))
+	})
+	t.Run("sorted by mana value", func(t *testing.T) {
+		cards, total := list(t, CardFilter{SortField: "mana_value"})
+		assert.Equal(t, 9, total)
+		assert.Equal(t, []string{"Dryad Arbor", "Llanowar Elves", "Llanowar Elves", "Tarmogoyf", "Rampant Growth",
+			"Grist, the Hunger Tide", "Esika's Chariot", "Eidolon of Blossoms", "Invasion of Zendikar"}, namesOf(cards))
+	})
+	t.Run("stacked", func(t *testing.T) {
+		cards, total := list(t, CardFilter{Stack: true, SortField: "name"})
+		assert.Equal(t, 8, total)
+		require.Len(t, cards, 8)
+		for _, c := range cards {
+			want := 1
+			if c.Name == "Llanowar Elves" {
+				want = 2
+			}
+			assert.Len(t, c.CopyIDs, want, c.Name)
+		}
+	})
+	t.Run("stacked and paged", func(t *testing.T) {
+		cards, total := list(t, CardFilter{Stack: true, SortField: "name", Page: 2, Limit: 3})
+		assert.Equal(t, 8, total)
+		assert.Equal(t, []string{"Grist, the Hunger Tide", "Invasion of Zendikar", "Llanowar Elves"}, namesOf(cards))
+	})
+	t.Run("grouped by subtype", func(t *testing.T) {
+		cards, total := list(t, CardFilter{Stack: true, GroupBy: "subtype", SortField: "name"})
+		rows := make([]string, len(cards))
+		for i, c := range cards {
+			subtype := "-"
+			if c.Subtype != nil {
+				subtype = *c.Subtype
+			}
+			rows[i] = subtype + ": " + c.Name
+		}
+		assert.Equal(t, len(rows), total)
+		assert.Equal(t, []string{
+			"Druid: Llanowar Elves", "Dryad: Dryad Arbor", "Elemental: Invasion of Zendikar", "Elf: Llanowar Elves",
+			"Forest: Dryad Arbor", "Grist: Grist, the Hunger Tide", "Lhurgoyf: Tarmogoyf", "Siege: Invasion of Zendikar",
+			"Spirit: Eidolon of Blossoms", "Vehicle: Esika's Chariot", "-: Rampant Growth",
+		}, rows)
+	})
+}
