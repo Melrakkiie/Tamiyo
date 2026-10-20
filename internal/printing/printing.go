@@ -2,6 +2,7 @@ package printing
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -18,18 +19,24 @@ const (
 )
 
 type Printing struct {
-	ScryfallID   string
-	Name         string
-	ManaValue    float64
-	ManaCost     string
-	TypeLine     string
-	OracleText   string
-	Rarity       string
-	Keywords     []string
-	LegalFormats []string
-	Powers       []string
-	Toughnesses  []string
-	Prices       scryfall.Prices
+	ScryfallID string
+	Name       string
+	ManaValue  float64
+	ManaCost   string
+	TypeLine   string
+	OracleText string
+	Rarity     string
+	Keywords   []string
+	// LegalFormats holds the formats where the card is legal or restricted,
+	// the meaning search by format relies on.
+	LegalFormats      []string
+	BannedFormats     []string
+	RestrictedFormats []string
+	Colors            []string
+	ColorIdentity     []string
+	Powers            []string
+	Toughnesses       []string
+	Prices            scryfall.Prices
 }
 
 type Repository interface {
@@ -53,18 +60,36 @@ func NewRefresher(repo Repository, fetcher Fetcher, logger *zap.Logger) *Refresh
 }
 
 func FromScryfall(card scryfall.Card) Printing {
-	formats := make([]string, 0, len(card.Legalities))
-	for format, status := range card.Legalities {
-		if status == "legal" || status == "restricted" {
+	return Printing{
+		ScryfallID: card.ID, Name: card.Name, ManaValue: card.CMC, ManaCost: card.ManaCost, TypeLine: card.TypeLine,
+		OracleText: card.OracleText, Rarity: card.Rarity, Keywords: card.Keywords,
+		LegalFormats:      formatsWithStatus(card.Legalities, "legal", "restricted"),
+		BannedFormats:     formatsWithStatus(card.Legalities, "banned"),
+		RestrictedFormats: formatsWithStatus(card.Legalities, "restricted"),
+		Colors:            nonNil(card.Colors),
+		ColorIdentity:     nonNil(card.ColorIdentity),
+		Powers:            card.Powers, Toughnesses: card.Toughnesses, Prices: card.Prices,
+	}
+}
+
+// formatsWithStatus lists, sorted, the formats whose Scryfall legality is one
+// of statuses.
+func formatsWithStatus(legalities map[string]string, statuses ...string) []string {
+	formats := []string{}
+	for format, status := range legalities {
+		if slices.Contains(statuses, status) {
 			formats = append(formats, format)
 		}
 	}
 	sort.Strings(formats)
-	return Printing{
-		ScryfallID: card.ID, Name: card.Name, ManaValue: card.CMC, ManaCost: card.ManaCost, TypeLine: card.TypeLine,
-		OracleText: card.OracleText, Rarity: card.Rarity, Keywords: card.Keywords,
-		LegalFormats: formats, Powers: card.Powers, Toughnesses: card.Toughnesses, Prices: card.Prices,
+	return formats
+}
+
+func nonNil(values []string) []string {
+	if values == nil {
+		return []string{}
 	}
+	return values
 }
 
 func (r *Refresher) RefreshBatch(ctx context.Context) (int, error) {
@@ -90,7 +115,10 @@ func (r *Refresher) RefreshBatch(ctx context.Context) (int, error) {
 	for _, id := range ids {
 		p, ok := found[strings.ToLower(id)]
 		if !ok {
-			p = Printing{ScryfallID: id, LegalFormats: []string{}, Powers: []string{}, Toughnesses: []string{}, Keywords: []string{}}
+			p = Printing{
+				ScryfallID: id, LegalFormats: []string{}, BannedFormats: []string{}, RestrictedFormats: []string{},
+				Colors: []string{}, ColorIdentity: []string{}, Powers: []string{}, Toughnesses: []string{}, Keywords: []string{},
+			}
 		}
 		p.ScryfallID = id
 		printings = append(printings, p)

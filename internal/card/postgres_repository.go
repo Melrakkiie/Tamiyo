@@ -450,15 +450,9 @@ func (r *PostgresRepository) Value(ctx context.Context, userID string) (Value, e
 	var v Value
 	err := r.db.QueryRowContext(ctx, `
 		SELECT
-			COALESCE(SUM(COALESCE(
-				CASE WHEN c.foil THEN p.eur_foil ELSE p.eur END,
-				CASE WHEN c.foil THEN COALESCE(p.usd_foil, p.usd_etched) ELSE p.usd END / r.per_eur,
-				CASE WHEN c.foil THEN p.eur ELSE p.eur_foil END,
-				CASE WHEN c.foil THEN p.usd ELSE COALESCE(p.usd_foil, p.usd_etched) END / r.per_eur)), 0)::float8,
-			COALESCE(SUM(COALESCE(CASE WHEN c.foil THEN COALESCE(p.usd_foil, p.usd_etched) ELSE p.usd END, p.usd, p.usd_foil, p.usd_etched)), 0)::float8
+			COALESCE(SUM(tamiyo.card_price(c.scryfall_id, c.foil, 'eur')), 0)::float8,
+			COALESCE(SUM(tamiyo.card_price(c.scryfall_id, c.foil, 'usd')), 0)::float8
 		FROM tamiyo.cards c
-		LEFT JOIN tamiyo.printings p USING (scryfall_id)
-		LEFT JOIN tamiyo.exchange_rates r ON r.currency = 'usd'
 		WHERE c.user_id = $1 AND NOT c.proxy
 	`, userID).Scan(&v.EUR, &v.USD)
 	return v, err

@@ -48,19 +48,23 @@ func (r *PostgresRepository) Upsert(ctx context.Context, printings []Printing) e
 	for _, p := range printings {
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO tamiyo.printings (scryfall_id, name, type_line, legal_formats, powers, toughnesses, eur, eur_foil, usd, usd_foil, usd_etched,
-				oracle_text, mana_cost, rarity, keywords, refreshed_at)
+				oracle_text, mana_cost, rarity, keywords, mana_value, colors, color_identity, banned_formats, restricted_formats, refreshed_at)
 			VALUES ($1, $2, $3, $4, COALESCE($5::text[], '{}'), COALESCE($6::text[], '{}'), $7, $8, $9, $10, $11,
-				NULLIF($12, ''), NULLIF($13, ''), NULLIF($14, ''), COALESCE($15::text[], '{}'), now())
+				NULLIF($12, ''), NULLIF($13, ''), NULLIF($14, ''), COALESCE($15::text[], '{}'), $16,
+				COALESCE($17::text[], '{}'), COALESCE($18::text[], '{}'), COALESCE($19::text[], '{}'), COALESCE($20::text[], '{}'), now())
 			ON CONFLICT (scryfall_id) DO UPDATE
 			SET name = EXCLUDED.name, type_line = EXCLUDED.type_line, legal_formats = EXCLUDED.legal_formats,
 				powers = EXCLUDED.powers, toughnesses = EXCLUDED.toughnesses,
 				eur = EXCLUDED.eur, eur_foil = EXCLUDED.eur_foil, usd = EXCLUDED.usd, usd_foil = EXCLUDED.usd_foil,
 				usd_etched = EXCLUDED.usd_etched,
 				oracle_text = EXCLUDED.oracle_text, mana_cost = EXCLUDED.mana_cost, rarity = EXCLUDED.rarity, keywords = EXCLUDED.keywords,
+				mana_value = EXCLUDED.mana_value, colors = EXCLUDED.colors, color_identity = EXCLUDED.color_identity,
+				banned_formats = EXCLUDED.banned_formats, restricted_formats = EXCLUDED.restricted_formats,
 				refreshed_at = now()
 		`, p.ScryfallID, p.Name, p.TypeLine, pq.Array(p.LegalFormats), pq.Array(p.Powers), pq.Array(p.Toughnesses),
 			p.Prices.EUR, p.Prices.EURFoil, p.Prices.USD, p.Prices.USDFoil, p.Prices.USDEtched,
-			p.OracleText, p.ManaCost, p.Rarity, pq.Array(p.Keywords)); err != nil {
+			p.OracleText, p.ManaCost, p.Rarity, pq.Array(p.Keywords), p.ManaValue,
+			pq.Array(p.Colors), pq.Array(p.ColorIdentity), pq.Array(p.BannedFormats), pq.Array(p.RestrictedFormats)); err != nil {
 			return err
 		}
 		if p.Name == "" {
