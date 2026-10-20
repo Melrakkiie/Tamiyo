@@ -95,8 +95,6 @@ func placementLines(lines []moxfieldDeckLine, resolved map[string]ResolvedCard) 
 	return placed, summary
 }
 
-// placeLines places the lines into the deck in one step and adds the result
-// to the summary.
 func (s *Service) placeLines(ctx context.Context, userID string, deckID string, plan deck.PlacementPlan, summary *Summary) error {
 	placed, err := s.decks.PlaceCards(ctx, userID, deckID, plan)
 	if err != nil {

@@ -9,9 +9,9 @@ import (
 
 var ErrCardsNotInDeck = errors.New("card_ids and pending_ids must list owned copies and pending cards of this deck")
 
-// errNothingToSwitch rolls back a composition that changes nothing, so the
+// errNothingToReplace rolls back a replacement that changes nothing, so the
 // deck's updated date stays as it was.
-var errNothingToSwitch = errors.New("nothing to switch")
+var errNothingToReplace = errors.New("nothing to switch")
 
 // CardSelection lists owned copies (CardIDs) and pending cards (PendingIDs)
 // of a deck.
@@ -20,9 +20,9 @@ type CardSelection struct {
 	PendingIDs []int
 }
 
-// SwitchSummary counts the copies an operation put in the deck from the
+// ReplacementSummary counts the copies an operation put in the deck from the
 // collection, the copies it left pending and the copies that left the deck.
-type SwitchSummary struct {
+type ReplacementSummary struct {
 	CardsLinked  int
 	CardsPending int
 	CardsRemoved int
@@ -31,7 +31,7 @@ type SwitchSummary struct {
 // SwitchFinish replaces the selected copies and pending cards not already in
 // that finish by copies of the same printing and proxy state in that finish
 // (ADR-0005), on the same board and in the same commander slot.
-func (s *Service) SwitchFinish(ctx context.Context, userID string, deckID string, cards CardSelection, foil bool) (SwitchSummary, error) {
+func (s *Service) SwitchFinish(ctx context.Context, userID string, deckID string, cards CardSelection, foil bool) (ReplacementSummary, error) {
 	return s.switchCards(ctx, userID, deckID, cards, func(p PendingCard) PendingCard {
 		p.Foil = foil
 		return p
@@ -40,7 +40,7 @@ func (s *Service) SwitchFinish(ctx context.Context, userID string, deckID string
 
 // SwitchProxy works like SwitchFinish for the proxy state: each card keeps
 // its finish.
-func (s *Service) SwitchProxy(ctx context.Context, userID string, deckID string, cards CardSelection, proxy bool) (SwitchSummary, error) {
+func (s *Service) SwitchProxy(ctx context.Context, userID string, deckID string, cards CardSelection, proxy bool) (ReplacementSummary, error) {
 	return s.switchCards(ctx, userID, deckID, cards, func(p PendingCard) PendingCard {
 		p.Proxy = proxy
 		return p
@@ -56,8 +56,8 @@ type switchedCard struct {
 	removed int
 }
 
-func (s *Service) switchCards(ctx context.Context, userID string, deckID string, cards CardSelection, change func(PendingCard) PendingCard) (SwitchSummary, error) {
-	return s.compose(ctx, userID, deckID, func(c *composition) error {
+func (s *Service) switchCards(ctx context.Context, userID string, deckID string, cards CardSelection, change func(PendingCard) PendingCard) (ReplacementSummary, error) {
+	return s.replace(ctx, userID, deckID, func(c *replacement) error {
 		copies, pending, err := c.selected(cards)
 		if err != nil {
 			return err
@@ -78,7 +78,7 @@ func (s *Service) switchCards(ctx context.Context, userID string, deckID string,
 			}
 		}
 		if len(switched) == 0 {
-			return errNothingToSwitch
+			return errNothingToReplace
 		}
 
 		targets := make([]PendingCard, 0, len(switched))
@@ -106,41 +106,40 @@ func (s *Service) switchCards(ctx context.Context, userID string, deckID string,
 	})
 }
 
-// composition is one switch or split in progress, inside the transaction.
-type composition struct {
+// replacement is one switch or split in progress, inside the transaction.
+type replacement struct {
 	ctx     context.Context
 	store   CompositionStore
 	userID  string
 	deck    Deck
-	owned   []OwnedCopy
-	used    map[int]bool
-	summary SwitchSummary
+	copies  *copyPicker
+	summary ReplacementSummary
 }
 
-func (s *Service) compose(ctx context.Context, userID string, deckID string, apply func(*composition) error) (SwitchSummary, error) {
-	var summary SwitchSummary
+func (s *Service) replace(ctx context.Context, userID string, deckID string, apply func(*replacement) error) (ReplacementSummary, error) {
+	var summary ReplacementSummary
 	err := s.repo.Compose(ctx, userID, deckID, func(store CompositionStore) error {
 		d, err := store.FindByID(ctx, userID, deckID)
 		if err != nil {
 			return err
 		}
-		c := &composition{ctx: ctx, store: store, userID: userID, deck: d, used: make(map[int]bool)}
+		c := &replacement{ctx: ctx, store: store, userID: userID, deck: d}
 		if err := apply(c); err != nil {
 			return err
 		}
 		summary = c.summary
 		return nil
 	})
-	if errors.Is(err, errNothingToSwitch) {
-		return SwitchSummary{}, nil
+	if errors.Is(err, errNothingToReplace) {
+		return ReplacementSummary{}, nil
 	}
 	if err != nil {
-		return SwitchSummary{}, err
+		return ReplacementSummary{}, err
 	}
 	return summary, nil
 }
 
-func (c *composition) selected(cards CardSelection) ([]DeckCard, []PendingCard, error) {
+func (c *replacement) selected(cards CardSelection) ([]DeckCard, []PendingCard, error) {
 	var copies []DeckCard
 	if len(cards.CardIDs) > 0 {
 		deckCards, err := c.store.FindCardsByDeckID(c.ctx, c.userID, c.deck.ID, "added", false)
@@ -184,7 +183,7 @@ func pick[T any](items []T, ids []int, id func(T) int) ([]T, error) {
 	return picked, nil
 }
 
-func (c *composition) loadOwnedCopies(targets []PendingCard) error {
+func (c *replacement) loadOwnedCopies(targets []PendingCard) error {
 	ids := make([]string, 0, len(targets))
 	for _, t := range targets {
 		ids = append(ids, strings.ToLower(t.ScryfallID))
@@ -193,34 +192,29 @@ func (c *composition) loadOwnedCopies(targets []PendingCard) error {
 	if err != nil {
 		return fmt.Errorf("finding owned copies: %w", err)
 	}
-	c.owned = owned
+	c.copies = newCopyPicker(owned, false)
 	return nil
 }
 
 // takeCopy picks an owned copy of the printing in that finish and proxy
 // state, outside the deck and storages locked against it: one in no deck
 // first, then one another deck uses (ADR-0005).
-func (c *composition) takeCopy(want PendingCard) (int, bool) {
-	best := -1
-	for i, o := range c.owned {
-		if c.used[o.ID] || o.InTargetDeck || o.LockedAgainstTarget || o.Foil != want.Foil || o.Proxy != want.Proxy || !strings.EqualFold(o.ScryfallID, want.ScryfallID) {
-			continue
-		}
-		if best == -1 || c.owned[best].InDeck && !o.InDeck {
-			best = i
-		}
+func (c *replacement) takeCopy(want PendingCard) (int, bool) {
+	proxy := RealOnly
+	if want.Proxy {
+		proxy = ProxyOnly
 	}
-	if best == -1 {
+	ids := c.copies.takeInFinish(PlacementLine{Printing: Printing{ScryfallID: want.ScryfallID}, Foil: want.Foil, Proxy: proxy, Quantity: 1})
+	if len(ids) == 0 {
 		return 0, false
 	}
-	c.used[c.owned[best].ID] = true
-	return c.owned[best].ID, true
+	return ids[0], true
 }
 
 // place puts want.Quantity copies of want in the deck on want.Board: owned
 // copies first, a pending card for the rest. A commander slot goes to the
 // first owned copy, or else to the pending card.
-func (c *composition) place(want PendingCard, slot CommanderSlot, hasSlot bool) error {
+func (c *replacement) place(want PendingCard, slot CommanderSlot, hasSlot bool) error {
 	firstCopy, linked := 0, 0
 	for linked < want.Quantity {
 		copyID, ok := c.takeCopy(want)
@@ -264,7 +258,7 @@ func (c *composition) place(want PendingCard, slot CommanderSlot, hasSlot bool) 
 	return nil
 }
 
-func (c *composition) addPending(p PendingCard, commander bool) (PendingCard, error) {
+func (c *replacement) addPending(p PendingCard, commander bool) (PendingCard, error) {
 	existing, err := c.store.FindPendingCards(c.ctx, c.userID, c.deck.ID)
 	if err != nil {
 		return PendingCard{}, err

@@ -40,6 +40,7 @@ func FrontFaceName(name string) string {
 	return strings.TrimSpace(front)
 }
 
+// take hands out up to line.Quantity copies for the line.
 func (p *copyPicker) take(line PlacementLine) []int {
 	var copies []OwnedCopy
 	if line.AnyPrinting {
@@ -47,6 +48,16 @@ func (p *copyPicker) take(line PlacementLine) []int {
 	} else {
 		copies = p.byPrinting[strings.ToLower(line.Printing.ScryfallID)]
 	}
+	return p.pick(copies, line, false)
+}
+
+// takeInFinish hands out copies of the line's printing in exactly the line's
+// finish.
+func (p *copyPicker) takeInFinish(line PlacementLine) []int {
+	return p.pick(p.byPrinting[strings.ToLower(line.Printing.ScryfallID)], line, true)
+}
+
+func (p *copyPicker) pick(copies []OwnedCopy, line PlacementLine, exactFinish bool) []int {
 	candidates := append([]OwnedCopy(nil), copies...)
 	sort.SliceStable(candidates, func(i, j int) bool {
 		a, b := candidates[i], candidates[j]
@@ -66,7 +77,7 @@ func (p *copyPicker) take(line PlacementLine) []int {
 		if len(ids) == line.Quantity {
 			break
 		}
-		if p.used[c.ID] || !line.Proxy.accepts(c.Proxy) {
+		if p.used[c.ID] || !line.Proxy.accepts(c.Proxy) || exactFinish && c.Foil != line.Foil {
 			continue
 		}
 		p.used[c.ID] = true

@@ -13,9 +13,9 @@ import (
 )
 
 type switchService interface {
-	SwitchFinish(ctx context.Context, userID string, deckID string, cards CardSelection, foil bool) (SwitchSummary, error)
-	SwitchProxy(ctx context.Context, userID string, deckID string, cards CardSelection, proxy bool) (SwitchSummary, error)
-	SplitPrintings(ctx context.Context, userID string, deckID string, cards CardSelection, printings []PrintingChoice) (SwitchSummary, error)
+	SwitchFinish(ctx context.Context, userID string, deckID string, cards CardSelection, foil bool) (ReplacementSummary, error)
+	SwitchProxy(ctx context.Context, userID string, deckID string, cards CardSelection, proxy bool) (ReplacementSummary, error)
+	SplitPrintings(ctx context.Context, userID string, deckID string, cards CardSelection, printings []PrintingChoice) (ReplacementSummary, error)
 }
 
 type switchFinishRequest struct {
@@ -65,7 +65,7 @@ func (h *Handler) switchFinish(ctx *gin.Context) {
 	var req switchFinishRequest
 	h.switchDeckCards(ctx, &req, "foil and at least one of card_ids or pending_ids are required",
 		func() bool { return req.Foil != nil && len(req.CardIDs)+len(req.PendingIDs) > 0 },
-		func(c context.Context, userID, deckID string) (SwitchSummary, error) {
+		func(c context.Context, userID, deckID string) (ReplacementSummary, error) {
 			return h.service.SwitchFinish(c, userID, deckID, CardSelection{CardIDs: req.CardIDs, PendingIDs: req.PendingIDs}, *req.Foil)
 		})
 }
@@ -74,7 +74,7 @@ func (h *Handler) switchProxy(ctx *gin.Context) {
 	var req switchProxyRequest
 	h.switchDeckCards(ctx, &req, "proxy and at least one of card_ids or pending_ids are required",
 		func() bool { return req.Proxy != nil && len(req.CardIDs)+len(req.PendingIDs) > 0 },
-		func(c context.Context, userID, deckID string) (SwitchSummary, error) {
+		func(c context.Context, userID, deckID string) (ReplacementSummary, error) {
 			return h.service.SwitchProxy(c, userID, deckID, CardSelection{CardIDs: req.CardIDs, PendingIDs: req.PendingIDs}, *req.Proxy)
 		})
 }
@@ -83,7 +83,7 @@ func (h *Handler) splitPrintings(ctx *gin.Context) {
 	var req splitPrintingsRequest
 	h.switchDeckCards(ctx, &req, "printings, each with a scryfall_id, and at least one of card_ids or pending_ids are required",
 		func() bool { return len(req.CardIDs)+len(req.PendingIDs) > 0 && validPrintings(req.Printings) },
-		func(c context.Context, userID, deckID string) (SwitchSummary, error) {
+		func(c context.Context, userID, deckID string) (ReplacementSummary, error) {
 			printings := make([]PrintingChoice, 0, len(req.Printings))
 			for _, p := range req.Printings {
 				printings = append(printings, PrintingChoice(p))
@@ -92,7 +92,7 @@ func (h *Handler) splitPrintings(ctx *gin.Context) {
 		})
 }
 
-func (h *Handler) switchDeckCards(ctx *gin.Context, req any, invalid string, complete func() bool, run func(c context.Context, userID, deckID string) (SwitchSummary, error)) {
+func (h *Handler) switchDeckCards(ctx *gin.Context, req any, invalid string, complete func() bool, run func(c context.Context, userID, deckID string) (ReplacementSummary, error)) {
 	userID, ok := auth.UserIDFromContext(ctx)
 	if !ok {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})

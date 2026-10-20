@@ -24,7 +24,7 @@ func repeatChoice(c PrintingChoice, n int) []PrintingChoice {
 	return out
 }
 
-func (f contentFixture) split(t *testing.T, cards CardSelection, printings []PrintingChoice) SwitchSummary {
+func (f contentFixture) split(t *testing.T, cards CardSelection, printings []PrintingChoice) ReplacementSummary {
 	t.Helper()
 	summary, err := f.service.SplitPrintings(context.Background(), f.userID, contentDeckID, cards, printings)
 	require.NoError(t, err)
@@ -41,7 +41,7 @@ func TestSplitPrintings_KeepsMatchingCopiesAndReplacesTheOthers(t *testing.T) {
 
 	summary := f.split(t, CardSelection{CardIDs: []int{kept, leaving}}, []PrintingChoice{choice(islandONE, false), choice(island, false)})
 
-	assert.Equal(t, SwitchSummary{CardsLinked: 1, CardsRemoved: 1}, summary)
+	assert.Equal(t, ReplacementSummary{CardsLinked: 1, CardsRemoved: 1}, summary)
 	assert.Equal(t, []int{kept, free}, f.ownedIDs(t), "the free ONE Island before the one another deck uses")
 	for _, e := range f.content(t).Entries {
 		assert.Equal(t, BoardSideboard, e.Board)
@@ -56,7 +56,7 @@ func TestSplitPrintings_SplitsAPendingCardAndLeavesTheRestPending(t *testing.T) 
 
 	summary := f.split(t, CardSelection{PendingIDs: []int{pendingID}}, append(repeatChoice(choice(island, false), 7), repeatChoice(choice(islandONE, true), 3)...))
 
-	assert.Equal(t, SwitchSummary{CardsPending: 3, CardsRemoved: 3}, summary, "the free ONE Island isn't foil")
+	assert.Equal(t, ReplacementSummary{CardsPending: 3, CardsRemoved: 3}, summary, "the free ONE Island isn't foil")
 	entries := f.content(t).Entries
 	assert.Equal(t, []entrySummary{
 		{name: island.name, board: BoardMain, pending: 7, quantity: 7},
@@ -76,7 +76,7 @@ func TestSplitPrintings_APendingCardThatFindsAFreeCopyBecomesOwned(t *testing.T)
 
 	summary := f.split(t, CardSelection{PendingIDs: []int{pendingID}}, repeatChoice(choice(islandONE, false), 2))
 
-	assert.Equal(t, SwitchSummary{CardsLinked: 1, CardsPending: 1, CardsRemoved: 2}, summary)
+	assert.Equal(t, ReplacementSummary{CardsLinked: 1, CardsPending: 1, CardsRemoved: 2}, summary)
 	entries := f.content(t).Entries
 	assert.Equal(t, []entrySummary{{name: island.name, board: BoardMain, owned: 1, pending: 1, quantity: 2}}, summarize(entries))
 	assert.Equal(t, []int{free}, entries[0].OwnedCardIDs)
@@ -180,7 +180,7 @@ func TestSplitPrintings_TakesFreeCopiesBeforeOnesAnotherDeckUses(t *testing.T) {
 
 	summary := f.split(t, CardSelection{CardIDs: []int{first, second}}, repeatChoice(choice(islandONE, false), 2))
 
-	assert.Equal(t, SwitchSummary{CardsLinked: 2, CardsRemoved: 2}, summary)
+	assert.Equal(t, ReplacementSummary{CardsLinked: 2, CardsRemoved: 2}, summary)
 	assert.Equal(t, []int{usedElsewhere, free}, f.ownedIDs(t))
 	assert.Len(t, f.collection(t), 4, "the collection is never modified")
 }

@@ -12,7 +12,7 @@ import (
 )
 
 type fakeSwitches struct {
-	switchSummary  SwitchSummary
+	switchSummary  ReplacementSummary
 	switchErr      error
 	lastSwitch     string
 	lastSelection  CardSelection
@@ -20,17 +20,17 @@ type fakeSwitches struct {
 	lastPrintings  []PrintingChoice
 }
 
-func (f *fakeSwitches) SwitchFinish(ctx context.Context, userID string, deckID string, cards CardSelection, foil bool) (SwitchSummary, error) {
+func (f *fakeSwitches) SwitchFinish(ctx context.Context, userID string, deckID string, cards CardSelection, foil bool) (ReplacementSummary, error) {
 	f.lastSwitch, f.lastSelection, f.lastSwitchedTo = "foil", cards, foil
 	return f.switchSummary, f.switchErr
 }
 
-func (f *fakeSwitches) SwitchProxy(ctx context.Context, userID string, deckID string, cards CardSelection, proxy bool) (SwitchSummary, error) {
+func (f *fakeSwitches) SwitchProxy(ctx context.Context, userID string, deckID string, cards CardSelection, proxy bool) (ReplacementSummary, error) {
 	f.lastSwitch, f.lastSelection, f.lastSwitchedTo = "proxy", cards, proxy
 	return f.switchSummary, f.switchErr
 }
 
-func (f *fakeSwitches) SplitPrintings(ctx context.Context, userID string, deckID string, cards CardSelection, printings []PrintingChoice) (SwitchSummary, error) {
+func (f *fakeSwitches) SplitPrintings(ctx context.Context, userID string, deckID string, cards CardSelection, printings []PrintingChoice) (ReplacementSummary, error) {
 	f.lastSwitch, f.lastSelection, f.lastPrintings = "printings", cards, printings
 	return f.switchSummary, f.switchErr
 }
@@ -48,7 +48,7 @@ func postSwitch(service *fakeService, route string, body string) *httptest.Respo
 func TestHandler_SwitchDeckCards(t *testing.T) {
 	for _, field := range []string{"foil", "proxy"} {
 		t.Run(field, func(t *testing.T) {
-			service := &fakeService{fakeSwitches: fakeSwitches{switchSummary: SwitchSummary{CardsLinked: 1, CardsPending: 2, CardsRemoved: 3}}}
+			service := &fakeService{fakeSwitches: fakeSwitches{switchSummary: ReplacementSummary{CardsLinked: 1, CardsPending: 2, CardsRemoved: 3}}}
 			post := func(body string) *httptest.ResponseRecorder {
 				return postSwitch(service, "switch-"+field, strings.ReplaceAll(body, "FIELD", field))
 			}
@@ -77,7 +77,7 @@ func TestHandler_SwitchDeckCards(t *testing.T) {
 }
 
 func TestHandler_SwitchDeckCards_ReturnsTheErrorWithoutASummary(t *testing.T) {
-	service := &fakeService{fakeSwitches: fakeSwitches{switchSummary: SwitchSummary{CardsLinked: 1}, switchErr: assert.AnError}}
+	service := &fakeService{fakeSwitches: fakeSwitches{switchSummary: ReplacementSummary{CardsLinked: 1}, switchErr: assert.AnError}}
 
 	w := postSwitch(service, "switch-foil", `{"card_ids": [2], "foil": true}`)
 
@@ -86,7 +86,7 @@ func TestHandler_SwitchDeckCards_ReturnsTheErrorWithoutASummary(t *testing.T) {
 }
 
 func TestHandler_SplitPrintings(t *testing.T) {
-	service := &fakeService{fakeSwitches: fakeSwitches{switchSummary: SwitchSummary{CardsLinked: 1, CardsRemoved: 1}}}
+	service := &fakeService{fakeSwitches: fakeSwitches{switchSummary: ReplacementSummary{CardsLinked: 1, CardsRemoved: 1}}}
 	post := func(body string) *httptest.ResponseRecorder { return postSwitch(service, "split-printings", body) }
 
 	w := post(`{"card_ids": [2], "pending_ids": [8], "printings": [

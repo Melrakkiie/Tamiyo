@@ -144,8 +144,6 @@ func (s *Service) BulkEditDeck(ctx context.Context, userID string, deckID string
 	return summary, nil
 }
 
-// planRemovals lists in the plan the copies and pending quantities the list
-// leaves out, and returns how many cards that removes.
 func planRemovals(plan *deck.PlacementPlan, entries []deck.DeckEntry, copies []*ownedMatch, pendings []*pendingMatch) int {
 	removed := 0
 	for _, c := range copies {
@@ -167,7 +165,6 @@ func planRemovals(plan *deck.PlacementPlan, entries []deck.DeckEntry, copies []*
 	return removed
 }
 
-// changedTags returns the listed cards whose tags differ from the deck's.
 func (s *Service) changedTags(ctx context.Context, userID string, deckID string, lines []moxfieldDeckLine) ([]deck.TaggedCard, error) {
 	tags := make(map[string][]string)
 	names := make(map[string]string)

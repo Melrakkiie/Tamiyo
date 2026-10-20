@@ -20,8 +20,8 @@ type PrintingChoice struct {
 // card's quantity) one of printings. Copies that already have a wanted
 // printing and finish stay; the others leave the deck and the remaining
 // printings are placed on the same board as SwitchFinish places them.
-func (s *Service) SplitPrintings(ctx context.Context, userID string, deckID string, cards CardSelection, printings []PrintingChoice) (SwitchSummary, error) {
-	return s.compose(ctx, userID, deckID, func(c *composition) error {
+func (s *Service) SplitPrintings(ctx context.Context, userID string, deckID string, cards CardSelection, printings []PrintingChoice) (ReplacementSummary, error) {
+	return s.replace(ctx, userID, deckID, func(c *replacement) error {
 		copies, pending, err := c.selected(cards)
 		if err != nil {
 			return err
@@ -41,7 +41,7 @@ func (s *Service) SplitPrintings(ctx context.Context, userID string, deckID stri
 			toPlace = append(toPlace, want)
 		}
 		if len(toPlace) == 0 {
-			return errNothingToSwitch
+			return errNothingToReplace
 		}
 
 		if err := c.removeUnkept(copies, keptCopies, pending, keptPending); err != nil {
@@ -69,7 +69,7 @@ func (s *Service) SplitPrintings(ctx context.Context, userID string, deckID stri
 	})
 }
 
-func (c *composition) removeUnkept(copies []DeckCard, keptCopies map[int]bool, pending []PendingCard, keptPending map[int]int) error {
+func (c *replacement) removeUnkept(copies []DeckCard, keptCopies map[int]bool, pending []PendingCard, keptPending map[int]int) error {
 	for _, dc := range copies {
 		if keptCopies[dc.ID] {
 			continue

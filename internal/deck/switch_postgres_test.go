@@ -21,7 +21,7 @@ func (f contentFixture) ownedIDs(t *testing.T) []int {
 	return ids
 }
 
-func (f contentFixture) switchToFoil(t *testing.T, cards CardSelection) SwitchSummary {
+func (f contentFixture) switchToFoil(t *testing.T, cards CardSelection) ReplacementSummary {
 	t.Helper()
 	summary, err := f.service.SwitchFinish(context.Background(), f.userID, contentDeckID, cards, true)
 	require.NoError(t, err)
@@ -38,7 +38,7 @@ func TestSwitchFinish_SwapsCopiesForFreeOnesFirstThenOnesAnotherDeckUses(t *test
 
 	summary := f.switchToFoil(t, CardSelection{CardIDs: []int{first, second}})
 
-	assert.Equal(t, SwitchSummary{CardsLinked: 2, CardsRemoved: 2}, summary)
+	assert.Equal(t, ReplacementSummary{CardsLinked: 2, CardsRemoved: 2}, summary)
 	assert.Equal(t, []int{usedElsewhere, free}, f.ownedIDs(t))
 	assert.Equal(t, []entrySummary{{name: island.name, board: BoardMain, foil: true, owned: 2, quantity: 2}}, summarize(f.content(t).Entries))
 	assert.Len(t, f.collection(t), 4, "the collection is never modified")
@@ -53,7 +53,7 @@ func TestSwitchFinish_LeavesTheRestPendingAndNeverUsesLockedStorages(t *testing.
 
 	summary := f.switchToFoil(t, CardSelection{PendingIDs: []int{pendingID}})
 
-	assert.Equal(t, SwitchSummary{CardsLinked: 1, CardsPending: 2, CardsRemoved: 3}, summary)
+	assert.Equal(t, ReplacementSummary{CardsLinked: 1, CardsPending: 2, CardsRemoved: 3}, summary)
 	assert.Equal(t, []int{free}, f.ownedIDs(t))
 	assert.Equal(t, []entrySummary{{name: island.name, board: BoardSideboard, foil: true, owned: 1, pending: 2, quantity: 3}}, summarize(f.content(t).Entries))
 }
@@ -67,7 +67,7 @@ func TestSwitchFinish_KeepsTheCommanderAndSecondCommanderInTheirSlots(t *testing
 
 	summary := f.switchToFoil(t, CardSelection{CardIDs: []int{commander, partner}})
 
-	assert.Equal(t, SwitchSummary{CardsLinked: 1, CardsPending: 1, CardsRemoved: 2}, summary)
+	assert.Equal(t, ReplacementSummary{CardsLinked: 1, CardsPending: 1, CardsRemoved: 2}, summary)
 	content := f.content(t)
 	assert.Equal(t, []entrySummary{
 		{name: atraxa.name, board: BoardMain, foil: true, slot: SlotCommander, pending: 1, quantity: 1},
@@ -86,7 +86,7 @@ func TestSwitchFinish_APendingCommanderThatFindsACopyBecomesTheOwnedCommander(t 
 
 	summary := f.switchToFoil(t, CardSelection{PendingIDs: []int{partner}})
 
-	assert.Equal(t, SwitchSummary{CardsLinked: 1, CardsRemoved: 1}, summary)
+	assert.Equal(t, ReplacementSummary{CardsLinked: 1, CardsRemoved: 1}, summary)
 	content := f.content(t)
 	assert.Equal(t, &foilTymna, content.Deck.PartnerID)
 	assert.Nil(t, content.Deck.PartnerPendingID)
@@ -143,7 +143,7 @@ func TestSwitchFinish_IsIsolatedFromAnotherUser(t *testing.T) {
 	})
 
 	summary := f.switchToFoil(t, CardSelection{CardIDs: []int{copyID}})
-	assert.Equal(t, SwitchSummary{CardsPending: 1, CardsRemoved: 1}, summary, "Bob's foil Island is not Alice's")
+	assert.Equal(t, ReplacementSummary{CardsPending: 1, CardsRemoved: 1}, summary, "Bob's foil Island is not Alice's")
 }
 
 func TestSwitchFinish_BumpsTheDecksUpdatedDate(t *testing.T) {
@@ -180,7 +180,7 @@ func TestSwitchProxy_KeepsTheFinishAndTheCommanderSlot(t *testing.T) {
 	summary, err := f.service.SwitchProxy(context.Background(), f.userID, contentDeckID, CardSelection{CardIDs: []int{commander}}, true)
 
 	require.NoError(t, err)
-	assert.Equal(t, SwitchSummary{CardsLinked: 1, CardsRemoved: 1}, summary)
+	assert.Equal(t, ReplacementSummary{CardsLinked: 1, CardsRemoved: 1}, summary)
 	content := f.content(t)
 	assert.Equal(t, &foilProxy, content.Deck.CommanderID)
 	assert.Equal(t, []entrySummary{{name: atraxa.name, board: BoardMain, foil: true, proxy: true, slot: SlotCommander, owned: 1, quantity: 1}}, summarize(content.Entries))
@@ -196,7 +196,7 @@ func TestSwitchProxy_APendingProxyTakesRealCopiesAndMergesTheRestIntoThePendingC
 	summary, err := f.service.SwitchProxy(context.Background(), f.userID, contentDeckID, CardSelection{PendingIDs: []int{proxies, real}}, false)
 
 	require.NoError(t, err)
-	assert.Equal(t, SwitchSummary{CardsLinked: 1, CardsPending: 2, CardsRemoved: 3}, summary)
+	assert.Equal(t, ReplacementSummary{CardsLinked: 1, CardsPending: 2, CardsRemoved: 3}, summary)
 	entries := f.content(t).Entries
 	assert.Equal(t, []entrySummary{{name: island.name, board: BoardMain, owned: 1, pending: 3, quantity: 4}}, summarize(entries))
 	assert.Equal(t, []PendingPart{{ID: real, Quantity: 3}}, entries[0].Pending)
@@ -216,7 +216,7 @@ func TestSwitchProxy_LeavesEverythingAsBeforeWhenAPendingCardCantBeAdded(t *test
 	})
 }
 
-func (f contentFixture) switchToProxy(t *testing.T, cards CardSelection) SwitchSummary {
+func (f contentFixture) switchToProxy(t *testing.T, cards CardSelection) ReplacementSummary {
 	t.Helper()
 	summary, err := f.service.SwitchProxy(context.Background(), f.userID, contentDeckID, cards, true)
 	require.NoError(t, err)
@@ -233,7 +233,7 @@ func TestSwitchProxy_SwapsCopiesForFreeProxiesFirstThenOnesAnotherDeckUses(t *te
 
 	summary := f.switchToProxy(t, CardSelection{CardIDs: []int{first, second}})
 
-	assert.Equal(t, SwitchSummary{CardsLinked: 2, CardsRemoved: 2}, summary)
+	assert.Equal(t, ReplacementSummary{CardsLinked: 2, CardsRemoved: 2}, summary)
 	assert.Equal(t, []int{usedElsewhere, free}, f.ownedIDs(t))
 	assert.Equal(t, []entrySummary{{name: island.name, board: BoardMain, proxy: true, owned: 2, quantity: 2}}, summarize(f.content(t).Entries))
 }
@@ -247,7 +247,7 @@ func TestSwitchProxy_KeepsTheCommanderAndSecondCommanderInTheirSlots(t *testing.
 
 	summary := f.switchToProxy(t, CardSelection{CardIDs: []int{commander, partner}})
 
-	assert.Equal(t, SwitchSummary{CardsLinked: 1, CardsPending: 1, CardsRemoved: 2}, summary)
+	assert.Equal(t, ReplacementSummary{CardsLinked: 1, CardsPending: 1, CardsRemoved: 2}, summary)
 	content := f.content(t)
 	assert.Equal(t, &proxyAtraxa, content.Deck.CommanderID)
 	assert.Nil(t, content.Deck.PartnerID)
@@ -266,7 +266,7 @@ func TestSwitchProxy_APendingCommanderThatFindsACopyBecomesTheOwnedCommander(t *
 
 	summary := f.switchToProxy(t, CardSelection{PendingIDs: []int{commander}})
 
-	assert.Equal(t, SwitchSummary{CardsLinked: 1, CardsRemoved: 1}, summary)
+	assert.Equal(t, ReplacementSummary{CardsLinked: 1, CardsRemoved: 1}, summary)
 	content := f.content(t)
 	assert.Equal(t, &proxyAtraxa, content.Deck.CommanderID)
 	assert.Nil(t, content.Deck.CommanderPendingID)
@@ -289,5 +289,5 @@ func TestSwitchProxy_IsIsolatedFromAnotherUser(t *testing.T) {
 	})
 
 	summary := f.switchToProxy(t, CardSelection{CardIDs: []int{copyID}})
-	assert.Equal(t, SwitchSummary{CardsPending: 1, CardsRemoved: 1}, summary, "Bob's proxy Island is not Alice's")
+	assert.Equal(t, ReplacementSummary{CardsPending: 1, CardsRemoved: 1}, summary, "Bob's proxy Island is not Alice's")
 }
