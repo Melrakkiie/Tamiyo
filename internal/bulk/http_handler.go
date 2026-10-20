@@ -33,12 +33,8 @@ type importService interface {
 	ExportSharedDeck(ctx context.Context, deckID string, opts DeckExportOptions, w io.Writer) error
 
 	RefreshCardDetails(ctx context.Context, userID string, afterID int) (DetailsRefreshSummary, error)
-	CommitPendingCards(ctx context.Context, userID string, deckID string, storageID, pendingID, quantity *int) (PendingCommitSummary, error)
 	DuplicateDeck(ctx context.Context, userID string, deckID string, req DuplicateRequest) (DuplicateSummary, error)
 	BulkEditDeck(ctx context.Context, userID string, deckID string, r io.Reader) (Summary, error)
-	SwitchFoil(ctx context.Context, userID string, deckID string, req FoilSwitch) (Summary, error)
-	SwitchProxy(ctx context.Context, userID string, deckID string, req ProxySwitch) (Summary, error)
-	SplitPrintings(ctx context.Context, userID string, deckID string, req PrintingSplit) (Summary, error)
 	CollectDeck(ctx context.Context, userID string, deckID string, req CollectRequest) (Summary, error)
 	StoreDeck(ctx context.Context, userID string, deckID string, storageID int, boards []string) (StoreSummary, error)
 	TransferStorage(ctx context.Context, userID string, fromStorageID, toStorageID int) (StoreSummary, error)
@@ -63,12 +59,8 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.GET("/export/tamiyo", h.exportTamiyoCollection)
 
 	router.POST("/cards/refresh-details", h.refreshCardDetails)
-	router.POST("/deck/:id/pending/commit", h.commitPendingCards)
 	router.POST("/deck/:id/import", h.importIntoDeck)
 	router.POST("/deck/:id/bulk-edit", h.bulkEditDeck)
-	router.POST("/deck/:id/switch-foil", h.switchFoil)
-	router.POST("/deck/:id/switch-proxy", h.switchProxy)
-	router.POST("/deck/:id/split-printings", h.splitPrintings)
 	router.GET("/deck/:id/export", h.exportDeck)
 	router.POST("/deck/:id/duplicate", h.duplicateDeck)
 	router.POST("/deck/:id/collect", h.collectDeck)

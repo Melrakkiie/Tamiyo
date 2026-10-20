@@ -30,7 +30,7 @@ type pendingMatch struct {
 }
 
 func lineMatches(line moxfieldDeckLine, e deck.DeckEntry) bool {
-	if boardOf(e.Board) != line.Board {
+	if deck.BoardOrMain(e.Board) != line.Board {
 		return false
 	}
 	if line.SetCode != "" {
@@ -40,7 +40,7 @@ func lineMatches(line moxfieldDeckLine, e deck.DeckEntry) bool {
 		return false
 	}
 	wanted := deck.CardNameKey(line.CardName)
-	return deck.CardNameKey(e.Name) == wanted || deck.CardNameKey(frontFaceName(e.Name)) == wanted
+	return deck.CardNameKey(e.Name) == wanted || deck.CardNameKey(deck.FrontFaceName(e.Name)) == wanted
 }
 
 func bulkEditOrder(lines []moxfieldDeckLine) []moxfieldDeckLine {
@@ -109,6 +109,7 @@ func (s *Service) BulkEditDeck(ctx context.Context, userID string, deckID string
 		if need > 0 {
 			missing := line
 			missing.Quantity = need
+			missing.Commander = false
 			toAdd = append(toAdd, missing)
 		}
 	}
@@ -120,63 +121,51 @@ func (s *Service) BulkEditDeck(ctx context.Context, userID string, deckID string
 		}
 	}
 
-	var summary Summary
-	if err := s.removeUnlisted(ctx, userID, d.ID, content.Entries, copies, pendings, &summary); err != nil {
-		return summary, err
+	tags, err := s.changedTags(ctx, userID, d.ID, lines)
+	if err != nil {
+		return Summary{}, err
 	}
+	plan := deck.PlacementPlan{ReplaceTags: tags}
+	var summary Summary
+	summary.CardsRemoved = planRemovals(&plan, content.Entries, copies, pendings)
 
 	if len(toAdd) > 0 {
-		placements, placed, err := s.placeResolvedLines(ctx, userID, toAdd, resolved, 0, d.ID, false)
-		if err != nil {
-			return summary, err
-		}
-		summary.CardsSkipped += placed.CardsSkipped
-		summary.Warnings = append(summary.Warnings, placed.Warnings...)
-		s.fillDeck(ctx, userID, d.ID, placements, &summary)
+		var unresolved Summary
+		plan.Lines, unresolved = placementLines(toAdd, resolved)
+		summary.CardsSkipped += unresolved.CardsSkipped
+		summary.Warnings = append(summary.Warnings, unresolved.Warnings...)
 	}
-
-	s.replaceListedTags(ctx, userID, d.ID, lines, &summary)
+	if len(plan.Lines)+len(plan.RemoveCards)+len(plan.PendingRemovals)+len(plan.ReplaceTags) == 0 {
+		return summary, nil
+	}
+	if err := s.placeLines(ctx, userID, d.ID, plan, &summary); err != nil {
+		return Summary{}, err
+	}
 	return summary, nil
 }
 
-func (s *Service) removeUnlisted(ctx context.Context, userID string, deckID string, entries []deck.DeckEntry, copies []*ownedMatch, pendings []*pendingMatch, summary *Summary) error {
+func planRemovals(plan *deck.PlacementPlan, entries []deck.DeckEntry, copies []*ownedMatch, pendings []*pendingMatch) int {
+	removed := 0
 	for _, c := range copies {
-		if c.matched {
-			continue
+		if !c.matched {
+			plan.RemoveCards = append(plan.RemoveCards, c.cardID)
+			removed++
 		}
-		if c.entry.IsCommander() {
-			if err := s.decks.ClearCommander(ctx, userID, deckID, c.entry.Slot); err != nil {
-				return fmt.Errorf("clearing the commander: %w", err)
-			}
-		}
-		if err := s.decks.RemoveCardFromDeck(ctx, userID, deckID, c.cardID); err != nil {
-			return fmt.Errorf("removing %q from the deck: %w", c.entry.Name, err)
-		}
-		summary.CardsRemoved++
 	}
-
 	kept := make(map[int]int)
 	for _, p := range pendings {
 		kept[p.part.ID] += p.kept
 	}
 	for _, p := range deck.PendingTotals(entries) {
-		removed := p.Quantity - kept[p.ID]
-		if removed == 0 {
-			continue
+		if gone := p.Quantity - kept[p.ID]; gone != 0 {
+			plan.PendingRemovals = append(plan.PendingRemovals, deck.PendingRemoval{ID: p.ID, Count: gone})
+			removed += gone
 		}
-		if kept[p.ID] == 0 {
-			if err := s.decks.RemovePendingCard(ctx, userID, deckID, p.ID); err != nil {
-				return fmt.Errorf("removing %q from the deck: %w", p.Name, err)
-			}
-		} else if _, err := s.decks.SetPendingQuantity(ctx, userID, deckID, p.ID, kept[p.ID]); err != nil {
-			return fmt.Errorf("updating %q in the deck: %w", p.Name, err)
-		}
-		summary.CardsRemoved += removed
 	}
-	return nil
+	return removed
 }
 
-func (s *Service) replaceListedTags(ctx context.Context, userID string, deckID string, lines []moxfieldDeckLine, summary *Summary) {
+func (s *Service) changedTags(ctx context.Context, userID string, deckID string, lines []moxfieldDeckLine) ([]deck.TaggedCard, error) {
 	tags := make(map[string][]string)
 	names := make(map[string]string)
 	var order []string
@@ -195,10 +184,10 @@ func (s *Service) replaceListedTags(ctx context.Context, userID string, deckID s
 
 	current, err := s.decks.GetCardTags(ctx, userID, deckID)
 	if err != nil {
-		summary.Warnings = append(summary.Warnings, fmt.Sprintf("could not load the tags: %v", err))
-		return
+		return nil, fmt.Errorf("loading the tags: %w", err)
 	}
 	existing := current.ByCardName()
+	var changed []deck.TaggedCard
 	for _, key := range order {
 		wanted := tags[key]
 		if sameTags(existing[key], wanted) {
@@ -207,10 +196,9 @@ func (s *Service) replaceListedTags(ctx context.Context, userID string, deckID s
 		if wanted == nil {
 			wanted = []string{}
 		}
-		if _, err := s.decks.SetCardTags(ctx, userID, deckID, names[key], wanted); err != nil {
-			summary.Warnings = append(summary.Warnings, fmt.Sprintf("could not tag %q: %v", names[key], err))
-		}
+		changed = append(changed, deck.TaggedCard{Name: names[key], Tags: wanted})
 	}
+	return changed, nil
 }
 
 func sameTags(a []string, b []string) bool {

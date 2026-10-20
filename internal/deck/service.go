@@ -59,41 +59,6 @@ func containsPendingCard(pending []PendingCard, id int) bool {
 	return false
 }
 
-func (s *Service) PromotePendingCommander(ctx context.Context, userID string, deckID string, pendingID, cardID int) error {
-	d, err := s.repo.FindByID(ctx, userID, deckID)
-	if err != nil {
-		return err
-	}
-	slot, ok := d.PendingSlot(pendingID)
-	if !ok {
-		return nil
-	}
-	d.setSlot(slot, &cardID, nil)
-	_, err = s.repo.Update(ctx, userID, d)
-	return err
-}
-
-func (s *Service) SetCardCommander(ctx context.Context, userID string, deckID string, slot CommanderSlot, cardID int) error {
-	return s.setCommander(ctx, userID, deckID, slot, &cardID, nil)
-}
-
-func (s *Service) SetPendingCommander(ctx context.Context, userID string, deckID string, slot CommanderSlot, pendingID int) error {
-	return s.setCommander(ctx, userID, deckID, slot, nil, &pendingID)
-}
-
-func (s *Service) setCommander(ctx context.Context, userID string, deckID string, slot CommanderSlot, cardID, pendingID *int) error {
-	d, err := s.repo.FindByID(ctx, userID, deckID)
-	if err != nil {
-		return err
-	}
-	d.setSlot(slot, cardID, pendingID)
-	if err := d.checkCommanders(); err != nil {
-		return err
-	}
-	_, err = s.repo.Update(ctx, userID, d)
-	return err
-}
-
 func (s *Service) DeleteDeck(ctx context.Context, userID string, id string) error {
 	return s.repo.Delete(ctx, userID, id)
 }
@@ -121,14 +86,4 @@ func (s *Service) RemoveCardFromDeck(ctx context.Context, userID string, deckID 
 		return err
 	}
 	return s.repo.UnlinkCardFromDeck(ctx, userID, deckID, cardID)
-}
-
-func (s *Service) ClearCommander(ctx context.Context, userID string, deckID string, slot CommanderSlot) error {
-	d, err := s.repo.FindByID(ctx, userID, deckID)
-	if err != nil {
-		return err
-	}
-	d.clearSlot(slot)
-	_, err = s.repo.Update(ctx, userID, d)
-	return err
 }

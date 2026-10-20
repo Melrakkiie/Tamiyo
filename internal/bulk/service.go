@@ -54,23 +54,16 @@ type deckService interface {
 	GetAllDecks(ctx context.Context, userID string, filter deck.Filter) ([]deck.Deck, int, error)
 	GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error)
 	GetDeckContent(ctx context.Context, userID string, deckID string) (deck.DeckContent, error)
+	GetVisibleDeck(ctx context.Context, userID string, id string) (deck.VisibleDeck, error)
 	GetSharedDeck(ctx context.Context, id string) (string, deck.Deck, error)
-	CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error)
 	CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error)
-	DeleteDeck(ctx context.Context, userID string, id string) error
+	DuplicateDeck(ctx context.Context, userID string, sourceID string, req deck.DuplicateRequest) (deck.DuplicateResult, error)
 	PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error
-	RemoveCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error
-	ClearCommander(ctx context.Context, userID string, deckID string, slot deck.CommanderSlot) error
 	GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error)
-	GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error)
-	RemovePendingCard(ctx context.Context, userID string, deckID string, id int) error
-	PromotePendingCommander(ctx context.Context, userID string, deckID string, pendingID, cardID int) error
-	AddPendingCard(ctx context.Context, userID string, deckID string, p deck.PendingCard) (deck.PendingCard, error)
-	SetPendingCommander(ctx context.Context, userID string, deckID string, slot deck.CommanderSlot, pendingID int) error
-	SetCardCommander(ctx context.Context, userID string, deckID string, slot deck.CommanderSlot, cardID int) error
-	SetPendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (deck.PendingCard, error)
+	PlaceCards(ctx context.Context, userID string, deckID string, plan deck.PlacementPlan) (deck.PlacementSummary, error)
+	CollectOwnDeck(ctx context.Context, userID string, deckID string, req deck.OwnDeckCollect) (deck.CollectSummary, error)
+	CollectSharedDeck(ctx context.Context, userID string, deckID string, req deck.SharedDeckCollect) (deck.CollectSummary, error)
 	GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error)
-	SetCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) (deck.TaggedCard, error)
 }
 
 type Service struct {
@@ -267,10 +260,6 @@ func (s *Service) exportedCards(ctx context.Context, userID string, storageID *i
 		return nil, fmt.Errorf("loading cards: %w", err)
 	}
 	return cards, nil
-}
-
-func (s *Service) loadAllCards(ctx context.Context, userID string) ([]card.Card, error) {
-	return s.loadCards(ctx, userID, nil)
 }
 
 func (s *Service) loadCards(ctx context.Context, userID string, storageID *int) ([]card.Card, error) {

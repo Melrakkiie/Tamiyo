@@ -1,29 +1,23 @@
 package bulk
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"Melrakkiie/Tamiyo/internal/apierr"
 	"Melrakkiie/Tamiyo/internal/auth"
-	"Melrakkiie/Tamiyo/internal/card"
 	"Melrakkiie/Tamiyo/internal/deck"
-	"Melrakkiie/Tamiyo/internal/storage"
 )
 
 const (
 	CollectAll     = "all"
 	CollectMissing = "missing"
 	CollectPending = "pending"
-
-	copySuffix = " (copie)"
 )
 
 var (
@@ -32,28 +26,12 @@ var (
 	ErrNoBoards           = errors.New("boards must list at least one of: main, sideboard, considering")
 )
 
-type visibleDeck struct {
-	ownerID string
-	deck    deck.Deck
-	mine    bool
-}
-
-func (s *Service) visibleDeck(ctx context.Context, userID string, deckID string) (visibleDeck, error) {
-	d, err := s.decks.GetDeck(ctx, userID, deckID)
-	if err == nil {
-		return visibleDeck{ownerID: userID, deck: d, mine: true}, nil
+func (s *Service) visibleDeck(ctx context.Context, userID string, deckID string) (deck.VisibleDeck, error) {
+	visible, err := s.decks.GetVisibleDeck(ctx, userID, deckID)
+	if errors.Is(err, deck.ErrNotFound) {
+		return deck.VisibleDeck{}, ErrDeckNotFound
 	}
-	if !errors.Is(err, deck.ErrNotFound) {
-		return visibleDeck{}, err
-	}
-	ownerID, shared, err := s.decks.GetSharedDeck(ctx, deckID)
-	if err != nil {
-		if errors.Is(err, deck.ErrNotFound) {
-			return visibleDeck{}, ErrDeckNotFound
-		}
-		return visibleDeck{}, err
-	}
-	return visibleDeck{ownerID: ownerID, deck: shared}, nil
+	return visible, err
 }
 
 type DuplicateRequest struct {
@@ -68,50 +46,22 @@ type DuplicateSummary struct {
 }
 
 func (s *Service) DuplicateDeck(ctx context.Context, userID string, deckID string, req DuplicateRequest) (DuplicateSummary, error) {
-	source, err := s.visibleDeck(ctx, userID, deckID)
-	if err != nil {
-		return DuplicateSummary{}, err
-	}
-
-	var file bytes.Buffer
-	lines, err := s.writeTamiyoDeck(ctx, source.ownerID, source.deck.ID, true, &file)
-	if err != nil {
-		return DuplicateSummary{}, err
-	}
-
-	name := strings.TrimSpace(req.Name)
-	if name == "" {
-		name = source.deck.Name + copySuffix
-	}
-	visibility := req.Visibility
-	if visibility == "" {
-		visibility = deck.VisibilityPrivate
-	}
-	created, err := s.decks.CreateDeck(ctx, userID, deck.Deck{
-		FolderID:             req.FolderID,
-		Name:                 name,
-		Format:               source.deck.Format,
-		Visibility:           visibility,
-		Bracket:              source.deck.Bracket,
-		BackgroundScryfallID: source.deck.BackgroundScryfallID,
+	result, err := s.decks.DuplicateDeck(ctx, userID, deckID, deck.DuplicateRequest{
+		Name: req.Name, FolderID: req.FolderID, Visibility: req.Visibility,
 	})
 	if err != nil {
-		return DuplicateSummary{}, fmt.Errorf("creating the copy: %w", err)
-	}
-
-	if lines == 0 {
-		return DuplicateSummary{DeckID: created.ID, Summary: Summary{DecksCreated: 1}}, nil
-	}
-
-	summary, err := s.ImportIntoDeck(ctx, userID, created.ID, DeckImportOptions{}, &file)
-	if err != nil {
-		if deleteErr := s.decks.DeleteDeck(ctx, userID, created.ID); deleteErr != nil {
-			return DuplicateSummary{}, errors.Join(err, fmt.Errorf("removing the unfinished copy: %w", deleteErr))
+		if errors.Is(err, deck.ErrNotFound) {
+			return DuplicateSummary{}, ErrDeckNotFound
 		}
 		return DuplicateSummary{}, err
 	}
-	summary.DecksCreated = 1
-	return DuplicateSummary{DeckID: created.ID, Summary: summary}, nil
+	summary := Summary{DecksCreated: 1}
+	summary.CardsLinked = result.Placement.CardsLinked
+	summary.CardsPending = result.Placement.CardsPending
+	for _, skipped := range result.Placement.SkippedTags {
+		summary.Warnings = append(summary.Warnings, fmt.Sprintf("could not tag %q: %v", skipped.CardName, skipped.Err))
+	}
+	return DuplicateSummary{DeckID: result.Deck.ID, Summary: summary}, nil
 }
 
 type CollectRequest struct {
@@ -134,11 +84,15 @@ func wantedBoards(boards []string) (map[string]bool, error) {
 	return wanted, nil
 }
 
-func boardOf(board string) string {
-	if board == "" {
-		return deck.BoardMain
+// boardList lists the wanted boards in display order.
+func boardList(wanted map[string]bool) []string {
+	var boards []string
+	for _, b := range []string{deck.BoardMain, deck.BoardSideboard, deck.BoardConsidering} {
+		if wanted[b] {
+			boards = append(boards, b)
+		}
 	}
-	return board
+	return boards
 }
 
 func (s *Service) entriesInBoards(ctx context.Context, ownerID string, deckID string, boards map[string]bool) ([]deck.DeckEntry, error) {
@@ -146,20 +100,7 @@ func (s *Service) entriesInBoards(ctx context.Context, ownerID string, deckID st
 	if err != nil {
 		return nil, fmt.Errorf("loading deck content: %w", err)
 	}
-	entries := make([]deck.DeckEntry, 0, len(content.Entries))
-	for _, e := range content.Entries {
-		if boards[boardOf(e.Board)] {
-			entries = append(entries, e)
-		}
-	}
-	return entries, nil
-}
-
-func entryCard(e deck.DeckEntry, storageID *int) card.Card {
-	return card.Card{
-		Name: e.Name, ScryfallID: e.ScryfallID, SetCode: e.SetCode, CollectorNumber: e.CollectorNumber, Foil: e.Foil, Proxy: e.Proxy,
-		StorageID: storageID, ManaValue: e.ManaValue, Colors: e.Colors, CardType: e.CardType, ColorIdentity: e.ColorIdentity,
-	}
+	return deck.EntriesInBoards(content.Entries, boardList(boards)), nil
 }
 
 func (s *Service) CollectDeck(ctx context.Context, userID string, deckID string, req CollectRequest) (Summary, error) {
@@ -174,94 +115,25 @@ func (s *Service) CollectDeck(ctx context.Context, userID string, deckID string,
 	if err != nil {
 		return Summary{}, err
 	}
-	if (req.Mode == CollectPending && !source.mine) || (req.Mode == CollectMissing && source.mine) {
+	if (req.Mode == CollectPending && !source.Mine) || (req.Mode == CollectMissing && source.Mine) {
 		return Summary{}, ErrCollectModeNotHere
 	}
-	if req.StorageID != nil {
-		if _, err := s.storages.GetStorage(ctx, userID, *req.StorageID); err != nil {
-			if errors.Is(err, storage.ErrNotFound) {
-				return Summary{}, ErrTargetStorageNotFound
-			}
-			return Summary{}, err
-		}
-	}
+	chosen := boardList(boards)
 
-	entries, err := s.entriesInBoards(ctx, source.ownerID, source.deck.ID, boards)
+	var result deck.CollectSummary
+	if source.Mine {
+		result, err = s.decks.CollectOwnDeck(ctx, userID, deckID, deck.OwnDeckCollect{
+			Boards: chosen, StorageID: req.StorageID, OwnedCopies: req.Mode == CollectAll,
+		})
+	} else {
+		result, err = s.decks.CollectSharedDeck(ctx, userID, deckID, deck.SharedDeckCollect{
+			Boards: chosen, StorageID: req.StorageID, MissingOnly: req.Mode == CollectMissing,
+		})
+	}
 	if err != nil {
 		return Summary{}, err
 	}
-
-	collected := make([]collectedEntry, len(entries))
-	for i, e := range entries {
-		collected[i] = collectedEntry{entry: e, copies: e.Quantity()}
-		if source.mine {
-			collected[i].copies = e.OwnedQuantity()
-		}
-	}
-	if req.Mode == CollectMissing {
-		if err = s.withoutOwnedCopies(ctx, userID, collected); err != nil {
-			return Summary{}, err
-		}
-	}
-
-	var summary Summary
-	if source.mine {
-		s.commitEntriesPending(ctx, userID, source.deck.ID, req.StorageID, entries, &summary)
-	}
-	if req.Mode == CollectPending {
-		return summary, nil
-	}
-	for _, c := range collected {
-		for range c.copies {
-			if _, err := s.cards.CreateCard(ctx, userID, entryCard(c.entry, req.StorageID)); err != nil {
-				summary.CardsSkipped++
-				summary.Warnings = append(summary.Warnings, fmt.Sprintf("could not create %q: %v", c.entry.Name, err))
-				continue
-			}
-			summary.CardsCreated++
-		}
-	}
-	return summary, nil
-}
-
-type collectedEntry struct {
-	entry  deck.DeckEntry
-	copies int
-}
-
-func (s *Service) commitEntriesPending(ctx context.Context, userID string, deckID string, storageID *int, entries []deck.DeckEntry, summary *Summary) {
-	for _, p := range deck.PendingTotals(entries) {
-		result, err := s.CommitPendingCards(ctx, userID, deckID, storageID, &p.ID, nil)
-		summary.CardsCreated += result.CardsCreated
-		summary.CardsLinked += result.CardsCreated
-		if err != nil {
-			summary.Warnings = append(summary.Warnings, fmt.Sprintf("%q: %v", p.Name, err))
-		}
-	}
-}
-
-func (s *Service) withoutOwnedCopies(ctx context.Context, userID string, collected []collectedEntry) error {
-	keys := make([]string, 0, len(collected))
-	seen := make(map[string]bool)
-	for _, c := range collected {
-		key := deck.CardNameKey(c.entry.Name)
-		if !seen[key] {
-			seen[key] = true
-			keys = append(keys, key)
-		}
-	}
-	owned, err := s.decks.CountCopiesByName(ctx, userID, keys)
-	if err != nil {
-		return fmt.Errorf("counting owned copies: %w", err)
-	}
-
-	for i := range collected {
-		key := deck.CardNameKey(collected[i].entry.Name)
-		covered := min(owned[key], collected[i].copies)
-		owned[key] -= covered
-		collected[i].copies -= covered
-	}
-	return nil
+	return Summary{CardsCreated: result.CardsCreated, CardsLinked: result.CardsLinked}, nil
 }
 
 func (h *Handler) duplicateDeck(ctx *gin.Context) {
@@ -299,7 +171,6 @@ func (h *Handler) duplicateDeck(ctx *gin.Context) {
 		apierr.Respond(ctx, err,
 			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: deck.ErrTargetFolderNotFound, Status: http.StatusBadRequest, Message: deck.ErrTargetFolderNotFound.Error()},
-			apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway},
 		)
 		return
 	}
@@ -336,7 +207,7 @@ func (h *Handler) collectDeck(ctx *gin.Context) {
 			apierr.Mapping{Err: ErrUnknownCollectMode, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrCollectModeNotHere, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrNoBoards, Status: http.StatusBadRequest},
-			apierr.Mapping{Err: ErrTargetStorageNotFound, Status: http.StatusBadRequest, Message: "storage_id does not reference an existing storage"},
+			apierr.Mapping{Err: deck.ErrTargetStorageNotFound, Status: http.StatusBadRequest, Message: "storage_id does not reference an existing storage"},
 		)
 		return
 	}

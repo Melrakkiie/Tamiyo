@@ -101,7 +101,7 @@ func (r *PostgresRepository) UpdateFolder(ctx context.Context, userID string, f 
 }
 
 func (r *PostgresRepository) DeleteFolder(ctx context.Context, userID string, id int) (err error) {
-	tx, err := r.db.BeginTxx(ctx, nil)
+	tx, err := r.pool.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
 	}

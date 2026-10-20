@@ -65,6 +65,39 @@ func (s *Service) AddPendingCard(ctx context.Context, userID string, deckID stri
 	return s.repo.CreatePendingCard(ctx, userID, p)
 }
 
+type pendingQuantityWriter interface {
+	UpdatePendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (PendingCard, error)
+	DeletePendingCard(ctx context.Context, userID string, deckID string, id int) error
+}
+
+// setPendingQuantity sets a pending card's quantity, and deletes the card
+// when none is left.
+func setPendingQuantity(ctx context.Context, store pendingQuantityWriter, userID string, deckID string, id int, quantity int) error {
+	if quantity <= 0 {
+		return store.DeletePendingCard(ctx, userID, deckID, id)
+	}
+	_, err := store.UpdatePendingQuantity(ctx, userID, deckID, id, quantity)
+	return err
+}
+
+type pendingWriter interface {
+	UpdatePendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (PendingCard, error)
+	CreatePendingCard(ctx context.Context, userID string, p PendingCard) (PendingCard, error)
+}
+
+// addPendingCard stores card as a pending card of the deck: added to a
+// matching pending card of existing, or created. A card about to take a
+// commander slot is always created, so that it stays a card of its own.
+func addPendingCard(ctx context.Context, store pendingWriter, userID string, d Deck, existing []PendingCard, card PendingCard, commander bool) (PendingCard, error) {
+	card.DeckID = d.ID
+	if !commander {
+		if e, ok := mergeTarget(d, existing, card, 0); ok {
+			return store.UpdatePendingQuantity(ctx, userID, d.ID, e.ID, e.Quantity+card.Quantity)
+		}
+	}
+	return store.CreatePendingCard(ctx, userID, card)
+}
+
 func mergeTarget(d Deck, existing []PendingCard, p PendingCard, skipID int) (PendingCard, bool) {
 	for _, e := range existing {
 		if e.ID == skipID || d.IsCommanderPending(e.ID) {
@@ -123,13 +156,6 @@ func findPending(pending []PendingCard, id int) (PendingCard, bool) {
 		}
 	}
 	return PendingCard{}, false
-}
-
-func (s *Service) SetPendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (PendingCard, error) {
-	if _, err := s.repo.FindByID(ctx, userID, deckID); err != nil {
-		return PendingCard{}, err
-	}
-	return s.repo.UpdatePendingQuantity(ctx, userID, deckID, id, quantity)
 }
 
 func (s *Service) RemovePendingCard(ctx context.Context, userID string, deckID string, id int) error {

@@ -119,6 +119,18 @@ func (f *fakeRepository) DeleteTag(ctx context.Context, userID string, deckID st
 	return nil
 }
 
+func (f *fakeRepository) Compose(ctx context.Context, userID string, deckID string, apply func(CompositionStore) error) error {
+	return errors.New("compositions are tested against Postgres")
+}
+
+func (f *fakeRepository) ComposeCollection(ctx context.Context, apply func(CompositionStore) error) error {
+	return errors.New("compositions are tested against Postgres")
+}
+
+func (f *fakeRepository) ComposeNewDeck(ctx context.Context, userID string, d Deck, apply func(CompositionStore, Deck) error) (Deck, error) {
+	return Deck{}, errors.New("compositions are tested against Postgres")
+}
+
 func (f *fakeRepository) FindPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error) {
 	f.lastUserID = userID
 	return f.pending, nil
@@ -652,28 +664,6 @@ func TestService_UpdateDeck_ClearCommanderClearsBoth(t *testing.T) {
 	assert.Nil(t, result.CommanderID)
 }
 
-func TestService_PromotePendingCommander(t *testing.T) {
-	pendingID := 7
-	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", CommanderPendingID: &pendingID}}
-	service := NewService(repo)
-
-	require.NoError(t, service.PromotePendingCommander(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 7, 42))
-
-	require.NotNil(t, repo.updatedDeck.CommanderID)
-	assert.Equal(t, 42, *repo.updatedDeck.CommanderID)
-	assert.Nil(t, repo.updatedDeck.CommanderPendingID)
-}
-
-func TestService_PromotePendingCommander_IgnoresOtherPendingCards(t *testing.T) {
-	pendingID := 7
-	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", CommanderPendingID: &pendingID}}
-	service := NewService(repo)
-
-	require.NoError(t, service.PromotePendingCommander(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", 8, 42))
-
-	assert.Zero(t, repo.updatedDeck.ID)
-}
-
 func TestService_GetSharedDeck_ReturnsOwnerAndDeck(t *testing.T) {
 	repo := &fakeRepository{sharedOwnerID: otherUserID, sharedDeck: Deck{ID: "00000000-0000-0000-0000-000000000004", Name: "Shared"}}
 	service := NewService(repo)
@@ -693,41 +683,6 @@ func TestService_GetSharedDeck_PropagatesNotFound(t *testing.T) {
 	_, _, err := service.GetSharedDeck(context.Background(), "abc")
 
 	assert.ErrorIs(t, err, ErrNotFound)
-}
-
-func TestService_SetPendingCommander_ReplacesTheCommander(t *testing.T) {
-	commanderID := 4
-	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", CommanderID: &commanderID}}
-	service := NewService(repo)
-
-	err := service.SetPendingCommander(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", SlotCommander, 7)
-
-	require.NoError(t, err)
-	assert.Nil(t, repo.updatedDeck.CommanderID)
-	require.NotNil(t, repo.updatedDeck.CommanderPendingID)
-	assert.Equal(t, 7, *repo.updatedDeck.CommanderPendingID)
-}
-
-func TestService_SetPendingCommander_ReturnsNotFoundForAnUnknownDeck(t *testing.T) {
-	repo := &fakeRepository{findByIDErr: ErrNotFound}
-	service := NewService(repo)
-
-	err := service.SetPendingCommander(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", SlotCommander, 7)
-
-	assert.ErrorIs(t, err, ErrNotFound)
-}
-
-func TestService_SetCardCommander_ReplacesAPendingCommander(t *testing.T) {
-	pendingID := 3
-	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", CommanderPendingID: &pendingID}}
-	service := NewService(repo)
-
-	err := service.SetCardCommander(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", SlotCommander, 12)
-
-	require.NoError(t, err)
-	assert.Nil(t, repo.updatedDeck.CommanderPendingID)
-	require.NotNil(t, repo.updatedDeck.CommanderID)
-	assert.Equal(t, 12, *repo.updatedDeck.CommanderID)
 }
 
 func TestService_AddPendingCard_MergesWithTheSamePrintingAndFinish(t *testing.T) {
@@ -871,27 +826,6 @@ func TestService_AddPendingCard_DoesNotMergeIntoThePendingCommander(t *testing.T
 	assert.Zero(t, repo.lastPendingQuantity)
 }
 
-func TestService_SetPendingQuantity_RequiresTheDeck(t *testing.T) {
-	repo := &fakeRepository{findByIDErr: ErrNotFound}
-	service := NewService(repo)
-
-	_, err := service.SetPendingQuantity(context.Background(), testUserID, "00000000-0000-0000-0000-000000000003", 4, 2)
-
-	assert.ErrorIs(t, err, ErrNotFound)
-	assert.Zero(t, repo.lastPendingQuantity)
-}
-
-func TestService_SetPendingQuantity_UpdatesTheItem(t *testing.T) {
-	repo := &fakeRepository{findByIDDeck: Deck{ID: "00000000-0000-0000-0000-000000000003"}}
-	service := NewService(repo)
-
-	updated, err := service.SetPendingQuantity(context.Background(), testUserID, "00000000-0000-0000-0000-000000000003", 4, 2)
-
-	require.NoError(t, err)
-	assert.Equal(t, 4, repo.lastPendingID)
-	assert.Equal(t, 2, updated.Quantity)
-}
-
 func (f *fakeRepository) FindPublic(ctx context.Context, filter PublicFilter) ([]PublicDeck, int, error) {
 	f.lastPublicFilter = filter
 	return f.publicDecks, len(f.publicDecks), nil
@@ -907,6 +841,10 @@ func TestService_BrowsePublicDecks_PassesTheFilter(t *testing.T) {
 	assert.Equal(t, 1, total)
 	assert.Equal(t, "Otters", decks[0].Name)
 	assert.Equal(t, "ott", repo.lastPublicFilter.Name)
+}
+
+func (f *fakeRepository) FindOwnedCopies(ctx context.Context, userID string, targetDeckID string, scryfallIDs []string, nameKeys []string) ([]OwnedCopy, error) {
+	return nil, nil
 }
 
 func (f *fakeRepository) CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error) {
@@ -1099,54 +1037,6 @@ func TestService_UpdateDeck_ClearsOnlyThePartner(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 4, *result.CommanderID)
 	assert.False(t, result.HasPartner())
-}
-
-func TestService_PromotePendingCommander_PromotesThePendingPartner(t *testing.T) {
-	commander, partner := 4, 7
-	repo := &fakeRepository{findByIDDeck: Deck{ID: partnerDeckID, CommanderID: &commander, PartnerPendingID: &partner}}
-	service := NewService(repo)
-
-	require.NoError(t, service.PromotePendingCommander(context.Background(), testUserID, partnerDeckID, 7, 42))
-
-	assert.Equal(t, 4, *repo.updatedDeck.CommanderID)
-	require.NotNil(t, repo.updatedDeck.PartnerID)
-	assert.Equal(t, 42, *repo.updatedDeck.PartnerID)
-	assert.Nil(t, repo.updatedDeck.PartnerPendingID)
-}
-
-func TestService_SetCardCommander_SetsThePartnerSlot(t *testing.T) {
-	commander := 4
-	repo := &fakeRepository{findByIDDeck: Deck{ID: partnerDeckID, CommanderID: &commander}}
-	service := NewService(repo)
-
-	require.NoError(t, service.SetCardCommander(context.Background(), testUserID, partnerDeckID, SlotPartner, 12))
-
-	assert.Equal(t, 4, *repo.updatedDeck.CommanderID)
-	require.NotNil(t, repo.updatedDeck.PartnerID)
-	assert.Equal(t, 12, *repo.updatedDeck.PartnerID)
-}
-
-func TestService_SetPendingCommander_RejectsAPartnerWithoutCommander(t *testing.T) {
-	repo := &fakeRepository{findByIDDeck: Deck{ID: partnerDeckID}}
-	service := NewService(repo)
-
-	err := service.SetPendingCommander(context.Background(), testUserID, partnerDeckID, SlotPartner, 7)
-
-	assert.ErrorIs(t, err, ErrPartnerWithoutCommander)
-}
-
-func TestService_ClearCommander_ClearsOneSlot(t *testing.T) {
-	commander, partner := 4, 9
-	repo := &fakeRepository{findByIDDeck: Deck{ID: partnerDeckID, CommanderID: &commander, PartnerID: &partner}}
-	service := NewService(repo)
-
-	require.NoError(t, service.ClearCommander(context.Background(), testUserID, partnerDeckID, SlotPartner))
-	assert.Equal(t, 4, *repo.updatedDeck.CommanderID)
-	assert.Nil(t, repo.updatedDeck.PartnerID)
-
-	require.NoError(t, service.ClearCommander(context.Background(), testUserID, partnerDeckID, SlotCommander))
-	assert.Equal(t, 9, *repo.updatedDeck.CommanderID)
-	assert.Nil(t, repo.updatedDeck.PartnerID)
 }
 
 func TestService_PartnerStaysInTheMainBoard(t *testing.T) {

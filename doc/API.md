@@ -926,7 +926,7 @@ Delete a deck and all of its card associations (`card_deck` rows are removed via
 
 ### `POST /deck/:id/duplicate`
 
-Copy a deck into your decks: one of yours, or someone else's `public` or `unlisted` deck. The copy is a new deck, **private** unless the body says otherwise, with the same `format` and `background_scryfall_id`. Its cards are added the way [`POST /deck/:id/import`](#post-deckidimport) adds a Tamiyo deck file, so the copy keeps boards, commander, proxies and tags: your owned copies of each printing go in it (your proxies for the source's proxies, your real copies for its real cards), missing ones become pending cards, pending proxies for the proxies.
+Copy a deck into your decks: one of yours, or someone else's `public` or `unlisted` deck. The copy is a new deck, **private** unless the body says otherwise, with the same `format` and `background_scryfall_id`. The copy keeps boards, commander, second commander, finishes, proxies and tags, and is read straight from the database: it never calls Scryfall, so it works when Scryfall is down. Your owned copies of each printing go in it (your proxies for the source's proxies, your real copies for its real cards), missing ones become pending cards, pending proxies for the proxies.
 
 Optional body:
 
@@ -945,9 +945,9 @@ Optional body:
 { "deck_id": "9b2f…", "summary": { "cards_created": 0, "cards_linked": 12, "cards_pending": 88, "cards_skipped": 0, "storages_created": 0, "decks_created": 1 } }
 ```
 
-If adding the cards fails (Scryfall unreachable, say), the copy is removed and the error returned.
+The copy and its cards are created in one transaction: if anything fails, no deck is created and the route returns the error alone.
 
-**Errors:** `400` invalid id, invalid body, unknown `visibility`, `folder_id` not a positive integer or not one of your folders · `404` unknown deck, or someone else's private deck · `502` Scryfall unavailable
+**Errors:** `400` invalid id, invalid body, unknown `visibility`, `folder_id` not a positive integer or not one of your folders · `404` unknown deck, or someone else's private deck
 
 ---
 
@@ -968,9 +968,9 @@ Add the cards of a deck to your collection, one card per copy, in the exact prin
 
 `boards` lists at least one of `main`, `sideboard`, `considering`.
 
-**Response `200 OK`** — the [import summary](#bulk-import): `cards_created`, and `cards_linked` for the pending cards also put in the deck. Cards are handled one by one: on a failure, those already added stay added, and a pending card that fails is reported in `warnings`.
+**Response `200 OK`** — the [import summary](#bulk-import): `cards_created`, and `cards_linked` for the pending cards also put in the deck. The whole operation is one transaction: every card is created, or none, and a failure leaves the deck, its pending cards and your collection as they were. The response has no `warnings`.
 
-**Errors:** `400` invalid id or body, unknown `mode` or board, `pending` on someone else's deck or `missing` on yours, unknown `storage_id` · `404` unknown deck, or someone else's private deck
+**Errors:** `400` invalid id or body, unknown `mode` or board, `pending` on someone else's deck or `missing` on yours, unknown `storage_id` · `404` unknown deck, or someone else's private deck · `500` a card could not be created, nothing was changed
 
 ---
 
@@ -1211,7 +1211,7 @@ Cards wanted in a deck but not in the collection yet (typically picked on Scryfa
 - `POST /deck/:id/pending` — add one. Body: `name`, `scryfall_id`, `set_code`, `collector_number` (required), `foil`, `proxy` (both `false` by default), `quantity` (1–100, default 1), `mana_value`, `colors`, `card_type`, `color_identity` (same rules as `POST /cards`), `board` (`main` by default, see [Boards](#boards)). Returns `201` with the item. If the deck already has a pending card of the same printing, finish, proxy state and board (other than its pending commanders), its quantity is raised instead and that item is returned.
 - `PATCH /deck/:id/pending/:pending_id` — change how many copies it stands for, its board, or both. Body: `{ "quantity": 12 }` (1–1000) and/or `{ "board": "considering" }`. Returns the item. Moved onto a board that already has a pending card of the same printing, finish and proxy state, the two are merged and the remaining item is returned. A pending commander can't leave `main` (`409`).
 - `DELETE /deck/:id/pending/:pending_id` — remove one. `204`, or `404` if it doesn't exist.
-- `POST /deck/:id/pending/commit` — create every pending card in the collection (one card per copy, in `storage_id` if given), put each in the deck on the board it was pending on, and clear the list. Pending cards on the `considering` board are left out, unless given as `pending_id`. Body optional: `{ "storage_id": 4 }`, plus `"pending_id": 12` to only add that one pending card (all its copies), and `"quantity": 5` with it to only add that many copies (the pending card keeps the rest). Returns `{ "cards_created": 7 }`. Items are handled one by one: on a failure, those already handled stay done and the rest stay pending.
+- `POST /deck/:id/pending/commit` — create every pending card in the collection (one card per copy, in `storage_id` if given), put each in the deck on the board it was pending on, and clear the list. Pending cards on the `considering` board are left out, unless given as `pending_id`. Body optional: `{ "storage_id": 4 }`, plus `"pending_id": 12` to only add that one pending card (all its copies), and `"quantity": 5` with it to only add that many copies (the pending card keeps the rest). A pending commander or second commander keeps its slot: its first new copy fills it. Returns `{ "cards_created": 7 }`. All or nothing: on a failure the route returns the error alone and nothing is created, put in the deck or taken off the pending list, so retrying never creates duplicates. The deck's `updated` date moves once per commit.
 - `POST /deck/:id/import` — add a list of cards to this deck, as `multipart/form-data` with the list in a `file` field and optional `commander_from_first_line` and `include_locked_storages` (both `false` by default). It never creates cards: owned copies go in the deck, missing ones become pending cards. Details, list format and response in [`POST /deck/:id/import`](#post-deckidimport) under Bulk Import.
 
 Each item has a `board` field, like the deck's own cards.
@@ -1631,6 +1631,8 @@ Each card goes on the [board](#boards) of the section it's listed under: `main` 
 
 `cards_created` and `decks_created` are always `0` for this route.
 
+The resolved lines are placed all at once, with the commanders and the tags: on a failure (a database error, the deck deleted meanwhile) nothing is placed, no copy is put in the deck, no pending card is added, no commander or tag is set, and the route returns the error alone, with no summary. Lines Scryfall can't resolve don't count as a failure: they are skipped and noted in `warnings`. The deck's `updated` date moves once per import.
+
 The lines under a `Commander` section header (the first two at most) are the deck's commanders, but only if the deck has none yet: the first becomes the commander, the second the second commander. When the list has no such section and `commander_from_first_line` is `true`, the first card line of `main` is treated as the commander. An owned commander becomes the deck's `commander_id` (`partner_id` for the second); one the collection lacks becomes its pending commander (`commander_pending_id`, `partner_pending_id`). A commander that can't be resolved on Scryfall is skipped (counted in `cards_skipped`, noted in `warnings`) and the rest of the list is still imported.
 
 **Form fields**
@@ -1657,7 +1659,8 @@ Replace a deck's content with a list: every card on the list ends up in the deck
 
 - Each line is matched against the deck's copies and pending cards on the same [board](#boards): a line with a printing matches that printing and finish, a plain line matches the card by name, any printing (foil only when the line says `*F*`). Lines with a printing are matched first.
 - Copies of the deck that no line matches leave it: owned copies stay in the collection, pending ones are dropped. Removing a commander clears it; when it was the commander, the second commander takes its place. Moving a card to another board is a removal plus an addition.
-- What the deck lacks is added as `POST /deck/:id/import` adds it: free owned copies first, pending cards for the rest. Nothing is removed when Scryfall can't resolve the cards to add.
+- What the deck lacks is added as `POST /deck/:id/import` adds it: free owned copies first, pending cards for the rest. The additions never set a commander. Nothing is removed when Scryfall can't resolve the cards to add.
+- The removals, the additions and the tag changes are applied in one transaction, and the deck's `updated` date is bumped once. On a failure the route returns the error alone, with no summary, and the deck, its pending cards, its commander slots and its tags stay as they were.
 - Each card on the list gets exactly the tags its lines give (`#tag`, as in the import), no tag clearing its tags.
 
 **Response `200 OK`** — the [import summary](#bulk-import), plus `cards_removed`, the copies that left the deck.
@@ -1670,7 +1673,7 @@ Switch cards of a deck to the other finish, without touching the collection. Bod
 
 Each listed copy or pending card that isn't already in that finish leaves the deck (an owned copy stays in the collection, as it is) and is replaced, on the same board, by copies of the same printing in that finish and with the same proxy state: your copies in no deck first, then ones another deck uses, and pending cards for whatever you don't own. Copies in a [storage locked](#storage) against the deck are never used. A pending card of 3 copies thus becomes the owned copies you have, plus a pending card for the rest. The commander stays the commander, owned when a copy was found.
 
-**Response `200 OK`** — the [import summary](#bulk-import): `cards_linked` copies found in the collection, `cards_pending` copies left pending, `cards_removed` copies that left the deck. Cards already in that finish are ignored.
+**Response `200 OK`** — the [import summary](#bulk-import): `cards_linked` copies found in the collection, `cards_pending` copies left pending, `cards_removed` copies that left the deck. Cards already in that finish are ignored. The change is applied in one transaction, and the deck's updated date is bumped once: on a failure the route returns the error, with no summary, and the deck, its pending cards and its commander slots stay as they were.
 
 **Errors:** `400` invalid id, `foil` missing, no id at all, or an id that isn't an owned copy or a pending card of this deck · `404` deck not found
 
@@ -1680,7 +1683,7 @@ Switch cards of a deck between a real card and a proxy, without touching the col
 
 It works like `switch-foil`: each listed copy or pending card that isn't already in that proxy state leaves the deck (an owned copy stays in the collection, as it is) and is replaced, on the same board, by copies of the same printing and finish with that proxy state: your copies in no deck first, then ones another deck uses, and pending cards (with that `proxy` flag) for whatever you don't own. Each card keeps its finish, so a foil card switched to proxy looks for a foil proxy. Copies in a [storage locked](#storage) against the deck are never used. The commander stays the commander, owned when a copy was found.
 
-**Response `200 OK`** — the [import summary](#bulk-import): `cards_linked` copies found in the collection, `cards_pending` copies left pending, `cards_removed` copies that left the deck. Cards already in that proxy state are ignored.
+**Response `200 OK`** — the [import summary](#bulk-import): `cards_linked` copies found in the collection, `cards_pending` copies left pending, `cards_removed` copies that left the deck. Cards already in that proxy state are ignored. The change is applied in one transaction, and the deck's updated date is bumped once: on a failure the route returns the error, with no summary, and the deck, its pending cards and its commander slots stay as they were.
 
 **Errors:** `400` invalid id, `proxy` missing, no id at all, or an id that isn't an owned copy or a pending card of this deck · `404` deck not found
 
@@ -1699,7 +1702,7 @@ Give each copy of a card in a deck its own printing and finish, without touching
 - The copies left over leave the deck: an owned copy stays in the collection, as it is; a pending card loses those copies (and goes away at 0).
 - The remaining printings are added as [`switch-foil`](#post-deckidswitch-foil) adds them, on the same board: your copies of that printing and finish in no deck first, then ones another deck uses, and pending cards for whatever you don't own. Copies in a [storage locked](#storage) against the deck are never used.
 
-**Response `200 OK`** — the [import summary](#bulk-import): `cards_linked` copies found in the collection, `cards_pending` copies left pending, `cards_removed` copies that left the deck. Asking for the printings the copies already have changes nothing.
+**Response `200 OK`** — the [import summary](#bulk-import): `cards_linked` copies found in the collection, `cards_pending` copies left pending, `cards_removed` copies that left the deck. Asking for the printings the copies already have changes nothing. The change is applied in one transaction, and the deck's updated date is bumped once: on a failure the route returns the error, with no summary, and the deck, its pending cards and its commander slots stay as they were.
 
 **Errors:** `400` invalid id, no id at all, no printing or one without `scryfall_id`, an id that isn't an owned copy or a pending card of this deck, copies of several cards or boards, the commander among them, or not one printing per copy · `404` deck not found
 

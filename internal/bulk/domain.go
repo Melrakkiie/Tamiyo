@@ -79,11 +79,6 @@ func resolveKeyByName(name string) string {
 	return "name:" + deck.CardNameKey(name)
 }
 
-func frontFaceName(name string) string {
-	front, _, _ := strings.Cut(strings.ReplaceAll(name, "//", "/"), "/")
-	return strings.TrimSpace(front)
-}
-
 func resolveKeyByID(scryfallID string) string {
 	return "id:" + strings.ToLower(scryfallID)
 }

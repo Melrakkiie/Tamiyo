@@ -2251,8 +2251,11 @@ paths:
         given as pending_id), in the given storage (or without storage),
         adds each one to the deck on the board it was pending on, and
         removes it from the pending list. Without pending_id, pending cards
-        on the considering board are left out. Items are handled one at a time: if something fails,
-        the items already handled stay done and the rest stay pending.
+        on the considering board are left out. A pending commander or second
+        commander keeps its slot: its first new copy fills it. All or
+        nothing: on a failure the error comes alone (no summary) and
+        nothing changed, so retrying never creates duplicates. The deck's
+        updated date moves once per commit.
       requestBody:
         required: false
         content:
@@ -2310,8 +2313,12 @@ paths:
         cards on the same board (by printing and finish, or by name for a
         line without printing); unmatched copies leave the deck (owned ones
         stay in the collection, a removed commander is cleared), and what
-        the deck lacks is added as POST /deck/{id}/import adds it. Each
-        listed card gets exactly the tags its lines give. Sending back the
+        the deck lacks is added as POST /deck/{id}/import adds it, all at
+        once and without setting a commander. Each listed card gets
+        exactly the tags its lines give. Removals, additions and tag changes
+        are applied in one transaction: when it fails, the error comes
+        alone, with no summary, and the deck, its pending cards, its
+        commander slots and its tags stay as they were. Sending back the
         moxfield export with tags=true changes nothing.
       requestBody:
         required: true
@@ -2364,6 +2371,8 @@ paths:
         finish and with the same proxy state: ones in no deck first, then ones
         another deck uses, and pending cards for the rest. The commander stays
         the commander. The collection itself is never modified.
+        The whole change is applied in one transaction; on a failure the route
+        returns the error with no summary and nothing changes.
       requestBody:
         required: true
         content:
@@ -2420,6 +2429,8 @@ paths:
         another deck uses, and pending cards (with that proxy flag) for the
         rest. The commander stays the commander. The collection itself is
         never modified.
+        The whole change is applied in one transaction; on a failure the route
+        returns the error with no summary and nothing changes.
       requestBody:
         required: true
         content:
@@ -2477,6 +2488,8 @@ paths:
         board: owned copies in no deck first, then ones another deck uses
         (never from a storage locked against the deck), and pending cards for
         the rest. The collection itself is never modified.
+        The whole change is applied in one transaction; on a failure the route
+        returns the error with no summary and nothing changes.
       requestBody:
         required: true
         content:
@@ -2567,6 +2580,10 @@ paths:
         A proxy entry only uses the collection's proxies and becomes a
         pending proxy for the rest; an entry without proxy, or false, only
         uses real copies.
+        The resolved lines, commanders and tags are placed all at once: on a
+        failure nothing is placed and the error comes alone, with no
+        summary. Unresolved lines are skipped and noted in warnings. The
+        deck's updated date moves once per import.
       requestBody:
         required: true
         content:
@@ -2627,11 +2644,11 @@ paths:
         after the body's name or "<name> (copie)" when it is absent or blank,
         in the body's folder_id or at the root, with the body's visibility or
         private. Its cards, boards,
-        commander, proxies and tags are added as POST /deck/{id}/import does
-        with a Tamiyo deck file: owned copies go in the copy (proxies for
-        proxies, real copies for real cards), missing ones become pending
-        cards, pending proxies for proxies. If adding the cards fails, the
-        copy is removed.
+        commander, second commander, finishes, proxies and tags are copied
+        from the database, with no Scryfall call: owned copies go in the copy
+        (proxies for proxies, real copies for real cards), missing ones become
+        pending cards, pending proxies for proxies. The deck and its cards are
+        created in one transaction: on a failure no deck is created.
       requestBody:
         required: false
         content:
@@ -2671,8 +2688,6 @@ paths:
                 $ref: "#/components/schemas/Error"
         "500":
           $ref: "#/components/responses/InternalError"
-        "502":
-          $ref: "#/components/responses/BadGateway"
 
   /deck/{id}/collect:
     parameters:
@@ -2691,8 +2706,9 @@ paths:
         stays out of any deck. On someone else's public or unlisted deck,
         "all" adds every copy and "missing" only the copies the user lacks,
         counted by card name whatever the printing, every copy of the
-        collection counting. Cards are handled one at a time: on a failure,
-        those already added stay added.
+        collection counting. Everything happens in one transaction: every
+        card is created, or none, and a failure leaves the deck, its pending
+        cards and the collection as they were. The summary has no warnings.
       requestBody:
         required: true
         content:
@@ -2716,7 +2732,7 @@ paths:
                   nullable: true
       responses:
         "200":
-          description: Cards added; cards_linked counts those also put in the deck.
+          description: All cards added; cards_linked counts those also put in the deck.
           content:
             application/json:
               schema:

@@ -75,33 +75,17 @@ type moxfieldDeckLine struct {
 	SetCode         string
 	CollectorNumber string
 	Foil            bool
-	Proxy           proxyMark
+	Proxy           deck.ProxyMatch
 	Board           string
 	Commander       bool
 	Tags            []string
 }
 
-type proxyMark int
-
-const (
-	proxyUnmarked proxyMark = iota
-	markedReal
-	markedProxy
-)
-
-func proxyMarkOf(proxy bool) proxyMark {
+func proxyMatch(proxy bool) deck.ProxyMatch {
 	if proxy {
-		return markedProxy
+		return deck.ProxyOnly
 	}
-	return markedReal
-}
-
-func (m proxyMark) isProxy() bool {
-	return m == markedProxy
-}
-
-func (m proxyMark) accepts(proxy bool) bool {
-	return m == proxyUnmarked || m.isProxy() == proxy
+	return deck.RealOnly
 }
 
 const maxCommanders = 2

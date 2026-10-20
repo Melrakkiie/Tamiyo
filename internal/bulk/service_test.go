@@ -151,59 +151,77 @@ func (f *fakeStorageService) CreateStorage(ctx context.Context, userID string, s
 	return s, nil
 }
 
+type duplication struct {
+	sourceID string
+	req      deck.DuplicateRequest
+}
+
 type fakeDeckService struct {
-	tags       deck.DeckTags
-	setTags    map[string][]string
-	setTagsErr error
+	tags deck.DeckTags
 
 	decks       []deck.Deck
 	nextID      int
 	created     []deck.Deck
 	linkedCards map[string][]int
-	linkErr     error
 
 	cardsByDeck   map[string][]deck.DeckCard
 	getDeckErr    error
 	createDeckErr error
 
+	duplicated      []duplication
+	duplicateResult deck.DuplicateResult
+	duplicateErr    error
+
 	pending        []deck.PendingCard
 	entries        map[string][]deck.DeckEntry
 	getContentErr  error
-	removedPending []int
-	promoted       map[int]int
+	ownCollects    []deck.OwnDeckCollect
+	sharedCollects []deck.SharedDeckCollect
+	collectResult  deck.CollectSummary
+	collectErr     error
 
-	addedPending       []deck.PendingCard
-	addPendingErr      error
-	pendingCommanderID int
-	cardCommanderID    int
-	pendingPartnerID   int
-	cardPartnerID      int
-	pendingQuantities  map[int]int
-	linkedBoards       map[int]string
+	linkedBoards map[int]string
 
-	owners      map[string]string
-	ownedCopies map[string]int
-	deleted     []string
+	owners map[string]string
 
-	unlinkedCards    []int
-	commanderCleared bool
-	clearedSlot      deck.CommanderSlot
+	placed       []placedPlan
+	placeSummary *deck.PlacementSummary
+	placeErr     error
 }
 
-func (f *fakeDeckService) RemoveCardFromDeck(ctx context.Context, userID string, deckID string, cardID int) error {
-	f.unlinkedCards = append(f.unlinkedCards, cardID)
-	return nil
+type placedPlan struct {
+	deckID string
+	plan   deck.PlacementPlan
 }
 
-func (f *fakeDeckService) ClearCommander(ctx context.Context, userID string, deckID string, slot deck.CommanderSlot) error {
-	f.commanderCleared = true
-	f.clearedSlot = slot
-	return nil
+// PlaceCards records the plan and, unless told otherwise, reports every card
+// as pending.
+func (f *fakeDeckService) PlaceCards(ctx context.Context, userID string, deckID string, plan deck.PlacementPlan) (deck.PlacementSummary, error) {
+	if f.placeErr != nil {
+		return deck.PlacementSummary{}, f.placeErr
+	}
+	f.placed = append(f.placed, placedPlan{deckID: deckID, plan: plan})
+	if f.placeSummary != nil {
+		return *f.placeSummary, nil
+	}
+	var summary deck.PlacementSummary
+	for _, line := range plan.Lines {
+		summary.CardsPending += line.Quantity
+	}
+	return summary, nil
 }
 
-func (f *fakeDeckService) DeleteDeck(ctx context.Context, userID string, id string) error {
-	f.deleted = append(f.deleted, id)
-	return nil
+// placedPlan returns the one plan placed into the deck.
+func (f *fakeDeckService) placedPlan(t *testing.T, deckID string) deck.PlacementPlan {
+	t.Helper()
+	require.Len(t, f.placed, 1)
+	require.Equal(t, deckID, f.placed[0].deckID)
+	return f.placed[0].plan
+}
+
+func (f *fakeDeckService) DuplicateDeck(ctx context.Context, userID string, sourceID string, req deck.DuplicateRequest) (deck.DuplicateResult, error) {
+	f.duplicated = append(f.duplicated, duplication{sourceID: sourceID, req: req})
+	return f.duplicateResult, f.duplicateErr
 }
 
 func (f *fakeDeckService) GetSharedDeck(ctx context.Context, id string) (string, deck.Deck, error) {
@@ -215,85 +233,33 @@ func (f *fakeDeckService) GetSharedDeck(ctx context.Context, id string) (string,
 	return "", deck.Deck{}, deck.ErrNotFound
 }
 
-func (f *fakeDeckService) CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error) {
-	counts := make(map[string]int, len(nameKeys))
-	for _, key := range nameKeys {
-		if n := f.ownedCopies[key]; n > 0 {
-			counts[key] = n
-		}
+func (f *fakeDeckService) GetVisibleDeck(ctx context.Context, userID string, id string) (deck.VisibleDeck, error) {
+	d, err := f.GetDeck(ctx, userID, id)
+	if err == nil {
+		return deck.VisibleDeck{OwnerID: userID, Deck: d, Mine: true}, nil
 	}
-	return counts, nil
-}
-
-func (f *fakeDeckService) SetPendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (deck.PendingCard, error) {
-	if f.pendingQuantities == nil {
-		f.pendingQuantities = map[int]int{}
+	if !errors.Is(err, deck.ErrNotFound) {
+		return deck.VisibleDeck{}, err
 	}
-	f.pendingQuantities[id] = quantity
-	return deck.PendingCard{ID: id, DeckID: deckID, Quantity: quantity}, nil
+	ownerID, shared, err := f.GetSharedDeck(ctx, id)
+	if err != nil {
+		return deck.VisibleDeck{}, err
+	}
+	return deck.VisibleDeck{OwnerID: ownerID, Deck: shared}, nil
 }
 
 func (f *fakeDeckService) GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error) {
 	return f.tags, nil
 }
 
-func (f *fakeDeckService) SetCardTags(ctx context.Context, userID string, deckID string, cardName string, tags []string) (deck.TaggedCard, error) {
-	if f.setTagsErr != nil {
-		return deck.TaggedCard{}, f.setTagsErr
-	}
-	if f.setTags == nil {
-		f.setTags = map[string][]string{}
-	}
-	f.setTags[cardName] = tags
-	return deck.TaggedCard{Name: cardName, Tags: tags}, nil
+func (f *fakeDeckService) CollectOwnDeck(ctx context.Context, userID string, deckID string, req deck.OwnDeckCollect) (deck.CollectSummary, error) {
+	f.ownCollects = append(f.ownCollects, req)
+	return f.collectResult, f.collectErr
 }
 
-func (f *fakeDeckService) SetCardCommander(ctx context.Context, userID string, deckID string, slot deck.CommanderSlot, cardID int) error {
-	if slot == deck.SlotPartner {
-		f.cardPartnerID = cardID
-		return nil
-	}
-	f.cardCommanderID = cardID
-	return nil
-}
-
-func (f *fakeDeckService) AddPendingCard(ctx context.Context, userID string, deckID string, p deck.PendingCard) (deck.PendingCard, error) {
-	if f.addPendingErr != nil {
-		return deck.PendingCard{}, f.addPendingErr
-	}
-	p.ID = len(f.addedPending) + 100
-	p.DeckID = deckID
-	f.addedPending = append(f.addedPending, p)
-	return p, nil
-}
-
-func (f *fakeDeckService) SetPendingCommander(ctx context.Context, userID string, deckID string, slot deck.CommanderSlot, pendingID int) error {
-	if slot == deck.SlotPartner {
-		f.pendingPartnerID = pendingID
-		return nil
-	}
-	f.pendingCommanderID = pendingID
-	return nil
-}
-
-func (f *fakeDeckService) PromotePendingCommander(ctx context.Context, userID string, deckID string, pendingID, cardID int) error {
-	if f.promoted == nil {
-		f.promoted = map[int]int{}
-	}
-	f.promoted[pendingID] = cardID
-	return nil
-}
-
-func (f *fakeDeckService) GetPendingCards(ctx context.Context, userID string, deckID string) ([]deck.PendingCard, error) {
-	if f.getDeckErr != nil {
-		return nil, f.getDeckErr
-	}
-	return f.pending, nil
-}
-
-func (f *fakeDeckService) RemovePendingCard(ctx context.Context, userID string, deckID string, id int) error {
-	f.removedPending = append(f.removedPending, id)
-	return nil
+func (f *fakeDeckService) CollectSharedDeck(ctx context.Context, userID string, deckID string, req deck.SharedDeckCollect) (deck.CollectSummary, error) {
+	f.sharedCollects = append(f.sharedCollects, req)
+	return f.collectResult, f.collectErr
 }
 
 func (f *fakeDeckService) GetAllDecks(ctx context.Context, userID string, filter deck.Filter) ([]deck.Deck, int, error) {
@@ -348,9 +314,6 @@ func (f *fakeDeckService) CreateDeck(ctx context.Context, userID string, d deck.
 }
 
 func (f *fakeDeckService) PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error {
-	if f.linkErr != nil {
-		return f.linkErr
-	}
 	if f.linkedCards == nil {
 		f.linkedCards = make(map[string][]int)
 	}
@@ -714,6 +677,28 @@ func importDeck(t *testing.T, cards *fakeCardService, decks *fakeDeckService, de
 	return summary
 }
 
+func TestImportIntoDeck_PlacesTheResolvedLinesAsOnePlan(t *testing.T) {
+	decks := &fakeDeckService{placeSummary: &deck.PlacementSummary{CardsLinked: 2, CardsPending: 1}}
+
+	summary := importDeck(t, &fakeCardService{}, decks, "1 Atraxa, Praetors' Voice (CMR) 1\n2 Sol Ring (SLD) 1011 *F*\n", true)
+
+	assert.Equal(t, deck.PlacementPlan{Lines: []deck.PlacementLine{
+		{
+			Printing:  deck.Printing{Name: "Atraxa, Praetors' Voice", ScryfallID: atraxaID, SetCode: "CMR", CollectorNumber: "1", ManaValue: 4, Colors: ptrString("WUBG"), CardType: ptrString("Creature"), ColorIdentity: ptrString("WUBG")},
+			Board:     deck.BoardMain,
+			Quantity:  1,
+			Commander: true,
+		},
+		{
+			Printing: deck.Printing{Name: "Sol Ring", ScryfallID: solRingID, SetCode: "SLD", CollectorNumber: "1011", ManaValue: 1, Colors: ptrString(""), CardType: ptrString("Artifact"), ColorIdentity: ptrString("")},
+			Foil:     true,
+			Board:    deck.BoardMain,
+			Quantity: 2,
+		},
+	}}, decks.placedPlan(t, targetDeckID))
+	assert.Equal(t, Summary{CardsLinked: 2, CardsPending: 1}, summary)
+}
+
 func TestImportIntoDeck_NeverCreatesCardsOrDecks(t *testing.T) {
 	cards := &fakeCardService{}
 	decks := &fakeDeckService{}
@@ -726,197 +711,84 @@ func TestImportIntoDeck_NeverCreatesCardsOrDecks(t *testing.T) {
 	assert.Equal(t, 0, summary.DecksCreated)
 }
 
-func TestImportIntoDeck_PutsOwnedCopiesInTheDeck(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{
-		{ID: 5, Name: "Atraxa, Praetors' Voice", ScryfallID: atraxaID},
-		{ID: 6, Name: "Sol Ring", ScryfallID: solRingID},
-		{ID: 7, Name: "Sol Ring", ScryfallID: solRingID},
-	}}
-	decks := &fakeDeckService{}
-
-	summary := importDeck(t, cards, decks, "1 Atraxa, Praetors' Voice (CMR) 1\n2 Sol Ring (SLD) 1011\n", true)
-
-	assert.Equal(t, 3, summary.CardsLinked)
-	assert.Equal(t, 0, summary.CardsPending)
-	assert.Equal(t, 5, decks.cardCommanderID)
-	assert.ElementsMatch(t, []int{5, 6, 7}, decks.linkedCards[targetDeckID])
-	assert.Empty(t, decks.addedPending)
+// placedLine is what a test checks of a placement line.
+type placedLine struct {
+	name        string
+	setCode     string
+	quantity    int
+	board       string
+	commander   bool
+	anyPrinting bool
+	foil        bool
+	proxy       deck.ProxyMatch
 }
 
-func TestImportIntoDeck_SkipsCopiesInStoragesClosedToTheDeck(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{
-		{ID: 6, Name: "Sol Ring", ScryfallID: solRingID, StorageID: ptr(1)},
-		{ID: 7, Name: "Sol Ring", ScryfallID: solRingID, StorageID: ptr(2)},
-		{ID: 8, Name: "Sol Ring", ScryfallID: solRingID, StorageID: ptr(3)},
-	}}
-	storages := &fakeStorageService{storages: []storage.Storage{
-		{ID: 1, Name: "Trades", Locked: true},
-		{ID: 2, Name: "Reserved", Locked: true, AllowedDeckIDs: []string{targetDeckID}},
-		{ID: 3, Name: "Binder", AllowedDeckIDs: []string{"00000000-0000-0000-0000-000000000099"}},
-	}}
-	decks := withTargetDeck(&fakeDeckService{})
-	svc := NewService(cards, storages, decks, deckImportResolver())
-
-	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader("3 Sol Ring (SLD) 1011\n"))
-
-	require.NoError(t, err)
-	assert.Equal(t, 2, summary.CardsLinked)
-	assert.Equal(t, 1, summary.CardsPending)
-	assert.ElementsMatch(t, []int{7, 8}, decks.linkedCards[targetDeckID])
+func placedLines(plan deck.PlacementPlan) []placedLine {
+	lines := make([]placedLine, 0, len(plan.Lines))
+	for _, l := range plan.Lines {
+		lines = append(lines, placedLine{l.Printing.Name, l.Printing.SetCode, l.Quantity, l.Board, l.Commander, l.AnyPrinting, l.Foil, l.Proxy})
+	}
+	return lines
 }
 
-func TestImportIntoDeck_IncludeLockedStoragesUsesOpenCopiesFirst(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{
-		{ID: 6, Name: "Sol Ring", ScryfallID: solRingID, StorageID: ptr(1)},
-		{ID: 7, Name: "Sol Ring", ScryfallID: solRingID, StorageID: ptr(2)},
-	}}
-	storages := &fakeStorageService{storages: []storage.Storage{
-		{ID: 1, Name: "Trades", Locked: true},
-		{ID: 2, Name: "Binder"},
-	}}
+func TestImportIntoDeck_UsesLockedStoragesOnlyWhenAsked(t *testing.T) {
+	for _, include := range []bool{false, true} {
+		decks := withTargetDeck(&fakeDeckService{})
+		svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, deckImportResolver())
 
-	decks := withTargetDeck(&fakeDeckService{})
-	svc := NewService(cards, storages, decks, deckImportResolver())
-	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{IncludeLockedStorages: true}, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
-	require.NoError(t, err)
-	assert.Equal(t, 1, summary.CardsLinked)
-	assert.Equal(t, []int{7}, decks.linkedCards[targetDeckID])
+		_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{IncludeLockedStorages: include}, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
 
-	decks = withTargetDeck(&fakeDeckService{})
-	svc = NewService(cards, storages, decks, deckImportResolver())
-	summary, err = svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{IncludeLockedStorages: true}, strings.NewReader("2 Sol Ring (SLD) 1011\n"))
-	require.NoError(t, err)
-	assert.Equal(t, 2, summary.CardsLinked)
-	assert.Equal(t, 0, summary.CardsPending)
-	assert.ElementsMatch(t, []int{6, 7}, decks.linkedCards[targetDeckID])
-}
-
-func TestImportIntoDeck_AddsMissingCopiesAsPending(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 6, Name: "Sol Ring", ScryfallID: solRingID}}}
-	decks := &fakeDeckService{}
-
-	summary := importDeck(t, cards, decks, "3 Sol Ring (SLD) 1011\n", false)
-
-	assert.Equal(t, 1, summary.CardsLinked)
-	assert.Equal(t, 2, summary.CardsPending)
-	assert.Equal(t, []int{6}, decks.linkedCards[targetDeckID])
-	require.Len(t, decks.addedPending, 1)
-	pending := decks.addedPending[0]
-	assert.Equal(t, targetDeckID, pending.DeckID)
-	assert.Equal(t, "Sol Ring", pending.Name)
-	assert.Equal(t, solRingID, pending.ScryfallID)
-	assert.Equal(t, "SLD", pending.SetCode)
-	assert.Equal(t, "1011", pending.CollectorNumber)
-	assert.Equal(t, 2, pending.Quantity)
-	assert.Equal(t, 1.0, pending.ManaValue)
-	require.NotNil(t, pending.CardType)
-	assert.Equal(t, "Artifact", *pending.CardType)
+		require.NoError(t, err)
+		assert.Equal(t, include, decks.placedPlan(t, targetDeckID).IncludeLockedStorages)
+	}
 }
 
 func TestImportIntoDeck_AddsMoxfieldTags(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 6, Name: "Sol Ring", ScryfallID: solRingID}}}
-	decks := &fakeDeckService{tags: deck.DeckTags{Cards: []deck.TaggedCard{{Name: "Sol Ring", Tags: []string{"Mana"}}}}}
+	decks := &fakeDeckService{}
 
-	importDeck(t, cards, decks, "1 Sol Ring (SLD) 1011 #ramp #mana\nSideboard\n2 Sol Ring (SLD) 1011 #artifact\n1 Atraxa, Praetors' Voice (CMR) 1\n", false)
+	importDeck(t, &fakeCardService{}, decks, "1 Sol Ring (SLD) 1011 #ramp #mana\nSideboard\n2 Sol Ring (SLD) 1011 #artifact #Ramp\n1 Atraxa, Praetors' Voice (CMR) 1\n", false)
 
-	assert.Equal(t, map[string][]string{"Sol Ring": {"Mana", "ramp", "artifact"}}, decks.setTags)
+	assert.Equal(t, []deck.TaggedCard{{Name: "Sol Ring", Tags: []string{"ramp", "mana", "artifact"}}}, decks.placedPlan(t, targetDeckID).Tags)
+}
+
+func TestImportIntoDeck_ReportsTagsTheDeckCouldNotApply(t *testing.T) {
+	decks := &fakeDeckService{placeSummary: &deck.PlacementSummary{CardsPending: 1, SkippedTags: []deck.SkippedTags{{CardName: "Sol Ring", Err: deck.ErrInvalidTag}}}}
+
+	summary := importDeck(t, &fakeCardService{}, decks, "1 Sol Ring (SLD) 1011 #ramp\n", false)
+
+	require.Len(t, summary.Warnings, 1)
+	assert.Contains(t, summary.Warnings[0], `could not tag "Sol Ring"`)
+	assert.Equal(t, 1, summary.CardsPending)
 }
 
 func TestImportIntoDeck_StoresAndTagsTheEnglishScryfallName(t *testing.T) {
-	cards := &fakeCardService{}
 	decks := &fakeDeckService{}
 
-	importDeck(t, cards, decks, "2 Anneau solaire (SLD) 1011 #ramp\n", false)
+	importDeck(t, &fakeCardService{}, decks, "2 Anneau solaire (SLD) 1011 #ramp\n", false)
 
-	require.Len(t, decks.addedPending, 1)
-	assert.Equal(t, "Sol Ring", decks.addedPending[0].Name)
-	assert.Equal(t, map[string][]string{"Sol Ring": {"ramp"}}, decks.setTags)
+	plan := decks.placedPlan(t, targetDeckID)
+	assert.Equal(t, []placedLine{{name: "Sol Ring", setCode: "SLD", quantity: 2, board: deck.BoardMain}}, placedLines(plan))
+	assert.Equal(t, []deck.TaggedCard{{Name: "Sol Ring", Tags: []string{"ramp"}}}, plan.Tags)
 }
 
-func TestImportIntoDeck_OnlyUsesTheExactPrinting(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 6, Name: "Sol Ring", ScryfallID: "33333333-0000-0000-0000-000000000000"}}}
+func TestImportIntoDeck_MarksNoCommanderWithoutTheFlag(t *testing.T) {
 	decks := &fakeDeckService{}
 
-	summary := importDeck(t, cards, decks, "1 Sol Ring (SLD) 1011\n", false)
+	importDeck(t, &fakeCardService{}, decks, "1 Atraxa, Praetors' Voice (CMR) 1\n", false)
 
-	assert.Equal(t, 0, summary.CardsLinked)
-	assert.Equal(t, 1, summary.CardsPending)
-	assert.Empty(t, decks.linkedCards[targetDeckID])
-}
-
-func TestImportIntoDeck_PrefersCopiesInNoDeckThenTheSameFinish(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{
-		{ID: 1, Name: "Sol Ring", ScryfallID: solRingID, Foil: false},
-		{ID: 2, Name: "Sol Ring", ScryfallID: solRingID, Foil: true},
-		{ID: 3, Name: "Sol Ring", ScryfallID: solRingID, Foil: true},
-	}}
-	decks := &fakeDeckService{
-		decks:       []deck.Deck{{ID: "00000000-0000-0000-0000-000000000099", Name: "Other"}},
-		cardsByDeck: map[string][]deck.DeckCard{"00000000-0000-0000-0000-000000000099": {{ID: 2}}},
-	}
-
-	importDeck(t, cards, decks, "2 Sol Ring (SLD) 1011 *F*\n", false)
-
-	assert.Equal(t, []int{3, 1}, decks.linkedCards[targetDeckID])
-}
-
-func TestImportIntoDeck_ReusesACopyAlreadyInAnotherDeck(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 2, Name: "Sol Ring", ScryfallID: solRingID}}}
-	decks := &fakeDeckService{
-		decks:       []deck.Deck{{ID: "00000000-0000-0000-0000-000000000099", Name: "Other"}},
-		cardsByDeck: map[string][]deck.DeckCard{"00000000-0000-0000-0000-000000000099": {{ID: 2}}},
-	}
-
-	summary := importDeck(t, cards, decks, "1 Sol Ring (SLD) 1011\n", false)
-
-	assert.Equal(t, 1, summary.CardsLinked)
-	assert.Equal(t, []int{2}, decks.linkedCards[targetDeckID])
-}
-
-func TestImportIntoDeck_UsesEachOwnedCopyOnce(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 6, Name: "Sol Ring", ScryfallID: solRingID}}}
-	decks := &fakeDeckService{}
-
-	summary := importDeck(t, cards, decks, "1 Sol Ring (SLD) 1011\n1 Sol Ring (SLD) 1011\n", false)
-
-	assert.Equal(t, 1, summary.CardsLinked)
-	assert.Equal(t, 1, summary.CardsPending)
-}
-
-func TestImportIntoDeck_MakesAPendingCommanderWhenItIsNotOwned(t *testing.T) {
-	cards := &fakeCardService{}
-	decks := &fakeDeckService{}
-
-	summary := importDeck(t, cards, decks, "1 Atraxa, Praetors' Voice (CMR) 1\n1 Sol Ring (SLD) 1011\n", true)
-
-	assert.Equal(t, 2, summary.CardsPending)
-	assert.Zero(t, decks.cardCommanderID)
-	require.Len(t, decks.addedPending, 2)
-	assert.Equal(t, "Atraxa, Praetors' Voice", decks.addedPending[0].Name)
-	assert.Equal(t, decks.addedPending[0].ID, decks.pendingCommanderID)
-}
-
-func TestImportIntoDeck_WithoutCommanderFlag(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 5, Name: "Atraxa, Praetors' Voice", ScryfallID: atraxaID}}}
-	decks := &fakeDeckService{}
-
-	importDeck(t, cards, decks, "1 Atraxa, Praetors' Voice (CMR) 1\n", false)
-
-	assert.Zero(t, decks.cardCommanderID)
-	assert.Zero(t, decks.pendingCommanderID)
+	assert.False(t, decks.placedPlan(t, targetDeckID).Lines[0].Commander)
 }
 
 func TestImportIntoDeck_UnresolvedLinesAreSkippedButTheRestIsImported(t *testing.T) {
-	cards := &fakeCardService{}
 	decks := &fakeDeckService{}
 
-	summary := importDeck(t, cards, decks, "1 Mystery Commander (XXX) 999\n1 Sol Ring (SLD) 1011\n", true)
+	summary := importDeck(t, &fakeCardService{}, decks, "1 Mystery Commander (XXX) 999\n1 Sol Ring (SLD) 1011\n", true)
 
 	assert.Equal(t, 1, summary.CardsSkipped)
 	assert.Equal(t, 1, summary.CardsPending)
-	assert.Zero(t, decks.cardCommanderID)
-	assert.Zero(t, decks.pendingCommanderID)
-	assert.NotEmpty(t, summary.Warnings)
+	require.Len(t, summary.Warnings, 1)
+	assert.Contains(t, summary.Warnings[0], `commander "Mystery Commander"`)
+	assert.Equal(t, []placedLine{{name: "Sol Ring", setCode: "SLD", quantity: 1, board: deck.BoardMain}}, placedLines(decks.placedPlan(t, targetDeckID)))
 }
 
 func plainListResolver() *fakeResolver {
@@ -926,114 +798,35 @@ func plainListResolver() *fakeResolver {
 	}}
 }
 
-func importPlainList(t *testing.T, cards *fakeCardService, decks *fakeDeckService, decklist string) Summary {
+func importPlainList(t *testing.T, decks *fakeDeckService, decklist string) Summary {
 	t.Helper()
-	svc := NewService(cards, &fakeStorageService{}, withTargetDeck(decks), plainListResolver())
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, withTargetDeck(decks), plainListResolver())
 	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader(decklist))
 	require.NoError(t, err)
 	return summary
 }
 
-func TestImportIntoDeck_PlainListUsesAnyOwnedPrinting(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{
-		{ID: 6, Name: "Sol Ring", ScryfallID: "33333333-0000-0000-0000-000000000000"},
-		{ID: 7, Name: "Sol Ring", ScryfallID: solRingID},
-	}}
+func TestImportIntoDeck_PlainListAcceptsAnyPrintingAndAddsTheScryfallOneAsPending(t *testing.T) {
 	decks := &fakeDeckService{}
 
-	summary := importPlainList(t, cards, decks, "3 Sol Ring\n")
+	importPlainList(t, decks, "3 Sol Ring\n2 Fire / Ice\n")
 
-	assert.Equal(t, 2, summary.CardsLinked)
-	assert.Equal(t, 1, summary.CardsPending)
-	assert.ElementsMatch(t, []int{6, 7}, decks.linkedCards[targetDeckID])
-}
-
-func TestImportIntoDeck_PlainListAddsTheScryfallPrintingAsPending(t *testing.T) {
-	decks := &fakeDeckService{}
-
-	summary := importPlainList(t, &fakeCardService{}, decks, "1 Sol Ring\n")
-
-	assert.Equal(t, 1, summary.CardsPending)
-	require.Len(t, decks.addedPending, 1)
-	pending := decks.addedPending[0]
-	assert.Equal(t, "Sol Ring", pending.Name)
-	assert.Equal(t, solRingID, pending.ScryfallID)
-	assert.Equal(t, "cmm", pending.SetCode)
-	assert.Equal(t, "464", pending.CollectorNumber)
-	assert.Equal(t, 1.0, pending.ManaValue)
-}
-
-func TestImportIntoDeck_PlainListMatchesSplitCardsWithEitherSeparator(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 8, Name: "Fire // Ice", ScryfallID: "55555555-0000-0000-0000-000000000000"}}}
-	decks := &fakeDeckService{}
-
-	summary := importPlainList(t, cards, decks, "2 Fire / Ice\n")
-
-	assert.Equal(t, 1, summary.CardsLinked)
-	assert.Equal(t, 1, summary.CardsPending)
-	assert.Equal(t, "Fire // Ice", decks.addedPending[0].Name)
+	plan := decks.placedPlan(t, targetDeckID)
+	assert.Equal(t, []placedLine{
+		{name: "Sol Ring", setCode: "cmm", quantity: 3, board: deck.BoardMain, anyPrinting: true},
+		{name: "Fire // Ice", setCode: "mh2", quantity: 2, board: deck.BoardMain, anyPrinting: true},
+	}, placedLines(plan))
+	assert.Equal(t, solRingID, plan.Lines[0].Printing.ScryfallID)
+	assert.Equal(t, "464", plan.Lines[0].Printing.CollectorNumber)
 }
 
 func TestImportIntoDeck_PlainListWarnsAboutUnknownNames(t *testing.T) {
-	summary := importPlainList(t, &fakeCardService{}, &fakeDeckService{}, "1 Not A Real Card\n1 Sol Ring\n")
+	summary := importPlainList(t, &fakeDeckService{}, "1 Not A Real Card\n1 Sol Ring\n")
 
 	assert.Equal(t, 1, summary.CardsSkipped)
 	assert.Equal(t, 1, summary.CardsPending)
 	require.Len(t, summary.Warnings, 1)
 	assert.Contains(t, summary.Warnings[0], "Not A Real Card")
-}
-
-func importIntoDeck(t *testing.T, cards *fakeCardService, decks *fakeDeckService, decklist string, commanderFromFirstLine bool) Summary {
-	t.Helper()
-	svc := NewService(cards, &fakeStorageService{}, decks, deckImportResolver())
-	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{CommanderFromFirstLine: commanderFromFirstLine}, strings.NewReader(decklist))
-	require.NoError(t, err)
-	return summary
-}
-
-func TestImportIntoDeck_AddsCardsToTheExistingDeck(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 6, Name: "Sol Ring", ScryfallID: solRingID}}}
-	decks := &fakeDeckService{decks: []deck.Deck{{ID: targetDeckID, Name: "Target"}}}
-
-	summary := importIntoDeck(t, cards, decks, "2 Sol Ring (SLD) 1011\n", false)
-
-	assert.Empty(t, decks.created)
-	assert.Equal(t, 0, summary.DecksCreated)
-	assert.Equal(t, 1, summary.CardsLinked)
-	assert.Equal(t, 1, summary.CardsPending)
-	assert.Equal(t, []int{6}, decks.linkedCards[targetDeckID])
-	assert.Equal(t, targetDeckID, decks.addedPending[0].DeckID)
-}
-
-func TestImportIntoDeck_DoesNotReuseCopiesAlreadyInTheDeck(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{
-		{ID: 6, Name: "Sol Ring", ScryfallID: solRingID},
-		{ID: 7, Name: "Sol Ring", ScryfallID: solRingID},
-	}}
-	decks := &fakeDeckService{
-		decks:       []deck.Deck{{ID: targetDeckID, Name: "Target"}},
-		cardsByDeck: map[string][]deck.DeckCard{targetDeckID: {{ID: 6}}},
-	}
-
-	summary := importIntoDeck(t, cards, decks, "2 Sol Ring (SLD) 1011\n", false)
-
-	assert.Equal(t, 1, summary.CardsLinked)
-	assert.Equal(t, 1, summary.CardsPending)
-	assert.Equal(t, []int{7}, decks.linkedCards[targetDeckID])
-}
-
-func TestImportIntoDeck_SetsTheCommanderOnlyWhenTheDeckHasNone(t *testing.T) {
-	owned := []card.Card{{ID: 5, Name: "Atraxa, Praetors' Voice", ScryfallID: atraxaID}}
-
-	decks := &fakeDeckService{decks: []deck.Deck{{ID: targetDeckID, Name: "Target"}}}
-	importIntoDeck(t, &fakeCardService{allCards: owned}, decks, "1 Atraxa, Praetors' Voice (CMR) 1\n", true)
-	assert.Equal(t, 5, decks.cardCommanderID)
-
-	commanderID := 9
-	decks = &fakeDeckService{decks: []deck.Deck{{ID: targetDeckID, Name: "Target", CommanderID: &commanderID}}}
-	importIntoDeck(t, &fakeCardService{allCards: owned}, decks, "1 Atraxa, Praetors' Voice (CMR) 1\n", true)
-	assert.Zero(t, decks.cardCommanderID)
-	assert.Equal(t, []int{5}, decks.linkedCards[targetDeckID])
 }
 
 func TestImportIntoDeck_ReturnsDeckNotFound(t *testing.T) {
@@ -1046,39 +839,31 @@ func TestImportIntoDeck_ReturnsDeckNotFound(t *testing.T) {
 
 func TestImportIntoDeck_ReturnsErrorWhenScryfallResolveFails(t *testing.T) {
 	resolver := &fakeResolver{err: errors.New("scryfall is down")}
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, withTargetDeck(&fakeDeckService{}), resolver)
+	decks := withTargetDeck(&fakeDeckService{})
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, resolver)
 
 	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
 
 	assert.ErrorIs(t, err, ErrScryfallUnavailable)
+	assert.Empty(t, decks.placed)
 }
 
-func TestImportIntoDeck_ReturnsErrorWhenTheCollectionCannotBeLoaded(t *testing.T) {
-	svc := NewService(&fakeCardService{getAllErr: errors.New("db is down")}, &fakeStorageService{}, withTargetDeck(&fakeDeckService{}), deckImportResolver())
+func TestImportIntoDeck_ReturnsThePlacementErrorWithoutAPartialSummary(t *testing.T) {
+	placeErr := errors.New("insert failed")
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, withTargetDeck(&fakeDeckService{placeErr: placeErr}), deckImportResolver())
+
+	summary, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader("1 Mystery (XXX) 1\n1 Sol Ring (SLD) 1011\n"))
+
+	assert.ErrorIs(t, err, placeErr)
+	assert.Equal(t, Summary{}, summary)
+}
+
+func TestImportIntoDeck_ReturnsDeckNotFoundWhenTheDeckGoesAwayWhilePlacing(t *testing.T) {
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, withTargetDeck(&fakeDeckService{placeErr: deck.ErrNotFound}), deckImportResolver())
 
 	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
 
-	require.Error(t, err)
-}
-
-func TestImportIntoDeck_WarnsWhenPuttingACopyInTheDeckFails(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 6, Name: "Sol Ring", ScryfallID: solRingID}}}
-	decks := &fakeDeckService{linkErr: errors.New("link failed")}
-
-	summary := importDeck(t, cards, decks, "1 Sol Ring (SLD) 1011\n", false)
-
-	assert.Equal(t, 0, summary.CardsLinked)
-	assert.NotEmpty(t, summary.Warnings)
-}
-
-func TestImportIntoDeck_WarnsWhenAddingAPendingCardFails(t *testing.T) {
-	decks := &fakeDeckService{addPendingErr: errors.New("insert failed")}
-
-	summary := importDeck(t, &fakeCardService{}, decks, "1 Sol Ring (SLD) 1011\n", false)
-
-	assert.Equal(t, 0, summary.CardsPending)
-	assert.Equal(t, 1, summary.CardsSkipped)
-	assert.NotEmpty(t, summary.Warnings)
+	assert.ErrorIs(t, err, ErrDeckNotFound)
 }
 
 func TestImportManaBox_StoresColorsAndTypeFromScryfall(t *testing.T) {
@@ -1186,194 +971,14 @@ func TestRefreshCardDetails_ReturnsScryfallUnavailable(t *testing.T) {
 	assert.ErrorIs(t, err, ErrScryfallUnavailable)
 }
 
-func TestCommitPendingCards_CreatesEachCopyAndPutsItInTheDeck(t *testing.T) {
-	colors := "R"
-	cards := &fakeCardService{}
-	decks := &fakeDeckService{pending: []deck.PendingCard{
-		{ID: 1, Name: "Lightning Bolt", ScryfallID: "aaaaaaaa-0000-0000-0000-000000000000", SetCode: "2xm", CollectorNumber: "129", Quantity: 2, ManaValue: 1, Colors: &colors},
-		{ID: 2, Name: "Sol Ring", ScryfallID: "bbbbbbbb-0000-0000-0000-000000000000", SetCode: "c21", CollectorNumber: "263", Quantity: 1, Foil: true, Proxy: true},
-	}}
-	storages := &fakeStorageService{storages: []storage.Storage{{ID: 4, Name: "Binder"}}}
-	svc := NewService(cards, storages, decks, &fakeResolver{})
-	storageID := 4
-
-	summary, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", &storageID, nil, nil)
-
-	require.NoError(t, err)
-	assert.Equal(t, 3, summary.CardsCreated)
-	require.Len(t, cards.created, 3)
-	assert.Equal(t, "Lightning Bolt", cards.created[0].Name)
-	require.NotNil(t, cards.created[0].Colors)
-	assert.Equal(t, "R", *cards.created[0].Colors)
-	require.NotNil(t, cards.created[0].StorageID)
-	assert.Equal(t, 4, *cards.created[0].StorageID)
-	assert.False(t, cards.created[0].Proxy)
-	assert.True(t, cards.created[2].Foil)
-	assert.True(t, cards.created[2].Proxy, "a pending proxy becomes a proxy card")
-	assert.Len(t, decks.linkedCards["00000000-0000-0000-0000-000000000009"], 3)
-	assert.Equal(t, []int{1, 2}, decks.removedPending)
-}
-
-func TestCommitPendingCards_RejectsAnUnknownStorage(t *testing.T) {
-	cards := &fakeCardService{}
-	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 1, Name: "Sol Ring", Quantity: 1}}}
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
-	storageID := 42
-
-	_, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", &storageID, nil, nil)
-
-	assert.ErrorIs(t, err, ErrTargetStorageNotFound)
-	assert.Empty(t, cards.created)
-	assert.Empty(t, decks.removedPending)
-}
-
-func TestCommitPendingCards_ReturnsDeckNotFound(t *testing.T) {
-	decks := &fakeDeckService{getDeckErr: deck.ErrNotFound}
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
-
-	_, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, nil, nil)
-
-	assert.ErrorIs(t, err, ErrDeckNotFound)
-}
-
-func TestCommitPendingCards_KeepsTheItemWhenCreationFails(t *testing.T) {
-	cards := &fakeCardService{createErr: errors.New("database down")}
-	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 1, Name: "Sol Ring", Quantity: 1}}}
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
-
-	_, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, nil, nil)
-
-	assert.Error(t, err)
-	assert.Empty(t, decks.removedPending)
-}
-
-func TestCommitPendingCards_CanCommitASingleCard(t *testing.T) {
-	cards := &fakeCardService{}
-	decks := &fakeDeckService{pending: []deck.PendingCard{
-		{ID: 1, Name: "Lightning Bolt", Quantity: 1},
-		{ID: 2, Name: "Sol Ring", Quantity: 2},
-	}}
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
-	pendingID := 2
-
-	summary, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, &pendingID, nil)
-
-	require.NoError(t, err)
-	assert.Equal(t, 2, summary.CardsCreated)
-	require.Len(t, cards.created, 2)
-	assert.Equal(t, "Sol Ring", cards.created[0].Name)
-	assert.Equal(t, []int{2}, decks.removedPending)
-}
-
-func TestCommitPendingCards_CanCommitPartOfAPendingCard(t *testing.T) {
-	cards := &fakeCardService{}
-	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 2, Name: "Island", Quantity: 34}}}
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
-	pendingID, quantity := 2, 10
-
-	summary, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, &pendingID, &quantity)
-
-	require.NoError(t, err)
-	assert.Equal(t, 10, summary.CardsCreated)
-	assert.Len(t, decks.linkedCards["00000000-0000-0000-0000-000000000009"], 10)
-	assert.Equal(t, map[int]int{2: 24}, decks.pendingQuantities)
-	assert.Empty(t, decks.removedPending)
-}
-
-func TestCommitPendingCards_ClampsTheQuantityToThePendingCard(t *testing.T) {
-	cards := &fakeCardService{}
-	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 2, Name: "Island", Quantity: 3}}}
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
-	pendingID, quantity := 2, 10
-
-	summary, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, &pendingID, &quantity)
-
-	require.NoError(t, err)
-	assert.Equal(t, 3, summary.CardsCreated)
-	assert.Equal(t, []int{2}, decks.removedPending)
-	assert.Empty(t, decks.pendingQuantities)
-}
-
-func TestCommitPendingCards_ReturnsNotFoundForAnUnknownPendingCard(t *testing.T) {
-	cards := &fakeCardService{}
-	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 1, Name: "Lightning Bolt", Quantity: 1}}}
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
-	pendingID := 42
-
-	_, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, &pendingID, nil)
-
-	assert.ErrorIs(t, err, deck.ErrPendingCardNotFound)
-	assert.Empty(t, cards.created)
-}
-
-func TestCommitPendingCards_OffersEachItemAsCommanderOnce(t *testing.T) {
-	cards := &fakeCardService{}
-	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 3, Name: "Atraxa", Quantity: 2}}}
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
-
-	_, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, nil, nil)
-
-	require.NoError(t, err)
-	require.Len(t, cards.created, 2)
-	assert.Equal(t, map[int]int{3: cards.created[0].ID}, decks.promoted)
-}
-
-func TestCommitPendingCards_CommitAllSkipsConsideringCardsAndKeepsTheBoard(t *testing.T) {
-	cards := &fakeCardService{}
-	decks := &fakeDeckService{pending: []deck.PendingCard{
-		{ID: 1, Name: "Duress", Quantity: 1, Board: deck.BoardSideboard},
-		{ID: 2, Name: "Opt", Quantity: 1, Board: deck.BoardConsidering},
-	}}
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
-
-	summary, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, nil, nil)
-
-	require.NoError(t, err)
-	assert.Equal(t, 1, summary.CardsCreated)
-	require.Len(t, cards.created, 1)
-	assert.Equal(t, "Duress", cards.created[0].Name)
-	assert.Equal(t, []int{1}, decks.removedPending)
-	linked := decks.linkedCards["00000000-0000-0000-0000-000000000009"]
-	require.Len(t, linked, 1)
-	assert.Equal(t, deck.BoardSideboard, decks.linkedBoards[linked[0]])
-}
-
-func TestCommitPendingCards_CanCommitASingleConsideringCard(t *testing.T) {
-	cards := &fakeCardService{}
-	decks := &fakeDeckService{pending: []deck.PendingCard{{ID: 2, Name: "Opt", Quantity: 1, Board: deck.BoardConsidering}}}
-	svc := NewService(cards, &fakeStorageService{}, decks, &fakeResolver{})
-	pendingID := 2
-
-	summary, err := svc.CommitPendingCards(context.Background(), testUserID, "00000000-0000-0000-0000-000000000009", nil, &pendingID, nil)
-
-	require.NoError(t, err)
-	assert.Equal(t, 1, summary.CardsCreated)
-	linked := decks.linkedCards["00000000-0000-0000-0000-000000000009"]
-	require.Len(t, linked, 1)
-	assert.Equal(t, deck.BoardConsidering, decks.linkedBoards[linked[0]])
-}
-
-func TestImportIntoDeck_PutsEachSectionInItsBoard(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 6, Name: "Sol Ring", ScryfallID: solRingID}}}
+func TestImportIntoDeck_PutsEachSectionInItsBoardAndTakesTheCommanderFromTheMainBoard(t *testing.T) {
 	decks := &fakeDeckService{}
 
-	summary := importDeck(t, cards, decks, "Sideboard\n1 Sol Ring (SLD) 1011\n\nMaybeboard:\n1 Atraxa, Praetors' Voice (CMR) 1\n", true)
+	importDeck(t, &fakeCardService{}, decks, "Sideboard\n1 Sol Ring (SLD) 1011\n\nMaybeboard:\n1 Sol Ring (SLD) 1011\nDeck\n1 Atraxa, Praetors' Voice (CMR) 1\n", true)
 
-	assert.Equal(t, 1, summary.CardsLinked)
-	assert.Equal(t, 1, summary.CardsPending)
-	assert.Equal(t, deck.BoardSideboard, decks.linkedBoards[6])
-	require.Len(t, decks.addedPending, 1)
-	assert.Equal(t, deck.BoardConsidering, decks.addedPending[0].Board)
-	assert.Zero(t, decks.cardCommanderID)
-	assert.Zero(t, decks.pendingCommanderID)
-}
-
-func TestImportIntoDeck_TakesTheCommanderFromTheMainBoard(t *testing.T) {
-	cards := &fakeCardService{allCards: []card.Card{{ID: 5, Name: "Atraxa, Praetors' Voice", ScryfallID: atraxaID}}}
-	decks := &fakeDeckService{}
-
-	importDeck(t, cards, decks, "Sideboard\n1 Sol Ring (SLD) 1011\nDeck\n1 Atraxa, Praetors' Voice (CMR) 1\n", true)
-
-	assert.Equal(t, 5, decks.cardCommanderID)
-	assert.Equal(t, deck.BoardMain, decks.linkedBoards[5])
+	assert.Equal(t, []placedLine{
+		{name: "Sol Ring", setCode: "SLD", quantity: 1, board: deck.BoardSideboard},
+		{name: "Sol Ring", setCode: "SLD", quantity: 1, board: deck.BoardConsidering},
+		{name: "Atraxa, Praetors' Voice", setCode: "CMR", quantity: 1, board: deck.BoardMain, commander: true},
+	}, placedLines(decks.placedPlan(t, targetDeckID)))
 }

@@ -13,17 +13,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"Melrakkiie/Tamiyo/internal/deck"
 )
 
 type fakeImportService struct {
 	summary Summary
 	err     error
-
-	lastFoilSwitch  FoilSwitch
-	lastProxySwitch ProxySwitch
-	lastSplit       PrintingSplit
 
 	lastUserID            string
 	lastMoxfieldStorageID int
@@ -41,18 +35,13 @@ type fakeImportService struct {
 	refreshSummary DetailsRefreshSummary
 	lastAfterID    int
 
-	commitSummary PendingCommitSummary
-	lastDeckID    string
+	lastDeckID string
 
 	lastIntoDeckCommander bool
 	lastIncludeLocked     bool
 	lastTamiyoStorageID   *int
 	lastExportTags        bool
 	tamiyoImportCalled    bool
-	lastQuantity          *int
-	lastStorageID         *int
-	lastPendingID         *int
-	commitCalled          bool
 
 	duplicateResult DuplicateSummary
 	lastDuplicate   DuplicateRequest
@@ -113,27 +102,6 @@ func (f *fakeImportService) BulkEditDeck(ctx context.Context, userID string, dec
 	return f.summary, f.err
 }
 
-func (f *fakeImportService) SplitPrintings(ctx context.Context, userID string, deckID string, req PrintingSplit) (Summary, error) {
-	f.lastUserID = userID
-	f.lastDeckID = deckID
-	f.lastSplit = req
-	return f.summary, f.err
-}
-
-func (f *fakeImportService) SwitchFoil(ctx context.Context, userID string, deckID string, req FoilSwitch) (Summary, error) {
-	f.lastUserID = userID
-	f.lastDeckID = deckID
-	f.lastFoilSwitch = req
-	return f.summary, f.err
-}
-
-func (f *fakeImportService) SwitchProxy(ctx context.Context, userID string, deckID string, req ProxySwitch) (Summary, error) {
-	f.lastUserID = userID
-	f.lastDeckID = deckID
-	f.lastProxySwitch = req
-	return f.summary, f.err
-}
-
 func (f *fakeImportService) DuplicateDeck(ctx context.Context, userID string, deckID string, req DuplicateRequest) (DuplicateSummary, error) {
 	f.lastUserID = userID
 	f.lastDeckID = deckID
@@ -146,16 +114,6 @@ func (f *fakeImportService) CollectDeck(ctx context.Context, userID string, deck
 	f.lastDeckID = deckID
 	f.lastCollect = req
 	return f.summary, f.err
-}
-
-func (f *fakeImportService) CommitPendingCards(ctx context.Context, userID string, deckID string, storageID, pendingID, quantity *int) (PendingCommitSummary, error) {
-	f.lastQuantity = quantity
-	f.lastUserID = userID
-	f.lastDeckID = deckID
-	f.lastStorageID = storageID
-	f.lastPendingID = pendingID
-	f.commitCalled = true
-	return f.commitSummary, f.err
 }
 
 func (f *fakeImportService) ImportManaBox(ctx context.Context, userID string, storageID *int, r io.Reader) (Summary, error) {
@@ -680,84 +638,6 @@ func TestHandler_RefreshCardDetails_ReturnsBadGatewayWhenScryfallIsDown(t *testi
 	assert.Equal(t, http.StatusBadGateway, w.Code)
 }
 
-func TestHandler_CommitPendingCards(t *testing.T) {
-	service := &fakeImportService{commitSummary: PendingCommitSummary{CardsCreated: 3}}
-	router := setupRouter(service)
-
-	req := httptest.NewRequest(http.MethodPost, "/deck/00000000-0000-0000-0000-000000000009/pending/commit", bytes.NewBufferString(`{"storage_id": 4}`))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusOK, w.Code)
-	assert.JSONEq(t, `{"cards_created": 3}`, w.Body.String())
-	assert.Equal(t, "00000000-0000-0000-0000-000000000009", service.lastDeckID)
-	require.NotNil(t, service.lastStorageID)
-	assert.Equal(t, 4, *service.lastStorageID)
-}
-
-func TestHandler_CommitPendingCards_WorksWithoutABody(t *testing.T) {
-	service := &fakeImportService{}
-	router := setupRouter(service)
-
-	req := httptest.NewRequest(http.MethodPost, "/deck/00000000-0000-0000-0000-000000000009/pending/commit", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusOK, w.Code)
-	assert.Nil(t, service.lastStorageID)
-}
-
-func TestHandler_CommitPendingCards_MapsErrors(t *testing.T) {
-	cases := map[error]int{ErrDeckNotFound: http.StatusNotFound, ErrTargetStorageNotFound: http.StatusBadRequest}
-	for commitErr, expected := range cases {
-		router := setupRouter(&fakeImportService{err: commitErr})
-		req := httptest.NewRequest(http.MethodPost, "/deck/00000000-0000-0000-0000-000000000009/pending/commit", nil)
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-		assert.Equal(t, expected, w.Code)
-	}
-}
-
-func TestHandler_CommitPendingCards_RejectsABadStorageID(t *testing.T) {
-	service := &fakeImportService{}
-	router := setupRouter(service)
-
-	req := httptest.NewRequest(http.MethodPost, "/deck/00000000-0000-0000-0000-000000000009/pending/commit", bytes.NewBufferString(`{"storage_id": 0}`))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.False(t, service.commitCalled)
-}
-
-func TestHandler_CommitPendingCards_CanTargetOneCard(t *testing.T) {
-	service := &fakeImportService{commitSummary: PendingCommitSummary{CardsCreated: 1}}
-	router := setupRouter(service)
-
-	req := httptest.NewRequest(http.MethodPost, "/deck/00000000-0000-0000-0000-000000000009/pending/commit", bytes.NewBufferString(`{"pending_id": 5}`))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusOK, w.Code)
-	require.NotNil(t, service.lastPendingID)
-	assert.Equal(t, 5, *service.lastPendingID)
-	assert.Nil(t, service.lastStorageID)
-}
-
-func TestHandler_CommitPendingCards_ReturnsNotFoundForAnUnknownPendingCard(t *testing.T) {
-	router := setupRouter(&fakeImportService{err: deck.ErrPendingCardNotFound})
-
-	req := httptest.NewRequest(http.MethodPost, "/deck/00000000-0000-0000-0000-000000000009/pending/commit", bytes.NewBufferString(`{"pending_id": 5}`))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusNotFound, w.Code)
-}
-
 func TestImportIntoDeck_PassesTheDeckAndTheFile(t *testing.T) {
 	service := &fakeImportService{summary: Summary{CardsLinked: 2}}
 	router := setupRouter(service)
@@ -839,35 +719,6 @@ func TestImportIntoDeck_MapsErrors(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, status, w.Code, err.Error())
-	}
-}
-
-func TestHandler_CommitPendingCards_PassesTheQuantity(t *testing.T) {
-	service := &fakeImportService{}
-	router := setupRouter(service)
-
-	req := httptest.NewRequest(http.MethodPost, "/deck/00000000-0000-0000-0000-000000000009/pending/commit", bytes.NewBufferString(`{"pending_id": 3, "quantity": 5}`))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusOK, w.Code)
-	require.NotNil(t, service.lastQuantity)
-	assert.Equal(t, 5, *service.lastQuantity)
-}
-
-func TestHandler_CommitPendingCards_RejectsAQuantityWithoutAPendingCard(t *testing.T) {
-	for _, body := range []string{`{"quantity": 5}`, `{"pending_id": 3, "quantity": 0}`} {
-		service := &fakeImportService{}
-		router := setupRouter(service)
-
-		req := httptest.NewRequest(http.MethodPost, "/deck/00000000-0000-0000-0000-000000000009/pending/commit", bytes.NewBufferString(body))
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusBadRequest, w.Code, body)
-		assert.False(t, service.commitCalled)
 	}
 }
 
