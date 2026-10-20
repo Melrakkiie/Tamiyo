@@ -95,6 +95,14 @@ func seedCriterionFixture(t *testing.T) criterionFixture {
 			typeLine: "Creature — Squirrel", manaValue: 1, legal: []string{}, powers: []string{".5"}, toughnesses: []string{"-1"}},
 		{name: "Mystery Elf", scryfallID: "cccccccc-cccc-cccc-cccc-cccccccccccc", colors: strPtr("U"), cardType: strPtr("Creature"), manaValue: 7},
 		{name: "Unknown", scryfallID: "dddddddd-dddd-dddd-dddd-dddddddddddd", manaValue: 5},
+		{name: "Rampant Growth", scryfallID: "e1111111-1111-1111-1111-111111111111", colors: strPtr("G"), cardType: strPtr("Sorcery"),
+			typeLine: "Sorcery", manaValue: 2},
+		{name: "Forest", scryfallID: "e2222222-2222-2222-2222-222222222222", colors: strPtr(""), cardType: strPtr("Land"),
+			typeLine: "Basic Land — Forest"},
+		{name: "Dryad Arbor", scryfallID: "e3333333-3333-3333-3333-333333333333", colors: strPtr("G"), cardType: strPtr("Land"),
+			typeLine: "Land Creature — Forest Dryad", powers: []string{"1"}, toughnesses: []string{"1"}},
+		{name: "Invasion of Zendikar", scryfallID: "e4444444-4444-4444-4444-444444444444", colors: strPtr("G"), cardType: strPtr("Battle"),
+			typeLine: "Battle — Siege // Creature — Elemental", manaValue: 4, powers: []string{"", "6"}, toughnesses: []string{"", "6"}},
 	} {
 		_, err := f.repo.Create(ctx, f.userID, Card{
 			Name: s.name, ScryfallID: s.scryfallID, SetCode: "tst", CollectorNumber: "1", Foil: s.foil, StorageID: s.storageID,
@@ -136,11 +144,23 @@ func (f criterionFixture) names(t *testing.T, filter CardFilter) []string {
 // criterionCase states a criterion and the cards it must return. params is the
 // criterion written as advanced query parameters (q= may be one of them), q is
 // the same criterion in search syntax ("" when it has no search-syntax form).
+// scope, when set, adds the list scope the criterion runs inside (a storage,
+// "open to this deck", stacking) to both forms.
 type criterionCase struct {
 	name   string
 	params url.Values
 	q      string
 	want   []string
+	scope  func(f criterionFixture) CardFilter
+}
+
+func (tc criterionCase) withScope(f criterionFixture, filter CardFilter) CardFilter {
+	if tc.scope == nil {
+		return filter
+	}
+	scope := tc.scope(f)
+	filter.StorageID, filter.OpenToDeck, filter.Stack = scope.StorageID, scope.OpenToDeck, scope.Stack
+	return filter
 }
 
 // runCriterionCases runs each row twice against the fixture: once through the
@@ -152,7 +172,7 @@ func runCriterionCases(t *testing.T, f criterionFixture, cases []criterionCase) 
 			t.Run("advanced", func(t *testing.T) {
 				filter, err := parseAdvancedFilters(tc.params)
 				require.NoError(t, err)
-				assert.Equal(t, tc.want, f.names(t, filter))
+				assert.Equal(t, tc.want, f.names(t, tc.withScope(f, filter)))
 			})
 			if tc.q == "" {
 				return
@@ -160,148 +180,202 @@ func runCriterionCases(t *testing.T, f criterionFixture, cases []criterionCase) 
 			t.Run("search", func(t *testing.T) {
 				node, err := parseSearchQuery(tc.q)
 				require.NoError(t, err)
-				assert.Equal(t, tc.want, f.names(t, CardFilter{Query: node}))
+				assert.Equal(t, tc.want, f.names(t, tc.withScope(f, CardFilter{Query: node})))
 			})
 		})
 	}
 }
 
+func inBinder(f criterionFixture) CardFilter  { return CardFilter{StorageID: &f.binderID} }
+func inDeckbox(f criterionFixture) CardFilter { return CardFilter{StorageID: &f.deckboxID} }
+func stacked(criterionFixture) CardFilter     { return CardFilter{Stack: true} }
+func openToAllowedDeck(f criterionFixture) CardFilter {
+	return CardFilter{OpenToDeck: &f.allowedDeck}
+}
+func openToOtherDeck(f criterionFixture) CardFilter {
+	return CardFilter{OpenToDeck: &f.otherDeck}
+}
+
+// criterionCases is the one table of criteria and the cards they must return.
+// Rows without a search-syntax form (subtype, storage type) have q == "".
 var criterionCases = []criterionCase{
 	{"colors exact", url.Values{"colors": {"g"}}, "c=g",
-		[]string{"Eidolon of Blossoms", "Esika's Chariot", "Llanowar Elves", "Tarmogoyf"}},
+		[]string{"Dryad Arbor", "Eidolon of Blossoms", "Esika's Chariot", "Invasion of Zendikar", "Llanowar Elves", "Rampant Growth", "Tarmogoyf"}, nil},
 	{"colors exact multicolored", url.Values{"colors": {"rw"}, "color_mode": {"exact"}}, "c=rw",
-		[]string{"Lightning Helix", "Lightning Helix"}},
+		[]string{"Lightning Helix", "Lightning Helix"}, nil},
 	{"colors exact colorless", url.Values{"colors": {""}}, "c:c",
-		[]string{"Sol Ring", "Solemn Simulacrum"}},
+		[]string{"Forest", "Sol Ring", "Solemn Simulacrum"}, nil},
 	{"colors include", url.Values{"colors": {"g"}, "color_mode": {"include"}}, "c>=g",
-		[]string{"Eidolon of Blossoms", "Esika's Chariot", "Grist, the Hunger Tide", "Llanowar Elves", "Tarmogoyf"}},
+		[]string{"Dryad Arbor", "Eidolon of Blossoms", "Esika's Chariot", "Grist, the Hunger Tide", "Invasion of Zendikar", "Llanowar Elves", "Rampant Growth", "Tarmogoyf"}, nil},
 	{"colors include white", url.Values{"colors": {"W"}, "color_mode": {"include"}}, "c>=w",
-		[]string{"Half Squirrel", "Lightning Helix", "Lightning Helix"}},
+		[]string{"Half Squirrel", "Lightning Helix", "Lightning Helix"}, nil},
 	{"colors within", url.Values{"colors": {"g"}, "color_mode": {"within"}}, "c<=g",
-		[]string{"Eidolon of Blossoms", "Esika's Chariot", "Llanowar Elves", "Sol Ring", "Solemn Simulacrum", "Tarmogoyf"}},
+		[]string{"Dryad Arbor", "Eidolon of Blossoms", "Esika's Chariot", "Forest", "Invasion of Zendikar", "Llanowar Elves", "Rampant Growth", "Sol Ring", "Solemn Simulacrum", "Tarmogoyf"}, nil},
 	{"colors within two colors", url.Values{"colors": {"uw"}, "color_mode": {"within"}}, "c<=wu",
-		[]string{"Delver of Secrets", "Half Squirrel", "Mystery Elf", "Sol Ring", "Solemn Simulacrum"}},
+		[]string{"Delver of Secrets", "Forest", "Half Squirrel", "Mystery Elf", "Sol Ring", "Solemn Simulacrum"}, nil},
 	{"colors with a search", url.Values{"colors": {"g"}, "color_mode": {"include"}, "q": {"t:creature"}}, "c>=g t:creature",
-		[]string{"Eidolon of Blossoms", "Llanowar Elves", "Tarmogoyf"}},
+		[]string{"Dryad Arbor", "Eidolon of Blossoms", "Invasion of Zendikar", "Llanowar Elves", "Tarmogoyf"}, nil},
 	{"color count colorless", url.Values{"color_count": {"0"}}, "c:0",
-		[]string{"Sol Ring", "Solemn Simulacrum"}},
+		[]string{"Forest", "Sol Ring", "Solemn Simulacrum"}, nil},
 	{"color count one", url.Values{"color_count": {"1"}}, "c:1",
-		[]string{"Delver of Secrets", "Eidolon of Blossoms", "Esika's Chariot", "Half Squirrel", "Llanowar Elves", "Mystery Elf", "Tarmogoyf"}},
+		[]string{"Delver of Secrets", "Dryad Arbor", "Eidolon of Blossoms", "Esika's Chariot", "Half Squirrel", "Invasion of Zendikar", "Llanowar Elves", "Mystery Elf", "Rampant Growth", "Tarmogoyf"}, nil},
 	{"color count two", url.Values{"color_count": {"2"}}, "c:2",
-		[]string{"Grist, the Hunger Tide", "Lightning Helix", "Lightning Helix"}},
+		[]string{"Grist, the Hunger Tide", "Lightning Helix", "Lightning Helix"}, nil},
 	{"foil", url.Values{"foil": {"true"}}, "is:foil",
-		[]string{"Esika's Chariot", "Lightning Helix"}},
+		[]string{"Esika's Chariot", "Lightning Helix"}, nil},
 	{"nonfoil", url.Values{"foil": {"false"}}, "is:nonfoil",
-		[]string{"Delver of Secrets", "Eidolon of Blossoms", "Grist, the Hunger Tide", "Half Squirrel", "Lightning Helix",
-			"Llanowar Elves", "Mystery Elf", "Sol Ring", "Solemn Simulacrum", "Tarmogoyf", "Unknown"}},
+		[]string{"Delver of Secrets", "Dryad Arbor", "Eidolon of Blossoms", "Forest", "Grist, the Hunger Tide", "Half Squirrel", "Invasion of Zendikar", "Lightning Helix", "Llanowar Elves", "Mystery Elf", "Rampant Growth", "Sol Ring", "Solemn Simulacrum", "Tarmogoyf", "Unknown"}, nil},
 	{"legal format", url.Values{"legal_in": {"pioneer"}}, "f:pioneer",
-		[]string{"Delver of Secrets", "Eidolon of Blossoms", "Esika's Chariot"}},
+		[]string{"Delver of Secrets", "Eidolon of Blossoms", "Esika's Chariot"}, nil},
 	{"legal format commander", url.Values{"legal_in": {"commander"}}, "f:commander",
 		[]string{"Eidolon of Blossoms", "Esika's Chariot", "Lightning Helix", "Lightning Helix", "Llanowar Elves",
-			"Sol Ring", "Solemn Simulacrum", "Tarmogoyf"}},
+			"Sol Ring", "Solemn Simulacrum", "Tarmogoyf"}, nil},
 	{"colors, color count, foil and format with a search", url.Values{
 		"colors": {"w"}, "color_mode": {"include"}, "color_count": {"2"}, "foil": {"true"}, "legal_in": {"modern"}, "q": {"t:instant"},
 	}, "c>=w c:2 is:foil f:modern t:instant",
-		[]string{"Lightning Helix"}},
+		[]string{"Lightning Helix"}, nil},
 	{"format and nonfoil with a search", url.Values{"legal_in": {"modern"}, "foil": {"false"}, "q": {"t:creature or t:planeswalker"}},
 		"f:modern is:nonfoil (t:creature or t:planeswalker)",
-		[]string{"Delver of Secrets", "Eidolon of Blossoms", "Grist, the Hunger Tide", "Llanowar Elves", "Solemn Simulacrum", "Tarmogoyf"}},
+		[]string{"Delver of Secrets", "Eidolon of Blossoms", "Grist, the Hunger Tide", "Llanowar Elves", "Solemn Simulacrum", "Tarmogoyf"}, nil},
+	{"mana value eq", url.Values{"mana_value": {"2"}, "mana_value_op": {"eq"}}, "mv=2",
+		[]string{"Lightning Helix", "Lightning Helix", "Rampant Growth", "Tarmogoyf"}, nil},
+	{"mana value lt", url.Values{"mana_value": {"3"}, "mana_value_op": {"lt"}}, "mv<3",
+		[]string{"Delver of Secrets", "Dryad Arbor", "Forest", "Half Squirrel", "Lightning Helix", "Lightning Helix", "Llanowar Elves", "Rampant Growth", "Sol Ring", "Tarmogoyf"}, nil},
+	{"mana value lte", url.Values{"mana_value": {"3"}, "mana_value_op": {"lte"}}, "mv<=3",
+		[]string{"Delver of Secrets", "Dryad Arbor", "Forest", "Grist, the Hunger Tide", "Half Squirrel", "Lightning Helix", "Lightning Helix", "Llanowar Elves", "Rampant Growth", "Sol Ring", "Tarmogoyf"}, nil},
+	{"mana value gt", url.Values{"mana_value": {"4"}, "mana_value_op": {"gt"}}, "mv>4",
+		[]string{"Mystery Elf", "Unknown"}, nil},
+	{"mana value gte", url.Values{"mana_value": {"4"}, "mana_value_op": {"gte"}}, "mv>=4",
+		[]string{"Eidolon of Blossoms", "Esika's Chariot", "Invasion of Zendikar", "Mystery Elf", "Solemn Simulacrum", "Unknown"}, nil},
+	{"mana value defaults to eq", url.Values{"mana_value": {"1"}}, "mv:1",
+		[]string{"Delver of Secrets", "Half Squirrel", "Llanowar Elves", "Sol Ring"}, nil},
+	{"power eq", url.Values{"power": {"1"}, "power_op": {"eq"}}, "pow=1",
+		[]string{"Delver of Secrets", "Dryad Arbor", "Llanowar Elves"}, nil},
+	{"power on the back face", url.Values{"power": {"3"}}, "pow:3",
+		[]string{"Delver of Secrets"}, nil},
+	{"power lt", url.Values{"power": {"1"}, "power_op": {"lt"}}, "pow<1",
+		[]string{"Half Squirrel"}, nil},
+	{"power lte", url.Values{"power": {"2"}, "power_op": {"lte"}}, "pow<=2",
+		[]string{"Delver of Secrets", "Dryad Arbor", "Eidolon of Blossoms", "Half Squirrel", "Llanowar Elves", "Solemn Simulacrum"}, nil},
+	{"power gt", url.Values{"power": {"2"}, "power_op": {"gt"}}, "pow>2",
+		[]string{"Delver of Secrets", "Esika's Chariot", "Invasion of Zendikar"}, nil},
+	{"power gte", url.Values{"power": {"3"}, "power_op": {"gte"}}, "pow>=3",
+		[]string{"Delver of Secrets", "Esika's Chariot", "Invasion of Zendikar"}, nil},
+	{"power never matches a star or a missing printing", url.Values{"power": {"0"}}, "pow=0",
+		[]string{}, nil},
+	{"toughness eq on the back face", url.Values{"toughness": {"2"}, "toughness_op": {"eq"}}, "tou=2",
+		[]string{"Delver of Secrets", "Eidolon of Blossoms", "Solemn Simulacrum"}, nil},
+	{"toughness lt", url.Values{"toughness": {"0"}, "toughness_op": {"lt"}}, "tou<0",
+		[]string{"Half Squirrel"}, nil},
+	{"toughness lte", url.Values{"toughness": {"1"}, "toughness_op": {"lte"}}, "tou<=1",
+		[]string{"Delver of Secrets", "Dryad Arbor", "Half Squirrel", "Llanowar Elves"}, nil},
+	{"toughness gt", url.Values{"toughness": {"1"}, "toughness_op": {"gt"}}, "tou>1",
+		[]string{"Delver of Secrets", "Eidolon of Blossoms", "Esika's Chariot", "Invasion of Zendikar", "Solemn Simulacrum"}, nil},
+	{"toughness gte", url.Values{"toughness": {"4"}, "toughness_op": {"gte"}}, "tou>=4",
+		[]string{"Esika's Chariot", "Invasion of Zendikar"}, nil},
+	{"power and toughness of different faces", url.Values{"power": {"3"}, "toughness": {"1"}}, "pow=3 tou=1",
+		[]string{"Delver of Secrets"}, nil},
+	{"mana value with a search", url.Values{"mana_value": {"4"}, "mana_value_op": {"gte"}, "q": {"t:creature"}}, "mv>=4 t:creature",
+		[]string{"Eidolon of Blossoms", "Invasion of Zendikar", "Mystery Elf", "Solemn Simulacrum"}, nil},
+	{"subtype", url.Values{"subtype": {"elf"}}, "",
+		[]string{"Llanowar Elves"}, nil},
+	{"subtype ignores case and surrounding spaces", url.Values{"subtype": {" GOLEM "}}, "",
+		[]string{"Solemn Simulacrum"}, nil},
+	{"subtype of the front face", url.Values{"subtype": {"human"}}, "",
+		[]string{"Delver of Secrets"}, nil},
+	{"subtype stops at the second dash", url.Values{"subtype": {"insect"}}, "",
+		[]string{}, nil},
+	{"subtype keeps pattern wildcards", url.Values{"subtype": {"e%f"}}, "",
+		[]string{"Llanowar Elves"}, nil},
+	{"subtype with a search", url.Values{"subtype": {"vehicle"}, "q": {"t:artifact"}}, "",
+		[]string{"Esika's Chariot"}, nil},
+	{"subtype with mana value", url.Values{"subtype": {"o"}, "mana_value": {"4"}, "mana_value_op": {"gte"}}, "",
+		[]string{"Solemn Simulacrum"}, nil},
+	{"storage type", url.Values{"storage_type": {"deckbox"}}, "",
+		[]string{"Lightning Helix", "Sol Ring", "Solemn Simulacrum"}, nil},
+	{"storage type ignores case and surrounding spaces", url.Values{"storage_type": {" DeckBox "}}, "",
+		[]string{"Lightning Helix", "Sol Ring", "Solemn Simulacrum"}, nil},
+	{"storage type binder", url.Values{"storage_type": {"binder"}}, "",
+		[]string{"Eidolon of Blossoms", "Grist, the Hunger Tide", "Lightning Helix", "Llanowar Elves"}, nil},
+	{"storage type is an equality", url.Values{"storage_type": {"box"}}, "",
+		[]string{}, nil},
+	{"storage type with format", url.Values{"storage_type": {"deckbox"}, "legal_in": {"modern"}}, "",
+		[]string{"Lightning Helix", "Solemn Simulacrum"}, nil},
+	{"storage type with foil and a search", url.Values{"storage_type": {"deckbox"}, "foil": {"true"}, "q": {"t:instant"}}, "",
+		[]string{"Lightning Helix"}, nil},
+	{"type Creature includes artifact, enchantment and land creatures", url.Values{"type": {"Creature"}}, "t:creature",
+		[]string{"Delver of Secrets", "Dryad Arbor", "Eidolon of Blossoms", "Half Squirrel", "Invasion of Zendikar", "Llanowar Elves",
+			"Mystery Elf", "Solemn Simulacrum", "Tarmogoyf"}, nil},
+	{"type Artifact", url.Values{"type": {"Artifact"}}, "t:artifact",
+		[]string{"Esika's Chariot", "Sol Ring", "Solemn Simulacrum"}, nil},
+	{"type Enchantment", url.Values{"type": {"Enchantment"}}, "t:enchantment",
+		[]string{"Eidolon of Blossoms"}, nil},
+	{"type Land", url.Values{"type": {"Land"}}, "t:land",
+		[]string{"Dryad Arbor", "Forest"}, nil},
+	{"type Planeswalker", url.Values{"type": {"Planeswalker"}}, "t:planeswalker",
+		[]string{"Grist, the Hunger Tide"}, nil},
+	{"type Battle", url.Values{"type": {"Battle"}}, "t:battle",
+		[]string{"Invasion of Zendikar"}, nil},
+	{"type Instant", url.Values{"type": {"Instant"}}, "t:instant",
+		[]string{"Lightning Helix", "Lightning Helix"}, nil},
+	{"type Sorcery", url.Values{"type": {"Sorcery"}}, "t:sorcery",
+		[]string{"Rampant Growth"}, nil},
+	{"type with a search", url.Values{"type": {"Creature"}, "q": {"t:artifact"}}, "t:creature t:artifact",
+		[]string{"Solemn Simulacrum"}, nil},
+
+	// List scope: the same criteria apply inside a storage, and "open to this
+	// deck" hides copies in storages locked against the deck.
+	{"storage scope alone", url.Values{}, "",
+		[]string{"Eidolon of Blossoms", "Grist, the Hunger Tide", "Lightning Helix", "Llanowar Elves"}, inBinder},
+	{"storage scope with colors", url.Values{"colors": {"g"}, "color_mode": {"include"}}, "c>=g",
+		[]string{"Eidolon of Blossoms", "Grist, the Hunger Tide", "Llanowar Elves"}, inBinder},
+	{"storage scope with a search", url.Values{"q": {"t:creature"}}, "t:creature",
+		[]string{"Eidolon of Blossoms", "Llanowar Elves"}, inBinder},
+	{"storage scope with foil", url.Values{"foil": {"true"}}, "is:foil",
+		[]string{"Lightning Helix"}, inDeckbox},
+	{"storage scope with nonfoil", url.Values{"foil": {"false"}}, "is:nonfoil",
+		[]string{"Sol Ring", "Solemn Simulacrum"}, inDeckbox},
+	{"storage scope with a type the storage lacks", url.Values{"type": {"Land"}}, "t:land",
+		[]string{}, inBinder},
+	{"storage scope with a subtype", url.Values{"subtype": {"elf"}}, "",
+		[]string{"Llanowar Elves"}, inBinder},
+	{"open to the allowed deck sees the locked storage", url.Values{"colors": {""}}, "c:c",
+		[]string{"Forest", "Sol Ring", "Solemn Simulacrum"}, openToAllowedDeck},
+	{"open to another deck hides the locked storage", url.Values{"colors": {""}}, "c:c",
+		[]string{"Forest"}, openToOtherDeck},
+	{"open to another deck without other filters", url.Values{}, "",
+		[]string{"Delver of Secrets", "Dryad Arbor", "Eidolon of Blossoms", "Esika's Chariot", "Forest", "Grist, the Hunger Tide",
+			"Half Squirrel", "Invasion of Zendikar", "Lightning Helix", "Llanowar Elves", "Mystery Elf", "Rampant Growth", "Tarmogoyf", "Unknown"}, openToOtherDeck},
+	{"open to the allowed deck without other filters", url.Values{}, "",
+		[]string{"Delver of Secrets", "Dryad Arbor", "Eidolon of Blossoms", "Esika's Chariot", "Forest", "Grist, the Hunger Tide",
+			"Half Squirrel", "Invasion of Zendikar", "Lightning Helix", "Lightning Helix", "Llanowar Elves", "Mystery Elf", "Rampant Growth",
+			"Sol Ring", "Solemn Simulacrum", "Tarmogoyf", "Unknown"}, openToAllowedDeck},
+	{"open to another deck with a format", url.Values{"legal_in": {"commander"}}, "f:commander",
+		[]string{"Eidolon of Blossoms", "Esika's Chariot", "Lightning Helix", "Llanowar Elves", "Tarmogoyf"}, openToOtherDeck},
+	{"open to another deck, stacked, with colors", url.Values{"colors": {"g"}, "color_mode": {"include"}}, "c>=g",
+		[]string{"Dryad Arbor", "Eidolon of Blossoms", "Esika's Chariot", "Grist, the Hunger Tide", "Invasion of Zendikar", "Llanowar Elves", "Rampant Growth", "Tarmogoyf"},
+		func(f criterionFixture) CardFilter { return CardFilter{OpenToDeck: &f.otherDeck, Stack: true} }},
+	{"open to another deck in a storage", url.Values{}, "",
+		[]string{}, func(f criterionFixture) CardFilter {
+			return CardFilter{OpenToDeck: &f.otherDeck, StorageID: &f.deckboxID}
+		}},
+	{"open to the allowed deck in a storage", url.Values{"foil": {"true"}}, "is:foil",
+		[]string{"Lightning Helix"},
+		func(f criterionFixture) CardFilter {
+			return CardFilter{OpenToDeck: &f.allowedDeck, StorageID: &f.deckboxID}
+		}},
+
+	// Stacking merges copies of the same card after the criteria filtered them.
+	{"stacked copies in different storages stay apart", url.Values{"colors": {"rw"}}, "c=rw",
+		[]string{"Lightning Helix", "Lightning Helix"}, stacked},
+	{"stacked with a format and a search", url.Values{"legal_in": {"modern"}, "q": {"t:instant"}}, "f:modern t:instant",
+		[]string{"Lightning Helix", "Lightning Helix"}, stacked},
+	{"stacked with a criterion that selects one copy", url.Values{"foil": {"true"}, "colors": {"rw"}}, "is:foil c=rw",
+		[]string{"Lightning Helix"}, stacked},
 }
 
 func TestPostgresRepository_FindAll_Criteria(t *testing.T) {
 	runCriterionCases(t, seedCriterionFixture(t), criterionCases)
-}
-
-var numericCriterionCases = []criterionCase{
-	{"mana value eq", url.Values{"mana_value": {"2"}, "mana_value_op": {"eq"}}, "mv=2",
-		[]string{"Lightning Helix", "Lightning Helix", "Tarmogoyf"}},
-	{"mana value lt", url.Values{"mana_value": {"3"}, "mana_value_op": {"lt"}}, "mv<3",
-		[]string{"Delver of Secrets", "Half Squirrel", "Lightning Helix", "Lightning Helix", "Llanowar Elves", "Sol Ring", "Tarmogoyf"}},
-	{"mana value lte", url.Values{"mana_value": {"3"}, "mana_value_op": {"lte"}}, "mv<=3",
-		[]string{"Delver of Secrets", "Grist, the Hunger Tide", "Half Squirrel", "Lightning Helix", "Lightning Helix",
-			"Llanowar Elves", "Sol Ring", "Tarmogoyf"}},
-	{"mana value gt", url.Values{"mana_value": {"4"}, "mana_value_op": {"gt"}}, "mv>4",
-		[]string{"Mystery Elf", "Unknown"}},
-	{"mana value gte", url.Values{"mana_value": {"4"}, "mana_value_op": {"gte"}}, "mv>=4",
-		[]string{"Eidolon of Blossoms", "Esika's Chariot", "Mystery Elf", "Solemn Simulacrum", "Unknown"}},
-	{"mana value defaults to eq", url.Values{"mana_value": {"1"}}, "mv:1",
-		[]string{"Delver of Secrets", "Half Squirrel", "Llanowar Elves", "Sol Ring"}},
-	{"power eq", url.Values{"power": {"1"}, "power_op": {"eq"}}, "pow=1",
-		[]string{"Delver of Secrets", "Llanowar Elves"}},
-	{"power on the back face", url.Values{"power": {"3"}}, "pow:3",
-		[]string{"Delver of Secrets"}},
-	{"power lt", url.Values{"power": {"1"}, "power_op": {"lt"}}, "pow<1",
-		[]string{"Half Squirrel"}},
-	{"power lte", url.Values{"power": {"2"}, "power_op": {"lte"}}, "pow<=2",
-		[]string{"Delver of Secrets", "Eidolon of Blossoms", "Half Squirrel", "Llanowar Elves", "Solemn Simulacrum"}},
-	{"power gt", url.Values{"power": {"2"}, "power_op": {"gt"}}, "pow>2",
-		[]string{"Delver of Secrets", "Esika's Chariot"}},
-	{"power gte", url.Values{"power": {"3"}, "power_op": {"gte"}}, "pow>=3",
-		[]string{"Delver of Secrets", "Esika's Chariot"}},
-	{"power never matches a star or a missing printing", url.Values{"power": {"0"}}, "pow=0",
-		[]string{}},
-	{"toughness eq on the back face", url.Values{"toughness": {"2"}, "toughness_op": {"eq"}}, "tou=2",
-		[]string{"Delver of Secrets", "Eidolon of Blossoms", "Solemn Simulacrum"}},
-	{"toughness lt", url.Values{"toughness": {"0"}, "toughness_op": {"lt"}}, "tou<0",
-		[]string{"Half Squirrel"}},
-	{"toughness lte", url.Values{"toughness": {"1"}, "toughness_op": {"lte"}}, "tou<=1",
-		[]string{"Delver of Secrets", "Half Squirrel", "Llanowar Elves"}},
-	{"toughness gt", url.Values{"toughness": {"1"}, "toughness_op": {"gt"}}, "tou>1",
-		[]string{"Delver of Secrets", "Eidolon of Blossoms", "Esika's Chariot", "Solemn Simulacrum"}},
-	{"toughness gte", url.Values{"toughness": {"4"}, "toughness_op": {"gte"}}, "tou>=4",
-		[]string{"Esika's Chariot"}},
-	{"power and toughness of different faces", url.Values{"power": {"3"}, "toughness": {"1"}}, "pow=3 tou=1",
-		[]string{"Delver of Secrets"}},
-	{"mana value with a search", url.Values{"mana_value": {"4"}, "mana_value_op": {"gte"}, "q": {"t:creature"}}, "mv>=4 t:creature",
-		[]string{"Eidolon of Blossoms", "Mystery Elf", "Solemn Simulacrum"}},
-}
-
-func TestPostgresRepository_FindAll_NumericCriteria(t *testing.T) {
-	runCriterionCases(t, seedCriterionFixture(t), numericCriterionCases)
-}
-
-// Subtype has no search-syntax form: these rows run through the advanced
-// parameters only.
-var subtypeCriterionCases = []criterionCase{
-	{"subtype", url.Values{"subtype": {"elf"}}, "",
-		[]string{"Llanowar Elves"}},
-	{"subtype ignores case and surrounding spaces", url.Values{"subtype": {" GOLEM "}}, "",
-		[]string{"Solemn Simulacrum"}},
-	{"subtype of the front face", url.Values{"subtype": {"human"}}, "",
-		[]string{"Delver of Secrets"}},
-	{"subtype stops at the second dash", url.Values{"subtype": {"insect"}}, "",
-		[]string{}},
-	{"subtype keeps pattern wildcards", url.Values{"subtype": {"e%f"}}, "",
-		[]string{"Llanowar Elves"}},
-	{"subtype with a search", url.Values{"subtype": {"vehicle"}, "q": {"t:artifact"}}, "",
-		[]string{"Esika's Chariot"}},
-	{"subtype with mana value", url.Values{"subtype": {"o"}, "mana_value": {"4"}, "mana_value_op": {"gte"}}, "",
-		[]string{"Solemn Simulacrum"}},
-}
-
-func TestPostgresRepository_FindAll_SubtypeCriteria(t *testing.T) {
-	runCriterionCases(t, seedCriterionFixture(t), subtypeCriterionCases)
-}
-
-// Storage type has no search-syntax form: these rows run through the advanced
-// parameters only.
-var storageTypeCriterionCases = []criterionCase{
-	{"storage type", url.Values{"storage_type": {"deckbox"}}, "",
-		[]string{"Lightning Helix", "Sol Ring", "Solemn Simulacrum"}},
-	{"storage type ignores case and surrounding spaces", url.Values{"storage_type": {" DeckBox "}}, "",
-		[]string{"Lightning Helix", "Sol Ring", "Solemn Simulacrum"}},
-	{"storage type binder", url.Values{"storage_type": {"binder"}}, "",
-		[]string{"Eidolon of Blossoms", "Grist, the Hunger Tide", "Lightning Helix", "Llanowar Elves"}},
-	{"storage type is an equality", url.Values{"storage_type": {"box"}}, "",
-		[]string{}},
-	{"storage type with format", url.Values{"storage_type": {"deckbox"}, "legal_in": {"modern"}}, "",
-		[]string{"Lightning Helix", "Solemn Simulacrum"}},
-	{"storage type with foil and a search", url.Values{"storage_type": {"deckbox"}, "foil": {"true"}, "q": {"t:instant"}}, "",
-		[]string{"Lightning Helix"}},
-}
-
-func TestPostgresRepository_FindAll_StorageTypeCriteria(t *testing.T) {
-	runCriterionCases(t, seedCriterionFixture(t), storageTypeCriterionCases)
 }
 
 func TestPostgresRepository_FindAll_StorageTypeStaysWithinTheUser(t *testing.T) {
@@ -317,4 +391,85 @@ func TestPostgresRepository_FindAll_StorageTypeStaysWithinTheUser(t *testing.T) 
 	assert.Equal(t, []string{}, bob.names(t, binder))
 	binder.Stack = true
 	assert.Equal(t, []string{}, bob.names(t, binder))
+}
+
+// A criterion narrows the cards before the list shape is applied: the same
+// filtered cards stack, group, sort and page as an unfiltered list would.
+func TestPostgresRepository_FindAll_ListShapeWithCriteria(t *testing.T) {
+	f := seedCriterionFixture(t)
+	// A second, identical copy of Llanowar Elves so that stacking has something to merge.
+	_, err := f.repo.Create(context.Background(), f.userID, Card{
+		Name: "Llanowar Elves", ScryfallID: "11111111-1111-1111-1111-111111111111", SetCode: "tst", CollectorNumber: "1",
+		StorageID: &f.binderID, ManaValue: 1, Colors: strPtr("G"), CardType: strPtr("Creature"), ColorIdentity: strPtr("G"),
+	})
+	require.NoError(t, err)
+
+	greens, err := parseAdvancedFilters(url.Values{"colors": {"g"}, "color_mode": {"include"}})
+	require.NoError(t, err)
+
+	list := func(t *testing.T, shape CardFilter) ([]Card, int) {
+		t.Helper()
+		filter := greens
+		filter.Stack, filter.GroupBy, filter.SortField, filter.SortDesc = shape.Stack, shape.GroupBy, shape.SortField, shape.SortDesc
+		filter.Page, filter.Limit = shape.Page, shape.Limit
+		if filter.Limit == 0 {
+			filter.Page, filter.Limit = 1, 25
+		}
+		cards, total, err := f.repo.FindAll(context.Background(), f.userID, filter)
+		require.NoError(t, err)
+		return cards, total
+	}
+	namesOf := func(cards []Card) []string {
+		out := make([]string, len(cards))
+		for i, c := range cards {
+			out[i] = c.Name
+		}
+		return out
+	}
+
+	t.Run("sorted by name, descending, one page", func(t *testing.T) {
+		cards, total := list(t, CardFilter{SortField: "name", SortDesc: true, Page: 2, Limit: 4})
+		assert.Equal(t, 9, total)
+		assert.Equal(t, []string{"Invasion of Zendikar", "Grist, the Hunger Tide", "Esika's Chariot", "Eidolon of Blossoms"}, namesOf(cards))
+	})
+	t.Run("sorted by mana value", func(t *testing.T) {
+		cards, total := list(t, CardFilter{SortField: "mana_value"})
+		assert.Equal(t, 9, total)
+		assert.Equal(t, []string{"Dryad Arbor", "Llanowar Elves", "Llanowar Elves", "Tarmogoyf", "Rampant Growth",
+			"Grist, the Hunger Tide", "Esika's Chariot", "Eidolon of Blossoms", "Invasion of Zendikar"}, namesOf(cards))
+	})
+	t.Run("stacked", func(t *testing.T) {
+		cards, total := list(t, CardFilter{Stack: true, SortField: "name"})
+		assert.Equal(t, 8, total)
+		require.Len(t, cards, 8)
+		for _, c := range cards {
+			want := 1
+			if c.Name == "Llanowar Elves" {
+				want = 2
+			}
+			assert.Len(t, c.CopyIDs, want, c.Name)
+		}
+	})
+	t.Run("stacked and paged", func(t *testing.T) {
+		cards, total := list(t, CardFilter{Stack: true, SortField: "name", Page: 2, Limit: 3})
+		assert.Equal(t, 8, total)
+		assert.Equal(t, []string{"Grist, the Hunger Tide", "Invasion of Zendikar", "Llanowar Elves"}, namesOf(cards))
+	})
+	t.Run("grouped by subtype", func(t *testing.T) {
+		cards, total := list(t, CardFilter{Stack: true, GroupBy: "subtype", SortField: "name"})
+		rows := make([]string, len(cards))
+		for i, c := range cards {
+			subtype := "-"
+			if c.Subtype != nil {
+				subtype = *c.Subtype
+			}
+			rows[i] = subtype + ": " + c.Name
+		}
+		assert.Equal(t, len(rows), total)
+		assert.Equal(t, []string{
+			"Druid: Llanowar Elves", "Dryad: Dryad Arbor", "Elemental: Invasion of Zendikar", "Elf: Llanowar Elves",
+			"Forest: Dryad Arbor", "Grist: Grist, the Hunger Tide", "Lhurgoyf: Tarmogoyf", "Siege: Invasion of Zendikar",
+			"Spirit: Eidolon of Blossoms", "Vehicle: Esika's Chariot", "-: Rampant Growth",
+		}, rows)
+	})
 }
