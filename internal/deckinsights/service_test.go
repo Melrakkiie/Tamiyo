@@ -95,13 +95,15 @@ func (f *fakeScryfallFetcher) Fetch(ctx context.Context, identifiers []scryfall.
 	return out, nil
 }
 
-type fakeValues struct {
-	values DeckValues
-	err    error
+// fakeStore stands in for the database while legality still reads Scryfall.
+type fakeStore struct{}
+
+func (fakeStore) DeckValues(ctx context.Context, userID string, deckID string) (DeckValues, error) {
+	return DeckValues{}, nil
 }
 
-func (f fakeValues) DeckValues(ctx context.Context, userID string, deckID string) (DeckValues, error) {
-	return f.values, f.err
+func (fakeStore) Printings(ctx context.Context, scryfallIDs []string) (map[string]Printing, error) {
+	return map[string]Printing{}, nil
 }
 
 func ptr(i int) *int { return &i }
@@ -109,7 +111,7 @@ func ptr(i int) *int { return &i }
 // --- GetDeckLegality ------------------------------------------------------
 
 func TestGetDeckLegality_UnknownDeckReturnsErrDeckNotFound(t *testing.T) {
-	svc := NewService(&fakeDeckService{}, &fakeScryfallFetcher{}, fakeValues{})
+	svc := NewService(&fakeDeckService{}, &fakeScryfallFetcher{}, fakeStore{})
 
 	_, err := svc.GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000999")
 
@@ -119,7 +121,7 @@ func TestGetDeckLegality_UnknownDeckReturnsErrDeckNotFound(t *testing.T) {
 
 func TestGetDeckLegality_PropagatesADeckContentError(t *testing.T) {
 	boom := errors.New("db down")
-	svc := NewService(&fakeDeckService{err: boom}, &fakeScryfallFetcher{}, fakeValues{})
+	svc := NewService(&fakeDeckService{err: boom}, &fakeScryfallFetcher{}, fakeStore{})
 
 	_, err := svc.GetDeckLegality(context.Background(), testUserID, testDeckID)
 
@@ -132,7 +134,7 @@ func TestGetDeckLegality_AllLegalCardsReportsLegalTrue(t *testing.T) {
 	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
 		"aaaa": {ID: "aaaa", Name: "Sol Ring", TypeLine: "Artifact", Legalities: map[string]string{"commander": "legal"}},
 	}}
-	svc := NewService(decks, fetcher, fakeValues{})
+	svc := NewService(decks, fetcher, fakeStore{})
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, testDeckID)
 	report = ignoringDeckSize(report)
@@ -148,7 +150,7 @@ func TestGetDeckLegality_BannedCardIsReportedAndMarksDeckIllegal(t *testing.T) {
 	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
 		"bbbb": {ID: "bbbb", Name: "Channel", TypeLine: "Sorcery", Legalities: map[string]string{"commander": "banned"}},
 	}}
-	svc := NewService(decks, fetcher, fakeValues{})
+	svc := NewService(decks, fetcher, fakeStore{})
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, testDeckID)
 	report = ignoringDeckSize(report)
@@ -165,7 +167,7 @@ func TestGetDeckLegality_UnrecognizedFormatReturnsErrUnknownFormat(t *testing.T)
 	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
 		"aaaa": {ID: "aaaa", Name: "Sol Ring", Legalities: map[string]string{"commander": "legal"}},
 	}}
-	svc := NewService(decks, fetcher, fakeValues{})
+	svc := NewService(decks, fetcher, fakeStore{})
 
 	_, err := svc.GetDeckLegality(context.Background(), testUserID, testDeckID)
 
@@ -175,7 +177,7 @@ func TestGetDeckLegality_UnrecognizedFormatReturnsErrUnknownFormat(t *testing.T)
 
 func TestGetDeckLegality_CardNotFoundOnScryfallIsReportedAndMarksDeckIllegal(t *testing.T) {
 	decks := deckWith(deck.Deck{Name: "Pile", Format: "commander"}, owned("Ghost Card", "cccc", 10))
-	svc := NewService(decks, &fakeScryfallFetcher{}, fakeValues{})
+	svc := NewService(decks, &fakeScryfallFetcher{}, fakeStore{})
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, testDeckID)
 	report = ignoringDeckSize(report)
@@ -191,7 +193,7 @@ func TestGetDeckLegality_CommanderSingletonViolationIsReported(t *testing.T) {
 	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
 		"aaaa": {ID: "aaaa", Name: "Sol Ring", TypeLine: "Artifact", Legalities: map[string]string{"commander": "legal"}},
 	}}
-	svc := NewService(decks, fetcher, fakeValues{})
+	svc := NewService(decks, fetcher, fakeStore{})
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, testDeckID)
 	report = ignoringDeckSize(report)
@@ -207,7 +209,7 @@ func TestGetDeckLegality_DuplicateBasicLandsAreExemptFromSingleton(t *testing.T)
 	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
 		"mtn": {ID: "mtn", Name: "Mountain", TypeLine: "Basic Land — Mountain", Legalities: map[string]string{"commander": "legal"}},
 	}}
-	svc := NewService(decks, fetcher, fakeValues{})
+	svc := NewService(decks, fetcher, fakeStore{})
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, testDeckID)
 	report = ignoringDeckSize(report)
@@ -226,7 +228,7 @@ func TestGetDeckLegality_CardOutsideCommanderColorIdentityIsReported(t *testing.
 		"golos": {ID: "golos", Name: "Golos, Tireless Pilgrim", TypeLine: "Legendary Creature — Dog", ColorIdentity: []string{}, Legalities: map[string]string{"commander": "legal"}},
 		"bolt":  {ID: "bolt", Name: "Lightning Bolt", TypeLine: "Instant", ColorIdentity: []string{"R"}, Legalities: map[string]string{"commander": "legal"}},
 	}}
-	svc := NewService(decks, fetcher, fakeValues{})
+	svc := NewService(decks, fetcher, fakeStore{})
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, testDeckID)
 	report = ignoringDeckSize(report)
@@ -247,7 +249,7 @@ func TestGetDeckLegality_CardWithinCommanderColorIdentityIsFine(t *testing.T) {
 		"krenko": {ID: "krenko", Name: "Krenko, Mob Boss", TypeLine: "Legendary Creature — Goblin", ColorIdentity: []string{"R"}, Legalities: map[string]string{"commander": "legal"}},
 		"bolt":   {ID: "bolt", Name: "Lightning Bolt", TypeLine: "Instant", ColorIdentity: []string{"R"}, Legalities: map[string]string{"commander": "legal"}},
 	}}
-	svc := NewService(decks, fetcher, fakeValues{})
+	svc := NewService(decks, fetcher, fakeStore{})
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, testDeckID)
 	report = ignoringDeckSize(report)
@@ -261,7 +263,7 @@ func TestGetDeckLegality_NonCommanderFormatSkipsConstructionRules(t *testing.T) 
 	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
 		"mtn": {ID: "mtn", Name: "Mountain", TypeLine: "Basic Land — Mountain", Legalities: map[string]string{"modern": "legal"}},
 	}}
-	svc := NewService(decks, fetcher, fakeValues{})
+	svc := NewService(decks, fetcher, fakeStore{})
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, testDeckID)
 	report = ignoringDeckSize(report)
@@ -273,176 +275,12 @@ func TestGetDeckLegality_NonCommanderFormatSkipsConstructionRules(t *testing.T) 
 func TestGetDeckLegality_PropagatesScryfallError(t *testing.T) {
 	decks := deckWith(deck.Deck{Name: "Pile", Format: "commander"}, owned("Sol Ring", "aaaa", 10))
 	fetcher := &fakeScryfallFetcher{err: errors.New("network down")}
-	svc := NewService(decks, fetcher, fakeValues{})
+	svc := NewService(decks, fetcher, fakeStore{})
 
 	_, err := svc.GetDeckLegality(context.Background(), testUserID, testDeckID)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrScryfallUnavailable)
-}
-
-// --- GetDeckStats ----------------------------------------------------------
-
-func TestGetDeckStats_SeparatesLandsFromNonlands(t *testing.T) {
-	decks := deckWith(deck.Deck{Name: "Pile", Format: "commander"},
-		owned("Mountain", "mtn", 10),
-		owned("Sol Ring", "ring", 11),
-	)
-	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
-		"mtn":  {ID: "mtn", TypeLine: "Basic Land — Mountain", CMC: 0},
-		"ring": {ID: "ring", TypeLine: "Artifact", CMC: 1, Colors: []string{}},
-	}}
-	svc := NewService(decks, fetcher, fakeValues{})
-
-	stats, err := svc.GetDeckStats(context.Background(), testUserID, testDeckID)
-
-	require.NoError(t, err)
-	assert.Equal(t, 2, stats.CardCount)
-	assert.Equal(t, 1, stats.LandCount)
-	assert.Equal(t, 1, stats.NonlandCount)
-	assert.Equal(t, 1.0, stats.AverageManaValue)
-	assert.Equal(t, 1, stats.ColorBreakdown["C"])
-}
-
-func TestGetDeckStats_ReturnsEmptyManaCurveForLandsOnlyDeck(t *testing.T) {
-	decks := deckWith(deck.Deck{Name: "Lands", Format: "commander"}, owned("Mountain", "mtn", 10))
-	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
-		"mtn": {ID: "mtn", TypeLine: "Basic Land — Mountain", CMC: 0},
-	}}
-	svc := NewService(decks, fetcher, fakeValues{})
-
-	stats, err := svc.GetDeckStats(context.Background(), testUserID, testDeckID)
-
-	require.NoError(t, err)
-	require.NotNil(t, stats.ManaCurve)
-	assert.Empty(t, stats.ManaCurve)
-	require.NotNil(t, stats.BackFaceLands)
-	assert.Empty(t, stats.BackFaceLands)
-}
-
-func TestGetDeckStats_BuildsManaCurveSortedByManaValue(t *testing.T) {
-	decks := deckWith(deck.Deck{Format: "commander"},
-		owned("A", "a", 10),
-		owned("B", "b", 11),
-		owned("C", "c", 12),
-	)
-	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
-		"a": {ID: "a", TypeLine: "Creature", CMC: 2, Colors: []string{"R"}},
-		"b": {ID: "b", TypeLine: "Creature", CMC: 2, Colors: []string{"R"}},
-		"c": {ID: "c", TypeLine: "Instant", CMC: 1, Colors: []string{"U"}},
-	}}
-	svc := NewService(decks, fetcher, fakeValues{})
-
-	stats, err := svc.GetDeckStats(context.Background(), testUserID, testDeckID)
-
-	require.NoError(t, err)
-	require.Len(t, stats.ManaCurve, 2)
-	assert.Equal(t, 1, stats.ManaCurve[0].ManaValue)
-	assert.Equal(t, 1, stats.ManaCurve[0].Count)
-	assert.Equal(t, 2, stats.ManaCurve[1].ManaValue)
-	assert.Equal(t, 2, stats.ManaCurve[1].Count)
-}
-
-func TestGetDeckStats_SplitsTheManaCurveIntoPermanentsAndListsItsCards(t *testing.T) {
-	decks := deckWith(deck.Deck{Format: "commander"},
-		owned("Shock", "shock", 10, 11),
-		owned("Mind Stone", "stone", 12),
-		owned("Bala Ged Recovery // Bala Ged Sanctuary", "mdfc", 13),
-		owned("Arcane Signet", "signet", 14),
-		foil(owned("Bala Ged Recovery // Bala Ged Sanctuary", "mdfc", 16)),
-		owned("Forest", "forest", 15),
-	)
-	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
-		"shock":  {ID: "shock", TypeLine: "Instant", CMC: 2, Colors: []string{"R"}},
-		"stone":  {ID: "stone", TypeLine: "Artifact", CMC: 2},
-		"mdfc":   {ID: "mdfc", TypeLine: "Sorcery // Land", CMC: 3, Colors: []string{"G"}},
-		"signet": {ID: "signet", TypeLine: "Artifact", CMC: 2},
-		"forest": {ID: "forest", TypeLine: "Basic Land — Forest"},
-	}}
-	svc := NewService(decks, fetcher, fakeValues{})
-
-	stats, err := svc.GetDeckStats(context.Background(), testUserID, testDeckID)
-
-	require.NoError(t, err)
-	require.Len(t, stats.ManaCurve, 2)
-	assert.Equal(t, ManaCurveBucket{ManaValue: 2, Count: 4, Permanents: 2, NonPermanents: 2, Cards: []ManaCurveCard{
-		{Name: "Arcane Signet", ScryfallID: "signet", Quantity: 1, Type: "Artifact"},
-		{Name: "Mind Stone", ScryfallID: "stone", Quantity: 1, Type: "Artifact"},
-		{Name: "Shock", ScryfallID: "shock", Quantity: 2, Type: "Instant"},
-	}}, stats.ManaCurve[0])
-	assert.Equal(t, ManaCurveBucket{ManaValue: 3, Count: 2, NonPermanents: 2, Cards: []ManaCurveCard{
-		{Name: "Bala Ged Recovery // Bala Ged Sanctuary", ScryfallID: "mdfc", Quantity: 2, Type: "Sorcery"},
-	}}, stats.ManaCurve[1])
-	assert.Equal(t, []BackFaceCard{{Name: "Bala Ged Recovery // Bala Ged Sanctuary", ScryfallID: "mdfc", Quantity: 2}}, stats.BackFaceLands)
-	assert.Equal(t, 1, stats.LandCount)
-}
-
-func TestGetDeckStats_MulticolorCardCountsUnderEachColor(t *testing.T) {
-	decks := deckWith(deck.Deck{Format: "commander"}, owned("Atraxa", "atraxa", 10))
-	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
-		"atraxa": {ID: "atraxa", TypeLine: "Legendary Creature — Angel", CMC: 4, Colors: []string{"W", "U", "B", "G"}},
-	}}
-	svc := NewService(decks, fetcher, fakeValues{})
-
-	stats, err := svc.GetDeckStats(context.Background(), testUserID, testDeckID)
-
-	require.NoError(t, err)
-	assert.Equal(t, 1, stats.ColorBreakdown["W"])
-	assert.Equal(t, 1, stats.ColorBreakdown["U"])
-	assert.Equal(t, 1, stats.ColorBreakdown["B"])
-	assert.Equal(t, 1, stats.ColorBreakdown["G"])
-}
-
-func TestGetDeckStats_ArtifactCreatureCountsAsCreature(t *testing.T) {
-	decks := deckWith(deck.Deck{Format: "commander"}, owned("Construct", "construct", 10))
-	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
-		"construct": {ID: "construct", TypeLine: "Artifact Creature — Construct", CMC: 3, Colors: []string{}},
-	}}
-	svc := NewService(decks, fetcher, fakeValues{})
-
-	stats, err := svc.GetDeckStats(context.Background(), testUserID, testDeckID)
-
-	require.NoError(t, err)
-	assert.Equal(t, 1, stats.TypeBreakdown["Creature"])
-	assert.Zero(t, stats.TypeBreakdown["Artifact"])
-}
-
-func TestGetDeckStats_CardNotFoundOnScryfallCountsAsUnknownType(t *testing.T) {
-	decks := deckWith(deck.Deck{Format: "commander"}, owned("Ghost Card", "ghost", 10))
-	svc := NewService(decks, &fakeScryfallFetcher{}, fakeValues{})
-
-	stats, err := svc.GetDeckStats(context.Background(), testUserID, testDeckID)
-
-	require.NoError(t, err)
-	assert.Equal(t, 1, stats.CardCount)
-	assert.Equal(t, 1, stats.TypeBreakdown["Unknown"])
-	assert.Zero(t, stats.LandCount)
-	assert.Zero(t, stats.NonlandCount)
-}
-
-func TestGetDeckStats_UnknownDeckReturnsErrDeckNotFound(t *testing.T) {
-	svc := NewService(&fakeDeckService{}, &fakeScryfallFetcher{}, fakeValues{})
-
-	_, err := svc.GetDeckStats(context.Background(), testUserID, "00000000-0000-0000-0000-000000000999")
-
-	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrDeckNotFound)
-}
-
-func TestGetDeckStats_DistinctScryfallIDsAreOnlyFetchedOnce(t *testing.T) {
-	decks := deckWith(deck.Deck{Format: "commander"},
-		owned("Mountain", "mtn", 10, 11),
-		foil(owned("Mountain", "mtn", 12)),
-	)
-	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
-		"mtn": {ID: "mtn", TypeLine: "Basic Land — Mountain"},
-	}}
-	svc := NewService(decks, fetcher, fakeValues{})
-
-	_, err := svc.GetDeckStats(context.Background(), testUserID, testDeckID)
-
-	require.NoError(t, err)
-	assert.Len(t, fetcher.lastRequest, 1)
 }
 
 func TestGetDeckLegality_UsesAPendingCommanderAndPendingCards(t *testing.T) {
@@ -456,7 +294,7 @@ func TestGetDeckLegality_UsesAPendingCommanderAndPendingCards(t *testing.T) {
 		"bolt":    {ID: "bolt", Name: "Lightning Bolt", TypeLine: "Instant", ColorIdentity: []string{"R"}, Legalities: map[string]string{"commander": "legal"}},
 		"counter": {ID: "counter", Name: "Counterspell", TypeLine: "Instant", ColorIdentity: []string{"U"}, Legalities: map[string]string{"commander": "legal"}},
 	}}
-	svc := NewService(decks, fetcher, fakeValues{})
+	svc := NewService(decks, fetcher, fakeStore{})
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, testDeckID)
 	report = ignoringDeckSize(report)
@@ -477,7 +315,7 @@ func TestGetDeckLegality_PendingCopiesCountForSingleton(t *testing.T) {
 	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
 		"ring": {ID: "ring", Name: "Sol Ring", TypeLine: "Artifact", Legalities: map[string]string{"commander": "legal"}},
 	}}
-	svc := NewService(decks, fetcher, fakeValues{})
+	svc := NewService(decks, fetcher, fakeStore{})
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, testDeckID)
 	report = ignoringDeckSize(report)
@@ -494,7 +332,7 @@ func TestGetDeckLegality_AnIssueOnAPendingOnlyCardHasNoCardID(t *testing.T) {
 		"channel": {ID: "channel", Name: "Channel", TypeLine: "Sorcery", Legalities: map[string]string{"modern": "not_legal"}},
 	}}
 
-	report, err := NewService(decks, fetcher, fakeValues{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
+	report, err := NewService(decks, fetcher, fakeStore{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
 	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
@@ -509,7 +347,7 @@ func TestGetDeckLegality_AnIssueOnAnOwnedCardCarriesAnOwnedCopysID(t *testing.T)
 		"channel": {ID: "channel", Name: "Channel", TypeLine: "Sorcery", Legalities: map[string]string{"modern": "banned"}},
 	}}
 
-	report, err := NewService(decks, fetcher, fakeValues{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
+	report, err := NewService(decks, fetcher, fakeStore{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
 	report = ignoringDeckSize(report)
 
 	require.NoError(t, err)
@@ -530,7 +368,7 @@ func TestGetDeckLegality_CountsAPendingCardOf1500Copies(t *testing.T) {
 		"bolt":   {ID: "bolt", Name: "Lightning Bolt", TypeLine: "Instant", ColorIdentity: []string{"R"}, Legalities: map[string]string{"commander": "legal"}},
 	}}
 
-	report, err := NewService(decks, fetcher, fakeValues{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
+	report, err := NewService(decks, fetcher, fakeStore{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
 
 	require.NoError(t, err)
 	assert.False(t, report.Legal)
@@ -539,49 +377,6 @@ func TestGetDeckLegality_CountsAPendingCardOf1500Copies(t *testing.T) {
 		{CardName: "Lightning Bolt", Board: deck.BoardMain, Reason: "outside commander's color identity (card: R, commander: )"},
 		{CardName: "Lightning Bolt", Reason: "singleton violation: 1500 copies in deck (commander allows only 1, except basic lands)"},
 	}, report.Issues)
-}
-
-func TestGetDeckStats_CountsPendingCopies(t *testing.T) {
-	decks := deckWith(deck.Deck{Name: "Pile", Format: "commander"},
-		withPending(5, 3, owned("Mountain", "mtn", 10)),
-	)
-	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
-		"mtn": {ID: "mtn", TypeLine: "Basic Land — Mountain", CMC: 0},
-	}}
-	svc := NewService(decks, fetcher, fakeValues{})
-
-	stats, err := svc.GetDeckStats(context.Background(), testUserID, testDeckID)
-
-	require.NoError(t, err)
-	assert.Equal(t, 4, stats.CardCount)
-	assert.Equal(t, 4, stats.LandCount)
-	assert.Len(t, fetcher.lastRequest, 1)
-}
-
-func TestGetDeckStats_CountsAPendingCardOf1500Copies(t *testing.T) {
-	decks := deckWith(deck.Deck{Name: "Pile", Format: "commander", CommanderPendingID: ptr(5)},
-		inSlot(deck.SlotCommander, pending("Golos, Tireless Pilgrim", "golos", 5, 1)),
-		pending("Wastes", "wastes", 6, 1500),
-		pending("Shock", "shock", 7, 1500),
-	)
-	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
-		"golos":  {ID: "golos", Name: "Golos, Tireless Pilgrim", TypeLine: "Legendary Creature — Dog", CMC: 7},
-		"wastes": {ID: "wastes", TypeLine: "Basic Land"},
-		"shock":  {ID: "shock", TypeLine: "Instant", CMC: 1, Colors: []string{"R"}},
-	}}
-
-	stats, err := NewService(decks, fetcher, fakeValues{}).GetDeckStats(context.Background(), testUserID, testDeckID)
-
-	require.NoError(t, err)
-	assert.Equal(t, 3001, stats.CardCount)
-	assert.Equal(t, 1500, stats.LandCount)
-	assert.Equal(t, 1501, stats.NonlandCount)
-	assert.Equal(t, 1500, stats.ColorBreakdown["R"])
-	assert.Equal(t, map[string]int{"Land": 1500, "Instant": 1500, "Creature": 1}, stats.TypeBreakdown)
-	assert.Equal(t, []ManaCurveBucket{
-		{ManaValue: 1, Count: 1500, NonPermanents: 1500, Cards: []ManaCurveCard{{Name: "Shock", ScryfallID: "shock", Quantity: 1500, Type: "Instant"}}},
-		{ManaValue: 7, Count: 1, Permanents: 1, Cards: []ManaCurveCard{{Name: "Golos, Tireless Pilgrim", ScryfallID: "golos", Quantity: 1, Type: "Creature"}}},
-	}, stats.ManaCurve)
 }
 
 func ignoringDeckSize(report LegalityReport) LegalityReport {
@@ -611,7 +406,7 @@ func deckOf(format string, count int) (*fakeDeckService, *fakeScryfallFetcher) {
 func TestGetDeckLegality_CommanderDeckOfExactlyAHundredCardsIsLegal(t *testing.T) {
 	decks, fetcher := deckOf("commander", 100)
 
-	report, err := NewService(decks, fetcher, fakeValues{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
+	report, err := NewService(decks, fetcher, fakeStore{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
 
 	require.NoError(t, err)
 	assert.True(t, report.Legal)
@@ -622,7 +417,7 @@ func TestGetDeckLegality_CommanderDeckWithTheWrongCardCountIsNotLegal(t *testing
 	for _, count := range []int{99, 101} {
 		decks, fetcher := deckOf("commander", count)
 
-		report, err := NewService(decks, fetcher, fakeValues{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
+		report, err := NewService(decks, fetcher, fakeStore{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
 
 		require.NoError(t, err)
 		assert.False(t, report.Legal)
@@ -634,14 +429,14 @@ func TestGetDeckLegality_CommanderDeckWithTheWrongCardCountIsNotLegal(t *testing
 
 func TestGetDeckLegality_ConstructedDeckNeedsAtLeastSixtyCards(t *testing.T) {
 	decks, fetcher := deckOf("modern", 59)
-	report, err := NewService(decks, fetcher, fakeValues{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
+	report, err := NewService(decks, fetcher, fakeStore{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
 	require.NoError(t, err)
 	assert.False(t, report.Legal)
 	require.Len(t, report.Issues, 1)
 	assert.Equal(t, "deck size: 59 cards, modern requires at least 60", report.Issues[0].Reason)
 
 	decks, fetcher = deckOf("modern", 75)
-	report, err = NewService(decks, fetcher, fakeValues{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
+	report, err = NewService(decks, fetcher, fakeStore{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
 	require.NoError(t, err)
 	assert.True(t, report.Legal)
 }
@@ -650,7 +445,7 @@ func TestGetDeckLegality_CountsPendingCopiesInTheDeckSize(t *testing.T) {
 	decks, fetcher := deckOf("commander", 97)
 	decks.add(foil(pending("Forest", "forest", 1, 3)))
 
-	report, err := NewService(decks, fetcher, fakeValues{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
+	report, err := NewService(decks, fetcher, fakeStore{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
 
 	require.NoError(t, err)
 	assert.True(t, report.Legal)
@@ -661,7 +456,7 @@ func TestGetDeckLegality_PutsTheDeckSizeIssueFirst(t *testing.T) {
 	decks.add(owned("Channel", "channel", 50))
 	fetcher.cards["channel"] = scryfall.Card{ID: "channel", Name: "Channel", TypeLine: "Sorcery", Legalities: map[string]string{"commander": "banned"}}
 
-	report, err := NewService(decks, fetcher, fakeValues{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
+	report, err := NewService(decks, fetcher, fakeStore{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
 
 	require.NoError(t, err)
 	require.Len(t, report.Issues, 2)
@@ -672,7 +467,7 @@ func TestGetDeckLegality_PutsTheDeckSizeIssueFirst(t *testing.T) {
 func TestGetDeckLegality_FormatsWithoutASizeRuleAreNotChecked(t *testing.T) {
 	decks, fetcher := deckOf("someformat", 3)
 
-	report, err := NewService(decks, fetcher, fakeValues{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
+	report, err := NewService(decks, fetcher, fakeStore{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
 
 	require.NoError(t, err)
 	assert.True(t, report.Legal)
@@ -686,7 +481,7 @@ func TestGetDeckLegality_SideboardAndConsideringStayOutOfTheDeckSizeAndSingleton
 	)
 	fetcher.cards["ring"] = scryfall.Card{ID: "ring", Name: "Sol Ring", TypeLine: "Artifact", Legalities: map[string]string{"commander": "legal"}}
 
-	report, err := NewService(decks, fetcher, fakeValues{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
+	report, err := NewService(decks, fetcher, fakeStore{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
 
 	require.NoError(t, err)
 	assert.True(t, report.Legal, report.Issues)
@@ -700,27 +495,11 @@ func TestGetDeckLegality_ChecksTheSideboardAndConsideringCards(t *testing.T) {
 	)
 	fetcher.cards["channel"] = scryfall.Card{ID: "channel", Name: "Channel", TypeLine: "Sorcery", Legalities: map[string]string{"commander": "banned"}}
 
-	report, err := NewService(decks, fetcher, fakeValues{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
+	report, err := NewService(decks, fetcher, fakeStore{}).GetDeckLegality(context.Background(), testUserID, testDeckID)
 
 	require.NoError(t, err)
 	assert.False(t, report.Legal)
 	require.Len(t, report.Issues, 2)
 	assert.Equal(t, deck.BoardSideboard, report.Issues[0].Board)
 	assert.Equal(t, deck.BoardConsidering, report.Issues[1].Board)
-}
-
-func TestGetDeckStats_OnlyCountsTheMainBoard(t *testing.T) {
-	decks := deckWith(deck.Deck{Name: "Pile", Format: "modern"},
-		owned("Mountain", "mtn", 10),
-		onBoard(deck.BoardSideboard, owned("Mountain", "mtn", 11)),
-		onBoard(deck.BoardConsidering, pending("Mountain", "mtn", 5, 3)),
-	)
-	fetcher := &fakeScryfallFetcher{cards: map[string]scryfall.Card{
-		"mtn": {ID: "mtn", TypeLine: "Basic Land — Mountain", CMC: 0},
-	}}
-
-	stats, err := NewService(decks, fetcher, fakeValues{}).GetDeckStats(context.Background(), testUserID, testDeckID)
-
-	require.NoError(t, err)
-	assert.Equal(t, 1, stats.CardCount)
 }

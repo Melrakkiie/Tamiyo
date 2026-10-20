@@ -35,28 +35,36 @@ func getTestDB(t *testing.T) *sqlx.DB {
 // printing is one row of tamiyo.printings, plus the set and collector number
 // the deck's copies of it carry. Nil prices are stored as NULL.
 type printing struct {
-	ScryfallID      string
-	Name            string
-	SetCode         string
-	CollectorNumber string
-	TypeLine        string
-	OracleText      string
-	Keywords        []string
-	LegalFormats    []string
-	EUR             *float64
-	EURFoil         *float64
-	USD             *float64
-	USDFoil         *float64
-	USDEtched       *float64
+	ScryfallID        string
+	Name              string
+	SetCode           string
+	CollectorNumber   string
+	TypeLine          string
+	OracleText        string
+	Keywords          []string
+	ManaValue         float64
+	Colors            []string
+	ColorIdentity     []string
+	LegalFormats      []string
+	BannedFormats     []string
+	RestrictedFormats []string
+	EUR               *float64
+	EURFoil           *float64
+	USD               *float64
+	USDFoil           *float64
+	USDEtched         *float64
 }
 
 func seedPrintings(t *testing.T, db *sqlx.DB, printings ...printing) {
 	t.Helper()
 	for _, p := range printings {
 		_, err := db.Exec(`
-			INSERT INTO tamiyo.printings (scryfall_id, name, type_line, oracle_text, keywords, legal_formats, eur, eur_foil, usd, usd_foil, usd_etched)
-			VALUES ($1, $2, $3, NULLIF($4, ''), COALESCE($5::text[], '{}'), COALESCE($6::text[], '{}'), $7, $8, $9, $10, $11)
-		`, p.ScryfallID, p.Name, p.TypeLine, p.OracleText, pq.Array(p.Keywords), pq.Array(p.LegalFormats),
+			INSERT INTO tamiyo.printings (scryfall_id, name, type_line, oracle_text, keywords, mana_value, colors, color_identity,
+				legal_formats, banned_formats, restricted_formats, eur, eur_foil, usd, usd_foil, usd_etched)
+			VALUES ($1, $2, $3, NULLIF($4, ''), COALESCE($5::text[], '{}'), $6, COALESCE($7::text[], '{}'), COALESCE($8::text[], '{}'),
+				COALESCE($9::text[], '{}'), COALESCE($10::text[], '{}'), COALESCE($11::text[], '{}'), $12, $13, $14, $15, $16)
+		`, p.ScryfallID, p.Name, p.TypeLine, p.OracleText, pq.Array(p.Keywords), p.ManaValue, pq.Array(p.Colors), pq.Array(p.ColorIdentity),
+			pq.Array(p.LegalFormats), pq.Array(p.BannedFormats), pq.Array(p.RestrictedFormats),
 			p.EUR, p.EURFoil, p.USD, p.USDFoil, p.USDEtched)
 		require.NoError(t, err)
 	}
@@ -158,7 +166,7 @@ func (f insightsFixture) cardList(t *testing.T) []deck.DeckEntry {
 }
 
 func (f insightsFixture) service() *Service {
-	return NewService(f.deckService(), &fakeScryfallFetcher{}, NewPostgresRepository(f.db))
+	return NewService(f.deckService(), nil, NewPostgresRepository(f.db))
 }
 
 func (f insightsFixture) stats(t *testing.T) DeckStats {

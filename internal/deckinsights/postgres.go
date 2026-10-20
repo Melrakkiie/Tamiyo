@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 // PostgresRepository reads what deck insights need from the database.
@@ -14,6 +15,62 @@ type PostgresRepository struct {
 
 func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
 	return &PostgresRepository{db: db}
+}
+
+// Printing is what deck statistics and legality know about a card, as stored
+// in tamiyo.printings by the background refresher.
+type Printing struct {
+	ScryfallID        string
+	Name              string
+	TypeLine          string
+	OracleText        string
+	Keywords          []string
+	ManaValue         float64
+	Colors            []string
+	ColorIdentity     []string
+	LegalFormats      []string // legal or restricted
+	BannedFormats     []string
+	RestrictedFormats []string
+}
+
+// Printings returns the stored printing of each of scryfallIDs, keyed by
+// Scryfall id. A printing not stored yet, or stored as a placeholder because
+// Scryfall didn't return it (empty type line), is left out: it is unknown.
+func (r *PostgresRepository) Printings(ctx context.Context, scryfallIDs []string) (map[string]Printing, error) {
+	byID := make(map[string]Printing, len(scryfallIDs))
+	if len(scryfallIDs) == 0 {
+		return byID, nil
+	}
+	var rows []struct {
+		ScryfallID        string         `db:"scryfall_id"`
+		Name              string         `db:"name"`
+		TypeLine          string         `db:"type_line"`
+		OracleText        string         `db:"oracle_text"`
+		Keywords          pq.StringArray `db:"keywords"`
+		ManaValue         float64        `db:"mana_value"`
+		Colors            pq.StringArray `db:"colors"`
+		ColorIdentity     pq.StringArray `db:"color_identity"`
+		LegalFormats      pq.StringArray `db:"legal_formats"`
+		BannedFormats     pq.StringArray `db:"banned_formats"`
+		RestrictedFormats pq.StringArray `db:"restricted_formats"`
+	}
+	err := r.db.SelectContext(ctx, &rows, `
+		SELECT scryfall_id::text AS scryfall_id, name, type_line, COALESCE(oracle_text, '') AS oracle_text, keywords,
+			mana_value::float8 AS mana_value, colors, color_identity, legal_formats, banned_formats, restricted_formats
+		FROM tamiyo.printings
+		WHERE scryfall_id = ANY($1::uuid[]) AND type_line <> ''
+	`, pq.Array(scryfallIDs))
+	if err != nil {
+		return nil, fmt.Errorf("reading printings: %w", err)
+	}
+	for _, row := range rows {
+		byID[row.ScryfallID] = Printing{
+			ScryfallID: row.ScryfallID, Name: row.Name, TypeLine: row.TypeLine, OracleText: row.OracleText,
+			Keywords: row.Keywords, ManaValue: row.ManaValue, Colors: row.Colors, ColorIdentity: row.ColorIdentity,
+			LegalFormats: row.LegalFormats, BannedFormats: row.BannedFormats, RestrictedFormats: row.RestrictedFormats,
+		}
+	}
+	return byID, nil
 }
 
 // DeckValues holds a deck's values before rounding, priced by tamiyo.card_price.

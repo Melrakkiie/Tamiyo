@@ -77,6 +77,30 @@ func TestGetDeckStats_DeckWithoutCardsIsWorthNothing(t *testing.T) {
 	assert.Equal(t, BoardValues{}, stats.BoardValues)
 }
 
+// Card printings for the statistics, read from tamiyo.printings.
+var (
+	mountain = printing{ScryfallID: "22222222-0000-0000-0000-000000000001", Name: "Mountain", SetCode: "fdn", CollectorNumber: "279",
+		TypeLine: "Basic Land — Mountain"}
+	solRing = printing{ScryfallID: "22222222-0000-0000-0000-000000000002", Name: "Sol Ring", SetCode: "c21", CollectorNumber: "263",
+		TypeLine: "Artifact", ManaValue: 1}
+)
+
+func TestGetDeckStats_SeparatesLandsFromNonlands(t *testing.T) {
+	f := newInsightsFixture(t, "commander")
+	seedPrintings(t, f.db, mountain, solRing)
+	f.ownedCopy(t, mountain, copyOptions{})
+	f.ownedCopy(t, solRing, copyOptions{})
+
+	stats := f.stats(t)
+
+	assert.Equal(t, 2, stats.CardCount)
+	assert.Equal(t, 1, stats.LandCount)
+	assert.Equal(t, 1, stats.NonlandCount)
+	assert.Equal(t, 1.0, stats.AverageManaValue)
+	assert.Equal(t, map[string]int{"C": 1}, stats.ColorBreakdown)
+	assert.Equal(t, map[string]int{"Land": 1, "Artifact": 1}, stats.TypeBreakdown)
+}
+
 type listValues struct{ owned, pending, sideboard float64 }
 
 // cardListValues sums the prices the card list shows next to each non-proxy

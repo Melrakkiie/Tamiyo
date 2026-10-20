@@ -9,7 +9,7 @@ import (
 	"Melrakkiie/Tamiyo/internal/scryfall"
 )
 
-func computeStats(entries []deck.DeckEntry, scryfallByID map[string]scryfall.Card) DeckStats {
+func computeStats(entries []deck.DeckEntry, printings map[string]Printing) DeckStats {
 	stats := DeckStats{
 		ManaCurve:      []ManaCurveBucket{},
 		BackFaceLands:  []BackFaceCard{},
@@ -27,13 +27,13 @@ func computeStats(entries []deck.DeckEntry, scryfallByID map[string]scryfall.Car
 		quantity := e.Quantity()
 		stats.CardCount += quantity
 
-		sc, ok := scryfallByID[e.ScryfallID]
+		p, ok := printings[e.ScryfallID]
 		if !ok {
 			stats.TypeBreakdown["Unknown"] += quantity
 			continue
 		}
 
-		t := scryfall.PrimaryType(sc.TypeLine)
+		t := scryfall.PrimaryType(p.TypeLine)
 		stats.TypeBreakdown[t] += quantity
 
 		if t == "Land" {
@@ -42,7 +42,7 @@ func computeStats(entries []deck.DeckEntry, scryfallByID map[string]scryfall.Car
 		}
 
 		nonlandCount += quantity
-		if _, back, ok := strings.Cut(sc.TypeLine, "//"); ok && scryfall.PrimaryType(back) == scryfall.TypeLand {
+		if _, back, ok := strings.Cut(p.TypeLine, "//"); ok && scryfall.PrimaryType(back) == scryfall.TypeLand {
 			if i, seen := backFaceIndex[e.Name]; seen {
 				stats.BackFaceLands[i].Quantity += quantity
 			} else {
@@ -50,13 +50,13 @@ func computeStats(entries []deck.DeckEntry, scryfallByID map[string]scryfall.Car
 				stats.BackFaceLands = append(stats.BackFaceLands, BackFaceCard{Name: e.Name, ScryfallID: e.ScryfallID, Quantity: quantity})
 			}
 		}
-		totalManaValue += sc.CMC * float64(quantity)
-		addToCurve(curve, cardIndex, int(sc.CMC), e, t, isPermanent(sc.TypeLine))
+		totalManaValue += p.ManaValue * float64(quantity)
+		addToCurve(curve, cardIndex, int(p.ManaValue), e, t, isPermanent(p.TypeLine))
 
-		if len(sc.Colors) == 0 {
+		if len(p.Colors) == 0 {
 			stats.ColorBreakdown["C"] += quantity
 		} else {
-			for _, color := range sc.Colors {
+			for _, color := range p.Colors {
 				stats.ColorBreakdown[color] += quantity
 			}
 		}
