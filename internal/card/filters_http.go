@@ -104,7 +104,11 @@ func parseAdvancedFilters(query url.Values) (CardFilter, error) {
 		if err != nil {
 			return filter, errInvalidFoilFilter
 		}
-		filter.Foil = &foil
+		state := "nonfoil"
+		if foil {
+			state = "foil"
+		}
+		criteria = append(criteria, term(fieldIs, "=", state, 0))
 	}
 
 	if raw := strings.TrimSpace(query.Get("storage_type")); raw != "" {

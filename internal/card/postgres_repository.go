@@ -140,9 +140,6 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 	if filter.LegalIn != "" {
 		add("EXISTS (SELECT 1 FROM tamiyo.printings p WHERE p.scryfall_id = cards.scryfall_id AND $%d = ANY(p.legal_formats))", filter.LegalIn)
 	}
-	if filter.Foil != nil {
-		add("foil = $%d", *filter.Foil)
-	}
 	if filter.StorageType != "" {
 		add("storage_id IN (SELECT s.id FROM tamiyo.storage s WHERE s.user_id = $1 AND lower(trim(s.type)) = lower(trim($%d)))", filter.StorageType)
 	}

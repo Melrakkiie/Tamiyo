@@ -189,6 +189,11 @@ var criterionCases = []criterionCase{
 		[]string{"Delver of Secrets", "Eidolon of Blossoms", "Esika's Chariot", "Half Squirrel", "Llanowar Elves", "Mystery Elf", "Tarmogoyf"}},
 	{"color count two", url.Values{"color_count": {"2"}}, "c:2",
 		[]string{"Grist, the Hunger Tide", "Lightning Helix", "Lightning Helix"}},
+	{"foil", url.Values{"foil": {"true"}}, "is:foil",
+		[]string{"Esika's Chariot", "Lightning Helix"}},
+	{"nonfoil", url.Values{"foil": {"false"}}, "is:nonfoil",
+		[]string{"Delver of Secrets", "Eidolon of Blossoms", "Grist, the Hunger Tide", "Half Squirrel", "Lightning Helix",
+			"Llanowar Elves", "Mystery Elf", "Sol Ring", "Solemn Simulacrum", "Tarmogoyf", "Unknown"}},
 }
 
 func TestPostgresRepository_FindAll_Criteria(t *testing.T) {

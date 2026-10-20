@@ -31,8 +31,6 @@ func TestHandler_GetCards_PassesAdvancedFilters(t *testing.T) {
 	assert.Equal(t, "Creature", f.Type)
 	assert.Equal(t, "Elf", f.Subtype)
 	assert.Equal(t, "commander", f.LegalIn)
-	require.NotNil(t, f.Foil)
-	assert.True(t, *f.Foil)
 	assert.Equal(t, "deckbox", f.StorageType)
 	require.NotNil(t, f.OpenToDeck)
 	assert.Equal(t, "0a0a0a0a-0000-0000-0000-000000000001", *f.OpenToDeck)
@@ -51,7 +49,6 @@ func TestHandler_GetCards_AdvancedFilterDefaults(t *testing.T) {
 	assert.Equal(t, "eq", f.ManaValueOp)
 	assert.Equal(t, "eq", f.PowerOp)
 	assert.Equal(t, "eq", f.ToughnessOp)
-	assert.Nil(t, f.Foil)
 
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards", nil))
@@ -133,6 +130,21 @@ func TestHandler_GetCards_TranslatesColorCountIntoCriteria(t *testing.T) {
 	node := advancedQuery(t, "color_count=0")
 	require.NotNil(t, node)
 	assert.Equal(t, SearchCriterion{Field: fieldColorCount, Op: "=", Number: 0}, node.Term)
+}
+
+func TestHandler_GetCards_TranslatesFoilIntoCriteria(t *testing.T) {
+	for _, tc := range []struct{ query, want string }{
+		{"foil=true", `is="foil"`},
+		{"foil=1", `is="foil"`},
+		{"foil=false", `is="nonfoil"`},
+		{"foil=F", `is="nonfoil"`},
+	} {
+		t.Run(tc.query, func(t *testing.T) {
+			node := advancedQuery(t, tc.query)
+			require.NotNil(t, node)
+			assert.Equal(t, tc.want, describe(node))
+		})
+	}
 }
 
 func TestHandler_GetCards_ParsesTheSearchQuery(t *testing.T) {

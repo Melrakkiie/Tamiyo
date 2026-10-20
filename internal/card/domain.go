@@ -45,7 +45,6 @@ type CardFilter struct {
 	Type        string
 	Subtype     string
 	LegalIn     string
-	Foil        *bool
 	StorageType string
 	OpenToDeck  *string
 
