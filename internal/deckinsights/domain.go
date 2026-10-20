@@ -4,7 +4,6 @@ import "errors"
 
 var ErrDeckNotFound = errors.New("deck does not exist")
 var ErrUnknownFormat = errors.New("deck format is not a format scryfall recognizes")
-var ErrScryfallUnavailable = errors.New("could not resolve cards against scryfall")
 
 type LegalityIssue struct {
 	CardID   int    `json:"card_id,omitempty"`

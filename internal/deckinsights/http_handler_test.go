@@ -90,16 +90,6 @@ func TestGetDeckLegality_UnknownFormatReturnsBadRequest(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestGetDeckLegality_ScryfallFailureReturnsBadGateway(t *testing.T) {
-	router := setupRouter(&fakeInsightsService{err: ErrScryfallUnavailable})
-
-	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/legality", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusBadGateway, w.Code)
-}
-
 func TestGetDeckLegality_UnknownErrorReturnsInternalServerError(t *testing.T) {
 	router := setupRouter(&fakeInsightsService{err: assertAnError{}})
 

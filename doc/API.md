@@ -1249,20 +1249,19 @@ How the owner last displayed the deck's cards, so the deck page opens the same w
 
 ## Deck Insights
 
-Two read-only routes analyze a deck's cards; nothing here persists anything. Statistics are computed from the printings Tamiyo stores and refreshes daily (see [Prices and values](#prices-and-values)), so they can be up to a day behind Scryfall; legality is checked against Scryfall at request time.
+Two read-only routes analyze a deck's cards; nothing here persists anything. Legality and statistics are both computed from the printings Tamiyo stores and refreshes daily (see [Prices and values](#prices-and-values)), so they can be up to a day behind Scryfall, like card search.
 
 **Errors common to both**
 - `400` — `:id` is not a UUID, or (legality only) the deck's own `format` field isn't a format Scryfall recognizes
 - `401` — unauthenticated
 - `404` — no deck with that id exists for this account
-- `502` — (legality only) Scryfall couldn't be reached
 - `500` — unexpected failure
 
 ---
 
 ### `GET /deck/:id/legality`
 
-Checks every card in the deck against the deck's own `format` (lowercased, matched against Scryfall's per-card `legalities`). A card that's `not_legal`, `restricted` or `banned` for that format is reported as an issue; a card whose Scryfall ID can't be resolved is reported too (legality can't be verified), rather than silently ignored.
+Checks every card in the deck against the deck's own `format` (lowercased, matched against the format lists stored with each card's printing). A card that's restricted, banned or in none of the legal lists (not legal) for that format is reported as an issue; a card whose printing isn't stored yet (just added, picked up by the background refresh within minutes) is reported too (legality can't be verified), rather than silently ignored.
 
 For the `commander` format specifically, two deck-construction rules Scryfall's per-card legality can't express are checked as well:
 - **Singleton** — at most one copy of each card by name, except basic lands.
@@ -1443,7 +1442,7 @@ The owner's copies and the deck's pending cards are merged into one list, one en
 
 Same report as [`GET /deck/:id/legality`](#get-deckidlegality), without `card_id` on the issues.
 
-**Errors:** `400` the deck's format isn't one Scryfall recognizes · `404` as above · `429` rate limit exceeded · `502` Scryfall unreachable
+**Errors:** `400` the deck's format isn't one Scryfall recognizes · `404` as above · `429` rate limit exceeded
 
 ### `GET /shared/decks/:id/stats`
 
@@ -1804,7 +1803,7 @@ All error responses share the same shape:
 | `409 Conflict` | Email already registered (`/auth/register`). |
 | `429 Too Many Requests` | Rate limit exceeded on `/auth/register` or `/auth/login` (see [rate limiting](#rate-limiting)). |
 | `500 Internal Server Error` | Unexpected failure (database unreachable, etc). |
-| `502 Bad Gateway` | A bulk import (see [Bulk Import](#bulk-import)) or deck insight (see [Deck Insights](#deck-insights)) couldn't reach or parse a response from the Scryfall API. |
+| `502 Bad Gateway` | A bulk import (see [Bulk Import](#bulk-import)) couldn't reach or parse a response from the Scryfall API. |
 
 ### Validation rules summary
 

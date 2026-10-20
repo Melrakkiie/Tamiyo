@@ -6,15 +6,10 @@ import (
 	"fmt"
 
 	"Melrakkiie/Tamiyo/internal/deck"
-	"Melrakkiie/Tamiyo/internal/scryfall"
 )
 
 type deckService interface {
 	GetDeckContent(ctx context.Context, userID string, deckID string) (deck.DeckContent, error)
-}
-
-type scryfallFetcher interface {
-	Fetch(ctx context.Context, identifiers []scryfall.Identifier) ([]scryfall.Card, error)
 }
 
 type valueReader interface {
@@ -32,13 +27,12 @@ type store interface {
 }
 
 type Service struct {
-	decks    deckService
-	scryfall scryfallFetcher
-	store    store
+	decks deckService
+	store store
 }
 
-func NewService(decks deckService, scryfall scryfallFetcher, store store) *Service {
-	return &Service{decks: decks, scryfall: scryfall, store: store}
+func NewService(decks deckService, store store) *Service {
+	return &Service{decks: decks, store: store}
 }
 
 func (s *Service) GetDeckLegality(ctx context.Context, userID string, deckID string) (LegalityReport, error) {
@@ -46,19 +40,11 @@ func (s *Service) GetDeckLegality(ctx context.Context, userID string, deckID str
 	if err != nil {
 		return LegalityReport{}, err
 	}
-	identifiers := make([]scryfall.Identifier, 0, len(content.Entries))
-	for _, id := range scryfallIDs(content.Entries) {
-		identifiers = append(identifiers, scryfall.Identifier{ID: id})
-	}
-	found, err := s.scryfall.Fetch(ctx, identifiers)
+	printings, err := s.store.Printings(ctx, scryfallIDs(content.Entries))
 	if err != nil {
-		return LegalityReport{}, fmt.Errorf("%w: %v", ErrScryfallUnavailable, err)
+		return LegalityReport{}, fmt.Errorf("loading printings: %w", err)
 	}
-	byID := make(map[string]scryfall.Card, len(found))
-	for _, c := range found {
-		byID[c.ID] = c
-	}
-	return checkLegality(content.Deck, content.Entries, byID)
+	return checkLegality(content.Deck, content.Entries, printings)
 }
 
 func (s *Service) GetDeckStats(ctx context.Context, userID string, deckID string) (DeckStats, error) {
