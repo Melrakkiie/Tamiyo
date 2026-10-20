@@ -37,7 +37,6 @@ type CardFilter struct {
 	Stack         bool
 
 	Type        string
-	Subtype     string
 	StorageType string
 	OpenToDeck  *string
 

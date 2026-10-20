@@ -88,7 +88,7 @@ func parseAdvancedFilters(query url.Values) (CardFilter, error) {
 		if len([]rune(raw)) > 50 {
 			return filter, errInvalidSubtype
 		}
-		filter.Subtype = raw
+		criteria = append(criteria, term(fieldSubtype, "=", raw, 0))
 	}
 
 	if raw := query.Get("legal_in"); raw != "" {

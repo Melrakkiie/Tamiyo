@@ -259,3 +259,26 @@ var numericCriterionCases = []criterionCase{
 func TestPostgresRepository_FindAll_NumericCriteria(t *testing.T) {
 	runCriterionCases(t, seedCriterionFixture(t), numericCriterionCases)
 }
+
+// Subtype has no search-syntax form: these rows run through the advanced
+// parameters only.
+var subtypeCriterionCases = []criterionCase{
+	{"subtype", url.Values{"subtype": {"elf"}}, "",
+		[]string{"Llanowar Elves"}},
+	{"subtype ignores case and surrounding spaces", url.Values{"subtype": {" GOLEM "}}, "",
+		[]string{"Solemn Simulacrum"}},
+	{"subtype of the front face", url.Values{"subtype": {"human"}}, "",
+		[]string{"Delver of Secrets"}},
+	{"subtype stops at the second dash", url.Values{"subtype": {"insect"}}, "",
+		[]string{}},
+	{"subtype keeps pattern wildcards", url.Values{"subtype": {"e%f"}}, "",
+		[]string{"Llanowar Elves"}},
+	{"subtype with a search", url.Values{"subtype": {"vehicle"}, "q": {"t:artifact"}}, "",
+		[]string{"Esika's Chariot"}},
+	{"subtype with mana value", url.Values{"subtype": {"o"}, "mana_value": {"4"}, "mana_value_op": {"gte"}}, "",
+		[]string{"Solemn Simulacrum"}},
+}
+
+func TestPostgresRepository_FindAll_SubtypeCriteria(t *testing.T) {
+	runCriterionCases(t, seedCriterionFixture(t), subtypeCriterionCases)
+}

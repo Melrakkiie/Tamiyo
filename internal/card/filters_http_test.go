@@ -21,7 +21,6 @@ func TestHandler_GetCards_PassesAdvancedFilters(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	f := service.lastFilter
 	assert.Equal(t, "Creature", f.Type)
-	assert.Equal(t, "Elf", f.Subtype)
 	assert.Equal(t, "deckbox", f.StorageType)
 	require.NotNil(t, f.OpenToDeck)
 	assert.Equal(t, "0a0a0a0a-0000-0000-0000-000000000001", *f.OpenToDeck)
@@ -160,6 +159,24 @@ func TestHandler_GetCards_TranslatesManaValuePowerAndToughnessIntoCriteria(t *te
 	node := advancedQuery(t, "power=0&power_op=lte")
 	require.NotNil(t, node)
 	assert.Equal(t, SearchCriterion{Field: fieldPower, Op: "<=", Number: 0}, node.Term)
+}
+
+func TestHandler_GetCards_TranslatesSubtypeIntoAnInternalCriterion(t *testing.T) {
+	assert.Equal(t, `subtype="Elf"`, describe(advancedQuery(t, "subtype=%20Elf%20")))
+	assert.Equal(t, `(subtype="vehicle" and type="artifact")`, describe(advancedQuery(t, "subtype=vehicle&q=t%3Aartifact")))
+	assert.Nil(t, advancedQuery(t, "subtype=%20%20"))
+}
+
+func TestParseSearchQuery_HasNoKeywordForInternalCriteria(t *testing.T) {
+	for _, query := range []string{"subtype:elf", "storagetype:deckbox", "storage:deckbox"} {
+		_, err := parseSearchQuery(query)
+		assert.ErrorIs(t, err, errInvalidQuery, query)
+	}
+
+	// A keyword is letters only, so this is a name search, not a criterion.
+	node, err := parseSearchQuery("storage_type:deckbox")
+	require.NoError(t, err)
+	assert.Equal(t, `name="storage_type:deckbox"`, describe(node))
 }
 
 func TestHandler_GetCards_TranslatesLegalFormatIntoCriteria(t *testing.T) {

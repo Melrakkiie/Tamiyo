@@ -1023,8 +1023,6 @@ func TestPostgresRepository_FindAll_AdvancedFilters(t *testing.T) {
 	str := func(s string) *string { return &s }
 
 	assert.Equal(t, []string{"Esika's Chariot", "Sol Ring"}, names(CardFilter{Type: "Artifact"}))
-	assert.Equal(t, []string{"Llanowar Elves"}, names(CardFilter{Subtype: "elf"}))
-	assert.Equal(t, []string{"Esika's Chariot"}, names(CardFilter{Subtype: "vehicle", Type: "Artifact"}))
 	assert.Equal(t, []string{"Lightning Helix", "Sol Ring"}, names(CardFilter{StorageType: "deckbox"}))
 	assert.Equal(t, []string{"Lightning Helix"}, names(CardFilter{StorageType: "deckbox", Query: term(fieldFormat, "=", "modern", 0), Stack: true}))
 
