@@ -20,7 +20,6 @@ type printingReader interface {
 	Printings(ctx context.Context, scryfallIDs []string) (map[string]Printing, error)
 }
 
-// store is what deck insights read from the database.
 type store interface {
 	valueReader
 	printingReader
@@ -83,7 +82,6 @@ func (s *Service) loadDeck(ctx context.Context, userID string, deckID string) (d
 	return content, nil
 }
 
-// scryfallIDs lists the distinct Scryfall ids of entries.
 func scryfallIDs(entries []deck.DeckEntry) []string {
 	seen := make(map[string]bool, len(entries))
 	var ids []string

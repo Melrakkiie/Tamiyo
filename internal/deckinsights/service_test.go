@@ -33,7 +33,6 @@ func (f *fakeDeckService) GetDeckContent(ctx context.Context, userID string, dec
 	return content, nil
 }
 
-// fakeStore stands in for the database.
 type fakeStore struct{}
 
 func (fakeStore) DeckValues(ctx context.Context, userID string, deckID string) (DeckValues, error) {
