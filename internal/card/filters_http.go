@@ -32,23 +32,31 @@ var (
 
 var scryfallIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
+// colorModeOperators maps each advanced color mode to the operator of the
+// search syntax's color criterion: exact is c=, include c>= and within c<=.
+var colorModeOperators = map[string]string{"exact": "=", "include": ">=", "within": "<="}
+
+// parseAdvancedFilters validates the advanced search parameters and translates
+// them into search criteria, joined with the parsed q= search under one AND in
+// the filter's Query, so the search compiler alone turns them into SQL.
 func parseAdvancedFilters(query url.Values) (CardFilter, error) {
 	var filter CardFilter
+	var criteria []*SearchNode
 
 	if query.Has("colors") {
 		upper := strings.ToUpper(query.Get("colors"))
 		if strings.Trim(upper, "WUBRG") != "" {
 			return filter, errInvalidFilterColors
 		}
-		normalized := scryfall.ColorCode(strings.Split(upper, ""))
-		filter.Colors = &normalized
-		filter.ColorMode = ColorModeExact
-		if mode := query.Get("color_mode"); mode != "" {
-			if mode != ColorModeExact && mode != ColorModeInclude && mode != ColorModeWithin {
-				return filter, errInvalidColorMode
-			}
-			filter.ColorMode = mode
+		mode := query.Get("color_mode")
+		if mode == "" {
+			mode = "exact"
 		}
+		op, known := colorModeOperators[mode]
+		if !known {
+			return filter, errInvalidColorMode
+		}
+		criteria = append(criteria, term(fieldColor, op, scryfall.ColorCode(strings.Split(upper, "")), 0))
 	}
 
 	var err error
@@ -114,9 +122,11 @@ func parseAdvancedFilters(query url.Values) (CardFilter, error) {
 		filter.OpenToDeck = &deckID
 	}
 
-	if filter.Query, err = parseSearchQuery(query.Get("q")); err != nil {
+	search, err := parseSearchQuery(query.Get("q"))
+	if err != nil {
 		return filter, err
 	}
+	filter.Query = allOf(append(criteria, search)...)
 
 	if raw := query.Get("scryfall_id"); raw != "" {
 		scryfallID := strings.ToLower(raw)

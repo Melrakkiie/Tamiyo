@@ -347,6 +347,25 @@ func negate(node *SearchNode) *SearchNode {
 	return &SearchNode{Kind: SearchNot, Children: []*SearchNode{node}}
 }
 
+// allOf joins the non-nil nodes under one AND: nil when there is none, the
+// node itself when there is one.
+func allOf(nodes ...*SearchNode) *SearchNode {
+	children := make([]*SearchNode, 0, len(nodes))
+	for _, node := range nodes {
+		if node != nil {
+			children = append(children, node)
+		}
+	}
+	switch len(children) {
+	case 0:
+		return nil
+	case 1:
+		return children[0]
+	default:
+		return &SearchNode{Kind: SearchAnd, Children: children}
+	}
+}
+
 func term(field, op, text string, number float64) *SearchNode {
 	return &SearchNode{Kind: SearchTerm, Term: SearchCriterion{Field: field, Op: op, Text: text, Number: number}}
 }

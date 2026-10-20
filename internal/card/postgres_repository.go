@@ -116,16 +116,6 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		args = append(args, values...)
 	}
 
-	if filter.Colors != nil {
-		switch filter.ColorMode {
-		case ColorModeInclude:
-			add("colors IS NOT NULL AND translate($%d, colors, '') = ''", *filter.Colors)
-		case ColorModeWithin:
-			add("colors IS NOT NULL AND translate(colors, $%d, '') = ''", *filter.Colors)
-		default:
-			add("colors = $%d", *filter.Colors)
-		}
-	}
 	if filter.ManaValue != nil {
 		add("mana_value "+comparisonOperators[filter.ManaValueOp]+" $%d", *filter.ManaValue)
 	}

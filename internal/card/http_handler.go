@@ -359,8 +359,6 @@ func (h *Handler) getCards(ctx *gin.Context) {
 		Stack:         stack,
 		Name:          ctx.Query("name"),
 		Query:         advanced.Query,
-		Colors:        advanced.Colors,
-		ColorMode:     advanced.ColorMode,
 		ManaValue:     advanced.ManaValue,
 		ManaValueOp:   advanced.ManaValueOp,
 		Power:         advanced.Power,

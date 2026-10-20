@@ -19,9 +19,6 @@ func TestHandler_GetCards_PassesAdvancedFilters(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	f := service.lastFilter
-	require.NotNil(t, f.Colors)
-	assert.Equal(t, "WG", *f.Colors)
-	assert.Equal(t, ColorModeWithin, f.ColorMode)
 	require.NotNil(t, f.ManaValue)
 	assert.Equal(t, 3.0, *f.ManaValue)
 	assert.Equal(t, "lte", f.ManaValueOp)
@@ -49,13 +46,10 @@ func TestHandler_GetCards_AdvancedFilterDefaults(t *testing.T) {
 	router := setupRouter(service)
 
 	w := httptest.NewRecorder()
-	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards?colors=&mana_value=2&power=3&toughness=4", nil))
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards?mana_value=2&power=3&toughness=4", nil))
 
 	require.Equal(t, http.StatusOK, w.Code)
 	f := service.lastFilter
-	require.NotNil(t, f.Colors)
-	assert.Equal(t, "", *f.Colors)
-	assert.Equal(t, ColorModeExact, f.ColorMode)
 	assert.Equal(t, "eq", f.ManaValueOp)
 	assert.Equal(t, "eq", f.PowerOp)
 	assert.Equal(t, "eq", f.ToughnessOp)
@@ -65,7 +59,7 @@ func TestHandler_GetCards_AdvancedFilterDefaults(t *testing.T) {
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards", nil))
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.Nil(t, service.lastFilter.Colors)
+	assert.Nil(t, service.lastFilter.Query)
 	assert.Nil(t, service.lastFilter.ManaValue)
 	assert.Nil(t, service.lastFilter.Power)
 	assert.Nil(t, service.lastFilter.Toughness)
@@ -103,6 +97,35 @@ func TestHandler_GetCards_RejectsInvalidAdvancedFilters(t *testing.T) {
 			router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards?"+query, nil))
 
 			assert.Equal(t, http.StatusBadRequest, w.Code)
+		})
+	}
+}
+
+func advancedQuery(t *testing.T, query string) *SearchNode {
+	t.Helper()
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards?"+query, nil))
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	return service.lastFilter.Query
+}
+
+func TestHandler_GetCards_TranslatesColorsIntoCriteria(t *testing.T) {
+	for _, tc := range []struct{ query, want string }{
+		{"colors=gw", `color="WG"`},
+		{"colors=gw&color_mode=exact", `color="WG"`},
+		{"colors=", `color=""`},
+		{"colors=g&color_mode=include", `color>="G"`},
+		{"colors=uw&color_mode=within", `color<="WU"`},
+		{"colors=g&q=t%3Aelf%20c%3Aw", `(color="G" and (type="elf" and color>="W"))`},
+	} {
+		t.Run(tc.query, func(t *testing.T) {
+			node := advancedQuery(t, tc.query)
+			require.NotNil(t, node)
+			assert.Equal(t, tc.want, describe(node))
 		})
 	}
 }
