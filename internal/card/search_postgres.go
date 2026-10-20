@@ -79,6 +79,10 @@ func criterionCondition(c SearchCriterion, bind func(any) string) string {
 		// The text after the type line's first dash; % and _ keep their
 		// pattern meaning, as the advanced subtype parameter always had.
 		return printingExists("split_part(p.type_line, '—', 2) ILIKE " + bind("%"+c.Text+"%"))
+	case fieldStorageType:
+		// Only the card owner's storages: a storage belongs to the same user as
+		// the cards it holds.
+		return "cards.storage_id IN (SELECT s.id FROM tamiyo.storage s WHERE s.user_id = cards.user_id AND lower(trim(s.type)) = lower(trim(" + bind(c.Text) + ")))"
 	case fieldKeyword:
 		return `EXISTS (SELECT 1 FROM tamiyo.printings p, unnest(p.keywords) k WHERE p.scryfall_id = cards.scryfall_id AND lower(k) = lower(` + bind(c.Text) + `))`
 	case fieldIs:

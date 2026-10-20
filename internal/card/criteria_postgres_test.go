@@ -282,3 +282,39 @@ var subtypeCriterionCases = []criterionCase{
 func TestPostgresRepository_FindAll_SubtypeCriteria(t *testing.T) {
 	runCriterionCases(t, seedCriterionFixture(t), subtypeCriterionCases)
 }
+
+// Storage type has no search-syntax form: these rows run through the advanced
+// parameters only.
+var storageTypeCriterionCases = []criterionCase{
+	{"storage type", url.Values{"storage_type": {"deckbox"}}, "",
+		[]string{"Lightning Helix", "Sol Ring", "Solemn Simulacrum"}},
+	{"storage type ignores case and surrounding spaces", url.Values{"storage_type": {" DeckBox "}}, "",
+		[]string{"Lightning Helix", "Sol Ring", "Solemn Simulacrum"}},
+	{"storage type binder", url.Values{"storage_type": {"binder"}}, "",
+		[]string{"Eidolon of Blossoms", "Grist, the Hunger Tide", "Lightning Helix", "Llanowar Elves"}},
+	{"storage type is an equality", url.Values{"storage_type": {"box"}}, "",
+		[]string{}},
+	{"storage type with format", url.Values{"storage_type": {"deckbox"}, "legal_in": {"modern"}}, "",
+		[]string{"Lightning Helix", "Solemn Simulacrum"}},
+	{"storage type with foil and a search", url.Values{"storage_type": {"deckbox"}, "foil": {"true"}, "q": {"t:instant"}}, "",
+		[]string{"Lightning Helix"}},
+}
+
+func TestPostgresRepository_FindAll_StorageTypeCriteria(t *testing.T) {
+	runCriterionCases(t, seedCriterionFixture(t), storageTypeCriterionCases)
+}
+
+func TestPostgresRepository_FindAll_StorageTypeStaysWithinTheUser(t *testing.T) {
+	f := seedCriterionFixture(t)
+	bob := criterionFixture{repo: f.repo, userID: f.otherUserID}
+
+	deckbox, err := parseAdvancedFilters(url.Values{"storage_type": {"deckbox"}})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Bob's Bolt"}, bob.names(t, deckbox))
+
+	binder, err := parseAdvancedFilters(url.Values{"storage_type": {"binder"}})
+	require.NoError(t, err)
+	assert.Equal(t, []string{}, bob.names(t, binder))
+	binder.Stack = true
+	assert.Equal(t, []string{}, bob.names(t, binder))
+}

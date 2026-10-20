@@ -122,7 +122,7 @@ func parseAdvancedFilters(query url.Values) (CardFilter, error) {
 		if len([]rune(raw)) > 50 {
 			return filter, errInvalidStorageType
 		}
-		filter.StorageType = raw
+		criteria = append(criteria, term(fieldStorageType, "=", raw, 0))
 	}
 
 	if raw := query.Get("open_to_deck"); raw != "" {

@@ -21,7 +21,6 @@ func TestHandler_GetCards_PassesAdvancedFilters(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	f := service.lastFilter
 	assert.Equal(t, "Creature", f.Type)
-	assert.Equal(t, "deckbox", f.StorageType)
 	require.NotNil(t, f.OpenToDeck)
 	assert.Equal(t, "0a0a0a0a-0000-0000-0000-000000000001", *f.OpenToDeck)
 	assert.Equal(t, "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", f.ScryfallID)
@@ -165,6 +164,13 @@ func TestHandler_GetCards_TranslatesSubtypeIntoAnInternalCriterion(t *testing.T)
 	assert.Equal(t, `subtype="Elf"`, describe(advancedQuery(t, "subtype=%20Elf%20")))
 	assert.Equal(t, `(subtype="vehicle" and type="artifact")`, describe(advancedQuery(t, "subtype=vehicle&q=t%3Aartifact")))
 	assert.Nil(t, advancedQuery(t, "subtype=%20%20"))
+}
+
+func TestHandler_GetCards_TranslatesStorageTypeIntoAnInternalCriterion(t *testing.T) {
+	assert.Equal(t, `storage_type="deckbox"`, describe(advancedQuery(t, "storage_type=%20deckbox%20")))
+	assert.Equal(t, `(subtype="elf" and storage_type="Binder" and type="creature")`,
+		describe(advancedQuery(t, "storage_type=Binder&subtype=elf&q=t%3Acreature")))
+	assert.Nil(t, advancedQuery(t, "storage_type=%20"))
 }
 
 func TestParseSearchQuery_HasNoKeywordForInternalCriteria(t *testing.T) {

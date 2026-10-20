@@ -360,7 +360,6 @@ func (h *Handler) getCards(ctx *gin.Context) {
 		Name:          ctx.Query("name"),
 		Query:         advanced.Query,
 		Type:          advanced.Type,
-		StorageType:   advanced.StorageType,
 		OpenToDeck:    advanced.OpenToDeck,
 		GroupBy:       groupBy,
 		SortField:     sortField,
