@@ -116,15 +116,6 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		args = append(args, values...)
 	}
 
-	if filter.ManaValue != nil {
-		add("mana_value "+comparisonOperators[filter.ManaValueOp]+" $%d", *filter.ManaValue)
-	}
-	if filter.Power != nil {
-		add(printingStatCondition("powers", comparisonOperators[filter.PowerOp], "$%d"), *filter.Power)
-	}
-	if filter.Toughness != nil {
-		add(printingStatCondition("toughnesses", comparisonOperators[filter.ToughnessOp], "$%d"), *filter.Toughness)
-	}
 	if filter.Type != "" {
 		add(`(card_type = $%d OR EXISTS (
 			SELECT 1 FROM tamiyo.printings p

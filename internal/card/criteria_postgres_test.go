@@ -211,3 +211,51 @@ var criterionCases = []criterionCase{
 func TestPostgresRepository_FindAll_Criteria(t *testing.T) {
 	runCriterionCases(t, seedCriterionFixture(t), criterionCases)
 }
+
+var numericCriterionCases = []criterionCase{
+	{"mana value eq", url.Values{"mana_value": {"2"}, "mana_value_op": {"eq"}}, "mv=2",
+		[]string{"Lightning Helix", "Lightning Helix", "Tarmogoyf"}},
+	{"mana value lt", url.Values{"mana_value": {"3"}, "mana_value_op": {"lt"}}, "mv<3",
+		[]string{"Delver of Secrets", "Half Squirrel", "Lightning Helix", "Lightning Helix", "Llanowar Elves", "Sol Ring", "Tarmogoyf"}},
+	{"mana value lte", url.Values{"mana_value": {"3"}, "mana_value_op": {"lte"}}, "mv<=3",
+		[]string{"Delver of Secrets", "Grist, the Hunger Tide", "Half Squirrel", "Lightning Helix", "Lightning Helix",
+			"Llanowar Elves", "Sol Ring", "Tarmogoyf"}},
+	{"mana value gt", url.Values{"mana_value": {"4"}, "mana_value_op": {"gt"}}, "mv>4",
+		[]string{"Mystery Elf", "Unknown"}},
+	{"mana value gte", url.Values{"mana_value": {"4"}, "mana_value_op": {"gte"}}, "mv>=4",
+		[]string{"Eidolon of Blossoms", "Esika's Chariot", "Mystery Elf", "Solemn Simulacrum", "Unknown"}},
+	{"mana value defaults to eq", url.Values{"mana_value": {"1"}}, "mv:1",
+		[]string{"Delver of Secrets", "Half Squirrel", "Llanowar Elves", "Sol Ring"}},
+	{"power eq", url.Values{"power": {"1"}, "power_op": {"eq"}}, "pow=1",
+		[]string{"Delver of Secrets", "Llanowar Elves"}},
+	{"power on the back face", url.Values{"power": {"3"}}, "pow:3",
+		[]string{"Delver of Secrets"}},
+	{"power lt", url.Values{"power": {"1"}, "power_op": {"lt"}}, "pow<1",
+		[]string{"Half Squirrel"}},
+	{"power lte", url.Values{"power": {"2"}, "power_op": {"lte"}}, "pow<=2",
+		[]string{"Delver of Secrets", "Eidolon of Blossoms", "Half Squirrel", "Llanowar Elves", "Solemn Simulacrum"}},
+	{"power gt", url.Values{"power": {"2"}, "power_op": {"gt"}}, "pow>2",
+		[]string{"Delver of Secrets", "Esika's Chariot"}},
+	{"power gte", url.Values{"power": {"3"}, "power_op": {"gte"}}, "pow>=3",
+		[]string{"Delver of Secrets", "Esika's Chariot"}},
+	{"power never matches a star or a missing printing", url.Values{"power": {"0"}}, "pow=0",
+		[]string{}},
+	{"toughness eq on the back face", url.Values{"toughness": {"2"}, "toughness_op": {"eq"}}, "tou=2",
+		[]string{"Delver of Secrets", "Eidolon of Blossoms", "Solemn Simulacrum"}},
+	{"toughness lt", url.Values{"toughness": {"0"}, "toughness_op": {"lt"}}, "tou<0",
+		[]string{"Half Squirrel"}},
+	{"toughness lte", url.Values{"toughness": {"1"}, "toughness_op": {"lte"}}, "tou<=1",
+		[]string{"Delver of Secrets", "Half Squirrel", "Llanowar Elves"}},
+	{"toughness gt", url.Values{"toughness": {"1"}, "toughness_op": {"gt"}}, "tou>1",
+		[]string{"Delver of Secrets", "Eidolon of Blossoms", "Esika's Chariot", "Solemn Simulacrum"}},
+	{"toughness gte", url.Values{"toughness": {"4"}, "toughness_op": {"gte"}}, "tou>=4",
+		[]string{"Esika's Chariot"}},
+	{"power and toughness of different faces", url.Values{"power": {"3"}, "toughness": {"1"}}, "pow=3 tou=1",
+		[]string{"Delver of Secrets"}},
+	{"mana value with a search", url.Values{"mana_value": {"4"}, "mana_value_op": {"gte"}, "q": {"t:creature"}}, "mv>=4 t:creature",
+		[]string{"Eidolon of Blossoms", "Mystery Elf", "Solemn Simulacrum"}},
+}
+
+func TestPostgresRepository_FindAll_NumericCriteria(t *testing.T) {
+	runCriterionCases(t, seedCriterionFixture(t), numericCriterionCases)
+}
