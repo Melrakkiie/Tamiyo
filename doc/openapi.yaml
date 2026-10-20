@@ -2314,9 +2314,11 @@ paths:
         line without printing); unmatched copies leave the deck (owned ones
         stay in the collection, a removed commander is cleared), and what
         the deck lacks is added as POST /deck/{id}/import adds it, all at
-        once and without setting a commander (when that fails, the error
-        comes alone, with no summary, and nothing is added). Each
-        listed card gets exactly the tags its lines give. Sending back the
+        once and without setting a commander. Each listed card gets
+        exactly the tags its lines give. Removals, additions and tag changes
+        are applied in one transaction: when it fails, the error comes
+        alone, with no summary, and the deck, its pending cards, its
+        commander slots and its tags stay as they were. Sending back the
         moxfield export with tags=true changes nothing.
       requestBody:
         required: true

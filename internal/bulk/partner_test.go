@@ -129,6 +129,5 @@ func TestBulkEditDeck_ClearsTheSlotOfARemovedPartner(t *testing.T) {
 	_, err := svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, strings.NewReader("5 Island (NEO) 294\n"))
 
 	require.NoError(t, err)
-	assert.True(t, decks.commanderCleared)
-	assert.Equal(t, deck.SlotPartner, decks.clearedSlot)
+	assert.Contains(t, decks.placedPlan(t, fixtureDeckID).RemoveCards, 1, "the deck module clears the slot of a removed partner")
 }

@@ -125,13 +125,6 @@ func findPending(pending []PendingCard, id int) (PendingCard, bool) {
 	return PendingCard{}, false
 }
 
-func (s *Service) SetPendingQuantity(ctx context.Context, userID string, deckID string, id int, quantity int) (PendingCard, error) {
-	if _, err := s.repo.FindByID(ctx, userID, deckID); err != nil {
-		return PendingCard{}, err
-	}
-	return s.repo.UpdatePendingQuantity(ctx, userID, deckID, id, quantity)
-}
-
 func (s *Service) RemovePendingCard(ctx context.Context, userID string, deckID string, id int) error {
 	if _, err := s.repo.FindByID(ctx, userID, deckID); err != nil {
 		return err
