@@ -106,7 +106,13 @@ var rarityRanks = map[string]int{
 	"m": 4, "mythic": 4,
 }
 
-var ownedCopyStates = map[string]bool{"foil": true, "nonfoil": true, "proxy": true}
+const (
+	copyStateFoil    = "foil"
+	copyStateNonFoil = "nonfoil"
+	copyStateProxy   = "proxy"
+)
+
+var ownedCopyStates = map[string]bool{copyStateFoil: true, copyStateNonFoil: true, copyStateProxy: true}
 
 type tokenKind int
 
@@ -352,8 +358,6 @@ func negate(node *SearchNode) *SearchNode {
 	return &SearchNode{Kind: SearchNot, Children: []*SearchNode{node}}
 }
 
-// allOf joins the non-nil nodes under one AND: nil when there is none, the
-// node itself when there is one.
 func allOf(nodes ...*SearchNode) *SearchNode {
 	children := make([]*SearchNode, 0, len(nodes))
 	for _, node := range nodes {

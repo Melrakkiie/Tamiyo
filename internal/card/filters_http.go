@@ -30,15 +30,22 @@ var (
 	errInvalidScryfallID   = errors.New("scryfall_id must be a Scryfall card id")
 )
 
+type numericFilter struct {
+	key, field      string
+	min             float64
+	errValue, errOp error
+}
+
+var numericFilters = []numericFilter{
+	{"mana_value", fieldManaValue, 0, errInvalidManaValue, errInvalidManaValueOp},
+	{"power", fieldPower, -1000000, errInvalidPower, errInvalidPowerOp},
+	{"toughness", fieldToughness, -1000000, errInvalidToughness, errInvalidToughnessOp},
+}
+
 var scryfallIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
-// colorModeOperators maps each advanced color mode to the operator of the
-// search syntax's color criterion: exact is c=, include c>= and within c<=.
-var colorModeOperators = map[string]string{"exact": "=", "include": ">=", "within": "<="}
+var colorModeOperators = map[string]string{deck.ColorModeExact: "=", deck.ColorModeInclude: ">=", deck.ColorModeWithin: "<="}
 
-// parseAdvancedFilters validates the advanced search parameters and translates
-// them into search criteria, joined with the parsed q= search under one AND in
-// the filter's Query, so the search compiler alone turns them into SQL.
 func parseAdvancedFilters(query url.Values) (CardFilter, error) {
 	var filter CardFilter
 	var criteria []*SearchNode
@@ -50,7 +57,7 @@ func parseAdvancedFilters(query url.Values) (CardFilter, error) {
 		}
 		mode := query.Get("color_mode")
 		if mode == "" {
-			mode = "exact"
+			mode = deck.ColorModeExact
 		}
 		op, known := colorModeOperators[mode]
 		if !known {
@@ -59,16 +66,8 @@ func parseAdvancedFilters(query url.Values) (CardFilter, error) {
 		criteria = append(criteria, term(fieldColor, op, scryfall.ColorCode(strings.Split(upper, "")), 0))
 	}
 
-	for _, stat := range []struct {
-		key, field      string
-		min             float64
-		errValue, errOp error
-	}{
-		{"mana_value", fieldManaValue, 0, errInvalidManaValue, errInvalidManaValueOp},
-		{"power", fieldPower, -1000000, errInvalidPower, errInvalidPowerOp},
-		{"toughness", fieldToughness, -1000000, errInvalidToughness, errInvalidToughnessOp},
-	} {
-		criterion, err := parseComparison(query, stat.key, stat.field, stat.min, stat.errValue, stat.errOp)
+	for _, stat := range numericFilters {
+		criterion, err := parseComparison(query, stat)
 		if err != nil {
 			return filter, err
 		}
@@ -111,9 +110,9 @@ func parseAdvancedFilters(query url.Values) (CardFilter, error) {
 		if err != nil {
 			return filter, errInvalidFoilFilter
 		}
-		state := "nonfoil"
+		state := copyStateNonFoil
 		if foil {
-			state = "foil"
+			state = copyStateFoil
 		}
 		criteria = append(criteria, term(fieldIs, "=", state, 0))
 	}
@@ -150,24 +149,22 @@ func parseAdvancedFilters(query url.Values) (CardFilter, error) {
 	return filter, nil
 }
 
-// parseComparison translates a numeric parameter and its _op companion (eq by
-// default) into the search criterion on field with the same operator.
-func parseComparison(query url.Values, key, field string, min float64, errValue, errOp error) (*SearchNode, error) {
-	raw := query.Get(key)
+func parseComparison(query url.Values, f numericFilter) (*SearchNode, error) {
+	raw := query.Get(f.key)
 	if raw == "" {
 		return nil, nil
 	}
 	value, err := strconv.ParseFloat(raw, 64)
-	if err != nil || value < min || value > 1000000 {
-		return nil, errValue
+	if err != nil || value < f.min || value > 1000000 {
+		return nil, f.errValue
 	}
-	name := query.Get(key + "_op")
+	name := query.Get(f.key + "_op")
 	if name == "" {
 		name = "eq"
 	}
 	op, ok := comparisonOperators[name]
 	if !ok {
-		return nil, errOp
+		return nil, f.errOp
 	}
-	return term(field, op, "", value), nil
+	return term(f.field, op, "", value), nil
 }

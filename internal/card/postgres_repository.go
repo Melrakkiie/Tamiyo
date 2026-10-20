@@ -168,14 +168,6 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 	return cards, total, nil
 }
 
-func printingStatCondition(column, op, value string) string {
-	return `EXISTS (
-			SELECT 1 FROM tamiyo.printings p, unnest(p.` + column + `) v
-			WHERE p.scryfall_id = cards.scryfall_id
-			  AND (CASE WHEN v ~ '^-?[0-9]*\.?[0-9]+$' THEN v::numeric END) ` + op + ` ` + value + `
-		)`
-}
-
 func withSubtypes(source string, filter CardFilter) string {
 	if filter.GroupBy != "subtype" {
 		return source

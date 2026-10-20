@@ -80,16 +80,16 @@ func criterionCondition(c SearchCriterion, bind func(any) string) string {
 		// pattern meaning, as the advanced subtype parameter always had.
 		return printingExists("split_part(p.type_line, '—', 2) ILIKE " + bind("%"+c.Text+"%"))
 	case fieldStorageType:
-		// Only the card owner's storages: a storage belongs to the same user as
-		// the cards it holds.
+		// The outer user_id = $1 scoping is what keeps this safe; matching the
+		// owner here only keeps the subquery from reading across users.
 		return "cards.storage_id IN (SELECT s.id FROM tamiyo.storage s WHERE s.user_id = cards.user_id AND lower(trim(s.type)) = lower(trim(" + bind(c.Text) + ")))"
 	case fieldKeyword:
 		return `EXISTS (SELECT 1 FROM tamiyo.printings p, unnest(p.keywords) k WHERE p.scryfall_id = cards.scryfall_id AND lower(k) = lower(` + bind(c.Text) + `))`
 	case fieldIs:
 		switch c.Text {
-		case "foil":
+		case copyStateFoil:
 			return "cards.foil"
-		case "nonfoil":
+		case copyStateNonFoil:
 			return "NOT cards.foil"
 		default:
 			return "cards.proxy"
@@ -101,6 +101,14 @@ func criterionCondition(c SearchCriterion, bind func(any) string) string {
 
 func printingExists(condition string) string {
 	return "EXISTS (SELECT 1 FROM tamiyo.printings p WHERE p.scryfall_id = cards.scryfall_id AND " + condition + ")"
+}
+
+func printingStatCondition(column, op, value string) string {
+	return `EXISTS (
+			SELECT 1 FROM tamiyo.printings p, unnest(p.` + column + `) v
+			WHERE p.scryfall_id = cards.scryfall_id
+			  AND (CASE WHEN v ~ '^-?[0-9]*\.?[0-9]+$' THEN v::numeric END) ` + op + ` ` + value + `
+		)`
 }
 
 func containsPattern(text string) string {
