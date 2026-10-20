@@ -63,43 +63,6 @@ type Prices struct {
 	USDEtched *float64
 }
 
-func (p Prices) For(foil bool, usdPerEUR float64) (eur, usd float64) {
-	eurFirst, eurSecond := ordered(foil, p.EUR, p.EURFoil)
-	usdFirst, usdSecond := ordered(foil, p.USD, firstNonNil(p.USDFoil, p.USDEtched))
-	return firstOf(eurFirst, toEUR(usdFirst, usdPerEUR), eurSecond, toEUR(usdSecond, usdPerEUR)), firstOf(usdFirst, usdSecond)
-}
-
-func ordered(foil bool, regular, foiled *float64) (first, second *float64) {
-	if foil {
-		return foiled, regular
-	}
-	return regular, foiled
-}
-
-func firstNonNil(first, second *float64) *float64 {
-	if first != nil {
-		return first
-	}
-	return second
-}
-
-func toEUR(usd *float64, usdPerEUR float64) *float64 {
-	if usd == nil || usdPerEUR <= 0 {
-		return nil
-	}
-	eur := *usd / usdPerEUR
-	return &eur
-}
-
-func firstOf(prices ...*float64) float64 {
-	for _, price := range prices {
-		if price != nil {
-			return *price
-		}
-	}
-	return 0
-}
-
 type identifier struct {
 	ID              string `json:"id,omitempty"`
 	Set             string `json:"set,omitempty"`
