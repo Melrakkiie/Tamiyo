@@ -926,7 +926,7 @@ Delete a deck and all of its card associations (`card_deck` rows are removed via
 
 ### `POST /deck/:id/duplicate`
 
-Copy a deck into your decks: one of yours, or someone else's `public` or `unlisted` deck. The copy is a new deck, **private** unless the body says otherwise, with the same `format` and `background_scryfall_id`. Its cards are added the way [`POST /deck/:id/import`](#post-deckidimport) adds a Tamiyo deck file, so the copy keeps boards, commander, proxies and tags: your owned copies of each printing go in it (your proxies for the source's proxies, your real copies for its real cards), missing ones become pending cards, pending proxies for the proxies.
+Copy a deck into your decks: one of yours, or someone else's `public` or `unlisted` deck. The copy is a new deck, **private** unless the body says otherwise, with the same `format` and `background_scryfall_id`. The copy keeps boards, commander, second commander, finishes, proxies and tags, and is read straight from the database: it never calls Scryfall, so it works when Scryfall is down. Your owned copies of each printing go in it (your proxies for the source's proxies, your real copies for its real cards), missing ones become pending cards, pending proxies for the proxies.
 
 Optional body:
 
@@ -945,9 +945,9 @@ Optional body:
 { "deck_id": "9b2f…", "summary": { "cards_created": 0, "cards_linked": 12, "cards_pending": 88, "cards_skipped": 0, "storages_created": 0, "decks_created": 1 } }
 ```
 
-If adding the cards fails (Scryfall unreachable, say), the copy is removed and the error returned.
+The copy and its cards are created in one transaction: if anything fails, no deck is created and the route returns the error alone.
 
-**Errors:** `400` invalid id, invalid body, unknown `visibility`, `folder_id` not a positive integer or not one of your folders · `404` unknown deck, or someone else's private deck · `502` Scryfall unavailable
+**Errors:** `400` invalid id, invalid body, unknown `visibility`, `folder_id` not a positive integer or not one of your folders · `404` unknown deck, or someone else's private deck
 
 ---
 

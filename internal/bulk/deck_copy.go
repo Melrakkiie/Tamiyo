@@ -1,13 +1,11 @@
 package bulk
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -21,8 +19,6 @@ const (
 	CollectAll     = "all"
 	CollectMissing = "missing"
 	CollectPending = "pending"
-
-	copySuffix = " (copie)"
 )
 
 var (
@@ -67,50 +63,22 @@ type DuplicateSummary struct {
 }
 
 func (s *Service) DuplicateDeck(ctx context.Context, userID string, deckID string, req DuplicateRequest) (DuplicateSummary, error) {
-	source, err := s.visibleDeck(ctx, userID, deckID)
-	if err != nil {
-		return DuplicateSummary{}, err
-	}
-
-	var file bytes.Buffer
-	lines, err := s.writeTamiyoDeck(ctx, source.ownerID, source.deck.ID, true, &file)
-	if err != nil {
-		return DuplicateSummary{}, err
-	}
-
-	name := strings.TrimSpace(req.Name)
-	if name == "" {
-		name = source.deck.Name + copySuffix
-	}
-	visibility := req.Visibility
-	if visibility == "" {
-		visibility = deck.VisibilityPrivate
-	}
-	created, err := s.decks.CreateDeck(ctx, userID, deck.Deck{
-		FolderID:             req.FolderID,
-		Name:                 name,
-		Format:               source.deck.Format,
-		Visibility:           visibility,
-		Bracket:              source.deck.Bracket,
-		BackgroundScryfallID: source.deck.BackgroundScryfallID,
+	result, err := s.decks.DuplicateDeck(ctx, userID, deckID, deck.DuplicateRequest{
+		Name: req.Name, FolderID: req.FolderID, Visibility: req.Visibility,
 	})
 	if err != nil {
-		return DuplicateSummary{}, fmt.Errorf("creating the copy: %w", err)
-	}
-
-	if lines == 0 {
-		return DuplicateSummary{DeckID: created.ID, Summary: Summary{DecksCreated: 1}}, nil
-	}
-
-	summary, err := s.ImportIntoDeck(ctx, userID, created.ID, DeckImportOptions{}, &file)
-	if err != nil {
-		if deleteErr := s.decks.DeleteDeck(ctx, userID, created.ID); deleteErr != nil {
-			return DuplicateSummary{}, errors.Join(err, fmt.Errorf("removing the unfinished copy: %w", deleteErr))
+		if errors.Is(err, deck.ErrNotFound) {
+			return DuplicateSummary{}, ErrDeckNotFound
 		}
 		return DuplicateSummary{}, err
 	}
-	summary.DecksCreated = 1
-	return DuplicateSummary{DeckID: created.ID, Summary: summary}, nil
+	summary := Summary{DecksCreated: 1}
+	summary.CardsLinked = result.Placement.CardsLinked
+	summary.CardsPending = result.Placement.CardsPending
+	for _, skipped := range result.Placement.SkippedTags {
+		summary.Warnings = append(summary.Warnings, fmt.Sprintf("could not tag %q: %v", skipped.CardName, skipped.Err))
+	}
+	return DuplicateSummary{DeckID: result.Deck.ID, Summary: summary}, nil
 }
 
 type CollectRequest struct {
@@ -236,7 +204,6 @@ func (h *Handler) duplicateDeck(ctx *gin.Context) {
 		apierr.Respond(ctx, err,
 			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: deck.ErrTargetFolderNotFound, Status: http.StatusBadRequest, Message: deck.ErrTargetFolderNotFound.Error()},
-			apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway},
 		)
 		return
 	}

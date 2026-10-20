@@ -7,6 +7,7 @@ import "context"
 // applies entirely or not at all.
 type CompositionStore interface {
 	FindByID(ctx context.Context, userID string, id string) (Deck, error)
+	Create(ctx context.Context, userID string, d Deck) (Deck, error)
 	Update(ctx context.Context, userID string, d Deck) (Deck, error)
 	FindCardsByDeckID(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]DeckCard, error)
 
@@ -38,4 +39,7 @@ type Composer interface {
 	// ComposeCollection runs apply in a single transaction that locks no
 	// deck, for an operation that only adds to the user's collection.
 	ComposeCollection(ctx context.Context, apply func(CompositionStore) error) error
+	// ComposeNewDeck creates the deck for the user and runs apply on it in a
+	// single transaction: when apply fails the deck doesn't exist.
+	ComposeNewDeck(ctx context.Context, userID string, d Deck, apply func(store CompositionStore, created Deck) error) (Deck, error)
 }

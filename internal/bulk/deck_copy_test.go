@@ -21,138 +21,52 @@ const (
 	otherUserID   = "22222222-2222-2222-2222-222222222222"
 )
 
-func copyDeckFixture() *fakeDeckService {
+func sharedDeckFixture() *fakeDeckService {
 	decks := tamiyoDeckFixture()
 	decks.nextID = 50
-	return decks
-}
-
-func sharedDeckFixture() *fakeDeckService {
-	decks := copyDeckFixture()
 	decks.owners = map[string]string{fixtureDeckID: otherUserID}
 	return decks
 }
 
-func TestDuplicateDeck_CopiesOwnDeckAsPrivate(t *testing.T) {
-	decks := copyDeckFixture()
-	decks.decks[0].BackgroundScryfallID = ptrString(solRingSLD)
-	decks.decks[0].Visibility = deck.VisibilityPublic
-	bracket := 3
-	decks.decks[0].Bracket = &bracket
-	folderID := 7
-	decks.decks[0].FolderID = &folderID
-	decks.decks[0].Favorite = true
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
-	targetFolderID := 9
+func TestDuplicateDeck_AsksTheDeckModuleForTheCopyAndSummarisesIt(t *testing.T) {
+	decks := &fakeDeckService{duplicateResult: deck.DuplicateResult{
+		Deck: deck.Deck{ID: "00000000-0000-0000-0000-000000000050"},
+		Placement: deck.PlacementSummary{
+			CardsLinked: 2, CardsPending: 7,
+			SkippedTags: []deck.SkippedTags{{CardName: "Sol Ring", Err: deck.ErrCardNotInDeck}},
+		},
+	}}
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, nil)
+	folderID := 9
 
-	result, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{Name: "  Tempo v2 ", FolderID: &targetFolderID})
-
-	require.NoError(t, err)
-	require.Len(t, decks.created, 1)
-	copied := decks.created[0]
-	assert.Equal(t, copied.ID, result.DeckID)
-	assert.Equal(t, "Tempo v2", copied.Name)
-	assert.Equal(t, "commander", copied.Format)
-	assert.Equal(t, deck.VisibilityPrivate, copied.Visibility)
-	assert.Equal(t, ptrString(solRingSLD), copied.BackgroundScryfallID)
-	assert.Equal(t, &bracket, copied.Bracket)
-	assert.Equal(t, &targetFolderID, copied.FolderID)
-	assert.False(t, copied.Favorite)
-	assert.Equal(t, 1, result.Summary.DecksCreated)
-	assert.Equal(t, 9, result.Summary.CardsPending)
-	plan := decks.placedPlan(t, result.DeckID)
-	assert.Equal(t, "Tamiyo, Inquisitive Student", plan.Lines[0].Printing.Name)
-	assert.True(t, plan.Lines[0].Commander)
-	assert.Equal(t, []deck.TaggedCard{{Name: "Sol Ring", Tags: []string{"Ramp"}}}, plan.Tags)
-}
-
-func TestDuplicateDeck_EmptyRequestGivesDefaultNameAndNoFolder(t *testing.T) {
-	decks := copyDeckFixture()
-	folderID := 7
-	decks.decks[0].FolderID = &folderID
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
-
-	_, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{Name: "   "})
+	result, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{Name: "Tempo v2", FolderID: &folderID, Visibility: deck.VisibilityPublic})
 
 	require.NoError(t, err)
-	require.Len(t, decks.created, 1)
-	assert.Equal(t, "Tamiyo tempo (copie)", decks.created[0].Name)
-	assert.Nil(t, decks.created[0].FolderID)
-	assert.Equal(t, deck.VisibilityPrivate, decks.created[0].Visibility)
-}
-
-func TestDuplicateDeck_UsesTheChosenVisibility(t *testing.T) {
-	decks := copyDeckFixture()
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
-
-	_, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{Visibility: deck.VisibilityUnlisted})
-
-	require.NoError(t, err)
-	require.Len(t, decks.created, 1)
-	assert.Equal(t, deck.VisibilityUnlisted, decks.created[0].Visibility)
-}
-
-func TestDuplicateDeck_CopiesSomeoneElsesSharedDeck(t *testing.T) {
-	decks := sharedDeckFixture()
-	folderID := 7
-	decks.decks[0].FolderID = &folderID
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
-
-	result, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{})
-
-	require.NoError(t, err)
-	require.Len(t, decks.created, 1)
-	assert.Equal(t, "Tamiyo tempo (copie)", decks.created[0].Name)
-	assert.Nil(t, decks.created[0].FolderID)
-	assert.Equal(t, 9, result.Summary.CardsPending)
-}
-
-func TestDuplicateDeck_KeepsOwnedAndPendingProxiesAsProxies(t *testing.T) {
-	decks := proxyDeckFixture()
-	decks.nextID = 50
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
-
-	result, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{})
-
-	require.NoError(t, err)
-	assert.Equal(t, []placedLine{
-		{name: "Sol Ring", setCode: "sld", quantity: 1, board: deck.BoardMain, proxy: deck.RealOnly},
-		{name: "Sol Ring", setCode: "sld", quantity: 2, board: deck.BoardMain, proxy: deck.ProxyOnly},
-		{name: "Duress", setCode: "m19", quantity: 2, board: deck.BoardSideboard, proxy: deck.ProxyOnly},
-	}, placedLines(decks.placedPlan(t, result.DeckID)))
-}
-
-func TestDuplicateDeck_EmptyDeckGivesAnEmptyCopy(t *testing.T) {
-	decks := &fakeDeckService{nextID: 50, decks: []deck.Deck{{ID: fixtureDeckID, Name: "Vide", Format: "modern"}}}
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
-
-	result, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{})
-
-	require.NoError(t, err)
-	require.Len(t, decks.created, 1)
-	assert.Equal(t, "Vide (copie)", decks.created[0].Name)
-	assert.Equal(t, Summary{DecksCreated: 1}, result.Summary)
-}
-
-func TestDuplicateDeck_RemovesTheCopyWhenScryfallFails(t *testing.T) {
-	decks := copyDeckFixture()
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{err: errors.New("down")})
-
-	_, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{})
-
-	assert.ErrorIs(t, err, ErrScryfallUnavailable)
-	require.Len(t, decks.created, 1)
-	assert.Equal(t, []string{decks.created[0].ID}, decks.deleted)
+	assert.Equal(t, []duplication{{sourceID: fixtureDeckID, req: deck.DuplicateRequest{Name: "Tempo v2", FolderID: &folderID, Visibility: deck.VisibilityPublic}}}, decks.duplicated)
+	assert.Equal(t, "00000000-0000-0000-0000-000000000050", result.DeckID)
+	assert.Equal(t, Summary{
+		DecksCreated: 1, CardsLinked: 2, CardsPending: 7,
+		Warnings: []string{`could not tag "Sol Ring": card is not in the deck`},
+	}, result.Summary)
 }
 
 func TestDuplicateDeck_UnknownDeck(t *testing.T) {
-	decks := tamiyoDeckFixture()
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, tamiyoResolver())
+	decks := &fakeDeckService{duplicateErr: deck.ErrNotFound}
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, nil)
 
 	_, err := svc.DuplicateDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000099", DuplicateRequest{})
 
 	assert.ErrorIs(t, err, ErrDeckNotFound)
-	assert.Empty(t, decks.created)
+}
+
+func TestDuplicateDeck_ReturnsTheErrorWithoutASummary(t *testing.T) {
+	failure := errors.New("database down")
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{duplicateErr: failure}, nil)
+
+	result, err := svc.DuplicateDeck(context.Background(), testUserID, fixtureDeckID, DuplicateRequest{})
+
+	assert.ErrorIs(t, err, failure)
+	assert.Equal(t, DuplicateSummary{}, result)
 }
 
 func TestCollectDeck_PendingOnOwnDeckAsksTheDeckModuleForThePendingCardsOnly(t *testing.T) {
@@ -274,7 +188,7 @@ func TestHandler_DuplicateDeck_MapsErrors(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, postJSON(router, "/deck/00000000-0000-0000-0000-000000000009/duplicate", `{"visibility": "secret"}`).Code)
 	assert.Equal(t, http.StatusBadRequest, postJSON(router, "/deck/00000000-0000-0000-0000-000000000009/duplicate", `{`).Code)
 
-	cases := map[error]int{ErrDeckNotFound: http.StatusNotFound, ErrScryfallUnavailable: http.StatusBadGateway, deck.ErrTargetFolderNotFound: http.StatusBadRequest}
+	cases := map[error]int{ErrDeckNotFound: http.StatusNotFound, deck.ErrTargetFolderNotFound: http.StatusBadRequest}
 	for duplicateErr, expected := range cases {
 		w := postJSON(setupRouter(&fakeImportService{err: duplicateErr}), "/deck/00000000-0000-0000-0000-000000000009/duplicate", "")
 		assert.Equal(t, expected, w.Code)

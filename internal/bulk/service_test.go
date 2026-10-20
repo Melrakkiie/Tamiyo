@@ -151,6 +151,11 @@ func (f *fakeStorageService) CreateStorage(ctx context.Context, userID string, s
 	return s, nil
 }
 
+type duplication struct {
+	sourceID string
+	req      deck.DuplicateRequest
+}
+
 type fakeDeckService struct {
 	tags deck.DeckTags
 
@@ -162,6 +167,10 @@ type fakeDeckService struct {
 	cardsByDeck   map[string][]deck.DeckCard
 	getDeckErr    error
 	createDeckErr error
+
+	duplicated      []duplication
+	duplicateResult deck.DuplicateResult
+	duplicateErr    error
 
 	pending        []deck.PendingCard
 	entries        map[string][]deck.DeckEntry
@@ -214,6 +223,11 @@ func (f *fakeDeckService) placedPlan(t *testing.T, deckID string) deck.Placement
 func (f *fakeDeckService) DeleteDeck(ctx context.Context, userID string, id string) error {
 	f.deleted = append(f.deleted, id)
 	return nil
+}
+
+func (f *fakeDeckService) DuplicateDeck(ctx context.Context, userID string, sourceID string, req deck.DuplicateRequest) (deck.DuplicateResult, error) {
+	f.duplicated = append(f.duplicated, duplication{sourceID: sourceID, req: req})
+	return f.duplicateResult, f.duplicateErr
 }
 
 func (f *fakeDeckService) GetSharedDeck(ctx context.Context, id string) (string, deck.Deck, error) {

@@ -2644,11 +2644,11 @@ paths:
         after the body's name or "<name> (copie)" when it is absent or blank,
         in the body's folder_id or at the root, with the body's visibility or
         private. Its cards, boards,
-        commander, proxies and tags are added as POST /deck/{id}/import does
-        with a Tamiyo deck file: owned copies go in the copy (proxies for
-        proxies, real copies for real cards), missing ones become pending
-        cards, pending proxies for proxies. If adding the cards fails, the
-        copy is removed.
+        commander, second commander, finishes, proxies and tags are copied
+        from the database, with no Scryfall call: owned copies go in the copy
+        (proxies for proxies, real copies for real cards), missing ones become
+        pending cards, pending proxies for proxies. The deck and its cards are
+        created in one transaction: on a failure no deck is created.
       requestBody:
         required: false
         content:
@@ -2688,8 +2688,6 @@ paths:
                 $ref: "#/components/schemas/Error"
         "500":
           $ref: "#/components/responses/InternalError"
-        "502":
-          $ref: "#/components/responses/BadGateway"
 
   /deck/{id}/collect:
     parameters:
