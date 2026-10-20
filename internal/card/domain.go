@@ -101,8 +101,6 @@ var comparisonOperators = map[string]string{
 	"gte": ">=",
 }
 
-// IsLegalFormat reports whether format is one of the Scryfall formats a card
-// can be legal in.
 func IsLegalFormat(format string) bool {
 	return legalFormats[format]
 }

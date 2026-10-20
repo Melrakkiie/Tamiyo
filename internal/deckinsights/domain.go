@@ -63,3 +63,31 @@ type Value struct {
 	EUR float64 `json:"eur"`
 	USD float64 `json:"usd"`
 }
+
+// Printing is what deck statistics and legality know about a card, as stored
+// in tamiyo.printings by the background refresher.
+type Printing struct {
+	ScryfallID        string
+	Name              string
+	TypeLine          string
+	OracleText        string
+	Keywords          []string
+	ManaValue         float64
+	Colors            []string
+	ColorIdentity     []string
+	LegalFormats      []string // legal or restricted
+	BannedFormats     []string
+	RestrictedFormats []string
+}
+
+// DeckValues holds a deck's values before rounding, priced by tamiyo.card_price.
+type DeckValues struct {
+	Owned       Value
+	Pending     Value
+	Sideboard   Value
+	Considering Value
+}
+
+func (v Value) Plus(other Value) Value {
+	return Value{EUR: v.EUR + other.EUR, USD: v.USD + other.USD}
+}

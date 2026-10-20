@@ -138,7 +138,7 @@ func (r *LegalityReport) addIssue(e deck.DeckEntry, reason string) {
 func checkSingleton(report *LegalityReport, entries []deck.DeckEntry, printings map[string]Printing) {
 	counts := make(map[string]int)
 	for _, e := range entries {
-		if sc, ok := printings[e.ScryfallID]; ok && isBasicLand(sc.TypeLine) {
+		if printing, ok := printings[e.ScryfallID]; ok && isBasicLand(printing.TypeLine) {
 			continue
 		}
 		counts[e.Name] += e.Quantity()
@@ -169,12 +169,12 @@ func checkColorIdentity(report *LegalityReport, entries []deck.DeckEntry, printi
 	if !ok {
 		return
 	}
-	commanderScryfall, ok := printings[commander.ScryfallID]
+	commanderPrinting, ok := printings[commander.ScryfallID]
 	if !ok {
 		return
 	}
 
-	identity := append([]string(nil), commanderScryfall.ColorIdentity...)
+	identity := append([]string(nil), commanderPrinting.ColorIdentity...)
 	if partner, ok := entryInSlot(entries, deck.SlotPartner); ok {
 		identity = append(identity, printings[partner.ScryfallID].ColorIdentity...)
 	}
@@ -185,15 +185,15 @@ func checkColorIdentity(report *LegalityReport, entries []deck.DeckEntry, printi
 	commanderIdentity := scryfall.ColorCode(identity)
 
 	for _, e := range entries {
-		sc, ok := printings[e.ScryfallID]
+		printing, ok := printings[e.ScryfallID]
 		if !ok {
 			continue
 		}
-		for _, color := range sc.ColorIdentity {
+		for _, color := range printing.ColorIdentity {
 			if !allowed[color] {
 				report.addIssue(e, fmt.Sprintf(
 					"outside commander's color identity (card: %s, commander: %s)",
-					strings.Join(sc.ColorIdentity, ""), commanderIdentity,
+					strings.Join(printing.ColorIdentity, ""), commanderIdentity,
 				))
 				break
 			}

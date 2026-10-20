@@ -20,7 +20,6 @@ type printingReader interface {
 	Printings(ctx context.Context, scryfallIDs []string) (map[string]Printing, error)
 }
 
-// store is what deck insights read from the database.
 type store interface {
 	valueReader
 	printingReader
@@ -62,7 +61,7 @@ func (s *Service) GetDeckStats(ctx context.Context, userID string, deckID string
 		return DeckStats{}, fmt.Errorf("loading deck values: %w", err)
 	}
 	stats := computeStats(main, printings)
-	stats.Value = roundToCents(Value{EUR: values.Owned.EUR + values.Pending.EUR, USD: values.Owned.USD + values.Pending.USD})
+	stats.Value = roundToCents(values.Owned.Plus(values.Pending))
 	stats.OwnedValue = roundToCents(values.Owned)
 	stats.PendingValue = roundToCents(values.Pending)
 	stats.BoardValues = BoardValues{
@@ -83,7 +82,6 @@ func (s *Service) loadDeck(ctx context.Context, userID string, deckID string) (d
 	return content, nil
 }
 
-// scryfallIDs lists the distinct Scryfall ids of entries.
 func scryfallIDs(entries []deck.DeckEntry) []string {
 	seen := make(map[string]bool, len(entries))
 	var ids []string

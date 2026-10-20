@@ -53,12 +53,27 @@ func TestPostgresRepository_StorageValue_EqualsTheSumOfTheCardPrices(t *testing.
 	assert.InDelta(t, 19.25, found.Value.EUR, 0.001)
 	assert.InDelta(t, 24, found.Value.USD, 0.001)
 
+	var want struct {
+		EUR float64 `db:"eur"`
+		USD float64 `db:"usd"`
+	}
+	require.NoError(t, db.Get(&want, `
+		SELECT COALESCE(SUM(COALESCE(tamiyo.card_price(scryfall_id, foil, 'eur'), 0)), 0)::float8 AS eur,
+			COALESCE(SUM(COALESCE(tamiyo.card_price(scryfall_id, foil, 'usd'), 0)), 0)::float8 AS usd
+		FROM tamiyo.cards
+		WHERE user_id = $1 AND NOT proxy AND storage_id = 1
+	`, userID))
+	assert.InDelta(t, want.EUR, found.Value.EUR, 0.001)
+	assert.InDelta(t, want.USD, found.Value.USD, 0.001)
+
 	all, _, err := repo.FindAll(context.Background(), userID, defaultFilter())
 	require.NoError(t, err)
 	for _, s := range all {
 		if s.ID == 1 {
 			assert.InDelta(t, 19.25, s.Value.EUR, 0.001)
 			assert.InDelta(t, 24, s.Value.USD, 0.001)
+			assert.InDelta(t, want.EUR, s.Value.EUR, 0.001)
+			assert.InDelta(t, want.USD, s.Value.USD, 0.001)
 		}
 	}
 }
