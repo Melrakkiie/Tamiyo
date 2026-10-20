@@ -198,7 +198,7 @@ func TestGetDeckLegality_UsesTheUnionOfBothCommandersIdentities(t *testing.T) {
 	counterspell := scryfall.Card{Name: "Counterspell", TypeLine: "Instant", ColorIdentity: []string{"U"}}
 	swords := scryfall.Card{Name: "Swords to Plowshares", TypeLine: "Instant", ColorIdentity: []string{"W"}}
 	decks, fetcher := partnerDeckFixture(thrasios, tymna, bolt, counterspell, swords)
-	svc := NewService(decks, fetcher, fakeValues{})
+	svc := NewService(decks, fetcher, fakeStore{})
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 	report = ignoringDeckSize(report)
@@ -211,7 +211,7 @@ func TestGetDeckLegality_UsesTheUnionOfBothCommandersIdentities(t *testing.T) {
 
 func TestGetDeckLegality_ReportsCommandersThatCantBePaired(t *testing.T) {
 	decks, fetcher := partnerDeckFixture(thrasios, golos)
-	svc := NewService(decks, fetcher, fakeValues{})
+	svc := NewService(decks, fetcher, fakeStore{})
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 	report = ignoringDeckSize(report)
@@ -226,7 +226,7 @@ func TestGetDeckLegality_ReportsCommandersThatCantBePaired(t *testing.T) {
 
 func TestGetDeckLegality_AcceptsAValidPair(t *testing.T) {
 	decks, fetcher := partnerDeckFixture(wilson, raisedByGiants)
-	svc := NewService(decks, fetcher, fakeValues{})
+	svc := NewService(decks, fetcher, fakeStore{})
 
 	report, err := svc.GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001")
 	report = ignoringDeckSize(report)

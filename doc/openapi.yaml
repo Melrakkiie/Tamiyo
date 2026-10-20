@@ -2868,9 +2868,12 @@ paths:
       summary: Summarize a deck's composition
       description: >
         Mana curve, color breakdown and primary card types, computed from
-        Scryfall data. Lands are excluded from the mana curve, color
-        breakdown and average mana value, but still counted in
-        card_count, land_count and type_breakdown.
+        the stored printing of each card, without calling Scryfall (up to
+        a day behind it). A card whose printing isn't stored yet, or that
+        Scryfall doesn't know, counts as "Unknown" in type_breakdown.
+        Lands are excluded from the mana curve, color breakdown and
+        average mana value, but still counted in card_count, land_count
+        and type_breakdown.
       responses:
         "200":
           description: OK
@@ -2879,9 +2882,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeckStats"
         "400":
-          description: >
-            id is not a UUID, or the deck's format isn't one
-            Scryfall recognizes.
+          description: id is not a UUID.
           content:
             application/json:
               schema:
@@ -2896,8 +2897,6 @@ paths:
                 $ref: "#/components/schemas/Error"
         "500":
           $ref: "#/components/responses/InternalError"
-        "502":
-          $ref: "#/components/responses/BadGateway"
 
   /shared/decks:
     get:
@@ -3082,12 +3081,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DeckStats"
-        "400":
-          description: The deck's format isn't one Scryfall recognizes
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
         "404":
           description: >
             No deck has this id, or the deck is private.
@@ -3099,8 +3092,6 @@ paths:
           $ref: "#/components/responses/SharedTooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
-        "502":
-          $ref: "#/components/responses/BadGateway"
 
   /shared/decks/{id}/export:
     parameters:
