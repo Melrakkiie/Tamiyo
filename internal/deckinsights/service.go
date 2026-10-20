@@ -17,18 +17,18 @@ type scryfallFetcher interface {
 	Fetch(ctx context.Context, identifiers []scryfall.Identifier) ([]scryfall.Card, error)
 }
 
-type exchangeRates interface {
-	USDPerEUR(ctx context.Context) (float64, error)
+type valueReader interface {
+	DeckValues(ctx context.Context, userID string, deckID string) (DeckValues, error)
 }
 
 type Service struct {
 	decks    deckService
 	scryfall scryfallFetcher
-	rates    exchangeRates
+	values   valueReader
 }
 
-func NewService(decks deckService, scryfall scryfallFetcher, rates exchangeRates) *Service {
-	return &Service{decks: decks, scryfall: scryfall, rates: rates}
+func NewService(decks deckService, scryfall scryfallFetcher, values valueReader) *Service {
+	return &Service{decks: decks, scryfall: scryfall, values: values}
 }
 
 func (s *Service) GetDeckLegality(ctx context.Context, userID string, deckID string) (LegalityReport, error) {
@@ -44,15 +44,17 @@ func (s *Service) GetDeckStats(ctx context.Context, userID string, deckID string
 	if err != nil {
 		return DeckStats{}, err
 	}
-	usdPerEUR, err := s.rates.USDPerEUR(ctx)
+	values, err := s.values.DeckValues(ctx, userID, deckID)
 	if err != nil {
-		return DeckStats{}, fmt.Errorf("loading exchange rate: %w", err)
+		return DeckStats{}, fmt.Errorf("loading deck values: %w", err)
 	}
-	entries := content.Entries
-	stats := computeStats(mainBoard(entries), scryfallByID, usdPerEUR)
+	stats := computeStats(mainBoard(content.Entries), scryfallByID)
+	stats.Value = roundToCents(Value{EUR: values.Owned.EUR + values.Pending.EUR, USD: values.Owned.USD + values.Pending.USD})
+	stats.OwnedValue = roundToCents(values.Owned)
+	stats.PendingValue = roundToCents(values.Pending)
 	stats.BoardValues = BoardValues{
-		Sideboard:   entriesValue(inBoard(entries, deck.BoardSideboard), scryfallByID, usdPerEUR),
-		Considering: entriesValue(inBoard(entries, deck.BoardConsidering), scryfallByID, usdPerEUR),
+		Sideboard:   roundToCents(values.Sideboard),
+		Considering: roundToCents(values.Considering),
 	}
 	return stats, nil
 }

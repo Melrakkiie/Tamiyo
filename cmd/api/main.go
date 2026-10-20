@@ -128,7 +128,7 @@ func main() {
 	exchangeRateService := exchangerate.NewService(exchangeRateRepo)
 	exchangeRateHandler := exchangerate.NewHandler(exchangeRateService)
 
-	insightsService := deckinsights.NewService(deckService, scryfall.NewClient(), exchangeRateService)
+	insightsService := deckinsights.NewService(deckService, scryfall.NewClient(), deckinsights.NewPostgresRepository(db))
 	insightsHandler := deckinsights.NewHandler(insightsService)
 
 	shareService := deckshare.NewService(deckService, userService, insightsService)

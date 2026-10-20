@@ -9,7 +9,7 @@ import (
 	"Melrakkiie/Tamiyo/internal/scryfall"
 )
 
-func computeStats(entries []deck.DeckEntry, scryfallByID map[string]scryfall.Card, usdPerEUR float64) DeckStats {
+func computeStats(entries []deck.DeckEntry, scryfallByID map[string]scryfall.Card) DeckStats {
 	stats := DeckStats{
 		ManaCurve:      []ManaCurveBucket{},
 		BackFaceLands:  []BackFaceCard{},
@@ -31,14 +31,6 @@ func computeStats(entries []deck.DeckEntry, scryfallByID map[string]scryfall.Car
 		if !ok {
 			stats.TypeBreakdown["Unknown"] += quantity
 			continue
-		}
-
-		if !e.Proxy {
-			eur, usd := sc.Prices.For(e.Foil, usdPerEUR)
-			stats.OwnedValue.EUR += eur * float64(e.OwnedQuantity())
-			stats.OwnedValue.USD += usd * float64(e.OwnedQuantity())
-			stats.PendingValue.EUR += eur * float64(e.PendingQuantity())
-			stats.PendingValue.USD += usd * float64(e.PendingQuantity())
 		}
 
 		t := scryfall.PrimaryType(sc.TypeLine)
@@ -70,12 +62,6 @@ func computeStats(entries []deck.DeckEntry, scryfallByID map[string]scryfall.Car
 		}
 	}
 
-	stats.Value = Value{
-		EUR: roundToCents(stats.OwnedValue.EUR + stats.PendingValue.EUR),
-		USD: roundToCents(stats.OwnedValue.USD + stats.PendingValue.USD),
-	}
-	stats.OwnedValue = Value{EUR: roundToCents(stats.OwnedValue.EUR), USD: roundToCents(stats.OwnedValue.USD)}
-	stats.PendingValue = Value{EUR: roundToCents(stats.PendingValue.EUR), USD: roundToCents(stats.PendingValue.USD)}
 	stats.NonlandCount = nonlandCount
 	if nonlandCount > 0 {
 		stats.AverageManaValue = totalManaValue / float64(nonlandCount)
@@ -101,22 +87,8 @@ func computeStats(entries []deck.DeckEntry, scryfallByID map[string]scryfall.Car
 	return stats
 }
 
-func entriesValue(entries []deck.DeckEntry, scryfallByID map[string]scryfall.Card, usdPerEUR float64) Value {
-	var total Value
-	for _, e := range entries {
-		sc, ok := scryfallByID[e.ScryfallID]
-		if !ok || e.Proxy {
-			continue
-		}
-		eur, usd := sc.Prices.For(e.Foil, usdPerEUR)
-		total.EUR += eur * float64(e.Quantity())
-		total.USD += usd * float64(e.Quantity())
-	}
-	return Value{EUR: roundToCents(total.EUR), USD: roundToCents(total.USD)}
-}
-
-func roundToCents(amount float64) float64 {
-	return math.Round(amount*100) / 100
+func roundToCents(v Value) Value {
+	return Value{EUR: math.Round(v.EUR*100) / 100, USD: math.Round(v.USD*100) / 100}
 }
 
 func isPermanent(typeLine string) bool {

@@ -292,16 +292,6 @@ func mainBoard(entries []deck.DeckEntry) []deck.DeckEntry {
 	return main
 }
 
-func inBoard(entries []deck.DeckEntry, board string) []deck.DeckEntry {
-	var matching []deck.DeckEntry
-	for _, e := range entries {
-		if e.Board == board {
-			matching = append(matching, e)
-		}
-	}
-	return matching
-}
-
 func isBasicLand(typeLine string) bool {
 	return strings.Contains(typeLine, "Basic Land")
 }

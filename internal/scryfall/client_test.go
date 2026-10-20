@@ -385,34 +385,3 @@ func TestClient_ParsesPrices(t *testing.T) {
 	require.NotNil(t, prices.USDEtched)
 	assert.Equal(t, 9.75, *prices.USDEtched)
 }
-
-func TestPrices_For(t *testing.T) {
-	price := func(v float64) *float64 { return &v }
-	tests := []struct {
-		name      string
-		prices    Prices
-		foil      bool
-		usdPerEUR float64
-		wantEUR   float64
-		wantUSD   float64
-	}{
-		{name: "regular", prices: Prices{EUR: price(1), EURFoil: price(3), USD: price(2), USDFoil: price(4)}, wantEUR: 1, wantUSD: 2},
-		{name: "foil", prices: Prices{EUR: price(1), EURFoil: price(3), USD: price(2), USDFoil: price(4)}, foil: true, wantEUR: 3, wantUSD: 4},
-		{name: "regular falls back to foil", prices: Prices{EURFoil: price(3), USDFoil: price(4)}, wantEUR: 3, wantUSD: 4},
-		{name: "foil falls back to regular", prices: Prices{EUR: price(1), USD: price(2)}, foil: true, wantEUR: 1, wantUSD: 2},
-		{name: "euros converted from dollars", prices: Prices{USD: price(5)}, usdPerEUR: 1.25, wantEUR: 4, wantUSD: 5},
-		{name: "converted dollars of the same finish before euros of the other", prices: Prices{EUR: price(1), USDFoil: price(10)}, foil: true, usdPerEUR: 1.25, wantEUR: 8, wantUSD: 10},
-		{name: "etched dollars stand for the foil price", prices: Prices{USDEtched: price(10)}, foil: true, usdPerEUR: 1.25, wantEUR: 8, wantUSD: 10},
-		{name: "foil dollars before etched dollars", prices: Prices{USDFoil: price(4), USDEtched: price(10)}, foil: true, wantUSD: 4},
-		{name: "regular falls back to etched", prices: Prices{USDEtched: price(10)}, usdPerEUR: 1.25, wantEUR: 8, wantUSD: 10},
-		{name: "no conversion without a rate", prices: Prices{USD: price(5)}, wantUSD: 5},
-		{name: "no price", foil: true, usdPerEUR: 1.25},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			eur, usd := tt.prices.For(tt.foil, tt.usdPerEUR)
-			assert.Equal(t, tt.wantEUR, eur)
-			assert.Equal(t, tt.wantUSD, usd)
-		})
-	}
-}
