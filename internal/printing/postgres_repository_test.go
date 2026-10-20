@@ -216,6 +216,43 @@ func TestPostgresRepository_UpsertStoresSearchFields(t *testing.T) {
 	assert.Empty(t, keywords)
 }
 
+func TestPostgresRepository_UpsertStoresDeckInsightFields(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+	const a = "11111111-1111-1111-1111-111111111111"
+	var colors, colorIdentity, banned, restricted, legal []string
+	var manaValue float64
+	read := func() {
+		t.Helper()
+		require.NoError(t, db.QueryRow(`
+			SELECT colors, color_identity, banned_formats, restricted_formats, legal_formats, mana_value::float8
+			FROM tamiyo.printings WHERE scryfall_id = $1
+		`, a).Scan(pq.Array(&colors), pq.Array(&colorIdentity), pq.Array(&banned), pq.Array(&restricted), pq.Array(&legal), &manaValue))
+	}
+
+	require.NoError(t, repo.Upsert(ctx, []Printing{{
+		ScryfallID: a, TypeLine: "Creature", ManaValue: 2.5,
+		LegalFormats: []string{"commander", "vintage"}, BannedFormats: []string{"legacy", "modern"}, RestrictedFormats: []string{"vintage"},
+		Colors: []string{"G", "U"}, ColorIdentity: []string{"G", "U", "W"},
+	}}))
+	read()
+	assert.Equal(t, []string{"G", "U"}, colors)
+	assert.Equal(t, []string{"G", "U", "W"}, colorIdentity)
+	assert.Equal(t, []string{"legacy", "modern"}, banned)
+	assert.Equal(t, []string{"vintage"}, restricted)
+	assert.Equal(t, []string{"commander", "vintage"}, legal)
+	assert.Equal(t, 2.5, manaValue)
+
+	require.NoError(t, repo.Upsert(ctx, []Printing{{ScryfallID: a, TypeLine: "Land", LegalFormats: []string{}}}))
+	read()
+	assert.Empty(t, colors)
+	assert.Empty(t, colorIdentity)
+	assert.Empty(t, banned)
+	assert.Empty(t, restricted)
+	assert.Zero(t, manaValue)
+}
+
 func TestPostgresRepository_IDsToRefreshIncludesPendingOnlyPrintings(t *testing.T) {
 	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
