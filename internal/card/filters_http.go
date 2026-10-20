@@ -2,11 +2,10 @@ package card
 
 import (
 	"errors"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/gin-gonic/gin"
 
 	"Melrakkiie/Tamiyo/internal/deck"
 	"Melrakkiie/Tamiyo/internal/scryfall"
@@ -33,18 +32,18 @@ var (
 
 var scryfallIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
-func parseAdvancedFilters(ctx *gin.Context) (CardFilter, error) {
+func parseAdvancedFilters(query url.Values) (CardFilter, error) {
 	var filter CardFilter
 
-	if raw, present := ctx.GetQuery("colors"); present {
-		upper := strings.ToUpper(raw)
+	if query.Has("colors") {
+		upper := strings.ToUpper(query.Get("colors"))
 		if strings.Trim(upper, "WUBRG") != "" {
 			return filter, errInvalidFilterColors
 		}
 		normalized := scryfall.ColorCode(strings.Split(upper, ""))
 		filter.Colors = &normalized
 		filter.ColorMode = ColorModeExact
-		if mode := ctx.Query("color_mode"); mode != "" {
+		if mode := query.Get("color_mode"); mode != "" {
 			if mode != ColorModeExact && mode != ColorModeInclude && mode != ColorModeWithin {
 				return filter, errInvalidColorMode
 			}
@@ -53,38 +52,38 @@ func parseAdvancedFilters(ctx *gin.Context) (CardFilter, error) {
 	}
 
 	var err error
-	if filter.ManaValue, filter.ManaValueOp, err = parseComparison(ctx, "mana_value", 0, errInvalidManaValue, errInvalidManaValueOp); err != nil {
+	if filter.ManaValue, filter.ManaValueOp, err = parseComparison(query, "mana_value", 0, errInvalidManaValue, errInvalidManaValueOp); err != nil {
 		return filter, err
 	}
-	if filter.Power, filter.PowerOp, err = parseComparison(ctx, "power", -1000000, errInvalidPower, errInvalidPowerOp); err != nil {
+	if filter.Power, filter.PowerOp, err = parseComparison(query, "power", -1000000, errInvalidPower, errInvalidPowerOp); err != nil {
 		return filter, err
 	}
-	if filter.Toughness, filter.ToughnessOp, err = parseComparison(ctx, "toughness", -1000000, errInvalidToughness, errInvalidToughnessOp); err != nil {
+	if filter.Toughness, filter.ToughnessOp, err = parseComparison(query, "toughness", -1000000, errInvalidToughness, errInvalidToughnessOp); err != nil {
 		return filter, err
 	}
 
-	if raw := ctx.Query("type"); raw != "" {
+	if raw := query.Get("type"); raw != "" {
 		if !scryfall.IsPrimaryType(raw) || raw == "Other" {
 			return filter, errInvalidTypeFilter
 		}
 		filter.Type = raw
 	}
 
-	if raw := strings.TrimSpace(ctx.Query("subtype")); raw != "" {
+	if raw := strings.TrimSpace(query.Get("subtype")); raw != "" {
 		if len([]rune(raw)) > 50 {
 			return filter, errInvalidSubtype
 		}
 		filter.Subtype = raw
 	}
 
-	if raw := ctx.Query("legal_in"); raw != "" {
+	if raw := query.Get("legal_in"); raw != "" {
 		if !legalFormats[raw] {
 			return filter, errInvalidLegalIn
 		}
 		filter.LegalIn = raw
 	}
 
-	if raw := ctx.Query("color_count"); raw != "" {
+	if raw := query.Get("color_count"); raw != "" {
 		count, err := strconv.Atoi(raw)
 		if err != nil || count < 0 || count > 5 {
 			return filter, errInvalidColorCount
@@ -92,7 +91,7 @@ func parseAdvancedFilters(ctx *gin.Context) (CardFilter, error) {
 		filter.ColorCount = &count
 	}
 
-	if raw := ctx.Query("foil"); raw != "" {
+	if raw := query.Get("foil"); raw != "" {
 		foil, err := strconv.ParseBool(raw)
 		if err != nil {
 			return filter, errInvalidFoilFilter
@@ -100,14 +99,14 @@ func parseAdvancedFilters(ctx *gin.Context) (CardFilter, error) {
 		filter.Foil = &foil
 	}
 
-	if raw := strings.TrimSpace(ctx.Query("storage_type")); raw != "" {
+	if raw := strings.TrimSpace(query.Get("storage_type")); raw != "" {
 		if len([]rune(raw)) > 50 {
 			return filter, errInvalidStorageType
 		}
 		filter.StorageType = raw
 	}
 
-	if raw := ctx.Query("open_to_deck"); raw != "" {
+	if raw := query.Get("open_to_deck"); raw != "" {
 		deckID, valid := deck.ParseID(raw)
 		if !valid {
 			return filter, errInvalidOpenToDeck
@@ -115,11 +114,11 @@ func parseAdvancedFilters(ctx *gin.Context) (CardFilter, error) {
 		filter.OpenToDeck = &deckID
 	}
 
-	if filter.Query, err = parseSearchQuery(ctx.Query("q")); err != nil {
+	if filter.Query, err = parseSearchQuery(query.Get("q")); err != nil {
 		return filter, err
 	}
 
-	if raw := ctx.Query("scryfall_id"); raw != "" {
+	if raw := query.Get("scryfall_id"); raw != "" {
 		scryfallID := strings.ToLower(raw)
 		if !scryfallIDPattern.MatchString(scryfallID) {
 			return filter, errInvalidScryfallID
@@ -130,8 +129,8 @@ func parseAdvancedFilters(ctx *gin.Context) (CardFilter, error) {
 	return filter, nil
 }
 
-func parseComparison(ctx *gin.Context, key string, min float64, errValue, errOp error) (*float64, string, error) {
-	raw := ctx.Query(key)
+func parseComparison(query url.Values, key string, min float64, errValue, errOp error) (*float64, string, error) {
+	raw := query.Get(key)
 	if raw == "" {
 		return nil, "", nil
 	}
@@ -139,7 +138,7 @@ func parseComparison(ctx *gin.Context, key string, min float64, errValue, errOp 
 	if err != nil || value < min || value > 1000000 {
 		return nil, "", errValue
 	}
-	op := ctx.Query(key + "_op")
+	op := query.Get(key + "_op")
 	if op == "" {
 		return &value, "eq", nil
 	}

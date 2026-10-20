@@ -319,7 +319,7 @@ func (h *Handler) getCards(ctx *gin.Context) {
 		}
 	}
 
-	advanced, err := parseAdvancedFilters(ctx)
+	advanced, err := parseAdvancedFilters(ctx.Request.URL.Query())
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
