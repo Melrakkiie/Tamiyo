@@ -31,8 +31,6 @@ func TestHandler_GetCards_PassesAdvancedFilters(t *testing.T) {
 	assert.Equal(t, "Creature", f.Type)
 	assert.Equal(t, "Elf", f.Subtype)
 	assert.Equal(t, "commander", f.LegalIn)
-	require.NotNil(t, f.ColorCount)
-	assert.Equal(t, 2, *f.ColorCount)
 	require.NotNil(t, f.Foil)
 	assert.True(t, *f.Foil)
 	assert.Equal(t, "deckbox", f.StorageType)
@@ -53,7 +51,6 @@ func TestHandler_GetCards_AdvancedFilterDefaults(t *testing.T) {
 	assert.Equal(t, "eq", f.ManaValueOp)
 	assert.Equal(t, "eq", f.PowerOp)
 	assert.Equal(t, "eq", f.ToughnessOp)
-	assert.Nil(t, f.ColorCount)
 	assert.Nil(t, f.Foil)
 
 	w = httptest.NewRecorder()
@@ -128,6 +125,14 @@ func TestHandler_GetCards_TranslatesColorsIntoCriteria(t *testing.T) {
 			assert.Equal(t, tc.want, describe(node))
 		})
 	}
+}
+
+func TestHandler_GetCards_TranslatesColorCountIntoCriteria(t *testing.T) {
+	assert.Equal(t, `color_count=2`, describe(advancedQuery(t, "color_count=2")))
+
+	node := advancedQuery(t, "color_count=0")
+	require.NotNil(t, node)
+	assert.Equal(t, SearchCriterion{Field: fieldColorCount, Op: "=", Number: 0}, node.Term)
 }
 
 func TestHandler_GetCards_ParsesTheSearchQuery(t *testing.T) {

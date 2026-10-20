@@ -140,9 +140,6 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 	if filter.LegalIn != "" {
 		add("EXISTS (SELECT 1 FROM tamiyo.printings p WHERE p.scryfall_id = cards.scryfall_id AND $%d = ANY(p.legal_formats))", filter.LegalIn)
 	}
-	if filter.ColorCount != nil {
-		add("colors IS NOT NULL AND length(colors) = $%d", *filter.ColorCount)
-	}
 	if filter.Foil != nil {
 		add("foil = $%d", *filter.Foil)
 	}

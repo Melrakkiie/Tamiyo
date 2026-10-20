@@ -45,7 +45,6 @@ type CardFilter struct {
 	Type        string
 	Subtype     string
 	LegalIn     string
-	ColorCount  *int
 	Foil        *bool
 	StorageType string
 	OpenToDeck  *string

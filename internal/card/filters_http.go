@@ -96,7 +96,7 @@ func parseAdvancedFilters(query url.Values) (CardFilter, error) {
 		if err != nil || count < 0 || count > 5 {
 			return filter, errInvalidColorCount
 		}
-		filter.ColorCount = &count
+		criteria = append(criteria, term(fieldColorCount, "=", "", float64(count)))
 	}
 
 	if raw := query.Get("foil"); raw != "" {

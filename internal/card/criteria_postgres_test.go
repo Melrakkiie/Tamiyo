@@ -183,6 +183,12 @@ var criterionCases = []criterionCase{
 		[]string{"Delver of Secrets", "Half Squirrel", "Mystery Elf", "Sol Ring", "Solemn Simulacrum"}},
 	{"colors with a search", url.Values{"colors": {"g"}, "color_mode": {"include"}, "q": {"t:creature"}}, "c>=g t:creature",
 		[]string{"Eidolon of Blossoms", "Llanowar Elves", "Tarmogoyf"}},
+	{"color count colorless", url.Values{"color_count": {"0"}}, "c:0",
+		[]string{"Sol Ring", "Solemn Simulacrum"}},
+	{"color count one", url.Values{"color_count": {"1"}}, "c:1",
+		[]string{"Delver of Secrets", "Eidolon of Blossoms", "Esika's Chariot", "Half Squirrel", "Llanowar Elves", "Mystery Elf", "Tarmogoyf"}},
+	{"color count two", url.Values{"color_count": {"2"}}, "c:2",
+		[]string{"Grist, the Hunger Tide", "Lightning Helix", "Lightning Helix"}},
 }
 
 func TestPostgresRepository_FindAll_Criteria(t *testing.T) {

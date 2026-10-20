@@ -368,7 +368,6 @@ func (h *Handler) getCards(ctx *gin.Context) {
 		Type:          advanced.Type,
 		Subtype:       advanced.Subtype,
 		LegalIn:       advanced.LegalIn,
-		ColorCount:    advanced.ColorCount,
 		Foil:          advanced.Foil,
 		StorageType:   advanced.StorageType,
 		OpenToDeck:    advanced.OpenToDeck,
