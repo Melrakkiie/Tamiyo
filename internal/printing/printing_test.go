@@ -58,7 +58,42 @@ func TestFromScryfall_KeepsLegalAndRestrictedFormatsSorted(t *testing.T) {
 		Legalities: map[string]string{"vintage": "restricted", "commander": "legal", "modern": "banned", "standard": "not_legal"},
 	})
 
-	assert.Equal(t, Printing{ScryfallID: "a", TypeLine: "Artifact", LegalFormats: []string{"commander", "vintage"}}, p)
+	assert.Equal(t, []string{"commander", "vintage"}, p.LegalFormats)
+}
+
+func TestFromScryfall_SplitsBannedAndRestrictedFormatsSorted(t *testing.T) {
+	p := FromScryfall(scryfall.Card{
+		ID: "a",
+		Legalities: map[string]string{
+			"vintage": "restricted", "commander": "legal", "modern": "banned", "legacy": "banned",
+			"standard": "not_legal", "pauper": "restricted",
+		},
+	})
+
+	assert.Equal(t, []string{"legacy", "modern"}, p.BannedFormats)
+	assert.Equal(t, []string{"pauper", "vintage"}, p.RestrictedFormats)
+}
+
+func TestFromScryfall_KeepsColorsAndColorIdentity(t *testing.T) {
+	p := FromScryfall(scryfall.Card{ID: "a", Colors: []string{"G", "U"}, ColorIdentity: []string{"G", "U", "W"}})
+
+	assert.Equal(t, []string{"G", "U"}, p.Colors)
+	assert.Equal(t, []string{"G", "U", "W"}, p.ColorIdentity)
+}
+
+func TestFromScryfall_StoresEmptyListsForAColorlessUnrestrictedCard(t *testing.T) {
+	p := FromScryfall(scryfall.Card{ID: "a", TypeLine: "Artifact", Legalities: map[string]string{"commander": "legal"}})
+
+	assert.Equal(t, []string{}, p.Colors)
+	assert.Equal(t, []string{}, p.ColorIdentity)
+	assert.Equal(t, []string{}, p.BannedFormats)
+	assert.Equal(t, []string{}, p.RestrictedFormats)
+}
+
+func TestFromScryfall_KeepsTheManaValue(t *testing.T) {
+	p := FromScryfall(scryfall.Card{ID: "a", CMC: 3})
+
+	assert.Equal(t, 3.0, p.ManaValue)
 }
 
 func TestFromScryfall_KeepsTheEnglishName(t *testing.T) {
@@ -107,8 +142,14 @@ func TestRefreshBatch_StoresFoundAndMissingPrintings(t *testing.T) {
 	assert.Equal(t, refreshBatchSize, repo.lastLimit)
 	assert.Equal(t, []scryfall.Identifier{{ID: "AAAA"}, {ID: "bbbb"}}, fetcher.requested)
 	assert.Equal(t, []Printing{
-		{ScryfallID: "AAAA", TypeLine: "Creature — Elf", LegalFormats: []string{"commander"}},
-		{ScryfallID: "bbbb", LegalFormats: []string{}, Powers: []string{}, Toughnesses: []string{}, Keywords: []string{}},
+		{
+			ScryfallID: "AAAA", TypeLine: "Creature — Elf", LegalFormats: []string{"commander"},
+			BannedFormats: []string{}, RestrictedFormats: []string{}, Colors: []string{}, ColorIdentity: []string{},
+		},
+		{
+			ScryfallID: "bbbb", LegalFormats: []string{}, BannedFormats: []string{}, RestrictedFormats: []string{},
+			Colors: []string{}, ColorIdentity: []string{}, Powers: []string{}, Toughnesses: []string{}, Keywords: []string{},
+		},
 	}, repo.upserted)
 }
 
