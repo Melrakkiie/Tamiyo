@@ -4454,7 +4454,8 @@ components:
             - $ref: "#/components/schemas/Value"
           description: >
             Value of the main board, owned and pending cards, proxies left
-            out, from Scryfall's current prices, rounded to the cent.
+            out, from the stored printing prices the deck's card list
+            shows, rounded to the cent.
         owned_value:
           allOf:
             - $ref: "#/components/schemas/Value"

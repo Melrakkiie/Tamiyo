@@ -361,7 +361,7 @@ The value of the collection ([`GET /cards/value`](#get-cardsvalue)), of a storag
 { "eur": 12.34, "usd": 15.6 }
 ```
 
-Each card counts its printing's price: its foil price when it is foil, its regular price otherwise, and the other one when that price is missing. The foil dollar price falls back to Scryfall's etched price (`usd_etched`), the only price of etched-only printings. A card with no euro price counts its dollar price converted to euros, with the dollar price of its own finish tried before the euro price of the other. A card with no price at all counts `0`. Proxies never count. The collection and storage values use the prices stored with the printings, refreshed in the background once a day; deck values use Scryfall's current prices.
+Each card counts its printing's price: its foil price when it is foil, its regular price otherwise, and the other one when that price is missing. The foil dollar price falls back to Scryfall's etched price (`usd_etched`), the only price of etched-only printings. A card with no euro price counts its dollar price converted to euros, with the dollar price of its own finish tried before the euro price of the other. A card with no price at all counts `0`. Proxies never count. The collection, storage and deck values use the prices stored with the printings, refreshed in the background once a day: the same prices card lists show.
 
 The `price` sort of the [cards](#get-cards) and of a [deck's cards](#get-deckidcards), and the `price` of deck and pending cards, use the same stored prices and fallbacks for one copy, in the `price_currency` preference only: in dollars, a card with no dollar price has no price (`null`), and proxies have their printing's price.
 
@@ -1331,7 +1331,7 @@ Each `mana_curve` bucket splits its `count` into `permanents` and `non_permanent
 
 A multicolor card counts once per color it has in `color_breakdown`; a dual-typed permanent (e.g. "Artifact Creature") counts once under a single primary type in `type_breakdown` — Creature takes precedence over Artifact/Enchantment, matching how most deckbuilding sites categorize it. A double-faced or split card counts under the type of its front face (a creature with a land on its back is a creature). `back_face_lands` lists those cards with a land on their back face, by name with their number of copies: they aren't in `land_count`, but a client can show them as extra lands.
 
-`value` is the [value](#prices-and-values) of the `main` board, owned and pending cards, proxies left out, from Scryfall's current prices, rounded to the cent. `owned_value` and `pending_value` split it between the cards the deck holds and its [pending cards](#pending-cards-deckidpending); each is rounded on its own, so their sum can differ from `value` by a cent. `board_values` gives the value of the `sideboard` and `considering` boards the same way, owned and pending cards together, proxies left out.
+`value` is the [value](#prices-and-values) of the `main` board, owned and pending cards, proxies left out, from the stored printing prices the deck's card list shows, rounded to the cent. `owned_value` and `pending_value` split it between the cards the deck holds and its [pending cards](#pending-cards-deckidpending); each is rounded on its own, so their sum can differ from `value` by a cent. `board_values` gives the value of the `sideboard` and `considering` boards the same way, owned and pending cards together, proxies left out.
 
 ---
 
