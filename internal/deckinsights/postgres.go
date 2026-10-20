@@ -17,22 +17,6 @@ func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
 	return &PostgresRepository{db: db}
 }
 
-// Printing is what deck statistics and legality know about a card, as stored
-// in tamiyo.printings by the background refresher.
-type Printing struct {
-	ScryfallID        string
-	Name              string
-	TypeLine          string
-	OracleText        string
-	Keywords          []string
-	ManaValue         float64
-	Colors            []string
-	ColorIdentity     []string
-	LegalFormats      []string // legal or restricted
-	BannedFormats     []string
-	RestrictedFormats []string
-}
-
 // Printings returns the stored printing of each of scryfallIDs, keyed by
 // Scryfall id. A printing not stored yet, or stored as a placeholder because
 // Scryfall didn't return it (empty type line), is left out: it is unknown.
@@ -71,14 +55,6 @@ func (r *PostgresRepository) Printings(ctx context.Context, scryfallIDs []string
 		}
 	}
 	return byID, nil
-}
-
-// DeckValues holds a deck's values before rounding, priced by tamiyo.card_price.
-type DeckValues struct {
-	Owned       Value
-	Pending     Value
-	Sideboard   Value
-	Considering Value
 }
 
 // DeckValues sums the price of every non-proxy copy in the deck, owned and
