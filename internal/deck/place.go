@@ -186,7 +186,7 @@ func (p *placement) placeLine(ctx context.Context, line PlacementLine, summary *
 	if missing <= 0 {
 		return nil
 	}
-	pending, err := p.addPending(ctx, line, board, missing)
+	pending, err := p.addPending(ctx, line, board, missing, commander && len(ids) == 0)
 	if err != nil {
 		return fmt.Errorf("adding %q to the deck: %w", line.Printing.Name, err)
 	}
@@ -217,9 +217,8 @@ func (p *placement) saveCommanders(ctx context.Context) error {
 	return err
 }
 
-func (p *placement) addPending(ctx context.Context, line PlacementLine, board string, quantity int) (PendingCard, error) {
+func (p *placement) addPending(ctx context.Context, line PlacementLine, board string, quantity int, commander bool) (PendingCard, error) {
 	card := PendingCard{
-		DeckID:          p.deck.ID,
 		Name:            line.Printing.Name,
 		ScryfallID:      line.Printing.ScryfallID,
 		SetCode:         line.Printing.SetCode,
@@ -233,28 +232,22 @@ func (p *placement) addPending(ctx context.Context, line PlacementLine, board st
 		ColorIdentity:   line.Printing.ColorIdentity,
 		Board:           board,
 	}
-	if e, ok := mergeTarget(p.deck, p.pending, card, 0); ok {
-		merged, err := p.store.UpdatePendingQuantity(ctx, p.userID, p.deck.ID, e.ID, e.Quantity+quantity)
-		if err != nil {
-			return PendingCard{}, err
-		}
-		p.replacePending(merged)
-		return merged, nil
-	}
-	created, err := p.store.CreatePendingCard(ctx, p.userID, card)
+	stored, err := addPendingCard(ctx, p.store, p.userID, p.deck, p.pending, card, commander)
 	if err != nil {
 		return PendingCard{}, err
 	}
-	p.pending = append(p.pending, created)
-	return created, nil
+	p.replacePending(stored)
+	return stored, nil
 }
 
-func (p *placement) replacePending(updated PendingCard) {
+func (p *placement) replacePending(stored PendingCard) {
 	for i := range p.pending {
-		if p.pending[i].ID == updated.ID {
-			p.pending[i] = updated
+		if p.pending[i].ID == stored.ID {
+			p.pending[i] = stored
+			return
 		}
 	}
+	p.pending = append(p.pending, stored)
 }
 
 func (p *placement) writeTags(ctx context.Context, plan PlacementPlan) ([]SkippedTags, error) {

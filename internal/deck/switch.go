@@ -265,17 +265,11 @@ func (c *composition) place(want PendingCard, slot CommanderSlot, hasSlot bool) 
 }
 
 func (c *composition) addPending(p PendingCard, commander bool) (PendingCard, error) {
-	p.DeckID = c.deck.ID
-	if !commander {
-		existing, err := c.store.FindPendingCards(c.ctx, c.userID, c.deck.ID)
-		if err != nil {
-			return PendingCard{}, err
-		}
-		if e, ok := mergeTarget(c.deck, existing, p, 0); ok {
-			return c.store.UpdatePendingQuantity(c.ctx, c.userID, c.deck.ID, e.ID, e.Quantity+p.Quantity)
-		}
+	existing, err := c.store.FindPendingCards(c.ctx, c.userID, c.deck.ID)
+	if err != nil {
+		return PendingCard{}, err
 	}
-	return c.store.CreatePendingCard(c.ctx, c.userID, p)
+	return addPendingCard(c.ctx, c.store, c.userID, c.deck, existing, p, commander)
 }
 
 func copyTemplate(dc DeckCard) PendingCard {

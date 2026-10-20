@@ -66,14 +66,22 @@ func TestPlaceCards_SetsAnOwnedCommanderAndAPendingSecondCommander(t *testing.T)
 
 func TestPlaceCards_SetsAPendingCommanderApartFromAPendingCardOfTheSamePrinting(t *testing.T) {
 	f := newContentFixture(t)
-	f.pendingCard(t, atraxa, 2, copyOptions{})
+	existing := f.pendingCard(t, atraxa, 2, copyOptions{})
 
 	f.place(t, PlacementPlan{Lines: []PlacementLine{commanderLine(atraxa)}})
 
-	assert.Equal(t, []entrySummary{
-		{name: atraxa.name, board: BoardMain, slot: SlotCommander, pending: 1, quantity: 1},
-		{name: atraxa.name, board: BoardMain, pending: 2, quantity: 2},
-	}, summarize(f.content(t).Entries))
+	rows, err := f.repo.FindPendingCards(context.Background(), f.userID, contentDeckID)
+	require.NoError(t, err)
+	require.Len(t, rows, 2, "the commander is a pending card of its own")
+	quantities := map[int]int{}
+	for _, r := range rows {
+		quantities[r.ID] = r.Quantity
+	}
+	assert.Equal(t, 2, quantities[existing], "the existing pending card is untouched")
+	commanderPending := f.content(t).Deck.CommanderPendingID
+	require.NotNil(t, commanderPending)
+	assert.NotEqual(t, existing, *commanderPending)
+	assert.Equal(t, 1, quantities[*commanderPending])
 }
 
 func TestPlaceCards_KeepsTheCommanderOfADeckThatHasOne(t *testing.T) {
