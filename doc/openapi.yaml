@@ -2824,14 +2824,17 @@ paths:
       summary: Check a deck's legality for its own format
       description: >
         Checks every card in the deck against the deck's own format field,
-        using each card's Scryfall legalities. For the "commander" format
+        using the format lists stored with each card's printing (legal,
+        restricted, banned; a card in none of them is not legal), refreshed
+        daily, so a change can take up to a day to show. For the "commander" format
         specifically, also checks singleton (one copy of each card by
         name, basic lands excepted), color identity (every card within
         the union of the commanders' color identities) and, with a second
         commander, that the two can be paired (Partner, Partner with,
         Partner—quality, Friends forever, Choose a Background with a
-        Background, Doctor's companion with a Time Lord Doctor). Nothing is persisted — computed
-        fresh from Scryfall data on every call.
+        Background, Doctor's companion with a Time Lord Doctor). Nothing is
+        persisted. A card whose printing isn't stored yet is reported as
+        unverified.
       responses:
         "200":
           description: OK
@@ -2857,8 +2860,6 @@ paths:
                 $ref: "#/components/schemas/Error"
         "500":
           $ref: "#/components/responses/InternalError"
-        "502":
-          $ref: "#/components/responses/BadGateway"
 
   /deck/{id}/stats:
     parameters:
@@ -3063,8 +3064,6 @@ paths:
           $ref: "#/components/responses/SharedTooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
-        "502":
-          $ref: "#/components/responses/BadGateway"
 
   /shared/decks/{id}/stats:
     parameters:
