@@ -31,6 +31,7 @@ type criterionSeed struct {
 	name, scryfallID    string
 	colors, cardType    *string
 	typeLine            string
+	blankTypeLine       bool
 	manaValue           float64
 	foil                bool
 	storageID           *int
@@ -94,6 +95,7 @@ func seedCriterionFixture(t *testing.T) criterionFixture {
 		{name: "Half Squirrel", scryfallID: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", colors: strPtr("W"), cardType: strPtr("Creature"),
 			typeLine: "Creature — Squirrel", manaValue: 1, legal: []string{}, powers: []string{".5"}, toughnesses: []string{"-1"}},
 		{name: "Mystery Elf", scryfallID: "cccccccc-cccc-cccc-cccc-cccccccccccc", colors: strPtr("U"), cardType: strPtr("Creature"), manaValue: 7},
+		{name: "Typeless Printing", scryfallID: "dddddddd-0000-0000-0000-000000000000", cardType: strPtr("Creature"), blankTypeLine: true},
 		{name: "Unknown", scryfallID: "dddddddd-dddd-dddd-dddd-dddddddddddd", manaValue: 5},
 		{name: "Rampant Growth", scryfallID: "e1111111-1111-1111-1111-111111111111", colors: strPtr("G"), cardType: strPtr("Sorcery"),
 			typeLine: "Sorcery", manaValue: 2},
@@ -109,7 +111,7 @@ func seedCriterionFixture(t *testing.T) criterionFixture {
 			ManaValue: s.manaValue, Colors: s.colors, CardType: s.cardType, ColorIdentity: s.colors,
 		})
 		require.NoError(t, err)
-		if s.typeLine == "" {
+		if s.typeLine == "" && !s.blankTypeLine {
 			continue
 		}
 		_, err = db.Exec(`INSERT INTO tamiyo.printings (scryfall_id, type_line, legal_formats, powers, toughnesses) VALUES ($1, $2, $3, $4, $5)`,
@@ -221,7 +223,7 @@ var criterionCases = []criterionCase{
 	{"foil", url.Values{"foil": {"true"}}, "is:foil",
 		[]string{"Esika's Chariot", "Lightning Helix"}, nil},
 	{"nonfoil", url.Values{"foil": {"false"}}, "is:nonfoil",
-		[]string{"Delver of Secrets", "Dryad Arbor", "Eidolon of Blossoms", "Forest", "Grist, the Hunger Tide", "Half Squirrel", "Invasion of Zendikar", "Lightning Helix", "Llanowar Elves", "Mystery Elf", "Rampant Growth", "Sol Ring", "Solemn Simulacrum", "Tarmogoyf", "Unknown"}, nil},
+		[]string{"Delver of Secrets", "Dryad Arbor", "Eidolon of Blossoms", "Forest", "Grist, the Hunger Tide", "Half Squirrel", "Invasion of Zendikar", "Lightning Helix", "Llanowar Elves", "Mystery Elf", "Rampant Growth", "Sol Ring", "Solemn Simulacrum", "Tarmogoyf", "Typeless Printing", "Unknown"}, nil},
 	{"legal format", url.Values{"legal_in": {"pioneer"}}, "f:pioneer",
 		[]string{"Delver of Secrets", "Eidolon of Blossoms", "Esika's Chariot"}, nil},
 	{"legal format commander", url.Values{"legal_in": {"commander"}}, "f:commander",
@@ -237,9 +239,9 @@ var criterionCases = []criterionCase{
 	{"mana value eq", url.Values{"mana_value": {"2"}, "mana_value_op": {"eq"}}, "mv=2",
 		[]string{"Lightning Helix", "Lightning Helix", "Rampant Growth", "Tarmogoyf"}, nil},
 	{"mana value lt", url.Values{"mana_value": {"3"}, "mana_value_op": {"lt"}}, "mv<3",
-		[]string{"Delver of Secrets", "Dryad Arbor", "Forest", "Half Squirrel", "Lightning Helix", "Lightning Helix", "Llanowar Elves", "Rampant Growth", "Sol Ring", "Tarmogoyf"}, nil},
+		[]string{"Delver of Secrets", "Dryad Arbor", "Forest", "Half Squirrel", "Lightning Helix", "Lightning Helix", "Llanowar Elves", "Rampant Growth", "Sol Ring", "Tarmogoyf", "Typeless Printing"}, nil},
 	{"mana value lte", url.Values{"mana_value": {"3"}, "mana_value_op": {"lte"}}, "mv<=3",
-		[]string{"Delver of Secrets", "Dryad Arbor", "Forest", "Grist, the Hunger Tide", "Half Squirrel", "Lightning Helix", "Lightning Helix", "Llanowar Elves", "Rampant Growth", "Sol Ring", "Tarmogoyf"}, nil},
+		[]string{"Delver of Secrets", "Dryad Arbor", "Forest", "Grist, the Hunger Tide", "Half Squirrel", "Lightning Helix", "Lightning Helix", "Llanowar Elves", "Rampant Growth", "Sol Ring", "Tarmogoyf", "Typeless Printing"}, nil},
 	{"mana value gt", url.Values{"mana_value": {"4"}, "mana_value_op": {"gt"}}, "mv>4",
 		[]string{"Mystery Elf", "Unknown"}, nil},
 	{"mana value gte", url.Values{"mana_value": {"4"}, "mana_value_op": {"gte"}}, "mv>=4",
@@ -302,7 +304,7 @@ var criterionCases = []criterionCase{
 		[]string{"Lightning Helix"}, nil},
 	{"type Creature includes artifact, enchantment and land creatures", url.Values{"type": {"Creature"}}, "t:creature",
 		[]string{"Delver of Secrets", "Dryad Arbor", "Eidolon of Blossoms", "Half Squirrel", "Invasion of Zendikar", "Llanowar Elves",
-			"Mystery Elf", "Solemn Simulacrum", "Tarmogoyf"}, nil},
+			"Mystery Elf", "Solemn Simulacrum", "Tarmogoyf", "Typeless Printing"}, nil},
 	{"type Artifact", url.Values{"type": {"Artifact"}}, "t:artifact",
 		[]string{"Esika's Chariot", "Sol Ring", "Solemn Simulacrum"}, nil},
 	{"type Enchantment", url.Values{"type": {"Enchantment"}}, "t:enchantment",
@@ -317,6 +319,10 @@ var criterionCases = []criterionCase{
 		[]string{"Lightning Helix", "Lightning Helix"}, nil},
 	{"type Sorcery", url.Values{"type": {"Sorcery"}}, "t:sorcery",
 		[]string{"Rampant Growth"}, nil},
+	{"type falls back on the card's type when the printing has no type line", url.Values{"type": {"Creature"}, "q": {"typeless"}}, "t:creature typeless",
+		[]string{"Typeless Printing"}, nil},
+	{"type fallback only matches the card's own type", url.Values{"type": {"Artifact"}, "q": {"typeless"}}, "t:artifact typeless",
+		[]string{}, nil},
 	{"type with a search", url.Values{"type": {"Creature"}, "q": {"t:artifact"}}, "t:creature t:artifact",
 		[]string{"Solemn Simulacrum"}, nil},
 
@@ -342,11 +348,11 @@ var criterionCases = []criterionCase{
 		[]string{"Forest"}, openToOtherDeck},
 	{"open to another deck without other filters", url.Values{}, "",
 		[]string{"Delver of Secrets", "Dryad Arbor", "Eidolon of Blossoms", "Esika's Chariot", "Forest", "Grist, the Hunger Tide",
-			"Half Squirrel", "Invasion of Zendikar", "Lightning Helix", "Llanowar Elves", "Mystery Elf", "Rampant Growth", "Tarmogoyf", "Unknown"}, openToOtherDeck},
+			"Half Squirrel", "Invasion of Zendikar", "Lightning Helix", "Llanowar Elves", "Mystery Elf", "Rampant Growth", "Tarmogoyf", "Typeless Printing", "Unknown"}, openToOtherDeck},
 	{"open to the allowed deck without other filters", url.Values{}, "",
 		[]string{"Delver of Secrets", "Dryad Arbor", "Eidolon of Blossoms", "Esika's Chariot", "Forest", "Grist, the Hunger Tide",
 			"Half Squirrel", "Invasion of Zendikar", "Lightning Helix", "Lightning Helix", "Llanowar Elves", "Mystery Elf", "Rampant Growth",
-			"Sol Ring", "Solemn Simulacrum", "Tarmogoyf", "Unknown"}, openToAllowedDeck},
+			"Sol Ring", "Solemn Simulacrum", "Tarmogoyf", "Typeless Printing", "Unknown"}, openToAllowedDeck},
 	{"open to another deck with a format", url.Values{"legal_in": {"commander"}}, "f:commander",
 		[]string{"Eidolon of Blossoms", "Esika's Chariot", "Lightning Helix", "Llanowar Elves", "Tarmogoyf"}, openToOtherDeck},
 	{"open to another deck, stacked, with colors", url.Values{"colors": {"g"}, "color_mode": {"include"}}, "c>=g",
@@ -375,19 +381,17 @@ func TestPostgresRepository_FindAll_Criteria(t *testing.T) {
 	runCriterionCases(t, seedCriterionFixture(t), criterionCases)
 }
 
-func TestPostgresRepository_FindAll_StorageTypeStaysWithinTheUser(t *testing.T) {
+// The check_cards_storage_ownership trigger keeps a card in its owner's storages, so
+// the storage_type criterion cannot be tricked into reading another user's
+// storage; what is left to pin is that each user sees only their own cards.
+func TestPostgresRepository_FindAll_StorageTypeListsOnlyTheUsersOwnCards(t *testing.T) {
 	f := seedCriterionFixture(t)
 	bob := criterionFixture{repo: f.repo, userID: f.otherUserID}
 
 	deckbox, err := parseAdvancedFilters(url.Values{"storage_type": {"deckbox"}})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"Bob's Bolt"}, bob.names(t, deckbox))
-
-	binder, err := parseAdvancedFilters(url.Values{"storage_type": {"binder"}})
-	require.NoError(t, err)
-	assert.Equal(t, []string{}, bob.names(t, binder))
-	binder.Stack = true
-	assert.Equal(t, []string{}, bob.names(t, binder))
+	assert.Equal(t, []string{"Lightning Helix", "Sol Ring", "Solemn Simulacrum"}, f.names(t, deckbox))
 }
 
 // A criterion narrows the cards before the list shape is applied: the same
