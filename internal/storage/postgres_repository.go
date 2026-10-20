@@ -41,14 +41,8 @@ func (r storageRow) toDomain() Storage {
 }
 
 const valueColumns = `
-		    COALESCE(SUM(COALESCE(
-		        CASE WHEN tamiyo.cards.foil THEN tamiyo.printings.eur_foil ELSE tamiyo.printings.eur END,
-		        CASE WHEN tamiyo.cards.foil THEN COALESCE(tamiyo.printings.usd_foil, tamiyo.printings.usd_etched) ELSE tamiyo.printings.usd END / tamiyo.exchange_rates.per_eur,
-		        CASE WHEN tamiyo.cards.foil THEN tamiyo.printings.eur ELSE tamiyo.printings.eur_foil END,
-		        CASE WHEN tamiyo.cards.foil THEN tamiyo.printings.usd ELSE COALESCE(tamiyo.printings.usd_foil, tamiyo.printings.usd_etched) END / tamiyo.exchange_rates.per_eur
-		    )) FILTER (WHERE NOT tamiyo.cards.proxy), 0)::float8 AS eur,
-		    COALESCE(SUM(COALESCE(CASE WHEN tamiyo.cards.foil THEN COALESCE(tamiyo.printings.usd_foil, tamiyo.printings.usd_etched) ELSE tamiyo.printings.usd END,
-		        tamiyo.printings.usd, tamiyo.printings.usd_foil, tamiyo.printings.usd_etched)) FILTER (WHERE NOT tamiyo.cards.proxy), 0)::float8 AS usd,`
+		    COALESCE(SUM(tamiyo.card_price(tamiyo.cards.scryfall_id, tamiyo.cards.foil, 'eur')) FILTER (WHERE NOT tamiyo.cards.proxy), 0)::float8 AS eur,
+		    COALESCE(SUM(tamiyo.card_price(tamiyo.cards.scryfall_id, tamiyo.cards.foil, 'usd')) FILTER (WHERE NOT tamiyo.cards.proxy), 0)::float8 AS usd,`
 
 const allowedDeckIDsColumn = `
 		    COALESCE((
@@ -97,8 +91,6 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		    COUNT(tamiyo.cards.id) AS card_count,` + valueColumns + allowedDeckIDsColumn + `
 		FROM tamiyo.storage
 		LEFT JOIN tamiyo.cards ON tamiyo.storage.id = tamiyo.cards.storage_id AND tamiyo.cards.user_id = $1
-		LEFT JOIN tamiyo.printings ON tamiyo.printings.scryfall_id = tamiyo.cards.scryfall_id
-		LEFT JOIN tamiyo.exchange_rates ON tamiyo.exchange_rates.currency = 'usd'
 	` + whereClause + `
 		GROUP BY tamiyo.storage.id
 	` + orderByClause(filter) + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
@@ -148,8 +140,6 @@ func (r *PostgresRepository) FindByID(ctx context.Context, userID string, id int
 		    COUNT(tamiyo.cards.id) AS card_count,` + valueColumns + allowedDeckIDsColumn + `
 		FROM tamiyo.storage
 		LEFT JOIN tamiyo.cards ON tamiyo.storage.id = tamiyo.cards.storage_id AND tamiyo.cards.user_id = $2
-		LEFT JOIN tamiyo.printings ON tamiyo.printings.scryfall_id = tamiyo.cards.scryfall_id
-		LEFT JOIN tamiyo.exchange_rates ON tamiyo.exchange_rates.currency = 'usd'
 		WHERE tamiyo.storage.id = $1 AND tamiyo.storage.user_id = $2
 		GROUP BY tamiyo.storage.id
 	`
