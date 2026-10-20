@@ -59,15 +59,22 @@ func parseAdvancedFilters(query url.Values) (CardFilter, error) {
 		criteria = append(criteria, term(fieldColor, op, scryfall.ColorCode(strings.Split(upper, "")), 0))
 	}
 
-	var err error
-	if filter.ManaValue, filter.ManaValueOp, err = parseComparison(query, "mana_value", 0, errInvalidManaValue, errInvalidManaValueOp); err != nil {
-		return filter, err
-	}
-	if filter.Power, filter.PowerOp, err = parseComparison(query, "power", -1000000, errInvalidPower, errInvalidPowerOp); err != nil {
-		return filter, err
-	}
-	if filter.Toughness, filter.ToughnessOp, err = parseComparison(query, "toughness", -1000000, errInvalidToughness, errInvalidToughnessOp); err != nil {
-		return filter, err
+	for _, stat := range []struct {
+		key, field      string
+		min             float64
+		errValue, errOp error
+	}{
+		{"mana_value", fieldManaValue, 0, errInvalidManaValue, errInvalidManaValueOp},
+		{"power", fieldPower, -1000000, errInvalidPower, errInvalidPowerOp},
+		{"toughness", fieldToughness, -1000000, errInvalidToughness, errInvalidToughnessOp},
+	} {
+		criterion, err := parseComparison(query, stat.key, stat.field, stat.min, stat.errValue, stat.errOp)
+		if err != nil {
+			return filter, err
+		}
+		if criterion != nil {
+			criteria = append(criteria, criterion)
+		}
 	}
 
 	if raw := query.Get("type"); raw != "" {
@@ -81,7 +88,7 @@ func parseAdvancedFilters(query url.Values) (CardFilter, error) {
 		if len([]rune(raw)) > 50 {
 			return filter, errInvalidSubtype
 		}
-		filter.Subtype = raw
+		criteria = append(criteria, term(fieldSubtype, "=", raw, 0))
 	}
 
 	if raw := query.Get("legal_in"); raw != "" {
@@ -115,7 +122,7 @@ func parseAdvancedFilters(query url.Values) (CardFilter, error) {
 		if len([]rune(raw)) > 50 {
 			return filter, errInvalidStorageType
 		}
-		filter.StorageType = raw
+		criteria = append(criteria, term(fieldStorageType, "=", raw, 0))
 	}
 
 	if raw := query.Get("open_to_deck"); raw != "" {
@@ -143,21 +150,24 @@ func parseAdvancedFilters(query url.Values) (CardFilter, error) {
 	return filter, nil
 }
 
-func parseComparison(query url.Values, key string, min float64, errValue, errOp error) (*float64, string, error) {
+// parseComparison translates a numeric parameter and its _op companion (eq by
+// default) into the search criterion on field with the same operator.
+func parseComparison(query url.Values, key, field string, min float64, errValue, errOp error) (*SearchNode, error) {
 	raw := query.Get(key)
 	if raw == "" {
-		return nil, "", nil
+		return nil, nil
 	}
 	value, err := strconv.ParseFloat(raw, 64)
 	if err != nil || value < min || value > 1000000 {
-		return nil, "", errValue
+		return nil, errValue
 	}
-	op := query.Get(key + "_op")
-	if op == "" {
-		return &value, "eq", nil
+	name := query.Get(key + "_op")
+	if name == "" {
+		name = "eq"
 	}
-	if _, ok := comparisonOperators[op]; !ok {
-		return nil, "", errOp
+	op, ok := comparisonOperators[name]
+	if !ok {
+		return nil, errOp
 	}
-	return &value, op, nil
+	return term(field, op, "", value), nil
 }

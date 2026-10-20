@@ -63,6 +63,11 @@ const (
 	fieldNot           = "not"
 	fieldUSD           = "usd"
 	fieldEUR           = "eur"
+
+	// Internal-only criteria: produced by the advanced parameters, never by a
+	// q= keyword (they have no entry in searchKeys).
+	fieldSubtype     = "subtype"
+	fieldStorageType = "storage_type"
 )
 
 var searchKeys = map[string]string{

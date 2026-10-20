@@ -36,15 +36,7 @@ type CardFilter struct {
 	ColorIdentity *string
 	Stack         bool
 
-	ManaValue   *float64
-	ManaValueOp string
-	Power       *float64
-	PowerOp     string
-	Toughness   *float64
-	ToughnessOp string
-	Subtype     string
-	StorageType string
-	OpenToDeck  *string
+	OpenToDeck *string
 
 	GroupBy   string
 	SortField string

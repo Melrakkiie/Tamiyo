@@ -20,17 +20,6 @@ func TestHandler_GetCards_PassesAdvancedFilters(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	f := service.lastFilter
-	require.NotNil(t, f.ManaValue)
-	assert.Equal(t, 3.0, *f.ManaValue)
-	assert.Equal(t, "lte", f.ManaValueOp)
-	require.NotNil(t, f.Power)
-	assert.Equal(t, -1.0, *f.Power)
-	assert.Equal(t, "gte", f.PowerOp)
-	require.NotNil(t, f.Toughness)
-	assert.Equal(t, 0.5, *f.Toughness)
-	assert.Equal(t, "lt", f.ToughnessOp)
-	assert.Equal(t, "Elf", f.Subtype)
-	assert.Equal(t, "deckbox", f.StorageType)
 	require.NotNil(t, f.OpenToDeck)
 	assert.Equal(t, "0a0a0a0a-0000-0000-0000-000000000001", *f.OpenToDeck)
 	assert.Equal(t, "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", f.ScryfallID)
@@ -41,21 +30,9 @@ func TestHandler_GetCards_AdvancedFilterDefaults(t *testing.T) {
 	router := setupRouter(service)
 
 	w := httptest.NewRecorder()
-	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards?mana_value=2&power=3&toughness=4", nil))
-
-	require.Equal(t, http.StatusOK, w.Code)
-	f := service.lastFilter
-	assert.Equal(t, "eq", f.ManaValueOp)
-	assert.Equal(t, "eq", f.PowerOp)
-	assert.Equal(t, "eq", f.ToughnessOp)
-
-	w = httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards", nil))
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Nil(t, service.lastFilter.Query)
-	assert.Nil(t, service.lastFilter.ManaValue)
-	assert.Nil(t, service.lastFilter.Power)
-	assert.Nil(t, service.lastFilter.Toughness)
 }
 
 func TestHandler_GetCards_RejectsInvalidAdvancedFilters(t *testing.T) {
@@ -153,6 +130,58 @@ func TestHandler_GetCards_TranslatesFoilIntoCriteria(t *testing.T) {
 			assert.Equal(t, tc.want, describe(node))
 		})
 	}
+}
+
+func TestHandler_GetCards_TranslatesManaValuePowerAndToughnessIntoCriteria(t *testing.T) {
+	for _, tc := range []struct{ query, want string }{
+		{"mana_value=3", `mana_value=3`},
+		{"mana_value=3&mana_value_op=eq", `mana_value=3`},
+		{"mana_value=2.5&mana_value_op=lt", `mana_value<2.5`},
+		{"mana_value=3&mana_value_op=lte", `mana_value<=3`},
+		{"mana_value=3&mana_value_op=gt", `mana_value>3`},
+		{"mana_value=3&mana_value_op=gte", `mana_value>=3`},
+		{"power=-1&power_op=gte", `power>=-1`},
+		{"power=4", `power=4`},
+		{"toughness=.5&toughness_op=lt", `toughness<0.5`},
+		{"toughness=2&toughness_op=gt", `toughness>2`},
+		{"mana_value=3&mana_value_op=lte&power=2&toughness=1&toughness_op=gte", `(mana_value<=3 and power=2 and toughness>=1)`},
+		{"colors=g&mana_value=2&q=t%3Aelf", `(color="G" and mana_value=2 and type="elf")`},
+	} {
+		t.Run(tc.query, func(t *testing.T) {
+			node := advancedQuery(t, tc.query)
+			require.NotNil(t, node)
+			assert.Equal(t, tc.want, describe(node))
+		})
+	}
+
+	node := advancedQuery(t, "power=0&power_op=lte")
+	require.NotNil(t, node)
+	assert.Equal(t, SearchCriterion{Field: fieldPower, Op: "<=", Number: 0}, node.Term)
+}
+
+func TestHandler_GetCards_TranslatesSubtypeIntoAnInternalCriterion(t *testing.T) {
+	assert.Equal(t, `subtype="Elf"`, describe(advancedQuery(t, "subtype=%20Elf%20")))
+	assert.Equal(t, `(subtype="vehicle" and type="artifact")`, describe(advancedQuery(t, "subtype=vehicle&q=t%3Aartifact")))
+	assert.Nil(t, advancedQuery(t, "subtype=%20%20"))
+}
+
+func TestHandler_GetCards_TranslatesStorageTypeIntoAnInternalCriterion(t *testing.T) {
+	assert.Equal(t, `storage_type="deckbox"`, describe(advancedQuery(t, "storage_type=%20deckbox%20")))
+	assert.Equal(t, `(subtype="elf" and storage_type="Binder" and type="creature")`,
+		describe(advancedQuery(t, "storage_type=Binder&subtype=elf&q=t%3Acreature")))
+	assert.Nil(t, advancedQuery(t, "storage_type=%20"))
+}
+
+func TestParseSearchQuery_HasNoKeywordForInternalCriteria(t *testing.T) {
+	for _, query := range []string{"subtype:elf", "storagetype:deckbox", "storage:deckbox"} {
+		_, err := parseSearchQuery(query)
+		assert.ErrorIs(t, err, errInvalidQuery, query)
+	}
+
+	// A keyword is letters only, so this is a name search, not a criterion.
+	node, err := parseSearchQuery("storage_type:deckbox")
+	require.NoError(t, err)
+	assert.Equal(t, `name="storage_type:deckbox"`, describe(node))
 }
 
 func TestHandler_GetCards_TranslatesLegalFormatIntoCriteria(t *testing.T) {
