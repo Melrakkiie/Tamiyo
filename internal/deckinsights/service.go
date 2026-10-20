@@ -61,7 +61,7 @@ func (s *Service) GetDeckStats(ctx context.Context, userID string, deckID string
 		return DeckStats{}, fmt.Errorf("loading deck values: %w", err)
 	}
 	stats := computeStats(main, printings)
-	stats.Value = roundToCents(Value{EUR: values.Owned.EUR + values.Pending.EUR, USD: values.Owned.USD + values.Pending.USD})
+	stats.Value = roundToCents(values.Owned.Plus(values.Pending))
 	stats.OwnedValue = roundToCents(values.Owned)
 	stats.PendingValue = roundToCents(values.Pending)
 	stats.BoardValues = BoardValues{

@@ -87,3 +87,7 @@ type DeckValues struct {
 	Sideboard   Value
 	Considering Value
 }
+
+func (v Value) Plus(other Value) Value {
+	return Value{EUR: v.EUR + other.EUR, USD: v.USD + other.USD}
+}
