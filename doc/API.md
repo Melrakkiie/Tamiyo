@@ -412,7 +412,7 @@ List cards, with optional filtering, sorting, and pagination.
 | `power_op` | string | No | `eq` (default), `lt`, `lte`, `gt`, `gte`. |
 | `toughness` | number | No | Same as `power`, for toughness, compared with `toughness_op`. Checked independently of `power`: a double-faced card can match `power` on one face and `toughness` on the other. |
 | `toughness_op` | string | No | `eq` (default), `lt`, `lte`, `gt`, `gte`. |
-| `type` | string | No | A card type: `Creature`, `Planeswalker`, `Battle`, `Instant`, `Sorcery`, `Artifact`, `Enchantment` or `Land`. Matches the primary type, and any type of the card's type line (an artifact creature is also an `Artifact`). |
+| `type` | string | No | A card type: `Creature`, `Planeswalker`, `Battle`, `Instant`, `Sorcery`, `Artifact`, `Enchantment` or `Land`. Same as the [search](#search-syntax-q) `t:` key: matches anywhere in the printing's full type line, case-insensitive, so `Creature` also returns artifact, enchantment and land creatures, and a double-faced card matches the types of both faces. A card whose printing isn't known yet matches on its primary type. |
 | `subtype` | string | No | Part of the subtypes, after the dash of the type line (`elf`, `vehicle`…), case-insensitive. At most 50 characters. |
 | `legal_in` | string | No | A Scryfall format (`commander`, `modern`, `pioneer`, `standard`, `pauper`, `legacy`, `vintage`…): only cards legal or restricted in it. |
 | `color_count` | int | No | Number of colors, `0` to `5`. |

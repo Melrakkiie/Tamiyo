@@ -163,3 +163,15 @@ func TestSearchCondition_BindsEveryValue(t *testing.T) {
 	assert.Contains(t, sql, "NOT COALESCE(")
 	assert.Equal(t, []any{"%~ deals%", "G", "{2}", 3, "{W}", 6, "usd", 1.0, "modern"}, args)
 }
+
+func TestParseSearchQuery_HasNoKeywordForInternalCriteria(t *testing.T) {
+	for _, query := range []string{"subtype:elf", "storagetype:deckbox", "storage:deckbox"} {
+		_, err := parseSearchQuery(query)
+		assert.ErrorIs(t, err, errInvalidQuery, query)
+	}
+
+	// A keyword is letters only, so this is a name search, not a criterion.
+	node, err := parseSearchQuery("storage_type:deckbox")
+	require.NoError(t, err)
+	assert.Equal(t, `name="storage_type:deckbox"`, describe(node))
+}

@@ -715,11 +715,7 @@ func TestPostgresRepository_FindAll_SortsWithinGroups(t *testing.T) {
 		filter.Page, filter.Limit = 1, 25
 		result, _, err := repo.FindAll(context.Background(), userID, filter)
 		require.NoError(t, err)
-		out := make([]string, len(result))
-		for i, c := range result {
-			out[i] = c.Name
-		}
-		return out
+		return cardNames(result)
 	}
 
 	assert.Equal(t,
@@ -970,140 +966,6 @@ func TestPostgresRepository_FindAll_GroupsBySubtype(t *testing.T) {
 	assert.Nil(t, cards[0].Subtype)
 }
 
-func TestPostgresRepository_FindAll_AdvancedFilters(t *testing.T) {
-	db := getTestDB(t)
-	userID := seedUser(t, db, "alice@example.com")
-	repo := NewPostgresRepository(db)
-	ctx := context.Background()
-
-	var binderID, deckboxID int
-	require.NoError(t, db.Get(&binderID, `INSERT INTO tamiyo.storage (user_id, name, type) VALUES ($1, 'Binder', 'binder') RETURNING id`, userID))
-	require.NoError(t, db.Get(&deckboxID, `INSERT INTO tamiyo.storage (user_id, name, type) VALUES ($1, 'Kess', 'Deckbox ') RETURNING id`, userID))
-
-	type seed struct {
-		name, scryfallID, colors, cardType, typeLine string
-		manaValue                                    float64
-		foil                                         bool
-		storageID                                    *int
-		legal                                        []string
-	}
-	seeds := []seed{
-		{"Llanowar Elves", "11111111-1111-1111-1111-111111111111", "G", "Creature", "Creature — Elf Druid", 1, false, &binderID, []string{"modern", "commander"}},
-		{"Lightning Helix", "22222222-2222-2222-2222-222222222222", "RW", "Instant", "Instant", 2, true, &deckboxID, []string{"modern", "commander"}},
-		{"Sol Ring", "33333333-3333-3333-3333-333333333333", "", "Artifact", "Artifact", 1, false, &deckboxID, []string{"commander"}},
-		{"Esika's Chariot", "44444444-4444-4444-4444-444444444444", "G", "Artifact", "Legendary Artifact — Vehicle", 4, true, nil, []string{"commander", "pioneer"}},
-		{"Grist, the Hunger Tide", "55555555-5555-5555-5555-555555555555", "BG", "Planeswalker", "Legendary Planeswalker — Grist", 3, false, &binderID, []string{"modern"}},
-		{"Unknown", "66666666-6666-6666-6666-666666666666", "", "", "", 7, false, nil, nil},
-	}
-	for _, s := range seeds {
-		c := Card{Name: s.name, ScryfallID: s.scryfallID, SetCode: "tst", CollectorNumber: "1", Foil: s.foil, StorageID: s.storageID, ManaValue: s.manaValue}
-		if s.name != "Unknown" {
-			colors, cardType := s.colors, s.cardType
-			c.Colors, c.CardType, c.ColorIdentity = &colors, &cardType, &colors
-		}
-		_, err := repo.Create(ctx, userID, c)
-		require.NoError(t, err)
-		if s.typeLine != "" {
-			_, err = db.Exec(`INSERT INTO tamiyo.printings (scryfall_id, type_line, legal_formats) VALUES ($1, $2, $3)`, s.scryfallID, s.typeLine, pq.Array(s.legal))
-			require.NoError(t, err)
-		}
-	}
-
-	names := func(filter CardFilter) []string {
-		t.Helper()
-		filter.Page, filter.Limit, filter.SortField = 1, 25, "name"
-		result, _, err := repo.FindAll(ctx, userID, filter)
-		require.NoError(t, err)
-		out := make([]string, len(result))
-		for i, c := range result {
-			out[i] = c.Name
-		}
-		return out
-	}
-	str := func(s string) *string { return &s }
-	num := func(f float64) *float64 { return &f }
-	count := func(i int) *int { return &i }
-	yes := true
-
-	assert.Equal(t, []string{"Esika's Chariot", "Llanowar Elves"}, names(CardFilter{Colors: str("G"), ColorMode: ColorModeExact}))
-	assert.Equal(t, []string{"Esika's Chariot", "Grist, the Hunger Tide", "Llanowar Elves"}, names(CardFilter{Colors: str("G"), ColorMode: ColorModeInclude}))
-	assert.Equal(t, []string{"Esika's Chariot", "Llanowar Elves", "Sol Ring"}, names(CardFilter{Colors: str("G"), ColorMode: ColorModeWithin}))
-	assert.Equal(t, []string{"Sol Ring"}, names(CardFilter{Colors: str(""), ColorMode: ColorModeExact}))
-	assert.Equal(t, []string{"Esika's Chariot", "Grist, the Hunger Tide", "Unknown"}, names(CardFilter{ManaValue: num(3), ManaValueOp: "gte"}))
-	assert.Equal(t, []string{"Llanowar Elves", "Sol Ring"}, names(CardFilter{ManaValue: num(1), ManaValueOp: "eq"}))
-	assert.Equal(t, []string{"Esika's Chariot", "Sol Ring"}, names(CardFilter{Type: "Artifact"}))
-	assert.Equal(t, []string{"Llanowar Elves"}, names(CardFilter{Subtype: "elf"}))
-	assert.Equal(t, []string{"Esika's Chariot"}, names(CardFilter{Subtype: "vehicle", Type: "Artifact"}))
-	assert.Equal(t, []string{"Esika's Chariot"}, names(CardFilter{LegalIn: "pioneer"}))
-	assert.Equal(t, []string{"Grist, the Hunger Tide", "Lightning Helix"}, names(CardFilter{ColorCount: count(2)}))
-	assert.Equal(t, []string{"Esika's Chariot", "Lightning Helix"}, names(CardFilter{Foil: &yes}))
-	assert.Equal(t, []string{"Lightning Helix", "Sol Ring"}, names(CardFilter{StorageType: "deckbox"}))
-	assert.Equal(t, []string{"Lightning Helix"}, names(CardFilter{StorageType: "deckbox", LegalIn: "modern", Stack: true}))
-
-	var allowedDeck, otherDeck string
-	require.NoError(t, db.Get(&allowedDeck, `INSERT INTO tamiyo.deck (user_id, name, format) VALUES ($1, 'Allowed', 'commander') RETURNING id`, userID))
-	require.NoError(t, db.Get(&otherDeck, `INSERT INTO tamiyo.deck (user_id, name, format) VALUES ($1, 'Other', 'commander') RETURNING id`, userID))
-	_, err := db.Exec(`UPDATE tamiyo.storage SET locked = true WHERE id = $1`, deckboxID)
-	require.NoError(t, err)
-	_, err = db.Exec(`INSERT INTO tamiyo.storage_allowed_deck (storage_id, deck_id) VALUES ($1, $2)`, deckboxID, allowedDeck)
-	require.NoError(t, err)
-
-	everything := []string{"Esika's Chariot", "Grist, the Hunger Tide", "Lightning Helix", "Llanowar Elves", "Sol Ring", "Unknown"}
-	assert.Equal(t, everything, names(CardFilter{OpenToDeck: str(allowedDeck)}))
-	assert.Equal(t, []string{"Esika's Chariot", "Grist, the Hunger Tide", "Llanowar Elves", "Unknown"}, names(CardFilter{OpenToDeck: str(otherDeck)}))
-	assert.Equal(t, []string{"Esika's Chariot", "Llanowar Elves"}, names(CardFilter{OpenToDeck: str(otherDeck), Colors: str("G"), ColorMode: ColorModeExact, Stack: true}))
-	assert.Equal(t, everything, names(CardFilter{}))
-}
-
-func TestPostgresRepository_FindAll_FiltersByPowerAndToughness(t *testing.T) {
-	db := getTestDB(t)
-	userID := seedUser(t, db, "alice@example.com")
-	repo := NewPostgresRepository(db)
-	ctx := context.Background()
-
-	seeds := []struct {
-		name, scryfallID    string
-		powers, toughnesses []string
-	}{
-		{"Llanowar Elves", "11111111-1111-1111-1111-111111111111", []string{"1"}, []string{"1"}},
-		{"Delver of Secrets", "22222222-2222-2222-2222-222222222222", []string{"1", "3"}, []string{"1", "2"}},
-		{"Tarmogoyf", "33333333-3333-3333-3333-333333333333", []string{"*"}, []string{"1+*"}},
-		{"Esika's Chariot", "44444444-4444-4444-4444-444444444444", []string{"4"}, []string{"4"}},
-		{"Sol Ring", "55555555-5555-5555-5555-555555555555", []string{}, []string{}},
-		{"Half Squirrel", "66666666-6666-6666-6666-666666666666", []string{".5"}, []string{"-1"}},
-	}
-	for _, s := range seeds {
-		_, err := repo.Create(ctx, userID, Card{Name: s.name, ScryfallID: s.scryfallID, SetCode: "tst", CollectorNumber: "1"})
-		require.NoError(t, err)
-		_, err = db.Exec(`INSERT INTO tamiyo.printings (scryfall_id, type_line, powers, toughnesses) VALUES ($1, 'Creature', $2, $3)`,
-			s.scryfallID, pq.Array(s.powers), pq.Array(s.toughnesses))
-		require.NoError(t, err)
-	}
-	_, err := repo.Create(ctx, userID, Card{Name: "Unknown", ScryfallID: "77777777-7777-7777-7777-777777777777", SetCode: "tst", CollectorNumber: "1"})
-	require.NoError(t, err)
-
-	names := func(filter CardFilter) []string {
-		t.Helper()
-		filter.Page, filter.Limit, filter.SortField = 1, 25, "name"
-		result, _, err := repo.FindAll(ctx, userID, filter)
-		require.NoError(t, err)
-		out := make([]string, len(result))
-		for i, c := range result {
-			out[i] = c.Name
-		}
-		return out
-	}
-	num := func(f float64) *float64 { return &f }
-
-	assert.Equal(t, []string{"Delver of Secrets", "Llanowar Elves"}, names(CardFilter{Power: num(1), PowerOp: "eq"}))
-	assert.Equal(t, []string{"Delver of Secrets", "Esika's Chariot"}, names(CardFilter{Power: num(3), PowerOp: "gte"}))
-	assert.Equal(t, []string{"Half Squirrel"}, names(CardFilter{Power: num(1), PowerOp: "lt"}))
-	assert.Empty(t, names(CardFilter{Power: num(0), PowerOp: "eq"}))
-	assert.Equal(t, []string{"Half Squirrel"}, names(CardFilter{Toughness: num(0), ToughnessOp: "lt"}))
-	assert.Equal(t, []string{"Delver of Secrets"}, names(CardFilter{Toughness: num(2), ToughnessOp: "eq"}))
-	assert.Equal(t, []string{"Delver of Secrets"}, names(CardFilter{Power: num(3), PowerOp: "eq", Toughness: num(1), ToughnessOp: "eq", Stack: true}))
-}
-
 func TestPostgresRepository_FindAll_SearchQuery(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db, "alice@example.com")
@@ -1162,11 +1024,7 @@ func TestPostgresRepository_FindAll_SearchQuery(t *testing.T) {
 		require.NoError(t, err)
 		result, _, err := repo.FindAll(ctx, userID, CardFilter{Query: node, Stack: stack, Page: 1, Limit: 25, SortField: "name"})
 		require.NoError(t, err)
-		out := make([]string, len(result))
-		for i, c := range result {
-			out[i] = c.Name
-		}
-		return out
+		return cardNames(result)
 	}
 
 	for _, tc := range []struct {
@@ -1288,11 +1146,7 @@ func TestPostgresRepository_FindAll_SortsByPriceInThePreferredCurrency(t *testin
 		filter.Page, filter.Limit, filter.SortField = 1, 25, "price"
 		cards, _, err := repo.FindAll(context.Background(), alice, filter)
 		require.NoError(t, err)
-		out := make([]string, 0, len(cards))
-		for _, c := range cards {
-			out = append(out, c.Name)
-		}
-		return out
+		return cardNames(cards)
 	}
 
 	assert.Equal(t, []string{"Cheap", "Dollars", "Cheap Foil", "Unknown", "Unpriced"}, names(CardFilter{}))
@@ -1410,4 +1264,13 @@ func TestPostgresRepository_MoveStorageCards_ReturnsErrStorageNotFound(t *testin
 	_, err = repo.MoveStorageCards(ctx, userB, bobStorage, aliceStorage)
 
 	assert.ErrorIs(t, err, ErrStorageNotFound)
+}
+
+// cardNames lists the names of cards in the order given, never nil.
+func cardNames(cards []Card) []string {
+	out := make([]string, len(cards))
+	for i, c := range cards {
+		out[i] = c.Name
+	}
+	return out
 }

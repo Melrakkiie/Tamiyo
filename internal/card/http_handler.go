@@ -319,7 +319,7 @@ func (h *Handler) getCards(ctx *gin.Context) {
 		}
 	}
 
-	advanced, err := parseAdvancedFilters(ctx)
+	advanced, err := parseAdvancedFilters(ctx.Request.URL.Query())
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -359,20 +359,6 @@ func (h *Handler) getCards(ctx *gin.Context) {
 		Stack:         stack,
 		Name:          ctx.Query("name"),
 		Query:         advanced.Query,
-		Colors:        advanced.Colors,
-		ColorMode:     advanced.ColorMode,
-		ManaValue:     advanced.ManaValue,
-		ManaValueOp:   advanced.ManaValueOp,
-		Power:         advanced.Power,
-		PowerOp:       advanced.PowerOp,
-		Toughness:     advanced.Toughness,
-		ToughnessOp:   advanced.ToughnessOp,
-		Type:          advanced.Type,
-		Subtype:       advanced.Subtype,
-		LegalIn:       advanced.LegalIn,
-		ColorCount:    advanced.ColorCount,
-		Foil:          advanced.Foil,
-		StorageType:   advanced.StorageType,
 		OpenToDeck:    advanced.OpenToDeck,
 		GroupBy:       groupBy,
 		SortField:     sortField,

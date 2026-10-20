@@ -1,6 +1,7 @@
 package card
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,26 +20,6 @@ func TestHandler_GetCards_PassesAdvancedFilters(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	f := service.lastFilter
-	require.NotNil(t, f.Colors)
-	assert.Equal(t, "WG", *f.Colors)
-	assert.Equal(t, ColorModeWithin, f.ColorMode)
-	require.NotNil(t, f.ManaValue)
-	assert.Equal(t, 3.0, *f.ManaValue)
-	assert.Equal(t, "lte", f.ManaValueOp)
-	require.NotNil(t, f.Power)
-	assert.Equal(t, -1.0, *f.Power)
-	assert.Equal(t, "gte", f.PowerOp)
-	require.NotNil(t, f.Toughness)
-	assert.Equal(t, 0.5, *f.Toughness)
-	assert.Equal(t, "lt", f.ToughnessOp)
-	assert.Equal(t, "Creature", f.Type)
-	assert.Equal(t, "Elf", f.Subtype)
-	assert.Equal(t, "commander", f.LegalIn)
-	require.NotNil(t, f.ColorCount)
-	assert.Equal(t, 2, *f.ColorCount)
-	require.NotNil(t, f.Foil)
-	assert.True(t, *f.Foil)
-	assert.Equal(t, "deckbox", f.StorageType)
 	require.NotNil(t, f.OpenToDeck)
 	assert.Equal(t, "0a0a0a0a-0000-0000-0000-000000000001", *f.OpenToDeck)
 	assert.Equal(t, "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", f.ScryfallID)
@@ -49,62 +30,134 @@ func TestHandler_GetCards_AdvancedFilterDefaults(t *testing.T) {
 	router := setupRouter(service)
 
 	w := httptest.NewRecorder()
-	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards?colors=&mana_value=2&power=3&toughness=4", nil))
-
-	require.Equal(t, http.StatusOK, w.Code)
-	f := service.lastFilter
-	require.NotNil(t, f.Colors)
-	assert.Equal(t, "", *f.Colors)
-	assert.Equal(t, ColorModeExact, f.ColorMode)
-	assert.Equal(t, "eq", f.ManaValueOp)
-	assert.Equal(t, "eq", f.PowerOp)
-	assert.Equal(t, "eq", f.ToughnessOp)
-	assert.Nil(t, f.ColorCount)
-	assert.Nil(t, f.Foil)
-
-	w = httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards", nil))
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.Nil(t, service.lastFilter.Colors)
-	assert.Nil(t, service.lastFilter.ManaValue)
-	assert.Nil(t, service.lastFilter.Power)
-	assert.Nil(t, service.lastFilter.Toughness)
+	assert.Nil(t, service.lastFilter.Query)
 }
 
 func TestHandler_GetCards_RejectsInvalidAdvancedFilters(t *testing.T) {
-	for _, query := range []string{
-		"colors=X",
-		"colors=W&color_mode=some",
-		"mana_value=abc",
-		"mana_value=-1",
-		"mana_value=2&mana_value_op=ne",
-		"power=*",
-		"power=-1000001",
-		"power=2&power_op=ne",
-		"toughness=X",
-		"toughness=1000001",
-		"toughness=2&toughness_op=ne",
-		"type=Other",
-		"type=creature",
-		"legal_in=nope",
-		"color_count=6",
-		"foil=maybe",
-		"open_to_deck=nope",
-		"scryfall_id=nope",
-		"scryfall_id=bd8fa327-dd41-4737-8f19",
-		"subtype=" + "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		"q=foo:bar",
-		"q=(t:elf",
+	const tooLong = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	for _, tc := range []struct{ query, message string }{
+		{"colors=X", "colors must only contain the letters W, U, B, R and G"},
+		{"colors=W&color_mode=some", "color_mode must be one of: exact, include, within"},
+		{"colors=W&color_mode=Exact", "color_mode must be one of: exact, include, within"},
+		{"mana_value=abc", "mana_value must be a number between 0 and 1000000"},
+		{"mana_value=-1", "mana_value must be a number between 0 and 1000000"},
+		{"mana_value=2&mana_value_op=ne", "mana_value_op must be one of: eq, lt, lte, gt, gte"},
+		{"power=*", "power must be a number between -1000000 and 1000000"},
+		{"power=-1000001", "power must be a number between -1000000 and 1000000"},
+		{"power=2&power_op=ne", "power_op must be one of: eq, lt, lte, gt, gte"},
+		{"toughness=X", "toughness must be a number between -1000000 and 1000000"},
+		{"toughness=1000001", "toughness must be a number between -1000000 and 1000000"},
+		{"toughness=2&toughness_op=ne", "toughness_op must be one of: eq, lt, lte, gt, gte"},
+		{"type=Other", "type must be one of: Creature, Planeswalker, Battle, Instant, Sorcery, Artifact, Enchantment, Land"},
+		{"type=creature", "type must be one of: Creature, Planeswalker, Battle, Instant, Sorcery, Artifact, Enchantment, Land"},
+		{"legal_in=nope", "legal_in must be a Scryfall format, such as commander or modern"},
+		{"legal_in=Modern", "legal_in must be a Scryfall format, such as commander or modern"},
+		{"color_count=6", "color_count must be an integer between 0 and 5"},
+		{"color_count=-1", "color_count must be an integer between 0 and 5"},
+		{"color_count=two", "color_count must be an integer between 0 and 5"},
+		{"foil=maybe", "foil must be true or false"},
+		{"open_to_deck=nope", "open_to_deck must be a deck id"},
+		{"scryfall_id=nope", "scryfall_id must be a Scryfall card id"},
+		{"scryfall_id=bd8fa327-dd41-4737-8f19", "scryfall_id must be a Scryfall card id"},
+		{"subtype=" + tooLong, "subtype must have at most 50 characters"},
+		{"storage_type=" + tooLong, "storage_type must have at most 50 characters"},
+		{"q=foo:bar", `q: unknown keyword "foo"`},
+		{"q=(t:elf", "q: missing closing parenthesis"},
 	} {
-		t.Run(query, func(t *testing.T) {
+		t.Run(tc.query, func(t *testing.T) {
 			router := setupRouter(&fakeService{})
 
 			w := httptest.NewRecorder()
-			router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards?"+query, nil))
+			router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards?"+tc.query, nil))
 
 			assert.Equal(t, http.StatusBadRequest, w.Code)
+			var body struct{ Error string }
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+			assert.Equal(t, tc.message, body.Error)
 		})
 	}
+}
+
+func advancedQuery(t *testing.T, query string) *SearchNode {
+	t.Helper()
+	service := &fakeService{}
+	router := setupRouter(service)
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/cards?"+query, nil))
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	return service.lastFilter.Query
+}
+
+func TestHandler_GetCards_TranslatesAdvancedParametersIntoCriteria(t *testing.T) {
+	for _, tc := range []struct{ query, want string }{
+		{"colors=gw", `color="WG"`},
+		{"colors=gw&color_mode=exact", `color="WG"`},
+		{"colors=", `color=""`},
+		{"colors=g&color_mode=include", `color>="G"`},
+		{"colors=uw&color_mode=within", `color<="WU"`},
+		{"colors=g&q=t%3Aelf%20c%3Aw", `(color="G" and (type="elf" and color>="W"))`},
+		{"color_count=2", `color_count=2`},
+		{"foil=true", `is="foil"`},
+		{"foil=1", `is="foil"`},
+		{"foil=false", `is="nonfoil"`},
+		{"foil=F", `is="nonfoil"`},
+		{"mana_value=3", `mana_value=3`},
+		{"mana_value=3&mana_value_op=eq", `mana_value=3`},
+		{"mana_value=2.5&mana_value_op=lt", `mana_value<2.5`},
+		{"mana_value=3&mana_value_op=lte", `mana_value<=3`},
+		{"mana_value=3&mana_value_op=gt", `mana_value>3`},
+		{"mana_value=3&mana_value_op=gte", `mana_value>=3`},
+		{"power=-1&power_op=gte", `power>=-1`},
+		{"power=4", `power=4`},
+		{"toughness=.5&toughness_op=lt", `toughness<0.5`},
+		{"toughness=2&toughness_op=gt", `toughness>2`},
+		{"mana_value=3&mana_value_op=lte&power=2&toughness=1&toughness_op=gte", `(mana_value<=3 and power=2 and toughness>=1)`},
+		{"colors=g&mana_value=2&q=t%3Aelf", `(color="G" and mana_value=2 and type="elf")`},
+		{"subtype=%20Elf%20", `subtype="Elf"`},
+		{"subtype=vehicle&q=t%3Aartifact", `(subtype="vehicle" and type="artifact")`},
+		{"storage_type=%20deckbox%20", `storage_type="deckbox"`},
+		{"storage_type=Binder&subtype=elf&q=t%3Acreature", `(subtype="elf" and storage_type="Binder" and type="creature")`},
+		{"legal_in=commander", `format="commander"`},
+		{"type=Creature", `type="Creature"`},
+		{"type=Artifact&q=t%3Aelf", `(type="Artifact" and type="elf")`},
+	} {
+		t.Run(tc.query, func(t *testing.T) {
+			node := advancedQuery(t, tc.query)
+			require.NotNil(t, node)
+			assert.Equal(t, tc.want, describe(node))
+		})
+	}
+}
+
+func TestHandler_GetCards_KeepsZeroAsANumericCriterion(t *testing.T) {
+	for _, tc := range []struct {
+		query string
+		want  SearchCriterion
+	}{
+		{"color_count=0", SearchCriterion{Field: fieldColorCount, Op: "=", Number: 0}},
+		{"power=0&power_op=lte", SearchCriterion{Field: fieldPower, Op: "<=", Number: 0}},
+	} {
+		t.Run(tc.query, func(t *testing.T) {
+			node := advancedQuery(t, tc.query)
+			require.NotNil(t, node)
+			assert.Equal(t, tc.want, node.Term)
+		})
+	}
+}
+
+func TestHandler_GetCards_BlankSubtypeAndStorageTypeAddNoCriterion(t *testing.T) {
+	assert.Nil(t, advancedQuery(t, "subtype=%20%20"))
+	assert.Nil(t, advancedQuery(t, "storage_type=%20"))
+}
+
+func TestHandler_GetCards_JoinsAdvancedCriteriaWithTheSearchQuery(t *testing.T) {
+	node := advancedQuery(t, "colors=gw&color_mode=within&legal_in=commander&color_count=2&foil=true&q=t%3Aelf%20or%20t%3Awarrior")
+	require.NotNil(t, node)
+	assert.Equal(t, `(color<="WG" and format="commander" and color_count=2 and is="foil" and (type="elf" or type="warrior"))`, describe(node))
 }
 
 func TestHandler_GetCards_ParsesTheSearchQuery(t *testing.T) {

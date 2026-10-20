@@ -63,6 +63,11 @@ const (
 	fieldNot           = "not"
 	fieldUSD           = "usd"
 	fieldEUR           = "eur"
+
+	// Internal-only criteria: produced by the advanced parameters, never by a
+	// q= keyword (they have no entry in searchKeys).
+	fieldSubtype     = "subtype"
+	fieldStorageType = "storage_type"
 )
 
 var searchKeys = map[string]string{
@@ -101,7 +106,13 @@ var rarityRanks = map[string]int{
 	"m": 4, "mythic": 4,
 }
 
-var ownedCopyStates = map[string]bool{"foil": true, "nonfoil": true, "proxy": true}
+const (
+	copyStateFoil    = "foil"
+	copyStateNonFoil = "nonfoil"
+	copyStateProxy   = "proxy"
+)
+
+var ownedCopyStates = map[string]bool{copyStateFoil: true, copyStateNonFoil: true, copyStateProxy: true}
 
 type tokenKind int
 
@@ -345,6 +356,23 @@ func (p *queryParser) parseUnary() (*SearchNode, error) {
 
 func negate(node *SearchNode) *SearchNode {
 	return &SearchNode{Kind: SearchNot, Children: []*SearchNode{node}}
+}
+
+func allOf(nodes ...*SearchNode) *SearchNode {
+	children := make([]*SearchNode, 0, len(nodes))
+	for _, node := range nodes {
+		if node != nil {
+			children = append(children, node)
+		}
+	}
+	switch len(children) {
+	case 0:
+		return nil
+	case 1:
+		return children[0]
+	default:
+		return &SearchNode{Kind: SearchAnd, Children: children}
+	}
 }
 
 func term(field, op, text string, number float64) *SearchNode {
