@@ -40,7 +40,7 @@ func lineMatches(line moxfieldDeckLine, e deck.DeckEntry) bool {
 		return false
 	}
 	wanted := deck.CardNameKey(line.CardName)
-	return deck.CardNameKey(e.Name) == wanted || deck.CardNameKey(frontFaceName(e.Name)) == wanted
+	return deck.CardNameKey(e.Name) == wanted || deck.CardNameKey(deck.FrontFaceName(e.Name)) == wanted
 }
 
 func bulkEditOrder(lines []moxfieldDeckLine) []moxfieldDeckLine {

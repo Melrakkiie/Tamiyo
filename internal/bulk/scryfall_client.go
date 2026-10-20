@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"Melrakkiie/Tamiyo/internal/deck"
 	"Melrakkiie/Tamiyo/internal/scryfall"
 )
 
@@ -79,7 +80,7 @@ func (c *ScryfallClient) Resolve(ctx context.Context, identifiers []CardIdentifi
 		resolved[resolveKeyByID(card.ID)] = rc
 		if card.Name != "" {
 			resolved[resolveKeyByName(card.Name)] = rc
-			resolved[resolveKeyByName(frontFaceName(card.Name))] = rc
+			resolved[resolveKeyByName(deck.FrontFaceName(card.Name))] = rc
 		}
 	}
 	return resolved, nil

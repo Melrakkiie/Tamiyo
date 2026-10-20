@@ -182,8 +182,7 @@ type fakeDeckService struct {
 
 	linkedBoards map[int]string
 
-	owners  map[string]string
-	deleted []string
+	owners map[string]string
 
 	placed       []placedPlan
 	placeSummary *deck.PlacementSummary
@@ -218,11 +217,6 @@ func (f *fakeDeckService) placedPlan(t *testing.T, deckID string) deck.Placement
 	require.Len(t, f.placed, 1)
 	require.Equal(t, deckID, f.placed[0].deckID)
 	return f.placed[0].plan
-}
-
-func (f *fakeDeckService) DeleteDeck(ctx context.Context, userID string, id string) error {
-	f.deleted = append(f.deleted, id)
-	return nil
 }
 
 func (f *fakeDeckService) DuplicateDeck(ctx context.Context, userID string, sourceID string, req deck.DuplicateRequest) (deck.DuplicateResult, error) {

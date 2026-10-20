@@ -24,7 +24,7 @@ func newCopyPicker(copies []OwnedCopy, includeLocked bool) *copyPicker {
 		p.used[c.ID] = c.InTargetDeck
 		key := strings.ToLower(c.ScryfallID)
 		p.byPrinting[key] = append(p.byPrinting[key], c)
-		full, front := CardNameKey(c.Name), CardNameKey(frontFaceName(c.Name))
+		full, front := CardNameKey(c.Name), CardNameKey(FrontFaceName(c.Name))
 		p.byName[full] = append(p.byName[full], c)
 		if front != full {
 			p.byName[front] = append(p.byName[front], c)
@@ -33,7 +33,9 @@ func newCopyPicker(copies []OwnedCopy, includeLocked bool) *copyPicker {
 	return p
 }
 
-func frontFaceName(name string) string {
+// FrontFaceName is the name of a double-faced card's front face, or the name
+// itself. The SQL form of this rule is in owned_copies_postgres.go (ADR-0006).
+func FrontFaceName(name string) string {
 	front, _, _ := strings.Cut(strings.ReplaceAll(name, "//", "/"), "/")
 	return strings.TrimSpace(front)
 }
