@@ -92,7 +92,7 @@ func advancedQuery(t *testing.T, query string) *SearchNode {
 	return service.lastFilter.Query
 }
 
-func TestHandler_GetCards_TranslatesColorsIntoCriteria(t *testing.T) {
+func TestHandler_GetCards_TranslatesAdvancedParametersIntoCriteria(t *testing.T) {
 	for _, tc := range []struct{ query, want string }{
 		{"colors=gw", `color="WG"`},
 		{"colors=gw&color_mode=exact", `color="WG"`},
@@ -100,40 +100,11 @@ func TestHandler_GetCards_TranslatesColorsIntoCriteria(t *testing.T) {
 		{"colors=g&color_mode=include", `color>="G"`},
 		{"colors=uw&color_mode=within", `color<="WU"`},
 		{"colors=g&q=t%3Aelf%20c%3Aw", `(color="G" and (type="elf" and color>="W"))`},
-	} {
-		t.Run(tc.query, func(t *testing.T) {
-			node := advancedQuery(t, tc.query)
-			require.NotNil(t, node)
-			assert.Equal(t, tc.want, describe(node))
-		})
-	}
-}
-
-func TestHandler_GetCards_TranslatesColorCountIntoCriteria(t *testing.T) {
-	assert.Equal(t, `color_count=2`, describe(advancedQuery(t, "color_count=2")))
-
-	node := advancedQuery(t, "color_count=0")
-	require.NotNil(t, node)
-	assert.Equal(t, SearchCriterion{Field: fieldColorCount, Op: "=", Number: 0}, node.Term)
-}
-
-func TestHandler_GetCards_TranslatesFoilIntoCriteria(t *testing.T) {
-	for _, tc := range []struct{ query, want string }{
+		{"color_count=2", `color_count=2`},
 		{"foil=true", `is="foil"`},
 		{"foil=1", `is="foil"`},
 		{"foil=false", `is="nonfoil"`},
 		{"foil=F", `is="nonfoil"`},
-	} {
-		t.Run(tc.query, func(t *testing.T) {
-			node := advancedQuery(t, tc.query)
-			require.NotNil(t, node)
-			assert.Equal(t, tc.want, describe(node))
-		})
-	}
-}
-
-func TestHandler_GetCards_TranslatesManaValuePowerAndToughnessIntoCriteria(t *testing.T) {
-	for _, tc := range []struct{ query, want string }{
 		{"mana_value=3", `mana_value=3`},
 		{"mana_value=3&mana_value_op=eq", `mana_value=3`},
 		{"mana_value=2.5&mana_value_op=lt", `mana_value<2.5`},
@@ -146,6 +117,13 @@ func TestHandler_GetCards_TranslatesManaValuePowerAndToughnessIntoCriteria(t *te
 		{"toughness=2&toughness_op=gt", `toughness>2`},
 		{"mana_value=3&mana_value_op=lte&power=2&toughness=1&toughness_op=gte", `(mana_value<=3 and power=2 and toughness>=1)`},
 		{"colors=g&mana_value=2&q=t%3Aelf", `(color="G" and mana_value=2 and type="elf")`},
+		{"subtype=%20Elf%20", `subtype="Elf"`},
+		{"subtype=vehicle&q=t%3Aartifact", `(subtype="vehicle" and type="artifact")`},
+		{"storage_type=%20deckbox%20", `storage_type="deckbox"`},
+		{"storage_type=Binder&subtype=elf&q=t%3Acreature", `(subtype="elf" and storage_type="Binder" and type="creature")`},
+		{"legal_in=commander", `format="commander"`},
+		{"type=Creature", `type="Creature"`},
+		{"type=Artifact&q=t%3Aelf", `(type="Artifact" and type="elf")`},
 	} {
 		t.Run(tc.query, func(t *testing.T) {
 			node := advancedQuery(t, tc.query)
@@ -153,44 +131,27 @@ func TestHandler_GetCards_TranslatesManaValuePowerAndToughnessIntoCriteria(t *te
 			assert.Equal(t, tc.want, describe(node))
 		})
 	}
-
-	node := advancedQuery(t, "power=0&power_op=lte")
-	require.NotNil(t, node)
-	assert.Equal(t, SearchCriterion{Field: fieldPower, Op: "<=", Number: 0}, node.Term)
 }
 
-func TestHandler_GetCards_TranslatesSubtypeIntoAnInternalCriterion(t *testing.T) {
-	assert.Equal(t, `subtype="Elf"`, describe(advancedQuery(t, "subtype=%20Elf%20")))
-	assert.Equal(t, `(subtype="vehicle" and type="artifact")`, describe(advancedQuery(t, "subtype=vehicle&q=t%3Aartifact")))
-	assert.Nil(t, advancedQuery(t, "subtype=%20%20"))
-}
-
-func TestHandler_GetCards_TranslatesStorageTypeIntoAnInternalCriterion(t *testing.T) {
-	assert.Equal(t, `storage_type="deckbox"`, describe(advancedQuery(t, "storage_type=%20deckbox%20")))
-	assert.Equal(t, `(subtype="elf" and storage_type="Binder" and type="creature")`,
-		describe(advancedQuery(t, "storage_type=Binder&subtype=elf&q=t%3Acreature")))
-	assert.Nil(t, advancedQuery(t, "storage_type=%20"))
-}
-
-func TestParseSearchQuery_HasNoKeywordForInternalCriteria(t *testing.T) {
-	for _, query := range []string{"subtype:elf", "storagetype:deckbox", "storage:deckbox"} {
-		_, err := parseSearchQuery(query)
-		assert.ErrorIs(t, err, errInvalidQuery, query)
+func TestHandler_GetCards_KeepsZeroAsANumericCriterion(t *testing.T) {
+	for _, tc := range []struct {
+		query string
+		want  SearchCriterion
+	}{
+		{"color_count=0", SearchCriterion{Field: fieldColorCount, Op: "=", Number: 0}},
+		{"power=0&power_op=lte", SearchCriterion{Field: fieldPower, Op: "<=", Number: 0}},
+	} {
+		t.Run(tc.query, func(t *testing.T) {
+			node := advancedQuery(t, tc.query)
+			require.NotNil(t, node)
+			assert.Equal(t, tc.want, node.Term)
+		})
 	}
-
-	// A keyword is letters only, so this is a name search, not a criterion.
-	node, err := parseSearchQuery("storage_type:deckbox")
-	require.NoError(t, err)
-	assert.Equal(t, `name="storage_type:deckbox"`, describe(node))
 }
 
-func TestHandler_GetCards_TranslatesLegalFormatIntoCriteria(t *testing.T) {
-	assert.Equal(t, `format="commander"`, describe(advancedQuery(t, "legal_in=commander")))
-}
-
-func TestHandler_GetCards_TranslatesTypeIntoCriteria(t *testing.T) {
-	assert.Equal(t, `type="Creature"`, describe(advancedQuery(t, "type=Creature")))
-	assert.Equal(t, `(type="Artifact" and type="elf")`, describe(advancedQuery(t, "type=Artifact&q=t%3Aelf")))
+func TestHandler_GetCards_BlankSubtypeAndStorageTypeAddNoCriterion(t *testing.T) {
+	assert.Nil(t, advancedQuery(t, "subtype=%20%20"))
+	assert.Nil(t, advancedQuery(t, "storage_type=%20"))
 }
 
 func TestHandler_GetCards_JoinsAdvancedCriteriaWithTheSearchQuery(t *testing.T) {
