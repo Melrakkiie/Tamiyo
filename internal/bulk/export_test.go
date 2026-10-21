@@ -486,7 +486,6 @@ func TestExportSharedDeck_ExportsAsTheOwner(t *testing.T) {
 
 func TestExportSharedDeck_ReadsTheDeckAsSharedForAnyone(t *testing.T) {
 	decks := sharedDeckFixture()
-	decks.getContentErr = errors.New("the content comes with the read")
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	require.NoError(t, svc.ExportSharedDeck(context.Background(), fixtureDeckID, DeckExportOptions{Format: DeckExportMoxfield, WithTags: true}, &bytes.Buffer{}))

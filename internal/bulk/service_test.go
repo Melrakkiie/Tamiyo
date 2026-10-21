@@ -165,7 +165,6 @@ type fakeDeckService struct {
 	linkedCards map[string][]int
 
 	cardsByDeck   map[string][]deck.DeckCard
-	getDeckErr    error
 	createDeckErr error
 
 	duplicated      []duplication
@@ -174,7 +173,6 @@ type fakeDeckService struct {
 
 	pending        []deck.PendingCard
 	entries        map[string][]deck.DeckEntry
-	getContentErr  error
 	ownCollects    []deck.OwnDeckCollect
 	sharedCollects []deck.SharedDeckCollect
 	collectResult  deck.CollectSummary
@@ -260,10 +258,6 @@ func (f *fakeDeckService) ReadDeck(ctx context.Context, viewerID string, deckID 
 	return deck.ReadDeck{}, deck.ErrNotFound
 }
 
-func (f *fakeDeckService) GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error) {
-	return f.tags, nil
-}
-
 func (f *fakeDeckService) CollectOwnDeck(ctx context.Context, userID string, deckID string, req deck.OwnDeckCollect) (deck.CollectSummary, error) {
 	f.ownCollects = append(f.ownCollects, req)
 	return f.collectResult, f.collectErr
@@ -285,9 +279,6 @@ func (f *fakeDeckService) GetAllDecks(ctx context.Context, userID string, filter
 }
 
 func (f *fakeDeckService) GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error) {
-	if f.getDeckErr != nil {
-		return deck.Deck{}, f.getDeckErr
-	}
 	if owner := f.owners[id]; owner != "" && owner != userID {
 		return deck.Deck{}, deck.ErrNotFound
 	}
@@ -301,17 +292,6 @@ func (f *fakeDeckService) GetDeck(ctx context.Context, userID string, id string)
 
 func (f *fakeDeckService) GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error) {
 	return f.cardsByDeck[id], nil
-}
-
-func (f *fakeDeckService) GetDeckContent(ctx context.Context, userID string, deckID string) (deck.DeckContent, error) {
-	d, err := f.GetDeck(ctx, userID, deckID)
-	if err != nil {
-		return deck.DeckContent{}, err
-	}
-	if f.getContentErr != nil {
-		return deck.DeckContent{}, f.getContentErr
-	}
-	return deck.DeckContent{Deck: d, Entries: f.entries[deckID]}, nil
 }
 
 func (f *fakeDeckService) CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error) {
