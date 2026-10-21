@@ -78,6 +78,7 @@ func (f *fakeUsers) GetUser(ctx context.Context, userID string) (user.User, erro
 type fakeInsights struct {
 	report     deckinsights.LegalityReport
 	stats      deckinsights.DeckStats
+	combos     deckinsights.DeckCombos
 	err        error
 	lastUserID string
 	lastDeckID string
@@ -93,6 +94,42 @@ func (f *fakeInsights) GetDeckStats(ctx context.Context, userID string, deckID s
 	f.lastUserID = userID
 	f.lastDeckID = deckID
 	return f.stats, f.err
+}
+
+func (f *fakeInsights) GetDeckCombos(ctx context.Context, userID string, deckID string) (deckinsights.DeckCombos, error) {
+	f.lastUserID = userID
+	f.lastDeckID = deckID
+	return f.combos, f.err
+}
+
+func TestService_GetSharedDeckCombos_ComputesAsTheOwner(t *testing.T) {
+	insights := &fakeInsights{combos: deckinsights.DeckCombos{Combos: []deckinsights.Combo{{ID: "1-2"}}}}
+	service := newService(&fakeDecks{ownerID: ownerID, deck: deck.Deck{ID: "00000000-0000-0000-0000-000000000009"}}, insights)
+
+	combos, err := service.GetSharedDeckCombos(context.Background(), deckID)
+
+	require.NoError(t, err)
+	require.Len(t, combos.Combos, 1)
+	assert.Equal(t, ownerID, insights.lastUserID)
+	assert.Equal(t, "00000000-0000-0000-0000-000000000009", insights.lastDeckID)
+}
+
+func TestService_GetSharedDeckCombos_DoesNotComputeForAHiddenDeck(t *testing.T) {
+	insights := &fakeInsights{}
+	service := newService(&fakeDecks{sharedErr: deck.ErrNotFound}, insights)
+
+	_, err := service.GetSharedDeckCombos(context.Background(), deckID)
+
+	assert.ErrorIs(t, err, ErrNotFound)
+	assert.Empty(t, insights.lastUserID)
+}
+
+func TestService_GetSharedDeckCombos_PropagatesInsightErrors(t *testing.T) {
+	service := newService(&fakeDecks{ownerID: ownerID, deck: deck.Deck{ID: "00000000-0000-0000-0000-000000000009"}}, &fakeInsights{err: deckinsights.ErrCombosUnavailable})
+
+	_, err := service.GetSharedDeckCombos(context.Background(), deckID)
+
+	assert.ErrorIs(t, err, deckinsights.ErrCombosUnavailable)
 }
 
 func strPtr(s string) *string { return &s }
