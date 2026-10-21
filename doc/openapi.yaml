@@ -4474,6 +4474,13 @@ components:
           type: integer
         average_mana_value:
           type: number
+        total_mana_value:
+          type: number
+          description: >
+            Sum of the mana values of the main board's nonland cards, each
+            counted once per copy. Same scope as `average_mana_value`; a
+            modal double-faced card with a spell front counts its front
+            face. Can be fractional.
         mana_curve:
           type: array
           items:
@@ -4514,7 +4521,7 @@ components:
             the cent on its own.
         board_values:
           $ref: "#/components/schemas/BoardValues"
-      required: [card_count, land_count, nonland_count, average_mana_value, mana_curve, color_breakdown, type_breakdown, back_face_lands, value, owned_value, pending_value, board_values]
+      required: [card_count, land_count, nonland_count, average_mana_value, total_mana_value, mana_curve, color_breakdown, type_breakdown, back_face_lands, value, owned_value, pending_value, board_values]
 
     DeckCombos:
       type: object

@@ -44,6 +44,7 @@ type DeckStats struct {
 	LandCount        int               `json:"land_count"`
 	NonlandCount     int               `json:"nonland_count"`
 	AverageManaValue float64           `json:"average_mana_value"`
+	TotalManaValue   float64           `json:"total_mana_value"`
 	ManaCurve        []ManaCurveBucket `json:"mana_curve"`
 	ColorBreakdown   map[string]int    `json:"color_breakdown"`
 	TypeBreakdown    map[string]int    `json:"type_breakdown"`

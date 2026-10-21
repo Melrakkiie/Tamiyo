@@ -104,6 +104,9 @@ var (
 	// refresher stores for a printing Scryfall didn't return.
 	notStored = printing{ScryfallID: "22222222-0000-0000-0000-00000000000b", Name: "Brand New Card", SetCode: "new", CollectorNumber: "1"}
 	notFound  = printing{ScryfallID: "22222222-0000-0000-0000-00000000000c", Name: "Vanished Card", SetCode: "old", CollectorNumber: "2"}
+	// littleGirl has a half mana value.
+	littleGirl = printing{ScryfallID: "22222222-0000-0000-0000-00000000000d", Name: "Little Girl", SetCode: "unh", CollectorNumber: "9",
+		TypeLine: "Creature — Human Child", ManaValue: 0.5, Colors: []string{"W"}}
 )
 
 func TestGetDeckStats_LandsOnlyDeckHasAnEmptyManaCurve(t *testing.T) {
@@ -133,6 +136,7 @@ func TestGetDeckStats_SplitsTheManaCurveIntoPermanentsAndListsItsCards(t *testin
 
 	stats := f.stats(t)
 
+	assert.InDelta(t, 12.0, stats.TotalManaValue, 1e-9) // 2 Shock + Mind Stone + 2 Bala Ged (front face, 3) + Arcane Signet
 	assert.Equal(t, []ManaCurveBucket{
 		{ManaValue: 1, Count: 2, NonPermanents: 2, Cards: []ManaCurveCard{
 			{Name: "Shock", ScryfallID: shock.ScryfallID, Quantity: 2, Type: "Instant"},
@@ -185,6 +189,7 @@ func TestGetDeckStats_ACardWithoutAStoredPrintingCountsAsUnknown(t *testing.T) {
 	assert.Equal(t, map[string]int{"Artifact": 1, "Unknown": 3}, stats.TypeBreakdown)
 	assert.Zero(t, stats.LandCount)
 	assert.Equal(t, 1, stats.NonlandCount)
+	assert.InDelta(t, 1.0, stats.TotalManaValue, 1e-9)
 	assert.Equal(t, map[string]int{"C": 1}, stats.ColorBreakdown)
 	require.Len(t, stats.ManaCurve, 1)
 	assert.Equal(t, 1, stats.ManaCurve[0].Count)
@@ -210,6 +215,7 @@ func TestGetDeckStats_CountsPendingCardsWithTheirQuantities(t *testing.T) {
 	assert.Equal(t, 6, stats.CardCount)
 	assert.Equal(t, 4, stats.LandCount)
 	assert.Equal(t, 2, stats.NonlandCount)
+	assert.InDelta(t, 2.0, stats.TotalManaValue, 1e-9)
 	assert.Equal(t, map[string]int{"R": 2}, stats.ColorBreakdown)
 	assert.Equal(t, []ManaCurveBucket{
 		{ManaValue: 1, Count: 2, NonPermanents: 2, Cards: []ManaCurveCard{{Name: "Shock", ScryfallID: shock.ScryfallID, Quantity: 2, Type: "Instant"}}},
@@ -239,16 +245,38 @@ func TestGetDeckStats_CountsAPendingCardOf1500Copies(t *testing.T) {
 
 func TestGetDeckStats_OnlyCountsTheMainBoard(t *testing.T) {
 	f := newInsightsFixture(t, "modern")
-	seedPrintings(t, f.db, mountain, shock)
+	seedPrintings(t, f.db, mountain, shock, mindStone)
 	f.ownedCopy(t, mountain, copyOptions{})
+	f.ownedCopy(t, mindStone, copyOptions{})
 	f.ownedCopy(t, shock, copyOptions{board: deck.BoardSideboard})
 	f.pendingCard(t, shock, 3, copyOptions{board: deck.BoardConsidering})
 
 	stats := f.stats(t)
 
-	assert.Equal(t, 1, stats.CardCount)
-	assert.Equal(t, map[string]int{"Land": 1}, stats.TypeBreakdown)
-	assert.Empty(t, stats.ManaCurve)
+	assert.InDelta(t, 2.0, stats.TotalManaValue, 1e-9)
+	assert.Equal(t, 2, stats.CardCount)
+	assert.Equal(t, map[string]int{"Land": 1, "Artifact": 1}, stats.TypeBreakdown)
+}
+
+func TestGetDeckStats_TotalManaValueSumsHalfManaValuesPerCopy(t *testing.T) {
+	f := newInsightsFixture(t, "commander")
+	seedPrintings(t, f.db, littleGirl, shock, mountain)
+	f.pendingCard(t, littleGirl, 3, copyOptions{})
+	f.ownedCopy(t, shock, copyOptions{})
+	f.ownedCopy(t, mountain, copyOptions{})
+
+	stats := f.stats(t)
+
+	assert.InDelta(t, 2.5, stats.TotalManaValue, 1e-9)
+	assert.Equal(t, 4, stats.NonlandCount)
+}
+
+func TestGetDeckStats_DeckWithoutNonlandsHasNoTotalManaValue(t *testing.T) {
+	f := newInsightsFixture(t, "commander")
+	seedPrintings(t, f.db, mountain)
+	f.ownedCopy(t, mountain, copyOptions{})
+
+	assert.Zero(t, f.stats(t).TotalManaValue)
 }
 
 func TestGetDeckStats_SeparatesLandsFromNonlands(t *testing.T) {
