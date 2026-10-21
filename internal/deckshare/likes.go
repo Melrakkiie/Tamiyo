@@ -10,18 +10,18 @@ import (
 var ErrLikeOwnDeck = errors.New("you cannot like your own deck")
 
 func (s *Service) LikeStatus(ctx context.Context, userID string, deckID string) (deck.LikeStatus, error) {
-	if _, _, err := s.resolveVisible(ctx, userID, deckID); err != nil {
+	if _, err := s.decks.ReadDeck(ctx, userID, deckID, deck.ReachVisible); err != nil {
 		return deck.LikeStatus{}, err
 	}
 	return s.decks.GetLikeStatus(ctx, userID, deckID)
 }
 
 func (s *Service) LikeDeck(ctx context.Context, userID string, deckID string) (deck.LikeStatus, error) {
-	ownerID, _, err := s.resolveVisible(ctx, userID, deckID)
+	read, err := s.decks.ReadDeck(ctx, userID, deckID, deck.ReachVisible)
 	if err != nil {
 		return deck.LikeStatus{}, err
 	}
-	if ownerID == userID {
+	if read.Mine {
 		return deck.LikeStatus{}, ErrLikeOwnDeck
 	}
 	if err := s.decks.LikeDeck(ctx, userID, deckID); err != nil {
@@ -31,7 +31,7 @@ func (s *Service) LikeDeck(ctx context.Context, userID string, deckID string) (d
 }
 
 func (s *Service) UnlikeDeck(ctx context.Context, userID string, deckID string) (deck.LikeStatus, error) {
-	if _, _, err := s.resolveVisible(ctx, userID, deckID); err != nil {
+	if _, err := s.decks.ReadDeck(ctx, userID, deckID, deck.ReachVisible); err != nil {
 		return deck.LikeStatus{}, err
 	}
 	if err := s.decks.UnlikeDeck(ctx, userID, deckID); err != nil {
