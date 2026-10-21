@@ -32,6 +32,18 @@ type ReadDeck struct {
 	Tags map[string][]string
 }
 
+// MainBoard returns the entries outside the sideboard and considering, in
+// Entries order.
+func (r ReadDeck) MainBoard() []DeckEntry {
+	main := make([]DeckEntry, 0, len(r.Entries))
+	for _, e := range r.Entries {
+		if InMainBoard(e.Board) {
+			main = append(main, e)
+		}
+	}
+	return main
+}
+
 // ReadDeck returns the deck as the viewer (empty for an anonymous visitor)
 // reads it within the reach. It answers ErrNotFound when the deck does not
 // exist or is outside the reach.

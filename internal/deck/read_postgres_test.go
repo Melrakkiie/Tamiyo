@@ -134,6 +134,23 @@ func TestReadDeck_TagsAttachByCardNameAcrossPrintingsAndPendingCopies(t *testing
 	}, read.Tags, "a card no longer in the deck keeps no tags")
 }
 
+func TestReadDeck_MainBoardLeavesOutTheSideboardAndConsidering(t *testing.T) {
+	f := newContentFixture(t)
+	commander := f.ownedCopy(t, atraxa, copyOptions{})
+	f.setCommanders(t, &commander, nil, nil, nil)
+	f.pendingCard(t, bolt, 2, copyOptions{})
+	f.ownedCopy(t, island, copyOptions{board: BoardSideboard})
+	f.pendingCard(t, tymna, 1, copyOptions{board: BoardConsidering})
+
+	read, err := f.service.ReadDeck(context.Background(), f.userID, contentDeckID, ReachOwn)
+
+	require.NoError(t, err)
+	assert.Equal(t, []entrySummary{
+		{name: atraxa.name, board: BoardMain, slot: SlotCommander, owned: 1, quantity: 1},
+		{name: bolt.name, board: BoardMain, pending: 2, quantity: 2},
+	}, summarize(read.MainBoard()))
+}
+
 func TestReadDeck_AnUnknownDeckIsNotFoundWhateverTheReachAndViewer(t *testing.T) {
 	f := newContentFixture(t)
 	bob := seedUser(t, f.db, "bob@example.com")
