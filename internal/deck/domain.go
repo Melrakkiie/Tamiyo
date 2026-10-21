@@ -13,6 +13,13 @@ var ErrPartnerWithoutCommander = errors.New("a deck needs a commander before a s
 var ErrSameCommanders = errors.New("the commander and the second commander must be different cards")
 var ErrCardNotFound = errors.New("referenced card does not exist")
 var ErrNotFound = errors.New("deck not found")
+var ErrBackgroundFaceWithoutPrinting = errors.New("background_face needs background_scryfall_id")
+
+// Faces of a printing the deck art can show.
+const (
+	FaceFront = "front"
+	FaceBack  = "back"
+)
 
 type Deck struct {
 	ID                   string
@@ -23,6 +30,7 @@ type Deck struct {
 	PartnerID            *int
 	PartnerPendingID     *int
 	BackgroundScryfallID *string
+	BackgroundFace       string
 	CommanderScryfallID  *string
 	PartnerScryfallID    *string
 	ColorIdentity        *string

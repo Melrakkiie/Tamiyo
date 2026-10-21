@@ -819,6 +819,7 @@ GET /deck?format=commander&sort=-added&page=1&limit=25
       "partner_id": null,
       "partner_pending_id": null,
       "background_scryfall_id": "436d6a84-4cea-4ca7-94aa-9d08280652af",
+      "background_face": "front",
       "commander_scryfall_id": "a0b4c5ad-14f7-4bcb-9a59-6c0ac4f1a5e0",
       "partner_scryfall_id": null,
       "color_identity": "UBR",
@@ -840,7 +841,7 @@ GET /deck?format=commander&sort=-added&page=1&limit=25
 }
 ```
 
-`card_count` and `pending_count` only count the deck itself (its `main` board, see [Boards](#boards)): the sideboard and the cards being considered are left out. `pending_count` is the number of copies in the deck's pending list (see [Pending cards](#pending-cards-deckidpending)), not counted in `card_count`. `likes_count` is how many users [liked](#likes) the deck. `bracket` is the [Commander bracket](https://magic.wizards.com/en/news/announcements/commander-brackets-beta-update-october-21-2025) the owner gave the deck, `1` (Exhibition) to `5` (cEDH), `null` when not set; the API accepts it on any format. A deck can have a second commander (Partner, Friends forever, Choose a Background…): `partner_id` when it is an owned card, `partner_pending_id` when it is one of the deck's pending cards, like the commander's two fields. A deck only has a second commander when it has a commander. `commander_scryfall_id` and `partner_scryfall_id` are read-only: the Scryfall ids of the two commander cards, so a client can show their art without another call. `color_identity` is read-only too: the deck's colors in WUBRG order, the union of its commanders' color identities when it has a commander, otherwise every color in the color identity of its main board's cards, owned or pending (`""` when colorless, `null` for a deck without commander nor cards). `folder_id` is the [folder](#deck-folders) the deck is filed in (`null` at the root) and `favorite` whether its owner marked it as a favorite; changing either doesn't touch `updated`. `background_scryfall_id` is the art the user picked for the deck (`null` when none was chosen). `visibility` says who may see the deck: `private` (only its owner), `unlisted` (anyone with its link, the default) or `public` (anyone, and listed on its owner's profile). `id` is a random UUID generated when the deck is created, so deck ids can't be guessed from one another. It is also how anyone reaches the deck's read-only page: see [Shared decks](#shared-decks). The routes in this section still only serve the owner's own decks.
+`card_count` and `pending_count` only count the deck itself (its `main` board, see [Boards](#boards)): the sideboard and the cards being considered are left out. `pending_count` is the number of copies in the deck's pending list (see [Pending cards](#pending-cards-deckidpending)), not counted in `card_count`. `likes_count` is how many users [liked](#likes) the deck. `bracket` is the [Commander bracket](https://magic.wizards.com/en/news/announcements/commander-brackets-beta-update-october-21-2025) the owner gave the deck, `1` (Exhibition) to `5` (cEDH), `null` when not set; the API accepts it on any format. A deck can have a second commander (Partner, Friends forever, Choose a Background…): `partner_id` when it is an owned card, `partner_pending_id` when it is one of the deck's pending cards, like the commander's two fields. A deck only has a second commander when it has a commander. `commander_scryfall_id` and `partner_scryfall_id` are read-only: the Scryfall ids of the two commander cards, so a client can show their art without another call. `color_identity` is read-only too: the deck's colors in WUBRG order, the union of its commanders' color identities when it has a commander, otherwise every color in the color identity of its main board's cards, owned or pending (`""` when colorless, `null` for a deck without commander nor cards). `folder_id` is the [folder](#deck-folders) the deck is filed in (`null` at the root) and `favorite` whether its owner marked it as a favorite; changing either doesn't touch `updated`. `background_scryfall_id` is the art the user picked for the deck (`null` when none was chosen), and `background_face` the face of that printing whose art is shown: `front`, or `back` for the back face of a double-faced or reversible card. A meld card's back is its own printing, picked with its own `background_scryfall_id` and `front`. `background_face` is always `front` without a chosen printing. `visibility` says who may see the deck: `private` (only its owner), `unlisted` (anyone with its link, the default) or `public` (anyone, and listed on its owner's profile). `id` is a random UUID generated when the deck is created, so deck ids can't be guessed from one another. It is also how anyone reaches the deck's read-only page: see [Shared decks](#shared-decks). The routes in this section still only serve the owner's own decks.
 
 **Errors:** `400` if `page` or `limit` is not a valid integer, `limit` is outside `1..100`, or `sort` is not one of the allowed values.
 
@@ -897,8 +898,9 @@ Partially update a deck.
 | `partner_id` | int | The second commander, an owned card. The deck must have a commander (set in the same request or before), and it must be another card. Any card is accepted: whether the two can be paired is checked by [`GET /deck/:id/legality`](#get-deckidlegality). |
 | `partner_pending_id` | int | Make one of the deck's pending cards the second commander. Clears `partner_id`, and the other way round; added to the collection, its first new copy becomes `partner_id`. |
 | `clear_partner_id` | bool | Set to `true` to remove the second commander (sets `partner_id` and `partner_pending_id` to `null`). |
-| `background_scryfall_id` | uuid | Scryfall id of the printing whose art is shown behind the deck. |
-| `clear_background_scryfall_id` | bool | Set to `true` to remove the chosen art (set `background_scryfall_id` to `null`). |
+| `background_scryfall_id` | uuid | Scryfall id of the printing whose art is shown behind the deck. Shows its front unless `background_face` says otherwise. |
+| `background_face` | string | `front` or `back`: the face of `background_scryfall_id` whose art is shown. Only accepted with `background_scryfall_id`. The API doesn't check that the printing has a back face. |
+| `clear_background_scryfall_id` | bool | Set to `true` to remove the chosen art (set `background_scryfall_id` to `null` and `background_face` to `front`). |
 | `visibility` | string | `private`, `unlisted` or `public`. |
 | `bracket` | int | Commander bracket, `1` to `5`. |
 | `clear_bracket` | bool | Set to `true` to remove the bracket (set `bracket` to `null`). |
@@ -910,7 +912,7 @@ Partially update a deck.
 
 **Response `200 OK`** — the full, updated deck.
 
-**Errors:** `400` invalid id / invalid body / invalid `commander_id` or `partner_id` / a second commander without a commander (`"a deck needs a commander before a second commander"`) / the same card in both slots / `background_scryfall_id` not a UUID / unknown `visibility` / `bracket` not between 1 and 5 · `404` deck not found
+**Errors:** `400` invalid id / invalid body / invalid `commander_id` or `partner_id` / a second commander without a commander (`"a deck needs a commander before a second commander"`) / the same card in both slots / `background_scryfall_id` not a UUID / `background_face` not `front` or `back`, or sent without `background_scryfall_id` (`"background_face needs background_scryfall_id"`) / unknown `visibility` / `bracket` not between 1 and 5 · `404` deck not found
 
 ---
 
@@ -926,7 +928,7 @@ Delete a deck and all of its card associations (`card_deck` rows are removed via
 
 ### `POST /deck/:id/duplicate`
 
-Copy a deck into your decks: one of yours, or someone else's `public` or `unlisted` deck. The copy is a new deck, **private** unless the body says otherwise, with the same `format` and `background_scryfall_id`. The copy keeps boards, commander, second commander, finishes, proxies and tags, and is read straight from the database: it never calls Scryfall, so it works when Scryfall is down. Your owned copies of each printing go in it (your proxies for the source's proxies, your real copies for its real cards), missing ones become pending cards, pending proxies for the proxies.
+Copy a deck into your decks: one of yours, or someone else's `public` or `unlisted` deck. The copy is a new deck, **private** unless the body says otherwise, with the same `format`, `background_scryfall_id` and `background_face`. The copy keeps boards, commander, second commander, finishes, proxies and tags, and is read straight from the database: it never calls Scryfall, so it works when Scryfall is down. Your owned copies of each printing go in it (your proxies for the source's proxies, your real copies for its real cards), missing ones become pending cards, pending proxies for the proxies.
 
 Optional body:
 
@@ -1371,6 +1373,7 @@ A deck's color identity is its commanders' (the union of both when it has two), 
       "name": "Kess Commander",
       "format": "commander",
       "background_scryfall_id": null,
+      "background_face": "front",
       "commander_scryfall_id": "a0b4c5ad-14f7-4bcb-9a59-6c0ac4f1a5e0",
       "commander_name": "Kess, Dissident Mage",
       "partner_scryfall_id": null,
@@ -1406,6 +1409,7 @@ A deck's color identity is its commanders' (the union of both when it has two), 
     "format": "commander",
     "visibility": "unlisted",
     "background_scryfall_id": null,
+    "background_face": "front",
     "commander_scryfall_id": "a0b4c5ad-14f7-4bcb-9a59-6c0ac4f1a5e0",
     "partner_scryfall_id": null,
     "card_count": 100,

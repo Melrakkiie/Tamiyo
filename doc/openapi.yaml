@@ -4640,6 +4640,8 @@ components:
           type: string
           format: uuid
           nullable: true
+        background_face:
+          $ref: "#/components/schemas/DeckBackgroundFace"
         commander_scryfall_id:
           type: string
           format: uuid
@@ -4671,7 +4673,7 @@ components:
           type: string
         updated:
           type: string
-      required: [id, name, format, background_scryfall_id, commander_scryfall_id, commander_name, partner_scryfall_id, partner_name, color_identity, card_count, likes_count, owner, added, updated]
+      required: [id, name, format, background_scryfall_id, background_face, commander_scryfall_id, commander_name, partner_scryfall_id, partner_name, color_identity, card_count, likes_count, owner, added, updated]
 
     LikedDeck:
       allOf:
@@ -5294,6 +5296,8 @@ components:
           description: >
             Scryfall id of the printing whose art (art_crop) is shown behind
             the deck, null when none was chosen.
+        background_face:
+          $ref: "#/components/schemas/DeckBackgroundFace"
         commander_scryfall_id:
           type: string
           format: uuid
@@ -5346,7 +5350,7 @@ components:
           type: string
         updated:
           type: string
-      required: [id, name, format, visibility, card_count, likes_count, added, updated]
+      required: [id, name, format, visibility, background_face, card_count, likes_count, added, updated]
 
     DeckFolder:
       type: object
@@ -5403,6 +5407,8 @@ components:
           type: string
           format: uuid
           nullable: true
+        background_face:
+          $ref: "#/components/schemas/DeckBackgroundFace"
         commander_scryfall_id:
           type: string
           format: uuid
@@ -5422,7 +5428,7 @@ components:
           type: string
         updated:
           type: string
-      required: [id, name, format, visibility, background_scryfall_id, commander_scryfall_id, partner_scryfall_id, card_count, likes_count, added, updated]
+      required: [id, name, format, visibility, background_scryfall_id, background_face, commander_scryfall_id, partner_scryfall_id, card_count, likes_count, added, updated]
 
     SharedDeckCard:
       type: object
@@ -5745,9 +5751,14 @@ components:
         background_scryfall_id:
           type: string
           format: uuid
+          description: Shows the printing's front unless background_face says otherwise.
+        background_face:
+          allOf:
+            - $ref: "#/components/schemas/DeckBackgroundFace"
+          description: Only accepted with background_scryfall_id (400 otherwise).
         clear_background_scryfall_id:
           type: boolean
-          description: Set to true to remove the chosen art (set background_scryfall_id to null).
+          description: Set to true to remove the chosen art (set background_scryfall_id to null and background_face to front).
         visibility:
           $ref: "#/components/schemas/DeckVisibility"
         bracket:
@@ -5758,6 +5769,15 @@ components:
           type: boolean
           description: Set to true to remove the bracket.
 
+    DeckBackgroundFace:
+      type: string
+      enum: [front, back]
+      default: front
+      description: >
+        The face of background_scryfall_id whose art is shown: front, or back
+        for the back face of a double-faced or reversible card. A meld card's
+        back is its own printing, picked with front. Always front without a
+        chosen printing.
     DeckVisibility:
       type: string
       enum: [private, unlisted, public]

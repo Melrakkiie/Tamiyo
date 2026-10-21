@@ -32,6 +32,7 @@ type deckResponse struct {
 	Visibility           string  `json:"visibility"`
 	Bracket              *int    `json:"bracket"`
 	BackgroundScryfallID *string `json:"background_scryfall_id"`
+	BackgroundFace       string  `json:"background_face"`
 	CommanderScryfallID  *string `json:"commander_scryfall_id"`
 	PartnerScryfallID    *string `json:"partner_scryfall_id"`
 	CardCount            int     `json:"card_count"`
@@ -88,6 +89,7 @@ func toResponse(shared SharedDeck) sharedDeckResponse {
 			Visibility:           d.Visibility,
 			Bracket:              d.Bracket,
 			BackgroundScryfallID: d.BackgroundScryfallID,
+			BackgroundFace:       d.BackgroundFace,
 			CommanderScryfallID:  d.CommanderScryfallID,
 			PartnerScryfallID:    d.PartnerScryfallID,
 			CardCount:            total,

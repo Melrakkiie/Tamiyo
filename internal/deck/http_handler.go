@@ -31,6 +31,7 @@ type deckResponse struct {
 	PartnerID            *int    `json:"partner_id"`
 	PartnerPendingID     *int    `json:"partner_pending_id"`
 	BackgroundScryfallID *string `json:"background_scryfall_id"`
+	BackgroundFace       string  `json:"background_face"`
 	CommanderScryfallID  *string `json:"commander_scryfall_id"`
 	PartnerScryfallID    *string `json:"partner_scryfall_id"`
 	ColorIdentity        *string `json:"color_identity"`
@@ -55,6 +56,7 @@ func toResponse(d Deck) deckResponse {
 		PartnerID:            d.PartnerID,
 		PartnerPendingID:     d.PartnerPendingID,
 		BackgroundScryfallID: d.BackgroundScryfallID,
+		BackgroundFace:       d.BackgroundFace,
 		CommanderScryfallID:  d.CommanderScryfallID,
 		PartnerScryfallID:    d.PartnerScryfallID,
 		ColorIdentity:        d.ColorIdentity,
@@ -114,6 +116,7 @@ type updateDeckRequest struct {
 	PartnerPendingID     *int    `json:"partner_pending_id" binding:"omitempty,gt=0"`
 	ClearPartnerID       bool    `json:"clear_partner_id"`
 	BackgroundScryfallID *string `json:"background_scryfall_id" binding:"omitempty,uuid"`
+	BackgroundFace       *string `json:"background_face" binding:"omitempty,oneof=front back"`
 	ClearBackground      bool    `json:"clear_background_scryfall_id"`
 	Visibility           *string `json:"visibility" binding:"omitempty,oneof=public unlisted private"`
 	Bracket              *int    `json:"bracket" binding:"omitempty,min=1,max=5"`
@@ -143,8 +146,13 @@ func (r updateDeckRequest) applyTo(d Deck) Deck {
 	}
 	if r.ClearBackground {
 		d.BackgroundScryfallID = nil
+		d.BackgroundFace = FaceFront
 	} else if r.BackgroundScryfallID != nil {
 		d.BackgroundScryfallID = r.BackgroundScryfallID
+		d.BackgroundFace = FaceFront
+		if r.BackgroundFace != nil {
+			d.BackgroundFace = *r.BackgroundFace
+		}
 	}
 	if r.Visibility != nil {
 		d.Visibility = *r.Visibility
@@ -445,6 +453,7 @@ func (h *Handler) updateDeck(ctx *gin.Context) {
 			apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: ErrCommanderNotFound, Status: http.StatusBadRequest, Message: "commander_id does not reference an existing card"},
 			apierr.Mapping{Err: ErrPartnerWithoutCommander, Status: http.StatusBadRequest},
+			apierr.Mapping{Err: ErrBackgroundFaceWithoutPrinting, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrSameCommanders, Status: http.StatusBadRequest},
 		)
 		return

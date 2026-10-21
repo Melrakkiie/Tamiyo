@@ -25,6 +25,7 @@ type publicDeckResponse struct {
 	Format               string        `json:"format"`
 	Bracket              *int          `json:"bracket"`
 	BackgroundScryfallID *string       `json:"background_scryfall_id"`
+	BackgroundFace       string        `json:"background_face"`
 	CommanderScryfallID  *string       `json:"commander_scryfall_id"`
 	CommanderName        *string       `json:"commander_name"`
 	PartnerScryfallID    *string       `json:"partner_scryfall_id"`
@@ -52,6 +53,7 @@ func toPublicDeckResponse(d deck.PublicDeck) publicDeckResponse {
 		Format:               d.Format,
 		Bracket:              d.Bracket,
 		BackgroundScryfallID: d.BackgroundScryfallID,
+		BackgroundFace:       d.BackgroundFace,
 		CommanderScryfallID:  d.CommanderScryfallID,
 		CommanderName:        d.CommanderName,
 		PartnerScryfallID:    d.PartnerScryfallID,

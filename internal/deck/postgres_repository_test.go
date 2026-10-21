@@ -298,6 +298,35 @@ func TestPostgresRepository_StoresBackgroundScryfallID(t *testing.T) {
 	assert.Nil(t, updated.BackgroundScryfallID)
 }
 
+func TestPostgresRepository_StoresBackgroundFace(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+
+	created, err := repo.Create(context.Background(), userID, Deck{Name: "Otterly Playful", Format: "commander"})
+	require.NoError(t, err)
+	assert.Equal(t, FaceFront, created.BackgroundFace)
+
+	background := "436d6a84-4cea-4ca7-94aa-9d08280652af"
+	created.BackgroundScryfallID = &background
+	created.BackgroundFace = FaceBack
+	_, err = repo.Update(context.Background(), userID, created)
+	require.NoError(t, err)
+
+	found, err := repo.FindByID(context.Background(), userID, created.ID)
+	require.NoError(t, err)
+	assert.Equal(t, FaceBack, found.BackgroundFace)
+
+	all, _, err := repo.FindAll(context.Background(), userID, defaultFilter())
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	assert.Equal(t, FaceBack, all[0].BackgroundFace)
+
+	found.BackgroundScryfallID = nil
+	_, err = repo.Update(context.Background(), userID, found)
+	require.Error(t, err, "a back face without a printing breaks deck_background_face_needs_printing")
+}
+
 func TestPostgresRepository_Create_GeneratesAddedAndUpdatedTimestamps(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db, "alice@example.com")

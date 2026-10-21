@@ -54,6 +54,18 @@ func TestDuplicateDeck_CopiesBoardsFinishesProxiesAndCommanders(t *testing.T) {
 	assert.Equal(t, source, f.content(t), "the source deck is untouched")
 }
 
+func TestDuplicateDeck_CopiesTheBackgroundFace(t *testing.T) {
+	f := newContentFixture(t)
+	_, err := f.db.Exec(`UPDATE tamiyo.deck SET background_scryfall_id = $1, background_face = 'back' WHERE id = $2`, atraxa.scryfallID, contentDeckID)
+	require.NoError(t, err)
+
+	result := f.duplicate(t, f.userID, DuplicateRequest{})
+
+	require.NotNil(t, result.Deck.BackgroundScryfallID)
+	assert.Equal(t, atraxa.scryfallID, *result.Deck.BackgroundScryfallID)
+	assert.Equal(t, FaceBack, result.Deck.BackgroundFace)
+}
+
 func TestDuplicateDeck_UsesTheUsersFreeOwnedCopiesFirst(t *testing.T) {
 	f := newContentFixture(t)
 	f.pendingCard(t, bolt, 2, copyOptions{})

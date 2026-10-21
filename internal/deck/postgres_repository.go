@@ -24,6 +24,7 @@ type deckRow struct {
 	PartnerID            *int      `db:"partner_id"`
 	PartnerPendingID     *int      `db:"partner_pending_id"`
 	BackgroundScryfallID *string   `db:"background_scryfall_id"`
+	BackgroundFace       string    `db:"background_face"`
 	CommanderScryfallID  *string   `db:"commander_scryfall_id"`
 	PartnerScryfallID    *string   `db:"partner_scryfall_id"`
 	CommanderIdentity    *string   `db:"commander_color_identity"`
@@ -49,6 +50,7 @@ func (r deckRow) toDomain() Deck {
 		PartnerID:            r.PartnerID,
 		PartnerPendingID:     r.PartnerPendingID,
 		BackgroundScryfallID: r.BackgroundScryfallID,
+		BackgroundFace:       r.BackgroundFace,
 		CommanderScryfallID:  r.CommanderScryfallID,
 		PartnerScryfallID:    r.PartnerScryfallID,
 		ColorIdentity:        r.colorIdentity(),
@@ -75,10 +77,18 @@ func toDeckRow(userID string, d Deck) deckRow {
 		PartnerID:            d.PartnerID,
 		PartnerPendingID:     d.PartnerPendingID,
 		BackgroundScryfallID: d.BackgroundScryfallID,
+		BackgroundFace:       backgroundFaceOrDefault(d.BackgroundFace),
 		Visibility:           visibilityOrDefault(d.Visibility),
 		Bracket:              d.Bracket,
 		FolderID:             d.FolderID,
 	}
+}
+
+func backgroundFaceOrDefault(face string) string {
+	if face == "" {
+		return FaceFront
+	}
+	return face
 }
 
 func visibilityOrDefault(visibility string) string {
@@ -171,6 +181,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 			d.partner_id AS partner_id,
 			d.partner_pending_id AS partner_pending_id,
 			d.background_scryfall_id AS background_scryfall_id,
+			d.background_face AS background_face,
 			d.visibility AS visibility,
 			d.bracket AS bracket,
 			d.folder_id AS folder_id,
@@ -185,7 +196,7 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 		FROM tamiyo.deck d
 		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id AND cd.board = 'main'
 	` + whereClause + `
-		GROUP BY d.id, d.name, d.format, d.commander_id, d.commander_pending_id, d.partner_id, d.partner_pending_id, d.background_scryfall_id, d.visibility, d.bracket, d.folder_id, d.favorite, d.added, d.updated
+		GROUP BY d.id, d.name, d.format, d.commander_id, d.commander_pending_id, d.partner_id, d.partner_pending_id, d.background_scryfall_id, d.background_face, d.visibility, d.bracket, d.folder_id, d.favorite, d.added, d.updated
 	` + orderByClause(filter) + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 
 	pagedArgs := append(args, filter.Limit, offset)
@@ -260,6 +271,7 @@ func (r *compositionQueries) FindByID(ctx context.Context, userID string, id str
 			d.partner_id AS partner_id,
 			d.partner_pending_id AS partner_pending_id,
 			d.background_scryfall_id AS background_scryfall_id,
+			d.background_face AS background_face,
 			d.visibility AS visibility,
 			d.bracket AS bracket,
 			d.folder_id AS folder_id,
@@ -274,7 +286,7 @@ func (r *compositionQueries) FindByID(ctx context.Context, userID string, id str
 		FROM tamiyo.deck d
 		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id AND cd.board = 'main'
 		WHERE d.id = $1 AND d.user_id = $2
-		GROUP BY d.id, d.name, d.format, d.commander_id, d.commander_pending_id, d.partner_id, d.partner_pending_id, d.background_scryfall_id, d.visibility, d.bracket, d.folder_id, d.favorite, d.added, d.updated
+		GROUP BY d.id, d.name, d.format, d.commander_id, d.commander_pending_id, d.partner_id, d.partner_pending_id, d.background_scryfall_id, d.background_face, d.visibility, d.bracket, d.folder_id, d.favorite, d.added, d.updated
 	`
 
 	var row deckRow
@@ -300,6 +312,7 @@ func (r *PostgresRepository) FindShared(ctx context.Context, id string) (string,
 			d.partner_id AS partner_id,
 			d.partner_pending_id AS partner_pending_id,
 			d.background_scryfall_id AS background_scryfall_id,
+			d.background_face AS background_face,
 			d.visibility AS visibility,
 			d.bracket AS bracket,
 			d.folder_id AS folder_id,
@@ -314,7 +327,7 @@ func (r *PostgresRepository) FindShared(ctx context.Context, id string) (string,
 		FROM tamiyo.deck d
 		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id AND cd.board = 'main'
 		WHERE d.id = $1 AND d.visibility IN ('public', 'unlisted')
-		GROUP BY d.id, d.user_id, d.name, d.format, d.commander_id, d.commander_pending_id, d.partner_id, d.partner_pending_id, d.background_scryfall_id, d.visibility, d.bracket, d.folder_id, d.favorite, d.added, d.updated
+		GROUP BY d.id, d.user_id, d.name, d.format, d.commander_id, d.commander_pending_id, d.partner_id, d.partner_pending_id, d.background_scryfall_id, d.background_face, d.visibility, d.bracket, d.folder_id, d.favorite, d.added, d.updated
 	`
 
 	var row deckRow
@@ -331,9 +344,9 @@ func (r *PostgresRepository) FindShared(ctx context.Context, id string) (string,
 func (r *compositionQueries) Create(ctx context.Context, userID string, d Deck) (Deck, error) {
 	row := toDeckRow(userID, d)
 	query := `
-    	INSERT INTO tamiyo.deck (user_id, name, format, commander_id, partner_id, background_scryfall_id, visibility, bracket, folder_id)
-     	VALUES (:user_id, :name, :format, :commander_id, :partner_id, :background_scryfall_id, :visibility, :bracket, :folder_id)
-      	RETURNING id, name, format, commander_id, commander_pending_id, partner_id, partner_pending_id, background_scryfall_id, visibility, bracket, folder_id, favorite, added, updated,
+    	INSERT INTO tamiyo.deck (user_id, name, format, commander_id, partner_id, background_scryfall_id, background_face, visibility, bracket, folder_id)
+     	VALUES (:user_id, :name, :format, :commander_id, :partner_id, :background_scryfall_id, :background_face, :visibility, :bracket, :folder_id)
+      	RETURNING id, name, format, commander_id, commander_pending_id, partner_id, partner_pending_id, background_scryfall_id, background_face, visibility, bracket, folder_id, favorite, added, updated,
       	    ` + commanderScryfallIDsSQL("deck.") + `,
       	    ` + colorIdentitySQL("deck.") + `
 	`
@@ -365,9 +378,9 @@ func (r *compositionQueries) Update(ctx context.Context, userID string, d Deck) 
 	query := `
 		UPDATE tamiyo.deck
 		SET name = :name, format = :format, commander_id = :commander_id, commander_pending_id = :commander_pending_id,
-		    partner_id = :partner_id, partner_pending_id = :partner_pending_id, background_scryfall_id = :background_scryfall_id, visibility = :visibility, bracket = :bracket
+		    partner_id = :partner_id, partner_pending_id = :partner_pending_id, background_scryfall_id = :background_scryfall_id, background_face = :background_face, visibility = :visibility, bracket = :bracket
 		WHERE id = :id AND user_id = :user_id
-		RETURNING id, name, format, commander_id, commander_pending_id, partner_id, partner_pending_id, background_scryfall_id, visibility, bracket, folder_id, favorite, added, updated,
+		RETURNING id, name, format, commander_id, commander_pending_id, partner_id, partner_pending_id, background_scryfall_id, background_face, visibility, bracket, folder_id, favorite, added, updated,
 		    ` + commanderScryfallIDsSQL("deck.") + `,
 		    ` + colorIdentitySQL("deck.") + `
 	`

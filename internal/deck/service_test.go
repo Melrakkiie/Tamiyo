@@ -415,6 +415,71 @@ func TestService_UpdateDeck_KeepsBackgroundWhenNotMentioned(t *testing.T) {
 	assert.Equal(t, background, *result.BackgroundScryfallID)
 }
 
+func TestService_UpdateDeck_SetsBackgroundBackFace(t *testing.T) {
+	existing := Deck{ID: "00000000-0000-0000-0000-000000000001", Name: "Red Deck", Format: "commander"}
+	repo := &fakeRepository{findByIDDeck: existing}
+	service := NewService(repo)
+
+	background := "436d6a84-4cea-4ca7-94aa-9d08280652af"
+	back := FaceBack
+	result, err := service.UpdateDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", updateDeckRequest{BackgroundScryfallID: &background, BackgroundFace: &back})
+
+	require.NoError(t, err)
+	require.NotNil(t, result.BackgroundScryfallID)
+	assert.Equal(t, background, *result.BackgroundScryfallID)
+	assert.Equal(t, FaceBack, result.BackgroundFace)
+}
+
+func TestService_UpdateDeck_BackgroundWithoutFaceShowsTheFront(t *testing.T) {
+	background := "436d6a84-4cea-4ca7-94aa-9d08280652af"
+	existing := Deck{ID: "00000000-0000-0000-0000-000000000001", Name: "Red Deck", Format: "commander", BackgroundScryfallID: &background, BackgroundFace: FaceBack}
+	repo := &fakeRepository{findByIDDeck: existing}
+	service := NewService(repo)
+
+	other := "a3fb7228-e76b-4e96-a40e-20b5fed75685"
+	result, err := service.UpdateDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", updateDeckRequest{BackgroundScryfallID: &other})
+
+	require.NoError(t, err)
+	assert.Equal(t, FaceFront, result.BackgroundFace)
+}
+
+func TestService_UpdateDeck_ClearingBackgroundShowsTheFront(t *testing.T) {
+	background := "436d6a84-4cea-4ca7-94aa-9d08280652af"
+	existing := Deck{ID: "00000000-0000-0000-0000-000000000001", Name: "Red Deck", Format: "commander", BackgroundScryfallID: &background, BackgroundFace: FaceBack}
+	repo := &fakeRepository{findByIDDeck: existing}
+	service := NewService(repo)
+
+	result, err := service.UpdateDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", updateDeckRequest{ClearBackground: true})
+
+	require.NoError(t, err)
+	assert.Equal(t, FaceFront, result.BackgroundFace)
+}
+
+func TestService_UpdateDeck_KeepsBackgroundFaceWhenNotMentioned(t *testing.T) {
+	background := "436d6a84-4cea-4ca7-94aa-9d08280652af"
+	existing := Deck{ID: "00000000-0000-0000-0000-000000000001", Name: "Red Deck", Format: "commander", BackgroundScryfallID: &background, BackgroundFace: FaceBack}
+	repo := &fakeRepository{findByIDDeck: existing}
+	service := NewService(repo)
+
+	newName := "Renamed"
+	result, err := service.UpdateDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", updateDeckRequest{Name: &newName})
+
+	require.NoError(t, err)
+	assert.Equal(t, FaceBack, result.BackgroundFace)
+}
+
+func TestService_UpdateDeck_RejectsBackgroundFaceWithoutPrinting(t *testing.T) {
+	background := "436d6a84-4cea-4ca7-94aa-9d08280652af"
+	existing := Deck{ID: "00000000-0000-0000-0000-000000000001", Name: "Red Deck", Format: "commander", BackgroundScryfallID: &background}
+	repo := &fakeRepository{findByIDDeck: existing}
+	service := NewService(repo)
+
+	back := FaceBack
+	_, err := service.UpdateDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", updateDeckRequest{BackgroundFace: &back})
+
+	assert.ErrorIs(t, err, ErrBackgroundFaceWithoutPrinting)
+}
+
 func TestService_UpdateDeck_ReturnsNotFoundWhenDeckDoesNotBelongToUser(t *testing.T) {
 	repo := &fakeRepository{findByIDErr: ErrNotFound}
 	service := NewService(repo)
