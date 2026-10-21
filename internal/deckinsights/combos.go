@@ -2,11 +2,17 @@ package deckinsights
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/url"
 
 	"Melrakkiie/Tamiyo/internal/commanderspellbook"
 	"Melrakkiie/Tamiyo/internal/deck"
 )
+
+// ErrCombosUnavailable is returned when Commander Spellbook can't be reached
+// or doesn't answer usably.
+var ErrCombosUnavailable = errors.New("commander spellbook is unavailable")
 
 // comboFinder looks a deck's combos up on Commander Spellbook (ADR 0010).
 type comboFinder interface {
@@ -44,11 +50,20 @@ func (s *Service) GetDeckCombos(ctx context.Context, userID string, deckID strin
 		return DeckCombos{Combos: []Combo{}}, nil
 	}
 
-	_, err = s.combos.FindCombos(ctx, commanders, others)
+	found, err := s.combos.FindCombos(ctx, commanders, others)
 	if err != nil {
-		return DeckCombos{}, err
+		return DeckCombos{}, fmt.Errorf("%w: %w", ErrCombosUnavailable, err)
 	}
-	return DeckCombos{}, nil
+	combos := make([]Combo, 0, len(found))
+	for _, c := range found {
+		combos = append(combos, Combo{
+			ID:      c.ID,
+			Cards:   c.Cards,
+			Results: c.Results,
+			URL:     "https://commanderspellbook.com/combo/" + url.PathEscape(c.ID) + "/",
+		})
+	}
+	return DeckCombos{Combos: combos}, nil
 }
 
 // comboDeckList names the main board's cards the way Commander Spellbook

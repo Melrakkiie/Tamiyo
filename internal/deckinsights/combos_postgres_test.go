@@ -4,6 +4,7 @@ package deckinsights
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -141,4 +142,56 @@ func TestGetDeckCombos_AnEmptyMainBoardMakesNoCall(t *testing.T) {
 	assert.Zero(t, finder.calls)
 	assert.NotNil(t, got.Combos)
 	assert.Empty(t, got.Combos)
+}
+
+func TestGetDeckCombos_ReturnsEachComboWithItsSpellbookPage(t *testing.T) {
+	f := newInsightsFixture(t, "commander")
+	seedPrintings(t, f.db, curiosity)
+	f.ownedCopy(t, curiosity, copyOptions{})
+	finder := &recordingFinder{combos: []commanderspellbook.Combo{
+		{ID: "1414-2730", Cards: []string{"Niv-Mizzet, Parun", "Curiosity"}, Results: []string{"Infinite damage"}},
+	}}
+
+	got, err := f.combos(t, finder)
+
+	require.NoError(t, err)
+	assert.Equal(t, []Combo{{
+		ID:      "1414-2730",
+		Cards:   []string{"Niv-Mizzet, Parun", "Curiosity"},
+		Results: []string{"Infinite damage"},
+		URL:     "https://commanderspellbook.com/combo/1414-2730/",
+	}}, got.Combos)
+}
+
+func TestGetDeckCombos_ADeckWithoutCombosReturnsAnEmptyList(t *testing.T) {
+	f := newInsightsFixture(t, "commander")
+	seedPrintings(t, f.db, curiosity)
+	f.ownedCopy(t, curiosity, copyOptions{})
+
+	got, err := f.combos(t, &recordingFinder{})
+
+	require.NoError(t, err)
+	assert.NotNil(t, got.Combos)
+	assert.Empty(t, got.Combos)
+}
+
+func TestGetDeckCombos_AFailedLookupReturnsErrCombosUnavailable(t *testing.T) {
+	f := newInsightsFixture(t, "commander")
+	seedPrintings(t, f.db, curiosity)
+	f.ownedCopy(t, curiosity, copyOptions{})
+
+	_, err := f.combos(t, &recordingFinder{err: errors.New("commander spellbook returned status 503")})
+
+	assert.ErrorIs(t, err, ErrCombosUnavailable)
+}
+
+func TestGetDeckCombos_UnknownDeckReturnsErrDeckNotFound(t *testing.T) {
+	f := newInsightsFixture(t, "commander")
+	finder := &recordingFinder{}
+	f.deckID = "00000000-0000-0000-0000-000000000999"
+
+	_, err := f.combos(t, finder)
+
+	assert.ErrorIs(t, err, ErrDeckNotFound)
+	assert.Zero(t, finder.calls)
 }
