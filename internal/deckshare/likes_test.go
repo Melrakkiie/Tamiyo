@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -76,7 +77,8 @@ func TestService_LikeSomeoneElsesSharedDeck(t *testing.T) {
 }
 
 func TestService_LikeRules(t *testing.T) {
-	svc := NewService(compareStore(), compareUsers(), &fakeInsights{})
+	store := compareStore()
+	svc := NewService(store, compareUsers(), &fakeInsights{})
 	ctx := context.Background()
 
 	_, err := svc.LikeDeck(ctx, viewerID, myDeckID)
@@ -86,11 +88,13 @@ func TestService_LikeRules(t *testing.T) {
 	assert.Equal(t, deck.LikeStatus{}, status)
 
 	_, err = svc.LikeDeck(ctx, viewerID, privateID)
-	assert.ErrorIs(t, err, ErrNotFound)
+	assert.ErrorIs(t, err, deck.ErrNotFound)
 	_, err = svc.UnlikeDeck(ctx, viewerID, privateID)
-	assert.ErrorIs(t, err, ErrNotFound)
+	assert.ErrorIs(t, err, deck.ErrNotFound)
 	_, err = svc.LikeStatus(ctx, viewerID, privateID)
-	assert.ErrorIs(t, err, ErrNotFound)
+	assert.ErrorIs(t, err, deck.ErrNotFound)
+	assert.Empty(t, store.likes)
+	assert.Equal(t, slices.Repeat([]deck.Reach{deck.ReachVisible}, 5), store.reaches)
 }
 
 func TestLikeHandlers(t *testing.T) {

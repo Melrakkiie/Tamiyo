@@ -22,17 +22,11 @@ const (
 	privateID  = "77777777-7777-7777-7777-777777777777"
 )
 
-type storedDeck struct {
-	ownerID string
-	deck    deck.Deck
-	shared  bool
-	entries []deck.DeckEntry
-}
-
+// fakeDeckStore holds the decks as viewerID reads them; any other id is not found.
 type fakeDeckStore struct {
-	decks   map[string]storedDeck
-	getErr  error
-	visited []string
+	reads   map[string]deck.ReadDeck
+	readErr error
+	reaches []deck.Reach
 
 	owned       map[string]int
 	countedFor  string
@@ -41,32 +35,16 @@ type fakeDeckStore struct {
 	likes map[[2]string]bool
 }
 
-func (f *fakeDeckStore) GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error) {
-	if f.getErr != nil {
-		return deck.Deck{}, f.getErr
-	}
-	d, ok := f.decks[id]
-	if !ok || d.ownerID != userID {
-		return deck.Deck{}, deck.ErrNotFound
-	}
-	return d.deck, nil
-}
-
-func (f *fakeDeckStore) GetSharedDeck(ctx context.Context, id string) (string, deck.Deck, error) {
-	d, ok := f.decks[id]
-	if !ok || !d.shared {
-		return "", deck.Deck{}, deck.ErrNotFound
-	}
-	return d.ownerID, d.deck, nil
-}
-
-func (f *fakeDeckStore) GetDeckContent(ctx context.Context, userID string, deckID string) (deck.DeckContent, error) {
-	f.visited = append(f.visited, userID+":"+deckID)
-	return deck.DeckContent{Deck: f.decks[deckID].deck, Entries: f.decks[deckID].entries}, nil
-}
-
 func (f *fakeDeckStore) ReadDeck(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (deck.ReadDeck, error) {
-	return deck.ReadDeck{}, deck.ErrNotFound
+	f.reaches = append(f.reaches, reach)
+	if f.readErr != nil {
+		return deck.ReadDeck{}, f.readErr
+	}
+	read, ok := f.reads[deckID]
+	if !ok {
+		return deck.ReadDeck{}, deck.ErrNotFound
+	}
+	return read, nil
 }
 
 func (f *fakeDeckStore) CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error) {
@@ -85,16 +63,13 @@ func (f *fakeDeckStore) BrowsePublicDecks(ctx context.Context, filter deck.Publi
 	return nil, 0, nil
 }
 
-func (f *fakeDeckStore) GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error) {
-	return deck.DeckTags{}, nil
-}
-
 func compareStore() *fakeDeckStore {
-	return &fakeDeckStore{decks: map[string]storedDeck{
+	return &fakeDeckStore{reads: map[string]deck.ReadDeck{
 		myDeckID: {
-			ownerID: viewerID,
-			deck:    deck.Deck{ID: myDeckID, Name: "Mine", Format: "commander", Visibility: deck.VisibilityPrivate, CommanderID: intPtr(1)},
-			entries: []deck.DeckEntry{
+			OwnerID: viewerID,
+			Mine:    true,
+			Deck:    deck.Deck{ID: myDeckID, Name: "Mine", Format: "commander", Visibility: deck.VisibilityPrivate, CommanderID: intPtr(1)},
+			Entries: []deck.DeckEntry{
 				{Name: "Atraxa, Praetors' Voice", ScryfallID: "atraxa-cmr", ManaValue: 4, Slot: deck.SlotCommander, OwnedCardIDs: []int{1}},
 				{Name: "Counterspell", ScryfallID: "cs", Pending: []deck.PendingPart{{ID: 9, Quantity: 2}}},
 				{Name: "Fire // Ice", ScryfallID: "fire-mh2", CardType: strPtr("Instant"), Colors: strPtr("UR"), ColorIdentity: strPtr("UR"), OwnedCardIDs: []int{5}},
@@ -104,20 +79,15 @@ func compareStore() *fakeDeckStore {
 			},
 		},
 		theirDeck: {
-			ownerID: strangerID,
-			shared:  true,
-			deck:    deck.Deck{ID: theirDeck, Name: "Theirs", Format: "commander", Visibility: deck.VisibilityUnlisted},
-			entries: []deck.DeckEntry{
+			OwnerID: strangerID,
+			Deck:    deck.Deck{ID: theirDeck, Name: "Theirs", Format: "commander", Visibility: deck.VisibilityUnlisted},
+			Entries: []deck.DeckEntry{
 				{Name: "Fire / Ice", ScryfallID: "fire-other", OwnedCardIDs: []int{23}},
 				{Name: "Island", ScryfallID: "island-b", OwnedCardIDs: []int{21}},
 				{Name: "Island", ScryfallID: "island-c", OwnedCardIDs: []int{22}},
 				{Name: "Lightning Bolt", ScryfallID: "bolt", OwnedCardIDs: []int{24}},
 				{Name: "Sol Ring", ScryfallID: "sol-lea", OwnedCardIDs: []int{20}},
 			},
-		},
-		privateID: {
-			ownerID: strangerID,
-			deck:    deck.Deck{ID: privateID, Name: "Hidden", Visibility: deck.VisibilityPrivate},
 		},
 	}}
 }
@@ -179,7 +149,7 @@ func TestCompareDecks_DescribesBothDecks(t *testing.T) {
 	assert.False(t, comparison.Other.Mine)
 	assert.Equal(t, "Alice", *comparison.Other.Owner.DisplayName)
 	assert.Equal(t, 5, comparison.Other.CardCount)
-	assert.Contains(t, store.visited, strangerID+":"+theirDeck)
+	assert.Equal(t, []deck.Reach{deck.ReachVisible, deck.ReachVisible}, store.reaches)
 }
 
 func TestCompareDecks_TwoDecksSharedByOthers(t *testing.T) {
@@ -192,29 +162,6 @@ func TestCompareDecks_TwoDecksSharedByOthers(t *testing.T) {
 	assert.Len(t, comparison.Common, 4)
 	assert.Empty(t, comparison.OnlyInDeck)
 	assert.Empty(t, comparison.OnlyInOther)
-}
-
-func TestCompareDecks_SomeoneElsesPrivateDeckIsNotFound(t *testing.T) {
-	svc := NewService(compareStore(), compareUsers(), &fakeInsights{})
-
-	_, err := svc.CompareDecks(context.Background(), viewerID, myDeckID, privateID)
-	assert.ErrorIs(t, err, ErrNotFound)
-
-	_, err = svc.CompareDecks(context.Background(), viewerID, "88888888-8888-8888-8888-888888888888", myDeckID)
-	assert.ErrorIs(t, err, ErrNotFound)
-}
-
-func TestCompareDecks_WithoutAViewerOnlySeesSharedDecks(t *testing.T) {
-	svc := NewService(compareStore(), compareUsers(), &fakeInsights{})
-
-	comparison, err := svc.CompareDecks(context.Background(), "", theirDeck, theirDeck)
-	require.NoError(t, err)
-	assert.False(t, comparison.Deck.Mine)
-	assert.False(t, comparison.Other.Mine)
-	assert.Len(t, comparison.Common, 4)
-
-	_, err = svc.CompareDecks(context.Background(), "", theirDeck, myDeckID)
-	assert.ErrorIs(t, err, ErrNotFound)
 }
 
 func TestCompareSharedDecksHandler_NeedsNoViewer(t *testing.T) {
@@ -235,13 +182,13 @@ func TestCompareSharedDecksHandler_NeedsNoViewer(t *testing.T) {
 
 func TestCompareDecks_PropagatesUnexpectedErrors(t *testing.T) {
 	store := compareStore()
-	store.getErr = errors.New("db is down")
+	store.readErr = errors.New("db is down")
 	svc := NewService(store, compareUsers(), &fakeInsights{})
 
 	_, err := svc.CompareDecks(context.Background(), viewerID, myDeckID, theirDeck)
 
 	require.Error(t, err)
-	assert.NotErrorIs(t, err, ErrNotFound)
+	assert.NotErrorIs(t, err, deck.ErrNotFound)
 }
 
 func TestCompareDecksHandler_ReturnsTheComparison(t *testing.T) {
@@ -297,12 +244,12 @@ func TestCompareDecksHandler_Errors(t *testing.T) {
 
 func TestCompareDecks_OnlyComparesTheMainBoards(t *testing.T) {
 	store := compareStore()
-	mine := store.decks[myDeckID]
-	mine.entries = append(mine.entries,
+	mine := store.reads[myDeckID]
+	mine.Entries = append(mine.Entries,
 		deck.DeckEntry{Name: "Lightning Bolt", ScryfallID: "bolt", Board: deck.BoardSideboard, OwnedCardIDs: []int{6}},
 		deck.DeckEntry{Name: "Opt", ScryfallID: "opt", Board: deck.BoardConsidering, Pending: []deck.PendingPart{{ID: 10, Quantity: 1}}},
 	)
-	store.decks[myDeckID] = mine
+	store.reads[myDeckID] = mine
 	svc := NewService(store, compareUsers(), &fakeInsights{})
 
 	comparison, err := svc.CompareDecks(context.Background(), viewerID, myDeckID, theirDeck)
@@ -329,17 +276,7 @@ func TestCollectionOwnership_CountsTheViewersCopiesByName(t *testing.T) {
 	}, owned)
 	assert.Equal(t, viewerID, store.countedFor)
 	assert.ElementsMatch(t, []string{"sol ring", "island", "fire / ice", "lightning bolt"}, store.countedKeys)
-}
-
-func TestCollectionOwnership_WorksOnTheViewersOwnDeckButNotOnAPrivateOne(t *testing.T) {
-	svc := NewService(compareStore(), compareUsers(), &fakeInsights{})
-
-	owned, err := svc.CollectionOwnership(context.Background(), viewerID, myDeckID)
-	require.NoError(t, err)
-	assert.Len(t, owned, 5)
-
-	_, err = svc.CollectionOwnership(context.Background(), viewerID, privateID)
-	assert.ErrorIs(t, err, ErrNotFound)
+	assert.Equal(t, []deck.Reach{deck.ReachVisible}, store.reaches)
 }
 
 func TestGetVisibleDeck_LoadsTheViewersOwnPrivateDeck(t *testing.T) {
@@ -349,35 +286,23 @@ func TestGetVisibleDeck_LoadsTheViewersOwnPrivateDeck(t *testing.T) {
 	visible, err := svc.GetVisibleDeck(context.Background(), viewerID, myDeckID)
 
 	require.NoError(t, err)
+	assert.Equal(t, []deck.Reach{deck.ReachVisible}, store.reaches)
 	assert.Equal(t, "Mine", visible.Deck.Name)
 	assert.Equal(t, viewerID, visible.Owner.ID)
-	assert.Contains(t, store.visited, viewerID+":"+myDeckID)
 	require.Len(t, visible.Cards, 6)
 	assert.True(t, visible.Cards[0].Commander)
 	assert.Equal(t, 2, visible.Cards[1].Quantity)
 }
 
-func TestGetVisibleDeck_LoadsSomeoneElsesSharedDeckAsTheOwner(t *testing.T) {
-	store := compareStore()
-	svc := NewService(store, compareUsers(), &fakeInsights{})
+func TestGetVisibleDeck_ShowsTheOwnerOfSomeoneElsesSharedDeck(t *testing.T) {
+	svc := NewService(compareStore(), compareUsers(), &fakeInsights{})
 
 	visible, err := svc.GetVisibleDeck(context.Background(), viewerID, theirDeck)
 
 	require.NoError(t, err)
 	assert.Equal(t, "Theirs", visible.Deck.Name)
 	assert.Equal(t, "Alice", *visible.Owner.DisplayName)
-	assert.Contains(t, store.visited, strangerID+":"+theirDeck)
 	assert.Len(t, visible.Cards, 5)
-}
-
-func TestGetVisibleDeck_SomeoneElsesPrivateDeckIsNotFound(t *testing.T) {
-	svc := NewService(compareStore(), compareUsers(), &fakeInsights{})
-
-	_, err := svc.GetVisibleDeck(context.Background(), viewerID, privateID)
-	assert.ErrorIs(t, err, ErrNotFound)
-
-	_, err = svc.GetVisibleDeck(context.Background(), viewerID, "88888888-8888-8888-8888-888888888888")
-	assert.ErrorIs(t, err, ErrNotFound)
 }
 
 func TestVisibleDeckHandler_ReturnsTheSharedDeckShape(t *testing.T) {

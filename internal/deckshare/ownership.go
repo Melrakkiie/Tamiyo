@@ -14,20 +14,16 @@ type OwnedCard struct {
 }
 
 func (s *Service) CollectionOwnership(ctx context.Context, viewerID string, deckID string) ([]OwnedCard, error) {
-	ownerID, d, err := s.resolveVisible(ctx, viewerID, deckID)
-	if err != nil {
-		return nil, err
-	}
-	_, cards, err := s.loadContent(ctx, ownerID, d)
+	read, err := s.decks.ReadDeck(ctx, viewerID, deckID, deck.ReachVisible)
 	if err != nil {
 		return nil, err
 	}
 
 	names := make(map[string]string)
-	for _, c := range cards {
-		key := deck.CardNameKey(c.Name)
+	for _, e := range read.Entries {
+		key := deck.CardNameKey(e.Name)
 		if _, seen := names[key]; !seen {
-			names[key] = c.Name
+			names[key] = e.Name
 		}
 	}
 	keys := make([]string, 0, len(names))

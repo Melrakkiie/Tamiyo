@@ -15,10 +15,6 @@ var ErrNotFound = errors.New("shared deck not found")
 
 type deckService interface {
 	ReadDeck(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (deck.ReadDeck, error)
-	GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error)
-	GetSharedDeck(ctx context.Context, deckID string) (string, deck.Deck, error)
-	GetDeckContent(ctx context.Context, userID string, deckID string) (deck.DeckContent, error)
-	GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error)
 	BrowsePublicDecks(ctx context.Context, filter deck.PublicFilter) ([]deck.PublicDeck, int, error)
 	CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error)
 	LikeDeck(ctx context.Context, userID string, deckID string) error
@@ -75,17 +71,6 @@ func NewService(decks deckService, users userService, insights insightsService) 
 	return &Service{decks: decks, users: users, insights: insights}
 }
 
-func (s *Service) resolve(ctx context.Context, deckID string) (string, deck.Deck, error) {
-	ownerID, d, err := s.decks.GetSharedDeck(ctx, deckID)
-	if err != nil {
-		if errors.Is(err, deck.ErrNotFound) {
-			return "", deck.Deck{}, ErrNotFound
-		}
-		return "", deck.Deck{}, err
-	}
-	return ownerID, d, nil
-}
-
 func (s *Service) GetSharedDeck(ctx context.Context, deckID string) (SharedDeck, error) {
 	read, err := s.decks.ReadDeck(ctx, "", deckID, deck.ReachShared)
 	if err != nil {
@@ -120,35 +105,11 @@ func sharedCards(entries []deck.DeckEntry, tagsByName map[string][]string) []Car
 }
 
 func (s *Service) GetVisibleDeck(ctx context.Context, userID string, deckID string) (SharedDeck, error) {
-	ownerID, d, err := s.resolveVisible(ctx, userID, deckID)
+	read, err := s.decks.ReadDeck(ctx, userID, deckID, deck.ReachVisible)
 	if err != nil {
 		return SharedDeck{}, err
 	}
-
-	owner, cards, err := s.loadContent(ctx, ownerID, d)
-	if err != nil {
-		return SharedDeck{}, err
-	}
-	return SharedDeck{Deck: d, Owner: owner, Cards: cards}, nil
-}
-
-func (s *Service) loadContent(ctx context.Context, ownerID string, d deck.Deck) (Owner, []Card, error) {
-	owner, err := s.owner(ctx, ownerID)
-	if err != nil {
-		return Owner{}, nil, err
-	}
-
-	content, err := s.decks.GetDeckContent(ctx, ownerID, d.ID)
-	if err != nil {
-		return Owner{}, nil, fmt.Errorf("loading deck content: %w", err)
-	}
-
-	tags, err := s.decks.GetCardTags(ctx, ownerID, d.ID)
-	if err != nil {
-		return Owner{}, nil, fmt.Errorf("loading card tags: %w", err)
-	}
-
-	return owner, sharedCards(content.Entries, tags.ByCardName()), nil
+	return s.sharedDeck(ctx, read)
 }
 
 func (s *Service) BrowsePublicDecks(ctx context.Context, filter deck.PublicFilter) ([]deck.PublicDeck, int, error) {

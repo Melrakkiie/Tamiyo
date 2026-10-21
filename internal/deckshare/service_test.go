@@ -45,22 +45,6 @@ func (f *fakeDecks) BrowsePublicDecks(ctx context.Context, filter deck.PublicFil
 	return f.publicDecks, len(f.publicDecks), nil
 }
 
-func (f *fakeDecks) GetSharedDeck(ctx context.Context, deckID string) (string, deck.Deck, error) {
-	return "", deck.Deck{}, deck.ErrNotFound
-}
-
-func (f *fakeDecks) GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error) {
-	return deck.DeckTags{}, nil
-}
-
-func (f *fakeDecks) GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error) {
-	return deck.Deck{}, deck.ErrNotFound
-}
-
-func (f *fakeDecks) GetDeckContent(ctx context.Context, userID string, deckID string) (deck.DeckContent, error) {
-	return deck.DeckContent{}, nil
-}
-
 type fakeUsers struct {
 	users map[string]user.User
 }
