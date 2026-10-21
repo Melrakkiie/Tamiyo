@@ -2901,6 +2901,49 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /deck/{id}/combos:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    get:
+      tags: [deck-insights]
+      summary: List the combos a deck holds
+      description: >
+        Looks the deck's combos up on Commander Spellbook (find-my-combos)
+        on each call: only combos whose every card is in the main board,
+        with any card the combo needs as commander set as the deck's
+        commander or second commander. The main board is sent with its
+        pending cards, each card once by its stored printing's name (both
+        faces of a double-faced card), the commander and second commander
+        apart; cards without a stored printing are left out. A deck with
+        an empty main board answers an empty list without calling
+        Commander Spellbook. A rate-limited call is retried once; the call
+        times out after about 10 seconds.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeckCombos"
+        "400":
+          description: id is not a UUID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found, or not owned by the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/CombosUnavailable"
+
   /shared/decks:
     get:
       tags: [shared-decks]
@@ -4108,6 +4151,15 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+    CombosUnavailable:
+      description: >
+        Commander Spellbook couldn't be reached, timed out, answered an
+        error or was still rate-limiting after one retry. The body is
+        {"error": "commander spellbook is unavailable"}.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
 
   schemas:
     Preferences:
@@ -4470,6 +4522,41 @@ components:
         board_values:
           $ref: "#/components/schemas/BoardValues"
       required: [card_count, land_count, nonland_count, average_mana_value, total_mana_value, mana_curve, color_breakdown, type_breakdown, back_face_lands, value, owned_value, pending_value, board_values]
+
+    DeckCombos:
+      type: object
+      properties:
+        combos:
+          type: array
+          description: Combos the deck holds; empty when it holds none.
+          items:
+            $ref: "#/components/schemas/Combo"
+      required: [combos]
+
+    Combo:
+      type: object
+      description: A combo listed by Commander Spellbook.
+      properties:
+        id:
+          type: string
+          description: Commander Spellbook's id for the combo.
+          example: "1414-2730"
+        cards:
+          type: array
+          description: Names of the cards the combo uses.
+          items:
+            type: string
+        results:
+          type: array
+          description: Names of what the combo produces, in English.
+          items:
+            type: string
+        url:
+          type: string
+          format: uri
+          description: The combo's page on commanderspellbook.com.
+          example: "https://commanderspellbook.com/combo/1414-2730/"
+      required: [id, cards, results, url]
 
     BoardValues:
       type: object

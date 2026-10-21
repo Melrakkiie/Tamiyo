@@ -20,6 +20,7 @@ import (
 	"Melrakkiie/Tamiyo/internal/authcookie"
 	"Melrakkiie/Tamiyo/internal/bulk"
 	"Melrakkiie/Tamiyo/internal/card"
+	"Melrakkiie/Tamiyo/internal/commanderspellbook"
 	"Melrakkiie/Tamiyo/internal/config"
 	"Melrakkiie/Tamiyo/internal/cors"
 	"Melrakkiie/Tamiyo/internal/deck"
@@ -128,7 +129,7 @@ func main() {
 	exchangeRateService := exchangerate.NewService(exchangeRateRepo)
 	exchangeRateHandler := exchangerate.NewHandler(exchangeRateService)
 
-	insightsService := deckinsights.NewService(deckService, deckinsights.NewPostgresRepository(db))
+	insightsService := deckinsights.NewService(deckService, deckinsights.NewPostgresRepository(db), commanderspellbook.NewClient())
 	insightsHandler := deckinsights.NewHandler(insightsService)
 
 	shareService := deckshare.NewService(deckService, userService, insightsService)

@@ -166,7 +166,7 @@ func (f insightsFixture) cardList(t *testing.T) []deck.DeckEntry {
 }
 
 func (f insightsFixture) service() *Service {
-	return NewService(f.deckService(), NewPostgresRepository(f.db))
+	return NewService(f.deckService(), NewPostgresRepository(f.db), nil)
 }
 
 func (f insightsFixture) stats(t *testing.T) DeckStats {
