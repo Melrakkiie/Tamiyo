@@ -3137,6 +3137,35 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /shared/decks/{id}/combos:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    get:
+      tags: [shared-decks]
+      summary: Combos of a shared deck
+      description: Same combos as GET /deck/{id}/combos, looked up for the deck's owner. Works without authentication.
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeckCombos"
+        "404":
+          description: >
+            No deck has this id, or the deck is private.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/SharedTooManyRequests"
+        "502":
+          $ref: "#/components/responses/CombosUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /shared/decks/{id}/export:
     parameters:
       - $ref: "#/components/parameters/DeckID"

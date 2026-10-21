@@ -1366,9 +1366,9 @@ Commander Spellbook is called on each request (a rate-limited answer is retried 
 
 ## Shared decks
 
-Read-only access to public decks, and to a deck by its id. **No authentication required** for the six `/shared/decks` routes. Deck ids are random UUIDs, so an unlisted deck can only be found by someone who was given its id or link. Only `public` and `unlisted` decks resolve: a private deck, an unknown id or anything that isn't a UUID all answer `404`, so the response never tells whether a private deck exists.
+Read-only access to public decks, and to a deck by its id. **No authentication required** for the seven `/shared/decks` routes. Deck ids are random UUIDs, so an unlisted deck can only be found by someone who was given its id or link. Only `public` and `unlisted` decks resolve: a private deck, an unknown id or anything that isn't a UUID all answer `404`, so the response never tells whether a private deck exists.
 
-The six `/shared/decks` routes share a per-client-IP limit, separate from the auth one: 60 requests per 60-second window by default (`SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns `429` with a `Retry-After` header, as described in [Rate limiting](#rate-limiting).
+The seven `/shared/decks` routes share a per-client-IP limit, separate from the auth one: 60 requests per 60-second window by default (`SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns `429` with a `Retry-After` header, as described in [Rate limiting](#rate-limiting).
 
 ### `GET /shared/decks`
 
@@ -1481,6 +1481,12 @@ Same report as [`GET /deck/:id/legality`](#get-deckidlegality), without `card_id
 Same statistics as [`GET /deck/:id/stats`](#get-deckidstats).
 
 **Errors:** `404` as above · `429` rate limit exceeded
+
+### `GET /shared/decks/:id/combos`
+
+Same combos as [`GET /deck/:id/combos`](#get-deckidcombos), looked up for the deck's owner.
+
+**Errors:** `404` as above · `429` rate limit exceeded · `502` Commander Spellbook couldn't be reached
 
 ### `GET /shared/decks/:id/export`
 
