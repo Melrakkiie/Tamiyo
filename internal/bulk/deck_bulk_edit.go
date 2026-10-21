@@ -3,8 +3,6 @@ package bulk
 import (
 	"bytes"
 	"context"
-	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"sort"
@@ -52,11 +50,8 @@ func bulkEditOrder(lines []moxfieldDeckLine) []moxfieldDeckLine {
 }
 
 func (s *Service) BulkEditDeck(ctx context.Context, userID string, deckID string, r io.Reader) (Summary, error) {
-	d, err := s.decks.GetDeck(ctx, userID, deckID)
+	own, err := s.decks.ReadDeck(ctx, userID, deckID, deck.ReachOwn)
 	if err != nil {
-		if errors.Is(err, deck.ErrNotFound) {
-			return Summary{}, ErrDeckNotFound
-		}
 		return Summary{}, err
 	}
 	data, err := readImport(r)
@@ -68,13 +63,9 @@ func (s *Service) BulkEditDeck(ctx context.Context, userID string, deckID string
 		return Summary{}, err
 	}
 
-	content, err := s.decks.GetDeckContent(ctx, userID, d.ID)
-	if err != nil {
-		return Summary{}, fmt.Errorf("loading deck content: %w", err)
-	}
 	var copies []*ownedMatch
 	var pendings []*pendingMatch
-	for _, e := range content.Entries {
+	for _, e := range own.Entries {
 		for _, id := range e.OwnedCardIDs {
 			copies = append(copies, &ownedMatch{entry: e, cardID: id})
 		}
@@ -121,13 +112,9 @@ func (s *Service) BulkEditDeck(ctx context.Context, userID string, deckID string
 		}
 	}
 
-	tags, err := s.changedTags(ctx, userID, d.ID, lines)
-	if err != nil {
-		return Summary{}, err
-	}
-	plan := deck.PlacementPlan{ReplaceTags: tags}
+	plan := deck.PlacementPlan{ReplaceTags: changedTags(own.Tags, lines)}
 	var summary Summary
-	summary.CardsRemoved = planRemovals(&plan, content.Entries, copies, pendings)
+	summary.CardsRemoved = planRemovals(&plan, own.Entries, copies, pendings)
 
 	if len(toAdd) > 0 {
 		var unresolved Summary
@@ -138,7 +125,7 @@ func (s *Service) BulkEditDeck(ctx context.Context, userID string, deckID string
 	if len(plan.Lines)+len(plan.RemoveCards)+len(plan.PendingRemovals)+len(plan.ReplaceTags) == 0 {
 		return summary, nil
 	}
-	if err := s.placeLines(ctx, userID, d.ID, plan, &summary); err != nil {
+	if err := s.placeLines(ctx, userID, own.Deck.ID, plan, &summary); err != nil {
 		return Summary{}, err
 	}
 	return summary, nil
@@ -165,7 +152,9 @@ func planRemovals(plan *deck.PlacementPlan, entries []deck.DeckEntry, copies []*
 	return removed
 }
 
-func (s *Service) changedTags(ctx context.Context, userID string, deckID string, lines []moxfieldDeckLine) ([]deck.TaggedCard, error) {
+// changedTags lists the cards whose tags on the lines differ from the
+// existing ones, keyed by deck.CardNameKey.
+func changedTags(existing map[string][]string, lines []moxfieldDeckLine) []deck.TaggedCard {
 	tags := make(map[string][]string)
 	names := make(map[string]string)
 	var order []string
@@ -182,11 +171,6 @@ func (s *Service) changedTags(ctx context.Context, userID string, deckID string,
 		}
 	}
 
-	current, err := s.decks.GetCardTags(ctx, userID, deckID)
-	if err != nil {
-		return nil, fmt.Errorf("loading the tags: %w", err)
-	}
-	existing := current.ByCardName()
 	var changed []deck.TaggedCard
 	for _, key := range order {
 		wanted := tags[key]
@@ -198,7 +182,7 @@ func (s *Service) changedTags(ctx context.Context, userID string, deckID string,
 		}
 		changed = append(changed, deck.TaggedCard{Name: names[key], Tags: wanted})
 	}
-	return changed, nil
+	return changed
 }
 
 func sameTags(a []string, b []string) bool {
@@ -237,6 +221,7 @@ func (h *Handler) bulkEditDeck(ctx *gin.Context) {
 	summary, err := h.service.BulkEditDeck(ctx.Request.Context(), userID, deckID, file)
 	if err != nil {
 		apierr.Respond(ctx, err,
+			apierr.Mapping{Err: deck.ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: ErrInvalidFile, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway},

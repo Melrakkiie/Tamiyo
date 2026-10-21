@@ -88,11 +88,25 @@ func TestBulkEditDeck_ClearsARemovedCommander(t *testing.T) {
 	assert.Contains(t, decks.placedPlan(t, fixtureDeckID).RemoveCards, 1, "the deck module clears the slot of a removed commander")
 }
 
-func TestBulkEditDeck_Errors(t *testing.T) {
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{err: assert.AnError})
+func TestBulkEditDeck_ReadsTheViewersOwnDeckOnce(t *testing.T) {
+	decks := tamiyoDeckFixture()
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, bulkEditResolver())
 
-	_, err := svc.BulkEditDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000099", strings.NewReader("1 Island\n"))
-	assert.ErrorIs(t, err, ErrDeckNotFound)
+	_, err := svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, strings.NewReader("1 Sol Ring (SLD) 1011 #Ramp\n"))
+
+	require.NoError(t, err)
+	assert.Equal(t, []deckRead{{viewerID: testUserID, deckID: fixtureDeckID, reach: deck.ReachOwn}}, decks.reads)
+	assert.Empty(t, decks.placedPlan(t, fixtureDeckID).ReplaceTags, "Sol Ring keeps the tags the read deck has")
+}
+
+func TestBulkEditDeck_Errors(t *testing.T) {
+	missing := tamiyoDeckFixture()
+	missing.readErr = deck.ErrNotFound
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, missing, &fakeResolver{err: assert.AnError})
+	_, err := svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, strings.NewReader("1 Island\n"))
+	assert.ErrorIs(t, err, deck.ErrNotFound)
+
+	svc = NewService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{err: assert.AnError})
 	_, err = svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, strings.NewReader("not a card line\n"))
 	assert.ErrorIs(t, err, ErrInvalidFile)
 
@@ -124,7 +138,7 @@ func TestHandler_BulkEditDeck(t *testing.T) {
 	assert.Equal(t, "1 Island\n", service.lastFileContent)
 	assert.Equal(t, "00000000-0000-0000-0000-000000000001", service.lastDeckID)
 
-	cases := map[error]int{ErrDeckNotFound: http.StatusNotFound, ErrInvalidFile: http.StatusBadRequest, ErrScryfallUnavailable: http.StatusBadGateway}
+	cases := map[error]int{deck.ErrNotFound: http.StatusNotFound, ErrDeckNotFound: http.StatusNotFound, ErrInvalidFile: http.StatusBadRequest, ErrScryfallUnavailable: http.StatusBadGateway}
 	for editErr, want := range cases {
 		w := httptest.NewRecorder()
 		setupRouter(&fakeImportService{err: editErr}).ServeHTTP(w, multipartRequest(t, "/deck/00000000-0000-0000-0000-000000000001/bulk-edit", "1 Island\n", nil))
