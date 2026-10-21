@@ -68,11 +68,11 @@ func (e DeckEntry) IsCommander() bool {
 	return e.Slot != SlotNone
 }
 
-// GetDeckContent returns the deck's owned and pending cards merged into
+// getDeckContent returns the deck's owned and pending cards merged into
 // entries ordered commanders first (by slot), then by board (main, sideboard,
 // considering), name, set code, collector number, non-foil before foil and
 // real before proxy. Callers rely on this order.
-func (s *Service) GetDeckContent(ctx context.Context, userID string, deckID string) (DeckContent, error) {
+func (s *Service) getDeckContent(ctx context.Context, userID string, deckID string) (DeckContent, error) {
 	return readDeckContent(ctx, s.repo, userID, deckID)
 }
 

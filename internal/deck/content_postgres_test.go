@@ -85,7 +85,7 @@ func (f contentFixture) setCommanders(t *testing.T, commanderID, commanderPendin
 
 func (f contentFixture) content(t *testing.T) DeckContent {
 	t.Helper()
-	content, err := f.service.GetDeckContent(context.Background(), f.userID, contentDeckID)
+	content, err := f.service.getDeckContent(context.Background(), f.userID, contentDeckID)
 	require.NoError(t, err)
 	return content
 }
@@ -273,7 +273,7 @@ func TestDeckContent_IsNotReadableByAnotherUser(t *testing.T) {
 	f.pendingCard(t, bolt, 1, copyOptions{})
 	bob := seedUser(t, f.db, "bob@example.com")
 
-	_, err := f.service.GetDeckContent(context.Background(), bob, contentDeckID)
+	_, err := f.service.getDeckContent(context.Background(), bob, contentDeckID)
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
