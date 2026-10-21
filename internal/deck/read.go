@@ -32,8 +32,7 @@ type ReadDeck struct {
 	Tags map[string][]string
 }
 
-// MainBoard returns the entries outside the sideboard and considering, in
-// Entries order.
+// MainBoard keeps the Entries order.
 func (r ReadDeck) MainBoard() []DeckEntry {
 	main := make([]DeckEntry, 0, len(r.Entries))
 	for _, e := range r.Entries {

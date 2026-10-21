@@ -79,8 +79,6 @@ func (s *Service) loadMainBoard(ctx context.Context, userID string, deckID strin
 	return main, printings, nil
 }
 
-// readOwnDeck reads the user's own deck. It answers deck.ErrNotFound when
-// the user has no such deck.
 func (s *Service) readOwnDeck(ctx context.Context, userID string, deckID string) (deck.ReadDeck, error) {
 	read, err := s.decks.ReadDeck(ctx, userID, deckID, deck.ReachOwn)
 	if err != nil {
