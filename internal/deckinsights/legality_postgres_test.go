@@ -169,7 +169,7 @@ func TestGetDeckLegality_ReportsACardOutsideTheCommandersColorIdentity(t *testin
 	bolt := legalPrinting(3, "Lightning Bolt", "Instant", []string{"R"}, "commander")
 	seedPrintings(t, f.db, golosCard, krenko, bolt)
 	commander := f.ownedCopy(t, golosCard, copyOptions{})
-	f.setCommanders(t, &commander, nil, nil, nil)
+	f.setCommanders(t, &commander, nil, nil)
 	boltID := f.ownedCopy(t, bolt, copyOptions{})
 
 	report := f.legality(t)
@@ -186,7 +186,7 @@ func TestGetDeckLegality_AcceptsACardWithinTheCommandersColorIdentity(t *testing
 	bolt := legalPrinting(2, "Lightning Bolt", "Instant", []string{"R"}, "commander")
 	seedPrintings(t, f.db, krenko, bolt)
 	commander := f.ownedCopy(t, krenko, copyOptions{})
-	f.setCommanders(t, &commander, nil, nil, nil)
+	f.setCommanders(t, &commander, nil, nil)
 	f.ownedCopy(t, bolt, copyOptions{})
 
 	assert.True(t, f.legality(t).Legal)
@@ -200,7 +200,7 @@ func TestGetDeckLegality_AcceptsAValidPartnerPairAndUsesBothIdentities(t *testin
 	seedPrintings(t, f.db, thr, tym, bolt, swords)
 	commander := f.ownedCopy(t, thr, copyOptions{})
 	partner := f.pendingCard(t, tym, 1, copyOptions{})
-	f.setCommanders(t, &commander, nil, nil, &partner)
+	f.setCommanders(t, &commander, nil, &partner)
 	f.ownedCopy(t, bolt, copyOptions{})
 	f.ownedCopy(t, swords, copyOptions{})
 
@@ -217,7 +217,7 @@ func TestGetDeckLegality_ReportsCommandersThatCantBePaired(t *testing.T) {
 	seedPrintings(t, f.db, thr, gol)
 	commander := f.ownedCopy(t, thr, copyOptions{})
 	partner := f.ownedCopy(t, gol, copyOptions{})
-	f.setCommanders(t, &commander, nil, &partner, nil)
+	f.setCommanders(t, &commander, &partner, nil)
 
 	report := f.legality(t)
 

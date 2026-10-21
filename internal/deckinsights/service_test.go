@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"Melrakkiie/Tamiyo/internal/commanderspellbook"
 	"Melrakkiie/Tamiyo/internal/deck"
 )
 
@@ -37,18 +38,62 @@ func (f *fakeDeckReader) ReadDeck(ctx context.Context, viewerID string, deckID s
 	return read, nil
 }
 
-type fakeStore struct{}
-
-func (fakeStore) DeckValues(ctx context.Context, userID string, deckID string) (DeckValues, error) {
-	return DeckValues{}, nil
+// fakeStore holds stored printings by Scryfall id and the values of every
+// deck it is asked about.
+type fakeStore struct {
+	printings map[string]Printing
+	values    DeckValues
 }
 
-func (fakeStore) Printings(ctx context.Context, scryfallIDs []string) (map[string]Printing, error) {
-	return map[string]Printing{}, nil
+func (f fakeStore) DeckValues(ctx context.Context, userID string, deckID string) (DeckValues, error) {
+	return f.values, nil
+}
+
+func (f fakeStore) Printings(ctx context.Context, scryfallIDs []string) (map[string]Printing, error) {
+	byID := make(map[string]Printing, len(scryfallIDs))
+	for _, id := range scryfallIDs {
+		if p, ok := f.printings[id]; ok {
+			byID[id] = p
+		}
+	}
+	return byID, nil
+}
+
+// storeOf is a store holding printings, each keyed by its Scryfall id.
+func storeOf(printings ...Printing) fakeStore {
+	byID := make(map[string]Printing, len(printings))
+	for _, p := range printings {
+		byID[p.ScryfallID] = p
+	}
+	return fakeStore{printings: byID}
+}
+
+// recordingFinder stands in for Commander Spellbook: it records the deck it
+// is asked about and answers with combos or err.
+type recordingFinder struct {
+	calls      int
+	commanders []string
+	main       []string
+
+	combos []commanderspellbook.Combo
+	err    error
+}
+
+func (r *recordingFinder) FindCombos(ctx context.Context, commanders []string, main []string) ([]commanderspellbook.Combo, error) {
+	r.calls++
+	r.commanders = commanders
+	r.main = main
+	return r.combos, r.err
 }
 
 func readerWith(read deck.ReadDeck) *fakeDeckReader {
 	return &fakeDeckReader{decks: map[string]deck.ReadDeck{read.Deck.ID: read}}
+}
+
+// deckOf is the test user's own deck in format, holding entries in the order
+// the deck read gives them: commanders first, then by board and name.
+func deckOf(format string, entries ...deck.DeckEntry) deck.ReadDeck {
+	return deck.ReadDeck{OwnerID: testUserID, Mine: true, Deck: deck.Deck{ID: testDeckID, Format: format}, Entries: entries}
 }
 
 func ownedEntry(name string, board string, ownedCopies int) deck.DeckEntry {
@@ -57,6 +102,32 @@ func ownedEntry(name string, board string, ownedCopies int) deck.DeckEntry {
 		ids[i] = i + 1
 	}
 	return deck.DeckEntry{Name: name, ScryfallID: name + "-id", Board: board, OwnedCardIDs: ids}
+}
+
+// owned is a main board entry of p holding one owned copy per card id.
+func owned(p Printing, cardIDs ...int) deck.DeckEntry {
+	return deck.DeckEntry{Name: p.Name, ScryfallID: p.ScryfallID, Board: deck.BoardMain, OwnedCardIDs: cardIDs}
+}
+
+// pending is a main board entry of p holding one pending card of quantity copies.
+func pending(p Printing, quantity int) deck.DeckEntry {
+	return deck.DeckEntry{Name: p.Name, ScryfallID: p.ScryfallID, Board: deck.BoardMain, Pending: []deck.PendingPart{{ID: 1, Quantity: quantity}}}
+}
+
+func onBoard(board string, e deck.DeckEntry) deck.DeckEntry {
+	e.Board = board
+	return e
+}
+
+func inSlot(slot deck.CommanderSlot, e deck.DeckEntry) deck.DeckEntry {
+	e.Slot = slot
+	return e
+}
+
+// unstored is a printing the store doesn't hold: not refreshed yet, or a
+// placeholder for a printing Scryfall didn't return.
+func unstored(name, scryfallID string) Printing {
+	return Printing{ScryfallID: scryfallID, Name: name}
 }
 
 // --- GetDeckLegality ------------------------------------------------------

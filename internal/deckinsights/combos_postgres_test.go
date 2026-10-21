@@ -27,24 +27,6 @@ var (
 		SetCode: "isd", CollectorNumber: "51", TypeLine: "Creature — Human Wizard // Creature — Human Insect", ManaValue: 1}
 )
 
-// recordingFinder stands in for Commander Spellbook: it records the deck it
-// is asked about and answers with combos or err.
-type recordingFinder struct {
-	calls      int
-	commanders []string
-	main       []string
-
-	combos []commanderspellbook.Combo
-	err    error
-}
-
-func (r *recordingFinder) FindCombos(ctx context.Context, commanders []string, main []string) ([]commanderspellbook.Combo, error) {
-	r.calls++
-	r.commanders = commanders
-	r.main = main
-	return r.combos, r.err
-}
-
 func (f insightsFixture) combos(t *testing.T, finder comboFinder) (DeckCombos, error) {
 	t.Helper()
 	return NewService(f.deckService(), NewPostgresRepository(f.db), finder).GetDeckCombos(context.Background(), f.userID, f.deckID)
@@ -55,7 +37,7 @@ func TestGetDeckCombos_SendsTheCommandersApartFromTheMainBoard(t *testing.T) {
 	seedPrintings(t, f.db, nivMizzet, thrasiosCombo, curiosity, ophidianEye)
 	commander := f.ownedCopy(t, nivMizzet, copyOptions{})
 	partner := f.pendingCard(t, thrasiosCombo, 1, copyOptions{})
-	f.setCommanders(t, &commander, nil, nil, &partner)
+	f.setCommanders(t, &commander, nil, &partner)
 	f.ownedCopy(t, curiosity, copyOptions{})
 	f.pendingCard(t, ophidianEye, 1, copyOptions{})
 	finder := &recordingFinder{}
@@ -115,7 +97,7 @@ func TestGetDeckCombos_SendsEachCardOnce(t *testing.T) {
 	f := newInsightsFixture(t, "commander")
 	seedPrintings(t, f.db, nivMizzet, curiosity)
 	commander := f.ownedCopy(t, nivMizzet, copyOptions{})
-	f.setCommanders(t, &commander, nil, nil, nil)
+	f.setCommanders(t, &commander, nil, nil)
 	f.pendingCard(t, nivMizzet, 1, copyOptions{foil: true})
 	f.ownedCopy(t, curiosity, copyOptions{})
 	f.ownedCopy(t, curiosity, copyOptions{foil: true})
