@@ -59,9 +59,9 @@ func TestStoreDeck_RejectsBadRequests(t *testing.T) {
 	_, err = own.StoreDeck(ctx, testUserID, fixtureDeckID, 9, main)
 	assert.ErrorIs(t, err, ErrTargetStorageNotFound)
 	_, err = own.StoreDeck(ctx, testUserID, "00000000-0000-0000-0000-000000000099", 4, main)
-	assert.ErrorIs(t, err, ErrDeckNotFound)
+	assert.ErrorIs(t, err, deck.ErrNotFound)
 	_, err = shared.StoreDeck(ctx, testUserID, fixtureDeckID, 4, main)
-	assert.ErrorIs(t, err, ErrDeckNotFound)
+	assert.ErrorIs(t, err, deck.ErrNotFound)
 	assert.Nil(t, cards.movedIDs)
 
 	cards.moveErr = card.ErrStorageNotFound
@@ -91,7 +91,7 @@ func TestHandler_StoreDeck_RejectsBadInput(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, postJSON(router, "/deck/nope/store", `{"storage_id": 4, "boards": ["main"]}`).Code)
 
 	cases := map[error]int{
-		ErrDeckNotFound:          http.StatusNotFound,
+		deck.ErrNotFound:         http.StatusNotFound,
 		ErrNoBoards:              http.StatusBadRequest,
 		ErrTargetStorageNotFound: http.StatusBadRequest,
 		errors.New("boom"):       http.StatusInternalServerError,

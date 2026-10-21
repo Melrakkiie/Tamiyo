@@ -138,7 +138,7 @@ func TestHandler_BulkEditDeck(t *testing.T) {
 	assert.Equal(t, "1 Island\n", service.lastFileContent)
 	assert.Equal(t, "00000000-0000-0000-0000-000000000001", service.lastDeckID)
 
-	cases := map[error]int{deck.ErrNotFound: http.StatusNotFound, ErrDeckNotFound: http.StatusNotFound, ErrInvalidFile: http.StatusBadRequest, ErrScryfallUnavailable: http.StatusBadGateway}
+	cases := map[error]int{deck.ErrNotFound: http.StatusNotFound, ErrInvalidFile: http.StatusBadRequest, ErrScryfallUnavailable: http.StatusBadGateway}
 	for editErr, want := range cases {
 		w := httptest.NewRecorder()
 		setupRouter(&fakeImportService{err: editErr}).ServeHTTP(w, multipartRequest(t, "/deck/00000000-0000-0000-0000-000000000001/bulk-edit", "1 Island\n", nil))

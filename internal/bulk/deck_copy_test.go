@@ -56,7 +56,7 @@ func TestDuplicateDeck_UnknownDeck(t *testing.T) {
 
 	_, err := svc.DuplicateDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000099", DuplicateRequest{})
 
-	assert.ErrorIs(t, err, ErrDeckNotFound)
+	assert.ErrorIs(t, err, deck.ErrNotFound)
 }
 
 func TestDuplicateDeck_ReturnsTheErrorWithoutASummary(t *testing.T) {
@@ -131,7 +131,7 @@ func TestCollectDeck_ADeckOutOfReachIsNotFound(t *testing.T) {
 
 	_, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{Mode: CollectAll, Boards: []string{deck.BoardMain}})
 
-	assert.ErrorIs(t, err, ErrDeckNotFound)
+	assert.ErrorIs(t, err, deck.ErrNotFound)
 	assert.Empty(t, decks.sharedCollects)
 	assert.Empty(t, decks.ownCollects)
 }
@@ -164,7 +164,7 @@ func TestCollectDeck_RejectsBadRequests(t *testing.T) {
 	_, err = shared.CollectDeck(ctx, testUserID, fixtureDeckID, CollectRequest{Mode: CollectPending, Boards: main})
 	assert.ErrorIs(t, err, ErrCollectModeNotHere)
 	_, err = own.CollectDeck(ctx, testUserID, "00000000-0000-0000-0000-000000000099", CollectRequest{Mode: CollectAll, Boards: main})
-	assert.ErrorIs(t, err, ErrDeckNotFound)
+	assert.ErrorIs(t, err, deck.ErrNotFound)
 }
 
 func ptrString(s string) *string { return &s }
@@ -208,7 +208,7 @@ func TestHandler_DuplicateDeck_MapsErrors(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, postJSON(router, "/deck/00000000-0000-0000-0000-000000000009/duplicate", `{"visibility": "secret"}`).Code)
 	assert.Equal(t, http.StatusBadRequest, postJSON(router, "/deck/00000000-0000-0000-0000-000000000009/duplicate", `{`).Code)
 
-	cases := map[error]int{ErrDeckNotFound: http.StatusNotFound, deck.ErrTargetFolderNotFound: http.StatusBadRequest}
+	cases := map[error]int{deck.ErrNotFound: http.StatusNotFound, deck.ErrTargetFolderNotFound: http.StatusBadRequest}
 	for duplicateErr, expected := range cases {
 		w := postJSON(setupRouter(&fakeImportService{err: duplicateErr}), "/deck/00000000-0000-0000-0000-000000000009/duplicate", "")
 		assert.Equal(t, expected, w.Code)
@@ -233,7 +233,7 @@ func TestHandler_CollectDeck_RejectsBadInput(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, postJSON(router, "/deck/00000000-0000-0000-0000-000000000009/collect", `{"mode": "all", "storage_id": 0, "boards": ["main"]}`).Code)
 
 	cases := map[error]int{
-		ErrDeckNotFound:               http.StatusNotFound,
+		deck.ErrNotFound:              http.StatusNotFound,
 		ErrUnknownCollectMode:         http.StatusBadRequest,
 		ErrCollectModeNotHere:         http.StatusBadRequest,
 		ErrNoBoards:                   http.StatusBadRequest,

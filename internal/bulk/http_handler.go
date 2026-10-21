@@ -245,7 +245,7 @@ func (h *Handler) importIntoDeck(ctx *gin.Context) {
 	summary, err := h.service.ImportIntoDeck(ctx.Request.Context(), userID, deckID, opts, file)
 	if err != nil {
 		apierr.Respond(ctx, err,
-			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
+			apierr.Mapping{Err: deck.ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: ErrInvalidFile, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrTamiyoCollectionFile, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway},

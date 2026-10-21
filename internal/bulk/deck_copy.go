@@ -42,9 +42,6 @@ func (s *Service) DuplicateDeck(ctx context.Context, userID string, deckID strin
 		Name: req.Name, FolderID: req.FolderID, Visibility: req.Visibility,
 	})
 	if err != nil {
-		if errors.Is(err, deck.ErrNotFound) {
-			return DuplicateSummary{}, ErrDeckNotFound
-		}
 		return DuplicateSummary{}, err
 	}
 	summary := Summary{DecksCreated: 1}
@@ -97,9 +94,6 @@ func (s *Service) CollectDeck(ctx context.Context, userID string, deckID string,
 	}
 	source, err := s.decks.ReadDeck(ctx, userID, deckID, deck.ReachVisible)
 	if err != nil {
-		if errors.Is(err, deck.ErrNotFound) {
-			return Summary{}, ErrDeckNotFound
-		}
 		return Summary{}, err
 	}
 	if (req.Mode == CollectPending && !source.Mine) || (req.Mode == CollectMissing && source.Mine) {
@@ -156,7 +150,7 @@ func (h *Handler) duplicateDeck(ctx *gin.Context) {
 	result, err := h.service.DuplicateDeck(ctx.Request.Context(), userID, deckID, req)
 	if err != nil {
 		apierr.Respond(ctx, err,
-			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
+			apierr.Mapping{Err: deck.ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: deck.ErrTargetFolderNotFound, Status: http.StatusBadRequest, Message: deck.ErrTargetFolderNotFound.Error()},
 		)
 		return
@@ -190,7 +184,7 @@ func (h *Handler) collectDeck(ctx *gin.Context) {
 	summary, err := h.service.CollectDeck(ctx.Request.Context(), userID, deckID, req)
 	if err != nil {
 		apierr.Respond(ctx, err,
-			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
+			apierr.Mapping{Err: deck.ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: ErrUnknownCollectMode, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrCollectModeNotHere, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrNoBoards, Status: http.StatusBadRequest},

@@ -222,7 +222,6 @@ func (h *Handler) bulkEditDeck(ctx *gin.Context) {
 	if err != nil {
 		apierr.Respond(ctx, err,
 			apierr.Mapping{Err: deck.ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
-			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: ErrInvalidFile, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway},
 		)

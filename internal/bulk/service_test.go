@@ -846,7 +846,7 @@ func TestImportIntoDeck_ReturnsDeckNotFound(t *testing.T) {
 
 	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader("1 Sol Ring\n"))
 
-	assert.ErrorIs(t, err, ErrDeckNotFound)
+	assert.ErrorIs(t, err, deck.ErrNotFound)
 }
 
 func TestImportIntoDeck_ReturnsErrorWhenScryfallResolveFails(t *testing.T) {
@@ -875,7 +875,7 @@ func TestImportIntoDeck_ReturnsDeckNotFoundWhenTheDeckGoesAwayWhilePlacing(t *te
 
 	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
 
-	assert.ErrorIs(t, err, ErrDeckNotFound)
+	assert.ErrorIs(t, err, deck.ErrNotFound)
 }
 
 func TestImportManaBox_StoresColorsAndTypeFromScryfall(t *testing.T) {

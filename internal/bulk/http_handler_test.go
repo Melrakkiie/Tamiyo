@@ -710,7 +710,7 @@ func TestImportIntoDeck_RejectsAnInvalidDeckID(t *testing.T) {
 
 func TestImportIntoDeck_MapsErrors(t *testing.T) {
 	for err, status := range map[error]int{
-		ErrDeckNotFound:        http.StatusNotFound,
+		deck.ErrNotFound:       http.StatusNotFound,
 		ErrInvalidFile:         http.StatusBadRequest,
 		ErrScryfallUnavailable: http.StatusBadGateway,
 	} {
