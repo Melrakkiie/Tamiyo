@@ -43,12 +43,15 @@ func isBasicLand(name string) bool {
 
 var defaultCardmarketBoards = []string{deck.BoardMain, deck.BoardSideboard}
 
-func (s *Service) ExportCardmarketDeck(ctx context.Context, userID string, deckID string, opts DeckExportOptions, w io.Writer) error {
-	boardNames := opts.Boards
-	if len(boardNames) == 0 {
-		boardNames = defaultCardmarketBoards
+func cardmarketBoards(opts DeckExportOptions) (map[string]bool, error) {
+	if len(opts.Boards) == 0 {
+		return wantedBoards(defaultCardmarketBoards)
 	}
-	boards, err := wantedBoards(boardNames)
+	return wantedBoards(opts.Boards)
+}
+
+func (s *Service) ExportCardmarketDeck(ctx context.Context, userID string, deckID string, opts DeckExportOptions, w io.Writer) error {
+	boards, err := cardmarketBoards(opts)
 	if err != nil {
 		return err
 	}
@@ -65,8 +68,12 @@ func (s *Service) ExportCardmarketDeck(ctx context.Context, userID string, deckI
 	if err != nil {
 		return err
 	}
+	return s.writeCardmarketDeck(ctx, entries, opts, w)
+}
 
+func (s *Service) writeCardmarketDeck(ctx context.Context, entries []deck.DeckEntry, opts DeckExportOptions, w io.Writer) error {
 	var setNames map[string]string
+	var err error
 	if opts.Printings {
 		if setNames, err = s.scryfall.SetNames(ctx); err != nil {
 			return fmt.Errorf("%w: %v", ErrScryfallUnavailable, err)
@@ -108,15 +115,4 @@ func (s *Service) ExportCardmarketDeck(ctx context.Context, userID string, deckI
 		return fmt.Errorf("writing deck: %w", err)
 	}
 	return nil
-}
-
-func (s *Service) exportDeckAs(ctx context.Context, userID string, deckID string, opts DeckExportOptions, w io.Writer) error {
-	switch opts.Format {
-	case DeckExportTamiyo:
-		return s.ExportTamiyoDeck(ctx, userID, deckID, opts.WithTags, w)
-	case DeckExportCardmarket:
-		return s.ExportCardmarketDeck(ctx, userID, deckID, opts, w)
-	default:
-		return s.ExportDeck(ctx, userID, deckID, opts, w)
-	}
 }

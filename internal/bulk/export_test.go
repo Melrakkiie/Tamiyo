@@ -474,6 +474,16 @@ func TestExportSharedDeck_ExportsAsTheOwner(t *testing.T) {
 	assert.Contains(t, tamiyo.String(), `"Ramp"`)
 }
 
+func TestExportSharedDeck_ReadsTheDeckAsSharedForAnyone(t *testing.T) {
+	decks := sharedDeckFixture()
+	decks.getContentErr = errors.New("the content comes with the read")
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+
+	require.NoError(t, svc.ExportSharedDeck(context.Background(), fixtureDeckID, DeckExportOptions{Format: DeckExportMoxfield, WithTags: true}, &bytes.Buffer{}))
+
+	assert.Equal(t, []deckRead{{viewerID: "", deckID: fixtureDeckID, reach: deck.ReachShared}}, decks.reads)
+}
+
 func TestExportSharedDeck_ListsTheCommanderApartFromAnIdenticalMainBoardCopy(t *testing.T) {
 	decks := commanderWithAnIdenticalMainBoardCopy()
 	decks.owners = map[string]string{fixtureDeckID: "22222222-2222-2222-2222-222222222222"}
@@ -486,7 +496,8 @@ func TestExportSharedDeck_ListsTheCommanderApartFromAnIdenticalMainBoardCopy(t *
 }
 
 func TestExportSharedDeck_Errors(t *testing.T) {
-	decks := tamiyoDeckFixture()
+	decks := sharedDeckFixture()
+	decks.readErr = deck.ErrNotFound
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	assert.ErrorIs(t, svc.ExportSharedDeck(context.Background(), "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: DeckExportPlain, WithTags: false}, &bytes.Buffer{}), ErrDeckNotFound)

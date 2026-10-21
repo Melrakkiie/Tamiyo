@@ -110,10 +110,21 @@ func (s *Service) ExportTamiyoDeck(ctx context.Context, userID string, deckID st
 		}
 		return fmt.Errorf("loading deck content: %w", err)
 	}
-	d := content.Deck
+	var tags map[string][]string
+	if withTags {
+		deckTags, err := s.decks.GetCardTags(ctx, userID, content.Deck.ID)
+		if err != nil {
+			return fmt.Errorf("loading tags: %w", err)
+		}
+		tags = deckTags.ByCardName()
+	}
+	return writeTamiyoDeck(w, content.Deck, content.Entries, withTags, tags)
+}
 
-	out := make([]tamiyoDeckCard, 0, len(content.Entries))
-	for _, e := range content.Entries {
+// writeTamiyoDeck takes tags keyed by deck.CardNameKey.
+func writeTamiyoDeck(w io.Writer, d deck.Deck, entries []deck.DeckEntry, withTags bool, tags map[string][]string) error {
+	out := make([]tamiyoDeckCard, 0, len(entries))
+	for _, e := range entries {
 		out = append(out, tamiyoDeckCard{
 			Name: e.Name, ScryfallID: e.ScryfallID, SetCode: e.SetCode, CollectorNumber: e.CollectorNumber,
 			Foil: e.Foil, Proxy: e.Proxy, Quantity: e.Quantity(), Board: e.Board, Commander: e.IsCommander(),
@@ -123,16 +134,20 @@ func (s *Service) ExportTamiyoDeck(ctx context.Context, userID string, deckID st
 	file := newTamiyoFile(TamiyoKindDeck)
 	file.Deck = &tamiyoDeckInfo{Name: d.Name, Format: d.Format}
 	if withTags {
-		tags, err := s.decks.GetCardTags(ctx, userID, d.ID)
-		if err != nil {
-			return fmt.Errorf("loading tags: %w", err)
-		}
-		file.Tags = []tamiyoCardTags{}
-		for _, c := range tags.Cards {
-			if len(c.Tags) > 0 {
-				file.Tags = append(file.Tags, tamiyoCardTags{Name: c.Name, Tags: c.Tags})
-			}
-		}
+		file.Tags = tamiyoTags(entries, tags)
 	}
 	return writeTamiyoFile(w, file, out)
+}
+
+func tamiyoTags(entries []deck.DeckEntry, tags map[string][]string) []tamiyoCardTags {
+	cards := []tamiyoCardTags{}
+	for _, g := range deck.GroupByCardName(entries) {
+		if cardTags := tags[deck.CardNameKey(g[0].Name)]; len(cardTags) > 0 {
+			cards = append(cards, tamiyoCardTags{Name: g[0].Name, Tags: cardTags})
+		}
+	}
+	sort.Slice(cards, func(i, j int) bool {
+		return strings.ToLower(cards[i].Name) < strings.ToLower(cards[j].Name)
+	})
+	return cards
 }
