@@ -14,7 +14,7 @@ import (
 // or doesn't answer usably.
 var ErrCombosUnavailable = errors.New("commander spellbook is unavailable")
 
-// comboFinder looks a deck's combos up on Commander Spellbook (ADR 0010).
+// comboFinder looks a deck's combos up on Commander Spellbook (ADR 0011).
 type comboFinder interface {
 	FindCombos(ctx context.Context, commanders []string, main []string) ([]commanderspellbook.Combo, error)
 }

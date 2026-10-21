@@ -1,5 +1,5 @@
 // Package commanderspellbook finds the combos a deck holds through Commander
-// Spellbook's find-my-combos endpoint (ADR 0010).
+// Spellbook's find-my-combos endpoint (ADR 0011).
 package commanderspellbook
 
 import (
