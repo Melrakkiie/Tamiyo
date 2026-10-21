@@ -32,12 +32,12 @@ type DeckCombos struct {
 }
 
 func (s *Service) GetDeckCombos(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (DeckCombos, error) {
-	_, main, printings, err := s.loadMainBoard(ctx, viewerID, deckID, reach)
+	read, printings, err := s.loadMainBoard(ctx, viewerID, deckID, reach)
 	if err != nil {
 		return DeckCombos{}, err
 	}
 
-	commanders, others := comboDeckList(main, printings)
+	commanders, others := comboDeckList(read.MainBoard(), printings)
 	if len(commanders) == 0 && len(others) == 0 {
 		return DeckCombos{Combos: []Combo{}}, nil
 	}

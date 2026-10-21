@@ -18,8 +18,6 @@ const otherUserID = "22222222-2222-2222-2222-222222222222"
 
 const testDeckID = "00000000-0000-0000-0000-000000000001"
 
-// --- fakes -------------------------------------------------------------
-
 // fakeDeckReader holds read decks by id. Within ReachOwn it reads only the
 // viewer's own decks; other reaches read any deck it holds.
 type fakeDeckReader struct {
@@ -135,8 +133,6 @@ func unstored(name, scryfallID string) Printing {
 	return Printing{ScryfallID: scryfallID, Name: name}
 }
 
-// --- GetDeckLegality ------------------------------------------------------
-
 func TestGetDeckLegality_UnknownDeckReturnsErrNotFound(t *testing.T) {
 	svc := NewService(&fakeDeckReader{}, fakeStore{}, nil)
 
@@ -155,8 +151,6 @@ func TestGetDeckLegality_PropagatesADeckReadError(t *testing.T) {
 	assert.ErrorIs(t, err, boom)
 	assert.NotErrorIs(t, err, deck.ErrNotFound)
 }
-
-// --- GetDeckStats -----------------------------------------------------------
 
 func TestGetDeckStats_AnotherUsersSharedDeckReturnsErrNotFound(t *testing.T) {
 	reader := readerWith(deck.ReadDeck{
@@ -189,8 +183,6 @@ func TestGetDeckStats_CountsOnlyTheMainBoardOfTheOwnersDeck(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 3, stats.CardCount)
 }
-
-// --- shared reach ------------------------------------------------------------
 
 // sharedDeckOf is a public commander deck of otherUserID holding entries.
 func sharedDeckOf(entries ...deck.DeckEntry) deck.ReadDeck {

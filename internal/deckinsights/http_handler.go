@@ -28,36 +28,29 @@ func NewHandler(service insightsService) *Handler {
 // RegisterRoutes registers the insights of the signed-in user's own decks;
 // router must require authentication.
 func (h *Handler) RegisterRoutes(router gin.IRoutes) {
-	router.GET("/deck/:id/legality", h.private(h.legality))
-	router.GET("/deck/:id/stats", h.private(h.stats))
-	router.GET("/deck/:id/combos", h.private(h.combos))
+	router.GET("/deck/:id/legality", private(boxed(h.service.GetDeckLegality)))
+	router.GET("/deck/:id/stats", private(boxed(h.service.GetDeckStats)))
+	router.GET("/deck/:id/combos", private(boxed(h.service.GetDeckCombos)))
 }
 
 // RegisterSharedRoutes registers the insights of shared decks, readable by
 // anyone, signed in or not.
 func (h *Handler) RegisterSharedRoutes(router gin.IRoutes) {
-	router.GET("/shared/decks/:id/legality", h.shared(h.legality))
-	router.GET("/shared/decks/:id/stats", h.shared(h.stats))
-	router.GET("/shared/decks/:id/combos", h.shared(h.combos))
+	router.GET("/shared/decks/:id/legality", shared(boxed(h.service.GetDeckLegality)))
+	router.GET("/shared/decks/:id/stats", shared(boxed(h.service.GetDeckStats)))
+	router.GET("/shared/decks/:id/combos", shared(boxed(h.service.GetDeckCombos)))
 }
 
-// insight computes one insight of a deck, read by viewerID within reach.
 type insight func(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (any, error)
 
-func (h *Handler) legality(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (any, error) {
-	return h.service.GetDeckLegality(ctx, viewerID, deckID, reach)
-}
-
-func (h *Handler) stats(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (any, error) {
-	return h.service.GetDeckStats(ctx, viewerID, deckID, reach)
-}
-
-func (h *Handler) combos(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (any, error) {
-	return h.service.GetDeckCombos(ctx, viewerID, deckID, reach)
+func boxed[T any](compute func(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (T, error)) insight {
+	return func(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (any, error) {
+		return compute(ctx, viewerID, deckID, reach)
+	}
 }
 
 // private serves insight to the signed-in user, for their own decks.
-func (h *Handler) private(compute insight) gin.HandlerFunc {
+func private(compute insight) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		userID, authed := auth.UserIDFromContext(ctx)
 		if !authed {
@@ -70,18 +63,13 @@ func (h *Handler) private(compute insight) gin.HandlerFunc {
 			return
 		}
 
-		body, err := compute(ctx.Request.Context(), userID, deckID, deck.ReachOwn)
-		if err != nil {
-			respondError(ctx, err)
-			return
-		}
-		ctx.IndentedJSON(http.StatusOK, body)
+		respond(ctx, compute, userID, deckID, deck.ReachOwn, ctx.IndentedJSON)
 	}
 }
 
 // shared serves insight to whoever is viewing, anonymous included, for shared
 // decks. A malformed id answers like an unknown deck.
-func (h *Handler) shared(compute insight) gin.HandlerFunc {
+func shared(compute insight) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		viewerID, _ := auth.UserIDFromContext(ctx)
 		deckID, valid := deck.ParseID(ctx.Param("id"))
@@ -90,13 +78,17 @@ func (h *Handler) shared(compute insight) gin.HandlerFunc {
 			return
 		}
 
-		body, err := compute(ctx.Request.Context(), viewerID, deckID, deck.ReachShared)
-		if err != nil {
-			respondError(ctx, err)
-			return
-		}
-		ctx.JSON(http.StatusOK, body)
+		respond(ctx, compute, viewerID, deckID, deck.ReachShared, ctx.JSON)
 	}
+}
+
+func respond(ctx *gin.Context, compute insight, viewerID string, deckID string, reach deck.Reach, render func(code int, body any)) {
+	body, err := compute(ctx.Request.Context(), viewerID, deckID, reach)
+	if err != nil {
+		respondError(ctx, err)
+		return
+	}
+	render(http.StatusOK, body)
 }
 
 func respondError(ctx *gin.Context, err error) {
