@@ -185,13 +185,13 @@ func TestGetDeckCombos_AFailedLookupReturnsErrCombosUnavailable(t *testing.T) {
 	assert.ErrorIs(t, err, ErrCombosUnavailable)
 }
 
-func TestGetDeckCombos_UnknownDeckReturnsErrDeckNotFound(t *testing.T) {
+func TestGetDeckCombos_UnknownDeckReturnsErrNotFound(t *testing.T) {
 	f := newInsightsFixture(t, "commander")
 	finder := &recordingFinder{}
 	f.deckID = "00000000-0000-0000-0000-000000000999"
 
 	_, err := f.combos(t, finder)
 
-	assert.ErrorIs(t, err, ErrDeckNotFound)
+	assert.ErrorIs(t, err, deck.ErrNotFound)
 	assert.Zero(t, finder.calls)
 }

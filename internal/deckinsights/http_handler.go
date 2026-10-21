@@ -94,7 +94,7 @@ func (h *Handler) authAndParseID(ctx *gin.Context) (userID string, deckID string
 
 func (h *Handler) respondError(ctx *gin.Context, err error) {
 	apierr.Respond(ctx, err,
-		apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
+		apierr.Mapping{Err: deck.ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 		apierr.Mapping{Err: ErrUnknownFormat, Status: http.StatusBadRequest},
 		apierr.Mapping{Err: ErrCombosUnavailable, Status: http.StatusBadGateway, Message: ErrCombosUnavailable.Error()},
 	)

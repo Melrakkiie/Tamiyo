@@ -199,7 +199,7 @@ func (h *Handler) getSharedDeckCombos(ctx *gin.Context) {
 func (h *Handler) respondError(ctx *gin.Context, err error) {
 	apierr.Respond(ctx, err,
 		apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
-		apierr.Mapping{Err: deckinsights.ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
+		apierr.Mapping{Err: deck.ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 		apierr.Mapping{Err: deckinsights.ErrUnknownFormat, Status: http.StatusBadRequest},
 		apierr.Mapping{Err: deckinsights.ErrCombosUnavailable, Status: http.StatusBadGateway, Message: deckinsights.ErrCombosUnavailable.Error()},
 	)
