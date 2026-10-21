@@ -1251,13 +1251,14 @@ How the owner last displayed the deck's cards, so the deck page opens the same w
 
 ## Deck Insights
 
-Two read-only routes analyze a deck's cards; nothing here persists anything. Legality and statistics are both computed from the printings Tamiyo stores and refreshes daily (see [Prices and values](#prices-and-values)), so they can be up to a day behind Scryfall, like card search.
+Three read-only routes analyze a deck's cards; nothing here persists anything. Legality and statistics are both computed from the printings Tamiyo stores and refreshes daily (see [Prices and values](#prices-and-values)), so they can be up to a day behind Scryfall, like card search. Combos are looked up on [Commander Spellbook](https://commanderspellbook.com/) on each call.
 
-**Errors common to both**
+**Errors common to all three**
 - `400` — `:id` is not a UUID, or (legality only) the deck's own `format` field isn't a format Scryfall recognizes
 - `401` — unauthenticated
 - `404` — no deck with that id exists for this account
 - `500` — unexpected failure
+- `502` — (combos only) Commander Spellbook can't be reached or doesn't answer usably
 
 ---
 
@@ -1333,6 +1334,30 @@ Each `mana_curve` bucket splits its `count` into `permanents` and `non_permanent
 A multicolor card counts once per color it has in `color_breakdown`; a dual-typed permanent (e.g. "Artifact Creature") counts once under a single primary type in `type_breakdown` — Creature takes precedence over Artifact/Enchantment, matching how most deckbuilding sites categorize it. A double-faced or split card counts under the type of its front face (a creature with a land on its back is a creature). `back_face_lands` lists those cards with a land on their back face, by name with their number of copies: they aren't in `land_count`, but a client can show them as extra lands.
 
 `value` is the [value](#prices-and-values) of the `main` board, owned and pending cards, proxies left out, from the stored printing prices the deck's card list shows, rounded to the cent. `owned_value` and `pending_value` split it between the cards the deck holds and its [pending cards](#pending-cards-deckidpending); each is rounded on its own, so their sum can differ from `value` by a cent. `board_values` gives the value of the `sideboard` and `considering` boards the same way, owned and pending cards together, proxies left out.
+
+### `GET /deck/:id/combos`
+
+Lists the [combos](../GLOSSARY.md) the deck holds, as found by Commander Spellbook's `find-my-combos`: only combos whose every card is in the `main` board, with any card the combo needs as commander set as the deck's commander or second commander. Tamiyo sends the `main` board only, pending cards included, each card once by its stored printing's name (both faces of a double-faced card, `A // B`), the commander and second commander apart from the other cards. A card whose printing isn't stored yet is left out. A deck with nothing on its `main` board answers an empty list without calling Commander Spellbook.
+
+Commander Spellbook is called on each request (a rate-limited answer is retried once after a second; the call times out after about 10 seconds), so the route can be slower than the statistics: a client should not wait for it before showing them.
+
+**Response `200 OK`**
+```json
+{
+  "combos": [
+    {
+      "id": "1414-2730",
+      "cards": ["Niv-Mizzet, Parun", "Curiosity"],
+      "results": ["Infinite damage", "Infinite card draw"],
+      "url": "https://commanderspellbook.com/combo/1414-2730/"
+    }
+  ]
+}
+```
+
+`cards` are the card names the combo uses and `results` the names of what it produces, both in English as Commander Spellbook gives them. `url` is the combo's page on commanderspellbook.com. `combos` is `[]` when the deck holds none.
+
+**Errors:** see above · `502 {"error": "commander spellbook is unavailable"}` when Commander Spellbook fails, times out or answers `429` twice in a row.
 
 ---
 
