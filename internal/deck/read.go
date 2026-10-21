@@ -27,6 +27,9 @@ type ReadDeck struct {
 	// Entries are the owned and pending copies merged and ordered as by
 	// GetDeckContent.
 	Entries []DeckEntry
+	// Tags maps a CardNameKey to the sorted tags of that card (ADR-0006).
+	// Only cards in Entries appear.
+	Tags map[string][]string
 }
 
 // ReadDeck returns the deck as the viewer (empty for an anonymous visitor)
@@ -41,7 +44,17 @@ func (s *Service) ReadDeck(ctx context.Context, viewerID string, deckID string, 
 	if err != nil {
 		return ReadDeck{}, err
 	}
-	return ReadDeck{OwnerID: ownerID, Mine: viewerID != "" && ownerID == viewerID, Deck: d, Entries: entries}, nil
+	tagRows, err := s.repo.FindCardTags(ctx, ownerID, deckID)
+	if err != nil {
+		return ReadDeck{}, err
+	}
+	return ReadDeck{
+		OwnerID: ownerID,
+		Mine:    viewerID != "" && ownerID == viewerID,
+		Deck:    d,
+		Entries: entries,
+		Tags:    tagsByName(cardNames(entries), tagRows),
+	}, nil
 }
 
 // findWithinReach never looks a deck up by an empty viewer: user ids are

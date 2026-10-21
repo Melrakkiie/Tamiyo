@@ -107,6 +107,33 @@ func TestReadDeck_EntriesHoldPendingCardsAndTheCommanderSlotsForAVisitor(t *test
 	}, summarize(read.Entries))
 }
 
+func TestReadDeck_TagsAttachByCardNameAcrossPrintingsAndPendingCopies(t *testing.T) {
+	f := newContentFixture(t)
+	boltA25 := printing{bolt.name, "e3285e6b-3e79-4d7c-bf96-d920f973b122", "a25", "141"}
+	f.ownedCopy(t, bolt, copyOptions{})
+	f.pendingCard(t, boltA25, 2, copyOptions{board: BoardSideboard})
+	f.pendingCard(t, atraxa, 1, copyOptions{})
+	f.ownedCopy(t, island, copyOptions{})
+	ctx := context.Background()
+	_, err := f.service.SetCardTags(ctx, f.userID, contentDeckID, "lightning  BOLT", []string{"cheap", "Burn"})
+	require.NoError(t, err)
+	_, err = f.service.SetCardTags(ctx, f.userID, contentDeckID, atraxa.name, []string{"Ramp", "card draw"})
+	require.NoError(t, err)
+	_, err = f.service.SetCardTags(ctx, f.userID, contentDeckID, island.name, []string{"Land"})
+	require.NoError(t, err)
+	_, err = f.db.Exec(`DELETE FROM tamiyo.card_deck WHERE deck_id = $1 AND card_id IN (SELECT id FROM tamiyo.cards WHERE name = $2)`, contentDeckID, island.name)
+	require.NoError(t, err)
+	bob := f.sharedWithBob(t)
+
+	read, err := f.service.ReadDeck(ctx, bob, contentDeckID, ReachVisible)
+
+	require.NoError(t, err)
+	assert.Equal(t, map[string][]string{
+		"lightning bolt":          {"Burn", "cheap"},
+		"atraxa, praetors' voice": {"card draw", "Ramp"},
+	}, read.Tags, "a card no longer in the deck keeps no tags")
+}
+
 func TestReadDeck_AnUnknownDeckIsNotFoundWhateverTheReachAndViewer(t *testing.T) {
 	f := newContentFixture(t)
 	bob := seedUser(t, f.db, "bob@example.com")
