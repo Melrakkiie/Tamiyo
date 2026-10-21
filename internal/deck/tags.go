@@ -92,14 +92,12 @@ func (s *Service) GetCardTags(ctx context.Context, userID string, deckID string)
 		return DeckTags{}, err
 	}
 
-	byName := make(map[string][]string)
+	byName := tagsByName(names, rows)
 	distinct := make(map[string]bool)
-	for _, row := range rows {
-		if _, inDeck := names[row.CardName]; !inDeck {
-			continue
+	for _, tags := range byName {
+		for _, tag := range tags {
+			distinct[tag] = true
 		}
-		byName[row.CardName] = append(byName[row.CardName], row.Tag)
-		distinct[row.Tag] = true
 	}
 	declared, err := s.repo.FindDeckTags(ctx, userID, deckID)
 	if err != nil {
@@ -111,13 +109,27 @@ func (s *Service) GetCardTags(ctx context.Context, userID string, deckID string)
 
 	result := DeckTags{Tags: sortedTags(distinct), Cards: make([]TaggedCard, 0, len(byName))}
 	for key, tags := range byName {
-		sortTags(tags)
 		result.Cards = append(result.Cards, TaggedCard{Name: names[key], Tags: tags})
 	}
 	sort.Slice(result.Cards, func(i, j int) bool {
 		return strings.ToLower(result.Cards[i].Name) < strings.ToLower(result.Cards[j].Name)
 	})
 	return result, nil
+}
+
+// tagsByName keeps only the tags of cards still in the deck: a tag row
+// outlives the last copy of its card.
+func tagsByName(names map[string]string, rows []CardTag) map[string][]string {
+	byName := make(map[string][]string)
+	for _, row := range rows {
+		if _, inDeck := names[row.CardName]; inDeck {
+			byName[row.CardName] = append(byName[row.CardName], row.Tag)
+		}
+	}
+	for _, tags := range byName {
+		sortTags(tags)
+	}
+	return byName
 }
 
 func (s *Service) SetCardTags(ctx context.Context, userID string, deckID string, cardName string, rawTags []string) (TaggedCard, error) {

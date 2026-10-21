@@ -87,15 +87,23 @@ func readDeckContent(ctx context.Context, r contentReader, userID string, deckID
 	if err != nil {
 		return DeckContent{}, err
 	}
-	owned, err := r.FindCardsByDeckID(ctx, userID, deckID, "added", false)
+	entries, err := loadEntries(ctx, r, userID, d)
 	if err != nil {
 		return DeckContent{}, err
 	}
-	pending, err := r.FindPendingCards(ctx, userID, deckID)
+	return DeckContent{Deck: d, Entries: entries}, nil
+}
+
+func loadEntries(ctx context.Context, r contentReader, ownerID string, d Deck) ([]DeckEntry, error) {
+	owned, err := r.FindCardsByDeckID(ctx, ownerID, d.ID, "added", false)
 	if err != nil {
-		return DeckContent{}, err
+		return nil, err
 	}
-	return DeckContent{Deck: d, Entries: mergeDeckEntries(d, owned, pending)}, nil
+	pending, err := r.FindPendingCards(ctx, ownerID, d.ID)
+	if err != nil {
+		return nil, err
+	}
+	return mergeDeckEntries(d, owned, pending), nil
 }
 
 type entryKey struct {
