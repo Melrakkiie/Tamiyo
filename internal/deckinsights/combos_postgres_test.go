@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"Melrakkiie/Tamiyo/internal/commanderspellbook"
+	"Melrakkiie/Tamiyo/internal/deck"
 )
 
 var (
@@ -92,4 +93,52 @@ func TestGetDeckCombos_SkipsCardsWithoutAPrinting(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"Curiosity"}, finder.main)
+}
+
+func TestGetDeckCombos_LeavesOutTheSideboardAndConsideringCards(t *testing.T) {
+	f := newInsightsFixture(t, "commander")
+	seedPrintings(t, f.db, curiosity, ophidianEye, nivMizzet)
+	f.ownedCopy(t, curiosity, copyOptions{})
+	f.ownedCopy(t, ophidianEye, copyOptions{board: deck.BoardSideboard})
+	f.pendingCard(t, nivMizzet, 1, copyOptions{board: deck.BoardConsidering})
+	finder := &recordingFinder{}
+
+	_, err := f.combos(t, finder)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Curiosity"}, finder.main)
+	assert.Empty(t, finder.commanders)
+}
+
+func TestGetDeckCombos_SendsEachCardOnce(t *testing.T) {
+	f := newInsightsFixture(t, "commander")
+	seedPrintings(t, f.db, nivMizzet, curiosity)
+	commander := f.ownedCopy(t, nivMizzet, copyOptions{})
+	f.setCommanders(t, &commander, nil, nil, nil)
+	f.pendingCard(t, nivMizzet, 1, copyOptions{foil: true})
+	f.ownedCopy(t, curiosity, copyOptions{})
+	f.ownedCopy(t, curiosity, copyOptions{foil: true})
+	f.ownedCopy(t, curiosity, copyOptions{proxy: true})
+	f.pendingCard(t, curiosity, 2, copyOptions{})
+	finder := &recordingFinder{}
+
+	_, err := f.combos(t, finder)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Niv-Mizzet, Parun"}, finder.commanders)
+	assert.Equal(t, []string{"Curiosity"}, finder.main)
+}
+
+func TestGetDeckCombos_AnEmptyMainBoardMakesNoCall(t *testing.T) {
+	f := newInsightsFixture(t, "commander")
+	seedPrintings(t, f.db, curiosity)
+	f.ownedCopy(t, curiosity, copyOptions{board: deck.BoardSideboard})
+	finder := &recordingFinder{}
+
+	got, err := f.combos(t, finder)
+
+	require.NoError(t, err)
+	assert.Zero(t, finder.calls)
+	assert.NotNil(t, got.Combos)
+	assert.Empty(t, got.Combos)
 }

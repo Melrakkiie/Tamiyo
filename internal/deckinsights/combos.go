@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"Melrakkiie/Tamiyo/internal/commanderspellbook"
+	"Melrakkiie/Tamiyo/internal/deck"
 )
 
 // comboFinder looks a deck's combos up on Commander Spellbook (ADR 0010).
@@ -38,22 +39,42 @@ func (s *Service) GetDeckCombos(ctx context.Context, userID string, deckID strin
 		return DeckCombos{}, fmt.Errorf("loading printings: %w", err)
 	}
 
-	var commanderNames, mainNames []string
-	for _, e := range main {
-		p, ok := printings[e.ScryfallID]
-		if !ok || p.Name == "" {
-			continue
-		}
-		if e.IsCommander() {
-			commanderNames = append(commanderNames, p.Name)
-		} else {
-			mainNames = append(mainNames, p.Name)
-		}
+	commanders, others := comboDeckList(main, printings)
+	if len(commanders) == 0 && len(others) == 0 {
+		return DeckCombos{Combos: []Combo{}}, nil
 	}
 
-	_, err = s.combos.FindCombos(ctx, commanderNames, mainNames)
+	_, err = s.combos.FindCombos(ctx, commanders, others)
 	if err != nil {
 		return DeckCombos{}, err
 	}
 	return DeckCombos{}, nil
+}
+
+// comboDeckList names the main board's cards the way Commander Spellbook
+// expects: by printing name (both faces of a double-faced card), each card
+// once, the commander and partner apart from the rest. Cards without a
+// stored printing are left out.
+func comboDeckList(main []deck.DeckEntry, printings map[string]Printing) (commanders []string, others []string) {
+	seen := make(map[string]bool, len(main))
+	add := func(list []string, e deck.DeckEntry) []string {
+		p, ok := printings[e.ScryfallID]
+		if !ok || p.Name == "" || seen[p.Name] {
+			return list
+		}
+		seen[p.Name] = true
+		return append(list, p.Name)
+	}
+	// Commanders first, so a commander's other copies don't land in others.
+	for _, e := range main {
+		if e.IsCommander() {
+			commanders = add(commanders, e)
+		}
+	}
+	for _, e := range main {
+		if !e.IsCommander() {
+			others = add(others, e)
+		}
+	}
+	return commanders, others
 }
