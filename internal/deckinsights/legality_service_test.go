@@ -44,8 +44,7 @@ func legalityReport(read deck.ReadDeck, store fakeStore) (LegalityReport, error)
 	return NewService(readerWith(read), store, nil).GetDeckLegality(context.Background(), testUserID, read.Deck.ID, deck.ReachOwn)
 }
 
-// legalityOf is the legality report of the test user's own deck read,
-// against store, without the deck size issue.
+// legalityOf leaves the deck size issue out of the report.
 func legalityOf(t *testing.T, read deck.ReadDeck, store fakeStore) LegalityReport {
 	t.Helper()
 	report, err := legalityReport(read, store)

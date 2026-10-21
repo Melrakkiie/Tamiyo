@@ -14,15 +14,15 @@ import (
 
 // Stored printings for the combo lookups.
 var (
-	nivMizzet = Printing{ScryfallID: "33333333-0000-0000-0000-000000000001", Name: "Niv-Mizzet, Parun",
+	nivMizzet = Printing{ScryfallID: "66666666-0000-0000-0000-000000000001", Name: "Niv-Mizzet, Parun",
 		TypeLine: "Legendary Creature — Dragon Wizard", ManaValue: 6}
-	thrasiosCombo = Printing{ScryfallID: "33333333-0000-0000-0000-000000000002", Name: "Thrasios, Triton Hero",
+	thrasiosCombo = Printing{ScryfallID: "66666666-0000-0000-0000-000000000002", Name: "Thrasios, Triton Hero",
 		TypeLine: "Legendary Creature — Merfolk Wizard", ManaValue: 2}
-	curiosity = Printing{ScryfallID: "33333333-0000-0000-0000-000000000003", Name: "Curiosity",
+	curiosity = Printing{ScryfallID: "66666666-0000-0000-0000-000000000003", Name: "Curiosity",
 		TypeLine: "Enchantment — Aura", ManaValue: 1}
-	ophidianEye = Printing{ScryfallID: "33333333-0000-0000-0000-000000000004", Name: "Ophidian Eye",
+	ophidianEye = Printing{ScryfallID: "66666666-0000-0000-0000-000000000004", Name: "Ophidian Eye",
 		TypeLine: "Enchantment — Aura", ManaValue: 3}
-	delverOfSecrets = Printing{ScryfallID: "33333333-0000-0000-0000-000000000005", Name: "Delver of Secrets // Insectile Aberration",
+	delverOfSecrets = Printing{ScryfallID: "66666666-0000-0000-0000-000000000005", Name: "Delver of Secrets // Insectile Aberration",
 		TypeLine: "Creature — Human Wizard // Creature — Human Insect", ManaValue: 1}
 )
 
