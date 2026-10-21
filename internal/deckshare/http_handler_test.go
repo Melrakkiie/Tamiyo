@@ -21,6 +21,7 @@ type fakeSharedService struct {
 	shared   SharedDeck
 	legality deckinsights.LegalityReport
 	stats    deckinsights.DeckStats
+	combos   deckinsights.DeckCombos
 	compared Comparison
 	err      error
 
@@ -103,6 +104,38 @@ func (f *fakeSharedService) GetSharedDeckLegality(ctx context.Context, deckID st
 func (f *fakeSharedService) GetSharedDeckStats(ctx context.Context, deckID string) (deckinsights.DeckStats, error) {
 	f.lastDeckID = deckID
 	return f.stats, f.err
+}
+
+func (f *fakeSharedService) GetSharedDeckCombos(ctx context.Context, deckID string) (deckinsights.DeckCombos, error) {
+	f.lastDeckID = deckID
+	return f.combos, f.err
+}
+
+func TestGetSharedDeckCombos_ReturnsCombos(t *testing.T) {
+	router := setupRouter(&fakeSharedService{combos: deckinsights.DeckCombos{Combos: []deckinsights.Combo{
+		{ID: "1-2", Cards: []string{"A", "B"}, Results: []string{"Infinite mana"}, URL: "https://commanderspellbook.com/combo/1-2/"},
+	}}})
+
+	w := get(router, "/shared/decks/"+deckID+"/combos")
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.JSONEq(t, `{"combos":[{"id":"1-2","cards":["A","B"],"results":["Infinite mana"],"url":"https://commanderspellbook.com/combo/1-2/"}]}`, w.Body.String())
+}
+
+func TestGetSharedDeckCombos_UnavailableReturnsBadGateway(t *testing.T) {
+	router := setupRouter(&fakeSharedService{err: deckinsights.ErrCombosUnavailable})
+
+	w := get(router, "/shared/decks/"+deckID+"/combos")
+
+	assert.Equal(t, http.StatusBadGateway, w.Code)
+}
+
+func TestGetSharedDeckCombos_MissingOrPrivateDeckReturnsNotFound(t *testing.T) {
+	router := setupRouter(&fakeSharedService{err: ErrNotFound})
+
+	w := get(router, "/shared/decks/"+deckID+"/combos")
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
 func setupRouter(service sharedDeckService) *gin.Engine {

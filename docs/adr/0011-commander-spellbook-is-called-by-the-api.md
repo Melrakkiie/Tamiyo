@@ -1,0 +1,3 @@
+# Commander Spellbook is called by the API, not the browser
+
+A deck's combos come from Commander Spellbook's `find-my-combos` endpoint, called by the Go API behind a deck route, even though the front calls Scryfall straight from the browser. Commander Spellbook's CORS only allows its own origin and localhost, so a browser call would work in development and fail in production; going through the API also lets us trim its large response (close to 1 MB for a 100-card deck) and keep a short in-memory cache, so that a much-viewed shared deck does not hit a third-party service on every visit. Do not move this call to the front unless their CORS policy changes.

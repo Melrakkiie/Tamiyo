@@ -21,9 +21,10 @@ tamiyo/
 │   ├── storage/          # storage domain (binders, boxes, deckboxes)
 │   ├── deck/             # deck domain, including deck ↔ card relationship
 │   ├── bulk/             # bulk import/export routes (ManaBox, Moxfield)
-│   ├── deckinsights/     # deck legality + stats routes
+│   ├── deckinsights/     # deck legality, stats + combos routes
 │   ├── deckshare/        # public, read-only shared deck routes
 │   ├── scryfall/         # shared Scryfall API client (used by bulk and the printing refresher)
+│   ├── commanderspellbook/ # Commander Spellbook client (deck combos)
 │   ├── printing/         # background refresh of printings' names, mana values, type lines, legalities, power and toughness
 │   ├── follow/           # users following each other
 │   └── config/           # environment configuration
@@ -203,16 +204,18 @@ curl -X GET "localhost:8080/deck/<deck-id>/export?format=moxfield" \
 
 ## Deck Insights
 
-Two read-only, player-facing routes analyze a deck — nothing persisted, computed fresh from [Scryfall](https://scryfall.com/) data on every call (see [`internal/scryfall`](./internal/scryfall) for the shared client, also used by Bulk Import):
+Three read-only, player-facing routes analyze a deck — nothing persisted, computed fresh from [Scryfall](https://scryfall.com/) data on every call (see [`internal/scryfall`](./internal/scryfall) for the shared client, also used by Bulk Import), and for combos from [Commander Spellbook](https://commanderspellbook.com/):
 
 - `GET /deck/:id/legality` — checks every card against the deck's own format; for `commander` specifically, also checks singleton (one copy per card name, basic lands excepted), color identity against the deck's commanders (the union of both identities with a second commander), and that the two commanders can be paired (Partner, Partner with, Friends forever, Choose a Background, Doctor's companion…).
-- `GET /deck/:id/stats` — mana curve, color breakdown and card types (lands excluded from the curve/colors/average, since they skew every one of those without adding anything), and the main board's value.
+- `GET /deck/:id/stats` — total mana value, mana curve, color breakdown and card types (lands excluded from the curve/colors/average, since they skew every one of those without adding anything), and the main board's value.
+- `GET /deck/:id/combos` — the combos the main board holds, looked up on Commander Spellbook's `find-my-combos` by the API (its CORS policy rules out a browser call, see [ADR 0011](./docs/adr/0011-commander-spellbook-is-called-by-the-api.md); client in [`internal/commanderspellbook`](./internal/commanderspellbook)), each with its cards, results and commanderspellbook.com link; `502` when Commander Spellbook is unavailable.
 
 See [`doc/API.md`](./doc/API.md#deck-insights) for the exact response shapes and known limitations (e.g. no named singleton exceptions like Relentless Rats).
 
 ```bash
 curl localhost:8080/deck/<deck-id>/legality -H "Authorization: Bearer <token>"
 curl localhost:8080/deck/<deck-id>/stats -H "Authorization: Bearer <token>"
+curl localhost:8080/deck/<deck-id>/combos -H "Authorization: Bearer <token>"
 ```
 
 ### Sideboard and considering
@@ -233,7 +236,7 @@ A signed-in user can follow other users. `PUT` / `DELETE /users/:id/follow` foll
 
 ### Shared decks
 
-Deck ids are random UUIDs, so they can't be guessed from one another. `GET /shared/decks` browses every public deck, with filters on the name, format, commander, a card, the owner, the color identity and the Commander bracket (a deck's optional `bracket`, 1 to 5). `GET /shared/decks/:id` (plus `/legality`, `/stats`, `/export` and `/compare/:other_id`) serves a public or unlisted deck read-only, without authentication: its name, format, owner profile and card list, with no storage, proxy or ownership details. A private deck answers `404`, like an unknown link. These routes are rate-limited per client IP (60 requests per minute by default, `SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`). Signed in, `GET /deck/:id/content` returns the card list of a deck you can see (yours, whatever its visibility, or anyone's public or unlisted one) in the same shape, which the front uses to playtest a deck; `GET /deck/:id/ownership` tells how many copies of each card of a deck (yours, or anyone's public or unlisted one) your collection holds, by name whatever the printing, and `GET /deck/:id/compare/:other_id` compares two decks (yours, or anyone's public or unlisted ones) by card name, ignoring printings: cards in common with each deck's quantity, and cards only in one of them. Signed in, you can also like someone else's public or unlisted deck (`PUT` / `DELETE /deck/:id/like`) and find the decks you liked with `GET /auth/me/liked-decks`; public decks list their `likes_count` and can be sorted by it. See [`doc/API.md`](./doc/API.md#shared-decks).
+Deck ids are random UUIDs, so they can't be guessed from one another. `GET /shared/decks` browses every public deck, with filters on the name, format, commander, a card, the owner, the color identity and the Commander bracket (a deck's optional `bracket`, 1 to 5). `GET /shared/decks/:id` (plus `/legality`, `/stats`, `/combos`, `/export` and `/compare/:other_id`) serves a public or unlisted deck read-only, without authentication: its name, format, owner profile and card list, with no storage, proxy or ownership details. A private deck answers `404`, like an unknown link. These routes are rate-limited per client IP (60 requests per minute by default, `SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`). Signed in, `GET /deck/:id/content` returns the card list of a deck you can see (yours, whatever its visibility, or anyone's public or unlisted one) in the same shape, which the front uses to playtest a deck; `GET /deck/:id/ownership` tells how many copies of each card of a deck (yours, or anyone's public or unlisted one) your collection holds, by name whatever the printing, and `GET /deck/:id/compare/:other_id` compares two decks (yours, or anyone's public or unlisted ones) by card name, ignoring printings: cards in common with each deck's quantity, and cards only in one of them. Signed in, you can also like someone else's public or unlisted deck (`PUT` / `DELETE /deck/:id/like`) and find the decks you liked with `GET /auth/me/liked-decks`; public decks list their `likes_count` and can be sorted by it. See [`doc/API.md`](./doc/API.md#shared-decks).
 
 ### Importing a ManaBox Collection via script (alternative)
 

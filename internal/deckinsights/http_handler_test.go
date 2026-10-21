@@ -3,6 +3,7 @@ package deckinsights
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,6 +16,7 @@ import (
 type fakeInsightsService struct {
 	legality LegalityReport
 	stats    DeckStats
+	combos   DeckCombos
 	err      error
 
 	lastUserID string
@@ -31,6 +33,12 @@ func (f *fakeInsightsService) GetDeckStats(ctx context.Context, userID string, d
 	f.lastUserID = userID
 	f.lastDeckID = deckID
 	return f.stats, f.err
+}
+
+func (f *fakeInsightsService) GetDeckCombos(ctx context.Context, userID string, deckID string) (DeckCombos, error) {
+	f.lastUserID = userID
+	f.lastDeckID = deckID
+	return f.combos, f.err
 }
 
 func setupRouter(service insightsService) *gin.Engine {
@@ -118,6 +126,49 @@ func TestGetDeckStats_UnknownDeckReturnsNotFound(t *testing.T) {
 	router := setupRouter(&fakeInsightsService{err: ErrDeckNotFound})
 
 	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000999/stats", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestGetDeckCombos_ReturnsTheCombosOnSuccess(t *testing.T) {
+	service := &fakeInsightsService{combos: DeckCombos{Combos: []Combo{{
+		ID: "1414-2730", Cards: []string{"Niv-Mizzet, Parun", "Curiosity"}, Results: []string{"Infinite damage"},
+		URL: "https://commanderspellbook.com/combo/1414-2730/",
+	}}}}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000007/combos", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.JSONEq(t, `{"combos": [{
+		"id": "1414-2730",
+		"cards": ["Niv-Mizzet, Parun", "Curiosity"],
+		"results": ["Infinite damage"],
+		"url": "https://commanderspellbook.com/combo/1414-2730/"
+	}]}`, w.Body.String())
+	assert.Equal(t, testUserID, service.lastUserID)
+	assert.Equal(t, "00000000-0000-0000-0000-000000000007", service.lastDeckID)
+}
+
+func TestGetDeckCombos_UnavailableSpellbookReturnsBadGateway(t *testing.T) {
+	router := setupRouter(&fakeInsightsService{err: fmt.Errorf("%w: status 503", ErrCombosUnavailable)})
+
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/combos", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadGateway, w.Code)
+	assert.JSONEq(t, `{"error": "commander spellbook is unavailable"}`, w.Body.String())
+}
+
+func TestGetDeckCombos_UnknownDeckReturnsNotFound(t *testing.T) {
+	router := setupRouter(&fakeInsightsService{err: ErrDeckNotFound})
+
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000999/combos", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 

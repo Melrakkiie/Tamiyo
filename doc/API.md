@@ -1251,13 +1251,14 @@ How the owner last displayed the deck's cards, so the deck page opens the same w
 
 ## Deck Insights
 
-Two read-only routes analyze a deck's cards; nothing here persists anything. Legality and statistics are both computed from the printings Tamiyo stores and refreshes daily (see [Prices and values](#prices-and-values)), so they can be up to a day behind Scryfall, like card search.
+Three read-only routes analyze a deck's cards; nothing here persists anything. Legality and statistics are both computed from the printings Tamiyo stores and refreshes daily (see [Prices and values](#prices-and-values)), so they can be up to a day behind Scryfall, like card search. Combos are looked up on [Commander Spellbook](https://commanderspellbook.com/); the answer for a given list of cards is kept in memory for 24 hours (whatever the order of the cards), so a deck whose cards haven't changed is answered without calling Commander Spellbook again. A failed lookup is never kept.
 
-**Errors common to both**
+**Errors common to all three**
 - `400` — `:id` is not a UUID, or (legality only) the deck's own `format` field isn't a format Scryfall recognizes
 - `401` — unauthenticated
 - `404` — no deck with that id exists for this account
 - `500` — unexpected failure
+- `502` — (combos only) Commander Spellbook can't be reached or doesn't answer usably
 
 ---
 
@@ -1301,6 +1302,7 @@ Summarizes the deck's composition: mana curve, color breakdown, and primary card
   "land_count": 38,
   "nonland_count": 62,
   "average_mana_value": 2.74,
+  "total_mana_value": 170,
   "mana_curve": [
     {
       "mana_value": 1,
@@ -1332,15 +1334,41 @@ Each `mana_curve` bucket splits its `count` into `permanents` and `non_permanent
 
 A multicolor card counts once per color it has in `color_breakdown`; a dual-typed permanent (e.g. "Artifact Creature") counts once under a single primary type in `type_breakdown` — Creature takes precedence over Artifact/Enchantment, matching how most deckbuilding sites categorize it. A double-faced or split card counts under the type of its front face (a creature with a land on its back is a creature). `back_face_lands` lists those cards with a land on their back face, by name with their number of copies: they aren't in `land_count`, but a client can show them as extra lands.
 
+`total_mana_value` is the sum of the mana values of the `main` board's nonland cards, each counted once per copy (pending copies included; sideboard, considering, lands and cards without a known printing left out). A modal double-faced card with a spell front counts its front face's mana value. It has the same scope as `average_mana_value`, which is this total divided by `nonland_count`, and can be fractional (half mana values).
+
 `value` is the [value](#prices-and-values) of the `main` board, owned and pending cards, proxies left out, from the stored printing prices the deck's card list shows, rounded to the cent. `owned_value` and `pending_value` split it between the cards the deck holds and its [pending cards](#pending-cards-deckidpending); each is rounded on its own, so their sum can differ from `value` by a cent. `board_values` gives the value of the `sideboard` and `considering` boards the same way, owned and pending cards together, proxies left out.
+
+### `GET /deck/:id/combos`
+
+Lists the [combos](../GLOSSARY.md) the deck holds, as found by Commander Spellbook's `find-my-combos`: only combos whose every card is in the `main` board, with any card the combo needs as commander set as the deck's commander or second commander. Tamiyo sends the `main` board only, pending cards included, each card once by its stored printing's name (both faces of a double-faced card, `A // B`), the commander and second commander apart from the other cards. A card whose printing isn't stored yet is left out. A deck with nothing on its `main` board answers an empty list without calling Commander Spellbook.
+
+Identical lists of cards are answered from an in-memory cache for 24 hours per instance (see the introduction above), so a repeated request doesn't call Commander Spellbook. Otherwise each call to it times out after 10 seconds and a rate-limited answer (`429`) is retried once after a short wait, so the route can be slower than the statistics: a client should not wait for it before showing them.
+
+**Response `200 OK`**
+```json
+{
+  "combos": [
+    {
+      "id": "1414-2730",
+      "cards": ["Niv-Mizzet, Parun", "Curiosity"],
+      "results": ["Infinite damage", "Infinite card draw"],
+      "url": "https://commanderspellbook.com/combo/1414-2730/"
+    }
+  ]
+}
+```
+
+`cards` are the card names the combo uses and `results` the names of what it produces, both in English as Commander Spellbook gives them. `url` is the combo's page on commanderspellbook.com. `combos` is `[]` when the deck holds none.
+
+**Errors:** see above · `502 {"error": "commander spellbook is unavailable"}` when Commander Spellbook fails, times out or answers `429` twice in a row.
 
 ---
 
 ## Shared decks
 
-Read-only access to public decks, and to a deck by its id. **No authentication required** for the six `/shared/decks` routes. Deck ids are random UUIDs, so an unlisted deck can only be found by someone who was given its id or link. Only `public` and `unlisted` decks resolve: a private deck, an unknown id or anything that isn't a UUID all answer `404`, so the response never tells whether a private deck exists.
+Read-only access to public decks, and to a deck by its id. **No authentication required** for the seven `/shared/decks` routes. Deck ids are random UUIDs, so an unlisted deck can only be found by someone who was given its id or link. Only `public` and `unlisted` decks resolve: a private deck, an unknown id or anything that isn't a UUID all answer `404`, so the response never tells whether a private deck exists.
 
-The six `/shared/decks` routes share a per-client-IP limit, separate from the auth one: 60 requests per 60-second window by default (`SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns `429` with a `Retry-After` header, as described in [Rate limiting](#rate-limiting).
+The seven `/shared/decks` routes share a per-client-IP limit, separate from the auth one: 60 requests per 60-second window by default (`SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns `429` with a `Retry-After` header, as described in [Rate limiting](#rate-limiting).
 
 ### `GET /shared/decks`
 
@@ -1453,6 +1481,12 @@ Same report as [`GET /deck/:id/legality`](#get-deckidlegality), without `card_id
 Same statistics as [`GET /deck/:id/stats`](#get-deckidstats).
 
 **Errors:** `404` as above · `429` rate limit exceeded
+
+### `GET /shared/decks/:id/combos`
+
+Same combos as [`GET /deck/:id/combos`](#get-deckidcombos), looked up for the deck's owner.
+
+**Errors:** `404` as above · `429` rate limit exceeded · `502` Commander Spellbook couldn't be reached
 
 ### `GET /shared/decks/:id/export`
 
