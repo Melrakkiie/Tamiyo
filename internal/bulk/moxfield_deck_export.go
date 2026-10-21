@@ -31,29 +31,45 @@ func (s *Service) ExportDeck(ctx context.Context, userID string, deckID string, 
 		return ErrUnknownExportFormat
 	}
 
-	content, err := s.decks.GetDeckContent(ctx, userID, deckID)
+	own, err := s.decks.ReadDeck(ctx, userID, deckID, deck.ReachOwn)
 	if err != nil {
-		if errors.Is(err, deck.ErrNotFound) {
-			return ErrDeckNotFound
-		}
-		return fmt.Errorf("loading deck content: %w", err)
+		return err
 	}
-	boards := splitByBoard(content.Entries)
+	return s.writeReadDeck(ctx, own, opts, w)
+}
 
+// writeReadDeck writes a read deck in opts.Format for both the own and the
+// shared exports. The cardmarket boards are validated after the read here,
+// so the own export also validates them before its read.
+func (s *Service) writeReadDeck(ctx context.Context, read deck.ReadDeck, opts DeckExportOptions, w io.Writer) error {
+	switch opts.Format {
+	case DeckExportTamiyo:
+		return writeTamiyoDeck(w, read, opts.WithTags)
+	case DeckExportCardmarket:
+		boards, err := cardmarketBoards(opts)
+		if err != nil {
+			return err
+		}
+		return s.writeCardmarketDeck(ctx, deck.EntriesInBoards(read.Entries, boardList(boards)), opts, w)
+	default:
+		var tags map[string][]string
+		if opts.WithTags {
+			tags = read.Tags
+		}
+		return writeTextDeck(w, opts.Format, read.Entries, tags)
+	}
+}
+
+// writeTextDeck writes a moxfield, plain or arena list; only moxfield shows
+// the tags, keyed by deck.CardNameKey.
+func writeTextDeck(w io.Writer, format string, entries []deck.DeckEntry, tags map[string][]string) error {
+	boards := splitByBoard(entries)
 	switch format {
 	case DeckExportPlain:
 		return writePlainDeck(w, boards)
 	case DeckExportArena:
 		return writeArenaDeck(w, boards)
 	default:
-		tags := map[string][]string{}
-		if opts.WithTags {
-			deckTags, err := s.decks.GetCardTags(ctx, userID, content.Deck.ID)
-			if err != nil {
-				return fmt.Errorf("loading tags: %w", err)
-			}
-			tags = deckTags.ByCardName()
-		}
 		return writeMoxfieldDeck(w, boards, tags)
 	}
 }
@@ -62,14 +78,11 @@ func (s *Service) ExportSharedDeck(ctx context.Context, deckID string, opts Deck
 	if _, known := deckExportFilenames[opts.Format]; !known {
 		return ErrUnknownExportFormat
 	}
-	ownerID, d, err := s.decks.GetSharedDeck(ctx, deckID)
+	shared, err := s.decks.ReadDeck(ctx, "", deckID, deck.ReachShared)
 	if err != nil {
-		if errors.Is(err, deck.ErrNotFound) {
-			return ErrDeckNotFound
-		}
 		return err
 	}
-	return s.exportDeckAs(ctx, ownerID, d.ID, opts, w)
+	return s.writeReadDeck(ctx, shared, opts, w)
 }
 
 func splitByBoard(entries []deck.DeckEntry) deckExportBoards {

@@ -13,24 +13,28 @@ import (
 
 const testUserID = "11111111-1111-1111-1111-111111111111"
 
+const otherUserID = "22222222-2222-2222-2222-222222222222"
+
 const testDeckID = "00000000-0000-0000-0000-000000000001"
 
 // --- fakes -------------------------------------------------------------
 
-type fakeDeckService struct {
-	contents map[string]deck.DeckContent
-	err      error
+// fakeDeckReader holds read decks by id. Within ReachOwn it reads only the
+// viewer's own decks; other reaches read any deck it holds.
+type fakeDeckReader struct {
+	decks map[string]deck.ReadDeck
+	err   error
 }
 
-func (f *fakeDeckService) GetDeckContent(ctx context.Context, userID string, deckID string) (deck.DeckContent, error) {
+func (f *fakeDeckReader) ReadDeck(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (deck.ReadDeck, error) {
 	if f.err != nil {
-		return deck.DeckContent{}, f.err
+		return deck.ReadDeck{}, f.err
 	}
-	content, ok := f.contents[deckID]
-	if !ok {
-		return deck.DeckContent{}, deck.ErrNotFound
+	read, ok := f.decks[deckID]
+	if !ok || (reach == deck.ReachOwn && read.OwnerID != viewerID) {
+		return deck.ReadDeck{}, deck.ErrNotFound
 	}
-	return content, nil
+	return read, nil
 }
 
 type fakeStore struct{}
@@ -43,23 +47,69 @@ func (fakeStore) Printings(ctx context.Context, scryfallIDs []string) (map[strin
 	return map[string]Printing{}, nil
 }
 
+func readerWith(read deck.ReadDeck) *fakeDeckReader {
+	return &fakeDeckReader{decks: map[string]deck.ReadDeck{read.Deck.ID: read}}
+}
+
+func ownedEntry(name string, board string, ownedCopies int) deck.DeckEntry {
+	ids := make([]int, ownedCopies)
+	for i := range ids {
+		ids[i] = i + 1
+	}
+	return deck.DeckEntry{Name: name, ScryfallID: name + "-id", Board: board, OwnedCardIDs: ids}
+}
+
 // --- GetDeckLegality ------------------------------------------------------
 
-func TestGetDeckLegality_UnknownDeckReturnsErrDeckNotFound(t *testing.T) {
-	svc := NewService(&fakeDeckService{}, fakeStore{}, nil)
+func TestGetDeckLegality_UnknownDeckReturnsErrNotFound(t *testing.T) {
+	svc := NewService(&fakeDeckReader{}, fakeStore{}, nil)
 
 	_, err := svc.GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000999")
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrDeckNotFound)
+	assert.ErrorIs(t, err, deck.ErrNotFound)
 }
 
-func TestGetDeckLegality_PropagatesADeckContentError(t *testing.T) {
+func TestGetDeckLegality_PropagatesADeckReadError(t *testing.T) {
 	boom := errors.New("db down")
-	svc := NewService(&fakeDeckService{err: boom}, fakeStore{}, nil)
+	svc := NewService(&fakeDeckReader{err: boom}, fakeStore{}, nil)
 
 	_, err := svc.GetDeckLegality(context.Background(), testUserID, testDeckID)
 
 	assert.ErrorIs(t, err, boom)
-	assert.NotErrorIs(t, err, ErrDeckNotFound)
+	assert.NotErrorIs(t, err, deck.ErrNotFound)
+}
+
+// --- GetDeckStats -----------------------------------------------------------
+
+func TestGetDeckStats_AnotherUsersSharedDeckReturnsErrNotFound(t *testing.T) {
+	reader := readerWith(deck.ReadDeck{
+		OwnerID: otherUserID,
+		Deck:    deck.Deck{ID: testDeckID, Visibility: deck.VisibilityPublic},
+		Entries: []deck.DeckEntry{ownedEntry("Island", deck.BoardMain, 1)},
+	})
+	svc := NewService(reader, fakeStore{}, nil)
+
+	_, err := svc.GetDeckStats(context.Background(), testUserID, testDeckID)
+
+	assert.ErrorIs(t, err, deck.ErrNotFound)
+}
+
+func TestGetDeckStats_CountsOnlyTheMainBoardOfTheOwnersDeck(t *testing.T) {
+	reader := readerWith(deck.ReadDeck{
+		OwnerID: testUserID,
+		Mine:    true,
+		Deck:    deck.Deck{ID: testDeckID},
+		Entries: []deck.DeckEntry{
+			ownedEntry("Island", deck.BoardMain, 3),
+			ownedEntry("Negate", deck.BoardSideboard, 2),
+			ownedEntry("Opt", deck.BoardConsidering, 1),
+		},
+	})
+	svc := NewService(reader, fakeStore{}, nil)
+
+	stats, err := svc.GetDeckStats(context.Background(), testUserID, testDeckID)
+
+	require.NoError(t, err)
+	assert.Equal(t, 3, stats.CardCount)
 }

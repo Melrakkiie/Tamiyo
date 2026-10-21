@@ -26,14 +26,6 @@ var (
 	ErrNoBoards           = errors.New("boards must list at least one of: main, sideboard, considering")
 )
 
-func (s *Service) visibleDeck(ctx context.Context, userID string, deckID string) (deck.VisibleDeck, error) {
-	visible, err := s.decks.GetVisibleDeck(ctx, userID, deckID)
-	if errors.Is(err, deck.ErrNotFound) {
-		return deck.VisibleDeck{}, ErrDeckNotFound
-	}
-	return visible, err
-}
-
 type DuplicateRequest struct {
 	Name       string `json:"name"`
 	FolderID   *int   `json:"folder_id"`
@@ -50,9 +42,6 @@ func (s *Service) DuplicateDeck(ctx context.Context, userID string, deckID strin
 		Name: req.Name, FolderID: req.FolderID, Visibility: req.Visibility,
 	})
 	if err != nil {
-		if errors.Is(err, deck.ErrNotFound) {
-			return DuplicateSummary{}, ErrDeckNotFound
-		}
 		return DuplicateSummary{}, err
 	}
 	summary := Summary{DecksCreated: 1}
@@ -95,14 +84,6 @@ func boardList(wanted map[string]bool) []string {
 	return boards
 }
 
-func (s *Service) entriesInBoards(ctx context.Context, ownerID string, deckID string, boards map[string]bool) ([]deck.DeckEntry, error) {
-	content, err := s.decks.GetDeckContent(ctx, ownerID, deckID)
-	if err != nil {
-		return nil, fmt.Errorf("loading deck content: %w", err)
-	}
-	return deck.EntriesInBoards(content.Entries, boardList(boards)), nil
-}
-
 func (s *Service) CollectDeck(ctx context.Context, userID string, deckID string, req CollectRequest) (Summary, error) {
 	if req.Mode != CollectAll && req.Mode != CollectMissing && req.Mode != CollectPending {
 		return Summary{}, ErrUnknownCollectMode
@@ -111,7 +92,7 @@ func (s *Service) CollectDeck(ctx context.Context, userID string, deckID string,
 	if err != nil {
 		return Summary{}, err
 	}
-	source, err := s.visibleDeck(ctx, userID, deckID)
+	source, err := s.decks.ReadDeck(ctx, userID, deckID, deck.ReachVisible)
 	if err != nil {
 		return Summary{}, err
 	}
@@ -169,7 +150,7 @@ func (h *Handler) duplicateDeck(ctx *gin.Context) {
 	result, err := h.service.DuplicateDeck(ctx.Request.Context(), userID, deckID, req)
 	if err != nil {
 		apierr.Respond(ctx, err,
-			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
+			apierr.Mapping{Err: deck.ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: deck.ErrTargetFolderNotFound, Status: http.StatusBadRequest, Message: deck.ErrTargetFolderNotFound.Error()},
 		)
 		return
@@ -203,7 +184,7 @@ func (h *Handler) collectDeck(ctx *gin.Context) {
 	summary, err := h.service.CollectDeck(ctx.Request.Context(), userID, deckID, req)
 	if err != nil {
 		apierr.Respond(ctx, err,
-			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
+			apierr.Mapping{Err: deck.ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: ErrUnknownCollectMode, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrCollectModeNotHere, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrNoBoards, Status: http.StatusBadRequest},

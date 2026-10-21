@@ -2,7 +2,6 @@ package bulk
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -43,30 +42,29 @@ func isBasicLand(name string) bool {
 
 var defaultCardmarketBoards = []string{deck.BoardMain, deck.BoardSideboard}
 
+func cardmarketBoards(opts DeckExportOptions) (map[string]bool, error) {
+	if len(opts.Boards) == 0 {
+		return wantedBoards(defaultCardmarketBoards)
+	}
+	return wantedBoards(opts.Boards)
+}
+
 func (s *Service) ExportCardmarketDeck(ctx context.Context, userID string, deckID string, opts DeckExportOptions, w io.Writer) error {
-	boardNames := opts.Boards
-	if len(boardNames) == 0 {
-		boardNames = defaultCardmarketBoards
-	}
-	boards, err := wantedBoards(boardNames)
-	if err != nil {
+	if _, err := cardmarketBoards(opts); err != nil {
 		return err
 	}
 
-	d, err := s.decks.GetDeck(ctx, userID, deckID)
-	if err != nil {
-		if errors.Is(err, deck.ErrNotFound) {
-			return ErrDeckNotFound
-		}
-		return err
-	}
-
-	entries, err := s.entriesInBoards(ctx, userID, d.ID, boards)
+	own, err := s.decks.ReadDeck(ctx, userID, deckID, deck.ReachOwn)
 	if err != nil {
 		return err
 	}
+	opts.Format = DeckExportCardmarket
+	return s.writeReadDeck(ctx, own, opts, w)
+}
 
+func (s *Service) writeCardmarketDeck(ctx context.Context, entries []deck.DeckEntry, opts DeckExportOptions, w io.Writer) error {
 	var setNames map[string]string
+	var err error
 	if opts.Printings {
 		if setNames, err = s.scryfall.SetNames(ctx); err != nil {
 			return fmt.Errorf("%w: %v", ErrScryfallUnavailable, err)
@@ -108,15 +106,4 @@ func (s *Service) ExportCardmarketDeck(ctx context.Context, userID string, deckI
 		return fmt.Errorf("writing deck: %w", err)
 	}
 	return nil
-}
-
-func (s *Service) exportDeckAs(ctx context.Context, userID string, deckID string, opts DeckExportOptions, w io.Writer) error {
-	switch opts.Format {
-	case DeckExportTamiyo:
-		return s.ExportTamiyoDeck(ctx, userID, deckID, opts.WithTags, w)
-	case DeckExportCardmarket:
-		return s.ExportCardmarketDeck(ctx, userID, deckID, opts, w)
-	default:
-		return s.ExportDeck(ctx, userID, deckID, opts, w)
-	}
 }

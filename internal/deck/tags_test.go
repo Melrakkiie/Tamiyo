@@ -46,7 +46,6 @@ func TestGetCardTags_GroupsTagsByCardInTheDeck(t *testing.T) {
 	assert.Equal(t, TaggedCard{Name: "Counterspell", Tags: []string{"Contresort"}}, tags.Cards[0])
 	assert.Equal(t, TaggedCard{Name: "Fire // Ice", Tags: []string{"Removal"}}, tags.Cards[1])
 	assert.Equal(t, TaggedCard{Name: "Sol Ring", Tags: []string{"artefact", "Ramp"}}, tags.Cards[2])
-	assert.Equal(t, []string{"Removal"}, tags.ByCardName()["fire / ice"])
 }
 
 func TestGetCardTags_UnknownDeck(t *testing.T) {

@@ -63,7 +63,8 @@ func checkDeckSize(report *LegalityReport, format string, cardCount int) {
 	report.Legal = false
 }
 
-func checkLegality(d deck.Deck, entries []deck.DeckEntry, printings map[string]Printing) (LegalityReport, error) {
+func checkLegality(read deck.ReadDeck, printings map[string]Printing) (LegalityReport, error) {
+	d, entries := read.Deck, read.Entries
 	format := strings.ToLower(strings.TrimSpace(d.Format))
 	report := LegalityReport{Format: d.Format, Legal: true}
 
@@ -90,7 +91,7 @@ func checkLegality(d deck.Deck, entries []deck.DeckEntry, printings map[string]P
 		return LegalityReport{}, ErrUnknownFormat
 	}
 
-	main := mainBoard(entries)
+	main := read.MainBoard()
 	if format == commanderFormat {
 		checkSingleton(&report, main, printings)
 		checkColorIdentity(&report, entries, printings)
@@ -297,16 +298,6 @@ func canPair(first, second Printing) bool {
 		return true
 	}
 	return false
-}
-
-func mainBoard(entries []deck.DeckEntry) []deck.DeckEntry {
-	main := make([]deck.DeckEntry, 0, len(entries))
-	for _, e := range entries {
-		if deck.InMainBoard(e.Board) {
-			main = append(main, e)
-		}
-	}
-	return main
 }
 
 func isBasicLand(typeLine string) bool {

@@ -210,7 +210,7 @@ func tamiyoDeckFixture() *fakeDeckService {
 			{Name: "Duress", ScryfallID: duressM19, SetCode: "m19", CollectorNumber: "94", Board: deck.BoardSideboard, OwnedCardIDs: []int{4}},
 			{Name: "Duress", ScryfallID: duressM19, SetCode: "m19", CollectorNumber: "94", Foil: true, Board: deck.BoardConsidering, Pending: []deck.PendingPart{{ID: 9, Quantity: 1}}},
 		}},
-		tags: deck.DeckTags{Tags: []string{"Pioche", "Ramp"}, Cards: []deck.TaggedCard{{Name: "Sol Ring", Tags: []string{"Ramp"}}}},
+		tags: map[string][]string{"sol ring": {"Ramp"}},
 	}
 }
 
@@ -268,7 +268,23 @@ func TestExportTamiyoDeck_WithoutTags(t *testing.T) {
 	require.NoError(t, svc.ExportTamiyoDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000001", false, &buf))
 
 	assert.NotContains(t, decodeTamiyo(t, buf.Bytes()), "tags")
-	assert.ErrorIs(t, svc.ExportTamiyoDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000099", false, &bytes.Buffer{}), ErrDeckNotFound)
+}
+
+func TestExportTamiyoDeck_ReadsTheViewersOwnDeck(t *testing.T) {
+	decks := tamiyoDeckFixture()
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+
+	require.NoError(t, svc.ExportTamiyoDeck(context.Background(), testUserID, fixtureDeckID, true, &bytes.Buffer{}))
+
+	assert.Equal(t, []deckRead{{viewerID: testUserID, deckID: fixtureDeckID, reach: deck.ReachOwn}}, decks.reads)
+}
+
+func TestExportTamiyoDeck_UnknownDeckIsNotFound(t *testing.T) {
+	decks := tamiyoDeckFixture()
+	decks.readErr = deck.ErrNotFound
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+
+	assert.ErrorIs(t, svc.ExportTamiyoDeck(context.Background(), testUserID, fixtureDeckID, false, &bytes.Buffer{}), deck.ErrNotFound)
 }
 
 func TestImportIntoDeck_ReadsATamiyoDeckFile(t *testing.T) {

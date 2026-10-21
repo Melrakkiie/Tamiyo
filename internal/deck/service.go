@@ -18,10 +18,6 @@ func (s *Service) GetDeck(ctx context.Context, userID string, id string) (Deck, 
 	return s.repo.FindByID(ctx, userID, id)
 }
 
-func (s *Service) GetSharedDeck(ctx context.Context, id string) (string, Deck, error) {
-	return s.repo.FindShared(ctx, id)
-}
-
 func (s *Service) CreateDeck(ctx context.Context, userID string, d Deck) (Deck, error) {
 	return s.repo.Create(ctx, userID, d)
 }

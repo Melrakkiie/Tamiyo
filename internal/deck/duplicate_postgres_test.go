@@ -19,7 +19,7 @@ func (f contentFixture) duplicate(t *testing.T, userID string, req DuplicateRequ
 
 func (f contentFixture) contentOf(t *testing.T, userID string, deckID string) DeckContent {
 	t.Helper()
-	content, err := f.service.GetDeckContent(context.Background(), userID, deckID)
+	content, err := readDeckContent(context.Background(), f.repo, userID, deckID)
 	require.NoError(t, err)
 	return content
 }

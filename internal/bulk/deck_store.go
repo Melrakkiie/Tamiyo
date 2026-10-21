@@ -26,9 +26,6 @@ type StoreSummary struct {
 
 func (s *Service) StoreDeck(ctx context.Context, userID string, deckID string, storageID int, boards []string) (StoreSummary, error) {
 	if _, err := s.decks.GetDeck(ctx, userID, deckID); err != nil {
-		if errors.Is(err, deck.ErrNotFound) {
-			return StoreSummary{}, ErrDeckNotFound
-		}
 		return StoreSummary{}, err
 	}
 	wanted, err := wantedBoards(boards)
@@ -86,7 +83,7 @@ func (h *Handler) storeDeck(ctx *gin.Context) {
 	summary, err := h.service.StoreDeck(ctx.Request.Context(), userID, deckID, *req.StorageID, req.Boards)
 	if err != nil {
 		apierr.Respond(ctx, err,
-			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
+			apierr.Mapping{Err: deck.ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: ErrNoBoards, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrTargetStorageNotFound, Status: http.StatusBadRequest, Message: "storage_id does not reference an existing storage"},
 		)

@@ -11,6 +11,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"Melrakkiie/Tamiyo/internal/deck"
 )
 
 type fakeInsightsService struct {
@@ -79,7 +81,7 @@ func TestGetDeckLegality_InvalidIDReturnsBadRequest(t *testing.T) {
 }
 
 func TestGetDeckLegality_UnknownDeckReturnsNotFound(t *testing.T) {
-	router := setupRouter(&fakeInsightsService{err: ErrDeckNotFound})
+	router := setupRouter(&fakeInsightsService{err: deck.ErrNotFound})
 
 	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000999/legality", nil)
 	w := httptest.NewRecorder()
@@ -123,7 +125,7 @@ func TestGetDeckStats_ReturnsStatsOnSuccess(t *testing.T) {
 }
 
 func TestGetDeckStats_UnknownDeckReturnsNotFound(t *testing.T) {
-	router := setupRouter(&fakeInsightsService{err: ErrDeckNotFound})
+	router := setupRouter(&fakeInsightsService{err: deck.ErrNotFound})
 
 	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000999/stats", nil)
 	w := httptest.NewRecorder()
@@ -166,7 +168,7 @@ func TestGetDeckCombos_UnavailableSpellbookReturnsBadGateway(t *testing.T) {
 }
 
 func TestGetDeckCombos_UnknownDeckReturnsNotFound(t *testing.T) {
-	router := setupRouter(&fakeInsightsService{err: ErrDeckNotFound})
+	router := setupRouter(&fakeInsightsService{err: deck.ErrNotFound})
 
 	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000999/combos", nil)
 	w := httptest.NewRecorder()
