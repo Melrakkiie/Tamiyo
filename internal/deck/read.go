@@ -24,6 +24,9 @@ type ReadDeck struct {
 	// Mine is true when the viewer owns the deck, whatever the reach.
 	Mine bool
 	Deck Deck
+	// Entries are the owned and pending copies merged and ordered as by
+	// GetDeckContent.
+	Entries []DeckEntry
 }
 
 // ReadDeck returns the deck as the viewer (empty for an anonymous visitor)
@@ -34,7 +37,11 @@ func (s *Service) ReadDeck(ctx context.Context, viewerID string, deckID string, 
 	if err != nil {
 		return ReadDeck{}, err
 	}
-	return ReadDeck{OwnerID: ownerID, Mine: viewerID != "" && ownerID == viewerID, Deck: d}, nil
+	entries, err := loadEntries(ctx, s.repo, ownerID, d)
+	if err != nil {
+		return ReadDeck{}, err
+	}
+	return ReadDeck{OwnerID: ownerID, Mine: viewerID != "" && ownerID == viewerID, Deck: d, Entries: entries}, nil
 }
 
 // findWithinReach never looks a deck up by an empty viewer: user ids are

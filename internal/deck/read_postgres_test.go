@@ -85,6 +85,28 @@ func TestReadDeck_FindsTheDeckOnlyWithinTheReach(t *testing.T) {
 	}
 }
 
+func TestReadDeck_EntriesHoldPendingCardsAndTheCommanderSlotsForAVisitor(t *testing.T) {
+	f := newContentFixture(t)
+	commander := f.pendingCard(t, atraxa, 2, copyOptions{})
+	partner := f.ownedCopy(t, tymna, copyOptions{})
+	f.setCommanders(t, nil, &commander, &partner, nil)
+	f.ownedCopy(t, bolt, copyOptions{})
+	f.pendingCard(t, bolt, 2, copyOptions{})
+	f.pendingCard(t, island, 1, copyOptions{board: BoardSideboard})
+	bob := f.sharedWithBob(t)
+
+	read, err := f.service.ReadDeck(context.Background(), bob, contentDeckID, ReachShared)
+
+	require.NoError(t, err)
+	assert.Equal(t, []entrySummary{
+		{name: atraxa.name, board: BoardMain, slot: SlotCommander, pending: 1, quantity: 1},
+		{name: tymna.name, board: BoardMain, slot: SlotPartner, owned: 1, quantity: 1},
+		{name: atraxa.name, board: BoardMain, pending: 1, quantity: 1},
+		{name: bolt.name, board: BoardMain, owned: 1, pending: 2, quantity: 3},
+		{name: island.name, board: BoardSideboard, pending: 1, quantity: 1},
+	}, summarize(read.Entries))
+}
+
 func TestReadDeck_AnUnknownDeckIsNotFoundWhateverTheReachAndViewer(t *testing.T) {
 	f := newContentFixture(t)
 	bob := seedUser(t, f.db, "bob@example.com")
