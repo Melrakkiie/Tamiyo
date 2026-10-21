@@ -87,14 +87,6 @@ func boardList(wanted map[string]bool) []string {
 	return boards
 }
 
-func (s *Service) entriesInBoards(ctx context.Context, ownerID string, deckID string, boards map[string]bool) ([]deck.DeckEntry, error) {
-	content, err := s.decks.GetDeckContent(ctx, ownerID, deckID)
-	if err != nil {
-		return nil, fmt.Errorf("loading deck content: %w", err)
-	}
-	return deck.EntriesInBoards(content.Entries, boardList(boards)), nil
-}
-
 func (s *Service) CollectDeck(ctx context.Context, userID string, deckID string, req CollectRequest) (Summary, error) {
 	if req.Mode != CollectAll && req.Mode != CollectMissing && req.Mode != CollectPending {
 		return Summary{}, ErrUnknownCollectMode

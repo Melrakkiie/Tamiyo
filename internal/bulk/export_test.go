@@ -308,23 +308,33 @@ func TestExportDeck_MoxfieldFoilSuffix(t *testing.T) {
 	assert.Equal(t, "1 Sol Ring (SLD) 1011 *F*\n", exportDeckWith(t, decks, DeckExportMoxfield))
 }
 
-func TestExportDeck_MoxfieldUnknownDeckReturnsErrDeckNotFound(t *testing.T) {
-	svc := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
+func TestExportDeck_ReadsTheViewersOwnDeck(t *testing.T) {
+	decks := contentDeck(deck.Deck{Name: "Pile"})
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
-	err := svc.ExportDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000999", DeckExportOptions{Format: DeckExportMoxfield}, &bytes.Buffer{})
+	require.NoError(t, svc.ExportDeck(context.Background(), testUserID, fixtureDeckID, DeckExportOptions{Format: DeckExportMoxfield, WithTags: true}, &bytes.Buffer{}))
 
-	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrDeckNotFound)
+	assert.Equal(t, []deckRead{{viewerID: testUserID, deckID: fixtureDeckID, reach: deck.ReachOwn}}, decks.reads)
 }
 
-func TestExportDeck_MoxfieldPropagatesADeckContentError(t *testing.T) {
+func TestExportDeck_MoxfieldUnknownDeckIsNotFound(t *testing.T) {
 	decks := contentDeck(deck.Deck{Name: "Pile"})
-	decks.getContentErr = errors.New("db down")
+	decks.readErr = deck.ErrNotFound
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
 	err := svc.ExportDeck(context.Background(), testUserID, fixtureDeckID, DeckExportOptions{Format: DeckExportMoxfield}, &bytes.Buffer{})
 
-	assert.ErrorIs(t, err, decks.getContentErr)
+	assert.ErrorIs(t, err, deck.ErrNotFound)
+}
+
+func TestExportDeck_MoxfieldPropagatesAReadError(t *testing.T) {
+	decks := contentDeck(deck.Deck{Name: "Pile"})
+	decks.readErr = errors.New("db down")
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+
+	err := svc.ExportDeck(context.Background(), testUserID, fixtureDeckID, DeckExportOptions{Format: DeckExportMoxfield}, &bytes.Buffer{})
+
+	assert.ErrorIs(t, err, decks.readErr)
 }
 
 func mixedIsland() deck.DeckEntry {
@@ -500,6 +510,6 @@ func TestExportSharedDeck_Errors(t *testing.T) {
 	decks.readErr = deck.ErrNotFound
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
 
-	assert.ErrorIs(t, svc.ExportSharedDeck(context.Background(), "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: DeckExportPlain, WithTags: false}, &bytes.Buffer{}), ErrDeckNotFound)
+	assert.ErrorIs(t, svc.ExportSharedDeck(context.Background(), "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: DeckExportPlain, WithTags: false}, &bytes.Buffer{}), deck.ErrNotFound)
 	assert.ErrorIs(t, svc.ExportSharedDeck(context.Background(), "00000000-0000-0000-0000-000000000001", DeckExportOptions{Format: "csv", WithTags: false}, &bytes.Buffer{}), ErrUnknownExportFormat)
 }

@@ -31,22 +31,15 @@ func (s *Service) ExportDeck(ctx context.Context, userID string, deckID string, 
 		return ErrUnknownExportFormat
 	}
 
-	content, err := s.decks.GetDeckContent(ctx, userID, deckID)
+	own, err := s.decks.ReadDeck(ctx, userID, deckID, deck.ReachOwn)
 	if err != nil {
-		if errors.Is(err, deck.ErrNotFound) {
-			return ErrDeckNotFound
-		}
-		return fmt.Errorf("loading deck content: %w", err)
+		return err
 	}
 	var tags map[string][]string
-	if format == DeckExportMoxfield && opts.WithTags {
-		deckTags, err := s.decks.GetCardTags(ctx, userID, content.Deck.ID)
-		if err != nil {
-			return fmt.Errorf("loading tags: %w", err)
-		}
-		tags = deckTags.ByCardName()
+	if opts.WithTags {
+		tags = own.Tags
 	}
-	return writeTextDeck(w, format, content.Entries, tags)
+	return writeTextDeck(w, format, own.Entries, tags)
 }
 
 // writeTextDeck writes a moxfield, plain or arena list; only moxfield shows
@@ -69,9 +62,6 @@ func (s *Service) ExportSharedDeck(ctx context.Context, deckID string, opts Deck
 	}
 	shared, err := s.decks.ReadDeck(ctx, "", deckID, deck.ReachShared)
 	if err != nil {
-		if errors.Is(err, deck.ErrNotFound) {
-			return ErrDeckNotFound
-		}
 		return err
 	}
 	var tags map[string][]string

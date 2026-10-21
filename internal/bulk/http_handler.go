@@ -411,7 +411,7 @@ func (h *Handler) respondDeckExport(ctx *gin.Context, invalidIDStatus int, expor
 	var buf bytes.Buffer
 	if err := export(deckID, opts, &buf); err != nil {
 		apierr.Respond(ctx, err,
-			apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
+			apierr.Mapping{Err: deck.ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: ErrUnknownExportFormat, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway},
 			apierr.Mapping{Err: ErrNoBoards, Status: http.StatusBadRequest},

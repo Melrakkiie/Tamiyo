@@ -13,6 +13,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"Melrakkiie/Tamiyo/internal/deck"
 )
 
 type fakeImportService struct {
@@ -757,7 +759,7 @@ func TestExportDeck_RejectsAnUnknownFormatOrDeck(t *testing.T) {
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
-	router = setupRouter(&fakeImportService{exportErr: ErrDeckNotFound})
+	router = setupRouter(&fakeImportService{exportErr: deck.ErrNotFound})
 	req = httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000042/export?format=arena", nil)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -879,7 +881,7 @@ func TestHandler_ExportSharedDeck_NeedsNoAccount(t *testing.T) {
 	}
 
 	missing := gin.New()
-	NewHandler(&fakeImportService{exportErr: ErrDeckNotFound}).RegisterPublicRoutes(missing)
+	NewHandler(&fakeImportService{exportErr: deck.ErrNotFound}).RegisterPublicRoutes(missing)
 	w = httptest.NewRecorder()
 	missing.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/shared/decks/00000000-0000-0000-0000-000000000001/export", nil))
 	assert.Equal(t, http.StatusNotFound, w.Code)

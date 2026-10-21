@@ -233,8 +233,9 @@ type deckRead struct {
 	reach    deck.Reach
 }
 
-// ReadDeck records the read and returns the fixture deck whatever the reach:
-// a deck with no entry in owners is the viewer's, any other someone else's.
+// ReadDeck records the read and returns the fixture deck: a deck with no
+// entry in owners is the viewer's, any other someone else's and shared, so
+// only the own reach misses it.
 func (f *fakeDeckService) ReadDeck(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (deck.ReadDeck, error) {
 	f.reads = append(f.reads, deckRead{viewerID: viewerID, deckID: deckID, reach: reach})
 	if f.readErr != nil {
@@ -244,12 +245,15 @@ func (f *fakeDeckService) ReadDeck(ctx context.Context, viewerID string, deckID 
 		if d.ID != deckID {
 			continue
 		}
+		if reach == deck.ReachOwn && f.owners[deckID] != "" && f.owners[deckID] != viewerID {
+			return deck.ReadDeck{}, deck.ErrNotFound
+		}
 		ownerID := f.owners[deckID]
 		if ownerID == "" {
 			ownerID = viewerID
 		}
 		return deck.ReadDeck{
-			OwnerID: ownerID, Mine: f.owners[deckID] == "", Deck: d,
+			OwnerID: ownerID, Mine: ownerID == viewerID, Deck: d,
 			Entries: f.entries[deckID], Tags: f.tags.ByCardName(),
 		}, nil
 	}
