@@ -85,5 +85,46 @@ func (c *Client) fetch(ctx context.Context, commanders []string, main []string) 
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	return nil, nil
+	// Only the "included" list is decoded; the other lists (combos the deck
+	// almost has, or would have with other commanders or colors) are dropped.
+	var decoded findResponse
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		return nil, fmt.Errorf("decoding find-my-combos response: %w", err)
+	}
+	return decoded.combos(), nil
+}
+
+type findResponse struct {
+	Results struct {
+		Included []wireVariant `json:"included"`
+	} `json:"results"`
+}
+
+type wireVariant struct {
+	ID   string `json:"id"`
+	Uses []struct {
+		Card struct {
+			Name string `json:"name"`
+		} `json:"card"`
+	} `json:"uses"`
+	Produces []struct {
+		Feature struct {
+			Name string `json:"name"`
+		} `json:"feature"`
+	} `json:"produces"`
+}
+
+func (r findResponse) combos() []Combo {
+	combos := make([]Combo, 0, len(r.Results.Included))
+	for _, v := range r.Results.Included {
+		combo := Combo{ID: v.ID, Cards: make([]string, 0, len(v.Uses)), Results: make([]string, 0, len(v.Produces))}
+		for _, use := range v.Uses {
+			combo.Cards = append(combo.Cards, use.Card.Name)
+		}
+		for _, produced := range v.Produces {
+			combo.Results = append(combo.Results, produced.Feature.Name)
+		}
+		combos = append(combos, combo)
+	}
+	return combos
 }

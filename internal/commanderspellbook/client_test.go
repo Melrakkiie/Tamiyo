@@ -45,3 +45,40 @@ func TestClient_SendsTheDeckAsCardNamesWithATamiyoUserAgent(t *testing.T) {
 		"main":       {{"card": "Curiosity"}, {"card": "Bala Ged Recovery // Bala Ged Sanctuary"}},
 	}, body)
 }
+
+func TestClient_KeepsOnlyTheCombosTheDeckIncludes(t *testing.T) {
+	client := withFakeSpellbook(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{
+			"count": 2,
+			"next": null,
+			"results": {
+				"identity": "UR",
+				"included": [{
+					"id": "1414-2730",
+					"status": "OK",
+					"uses": [
+						{"card": {"id": 1414, "name": "Niv-Mizzet, Parun", "oracleId": "x"}, "zoneLocations": ["C"]},
+						{"card": {"id": 2730, "name": "Curiosity"}, "zoneLocations": ["B"]}
+					],
+					"produces": [
+						{"feature": {"id": 2, "name": "Infinite damage"}, "quantity": 1},
+						{"feature": {"id": 3, "name": "Infinite card draw"}, "quantity": 1}
+					],
+					"description": "Deal damage, draw a card, repeat."
+				}],
+				"includedByChangingCommanders": [{"id": "9-9", "uses": [], "produces": []}],
+				"almostIncluded": [{"id": "8-8", "uses": [], "produces": []}],
+				"almostIncludedByAddingColors": [{"id": "7-7", "uses": [], "produces": []}]
+			}
+		}`))
+	})
+
+	combos, err := client.FindCombos(context.Background(), []string{"Niv-Mizzet, Parun"}, []string{"Curiosity"})
+
+	require.NoError(t, err)
+	assert.Equal(t, []Combo{{
+		ID:      "1414-2730",
+		Cards:   []string{"Niv-Mizzet, Parun", "Curiosity"},
+		Results: []string{"Infinite damage", "Infinite card draw"},
+	}}, combos)
+}
