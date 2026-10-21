@@ -50,8 +50,7 @@ func cardmarketBoards(opts DeckExportOptions) (map[string]bool, error) {
 }
 
 func (s *Service) ExportCardmarketDeck(ctx context.Context, userID string, deckID string, opts DeckExportOptions, w io.Writer) error {
-	boards, err := cardmarketBoards(opts)
-	if err != nil {
+	if _, err := cardmarketBoards(opts); err != nil {
 		return err
 	}
 
@@ -59,7 +58,8 @@ func (s *Service) ExportCardmarketDeck(ctx context.Context, userID string, deckI
 	if err != nil {
 		return err
 	}
-	return s.writeCardmarketDeck(ctx, deck.EntriesInBoards(own.Entries, boardList(boards)), opts, w)
+	opts.Format = DeckExportCardmarket
+	return s.writeReadDeck(ctx, own, opts, w)
 }
 
 func (s *Service) writeCardmarketDeck(ctx context.Context, entries []deck.DeckEntry, opts DeckExportOptions, w io.Writer) error {

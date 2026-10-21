@@ -25,15 +25,14 @@ type ReadDeck struct {
 	Mine bool
 	Deck Deck
 	// Entries are the owned and pending copies merged and ordered as by
-	// getDeckContent.
+	// readDeckContent.
 	Entries []DeckEntry
 	// Tags maps a CardNameKey to the sorted tags of that card (ADR-0006).
 	// Only cards in Entries appear.
 	Tags map[string][]string
 }
 
-// MainBoard returns the entries outside the sideboard and considering, in
-// Entries order.
+// MainBoard keeps the Entries order.
 func (r ReadDeck) MainBoard() []DeckEntry {
 	main := make([]DeckEntry, 0, len(r.Entries))
 	for _, e := range r.Entries {

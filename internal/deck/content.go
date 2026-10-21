@@ -68,20 +68,16 @@ func (e DeckEntry) IsCommander() bool {
 	return e.Slot != SlotNone
 }
 
-// getDeckContent returns the deck's owned and pending cards merged into
-// entries ordered commanders first (by slot), then by board (main, sideboard,
-// considering), name, set code, collector number, non-foil before foil and
-// real before proxy. Callers rely on this order.
-func (s *Service) getDeckContent(ctx context.Context, userID string, deckID string) (DeckContent, error) {
-	return readDeckContent(ctx, s.repo, userID, deckID)
-}
-
 type contentReader interface {
 	FindByID(ctx context.Context, userID string, id string) (Deck, error)
 	FindCardsByDeckID(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]DeckCard, error)
 	FindPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error)
 }
 
+// readDeckContent returns the deck's owned and pending cards merged into
+// entries ordered commanders first (by slot), then by board (main, sideboard,
+// considering), name, set code, collector number, non-foil before foil and
+// real before proxy. Callers rely on this order.
 func readDeckContent(ctx context.Context, r contentReader, userID string, deckID string) (DeckContent, error) {
 	d, err := r.FindByID(ctx, userID, deckID)
 	if err != nil {

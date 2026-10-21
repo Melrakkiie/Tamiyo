@@ -49,14 +49,6 @@ func CardNameKey(name string) string {
 	return strings.Join(strings.Fields(key), " ")
 }
 
-func (t DeckTags) ByCardName() map[string][]string {
-	byName := make(map[string][]string, len(t.Cards))
-	for _, c := range t.Cards {
-		byName[CardNameKey(c.Name)] = c.Tags
-	}
-	return byName
-}
-
 func cleanTag(raw string) (string, error) {
 	tag := strings.Join(strings.Fields(raw), " ")
 	if tag == "" || utf8.RuneCountInString(tag) > maxTagLength {
@@ -66,7 +58,7 @@ func cleanTag(raw string) (string, error) {
 }
 
 func (s *Service) deckCardNames(ctx context.Context, userID string, deckID string) (map[string]string, error) {
-	content, err := s.getDeckContent(ctx, userID, deckID)
+	content, err := readDeckContent(ctx, s.repo, userID, deckID)
 	if err != nil {
 		return nil, err
 	}

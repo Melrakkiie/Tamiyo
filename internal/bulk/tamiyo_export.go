@@ -106,13 +106,12 @@ func (s *Service) ExportTamiyoDeck(ctx context.Context, userID string, deckID st
 	if err != nil {
 		return err
 	}
-	return writeTamiyoDeck(w, own.Deck, own.Entries, withTags, own.Tags)
+	return s.writeReadDeck(ctx, own, DeckExportOptions{Format: DeckExportTamiyo, WithTags: withTags}, w)
 }
 
-// writeTamiyoDeck takes tags keyed by deck.CardNameKey.
-func writeTamiyoDeck(w io.Writer, d deck.Deck, entries []deck.DeckEntry, withTags bool, tags map[string][]string) error {
-	out := make([]tamiyoDeckCard, 0, len(entries))
-	for _, e := range entries {
+func writeTamiyoDeck(w io.Writer, read deck.ReadDeck, withTags bool) error {
+	out := make([]tamiyoDeckCard, 0, len(read.Entries))
+	for _, e := range read.Entries {
 		out = append(out, tamiyoDeckCard{
 			Name: e.Name, ScryfallID: e.ScryfallID, SetCode: e.SetCode, CollectorNumber: e.CollectorNumber,
 			Foil: e.Foil, Proxy: e.Proxy, Quantity: e.Quantity(), Board: e.Board, Commander: e.IsCommander(),
@@ -120,9 +119,9 @@ func writeTamiyoDeck(w io.Writer, d deck.Deck, entries []deck.DeckEntry, withTag
 	}
 
 	file := newTamiyoFile(TamiyoKindDeck)
-	file.Deck = &tamiyoDeckInfo{Name: d.Name, Format: d.Format}
+	file.Deck = &tamiyoDeckInfo{Name: read.Deck.Name, Format: read.Deck.Format}
 	if withTags {
-		file.Tags = tamiyoTags(entries, tags)
+		file.Tags = tamiyoTags(read.Entries, read.Tags)
 	}
 	return writeTamiyoFile(w, file, out)
 }
