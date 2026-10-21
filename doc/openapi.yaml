@@ -2908,16 +2908,17 @@ paths:
       tags: [deck-insights]
       summary: List the combos a deck holds
       description: >
-        Looks the deck's combos up on Commander Spellbook (find-my-combos)
-        on each call: only combos whose every card is in the main board,
-        with any card the combo needs as commander set as the deck's
+        Looks the deck's combos up on Commander Spellbook (find-my-combos);
+        the answer for an identical list of cards is cached in memory for
+        24 hours per instance. Only combos whose every card is in the main
+        board are listed, with any card the combo needs as commander set as the deck's
         commander or second commander. The main board is sent with its
         pending cards, each card once by its stored printing's name (both
         faces of a double-faced card), the commander and second commander
         apart; cards without a stored printing are left out. A deck with
         an empty main board answers an empty list without calling
-        Commander Spellbook. A rate-limited call is retried once; the call
-        times out after about 10 seconds.
+        Commander Spellbook. Each call times out after 10 seconds; a 429 is
+        retried once after a short wait.
       responses:
         "200":
           description: OK
