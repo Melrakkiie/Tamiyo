@@ -555,6 +555,47 @@ func TestHandler_UpdateDeck_RejectsInvalidBackgroundScryfallID(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestHandler_UpdateDeck_ReturnsBackgroundFace(t *testing.T) {
+	background := "436d6a84-4cea-4ca7-94aa-9d08280652af"
+	service := &fakeService{updateDeck: Deck{ID: "00000000-0000-0000-0000-000000000001", Name: "Deck", Format: "commander", BackgroundScryfallID: &background, BackgroundFace: FaceBack}}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodPatch, "/deck/00000000-0000-0000-0000-000000000001", bytes.NewBufferString(`{"background_scryfall_id": "`+background+`", "background_face": "back"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, service.lastUpdateRequest.BackgroundFace)
+	assert.Equal(t, FaceBack, *service.lastUpdateRequest.BackgroundFace)
+	var response deckResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	assert.Equal(t, FaceBack, response.BackgroundFace)
+}
+
+func TestHandler_UpdateDeck_RejectsUnknownBackgroundFace(t *testing.T) {
+	router := setupRouter(&fakeService{})
+
+	req := httptest.NewRequest(http.MethodPatch, "/deck/00000000-0000-0000-0000-000000000001", bytes.NewBufferString(`{"background_scryfall_id": "436d6a84-4cea-4ca7-94aa-9d08280652af", "background_face": "side"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_UpdateDeck_ReturnsBadRequestOnBackgroundFaceWithoutPrinting(t *testing.T) {
+	router := setupRouter(&fakeService{updateErr: ErrBackgroundFaceWithoutPrinting})
+
+	req := httptest.NewRequest(http.MethodPatch, "/deck/00000000-0000-0000-0000-000000000001", bytes.NewBufferString(`{"background_face": "back"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "background_face needs background_scryfall_id")
+}
+
 func TestHandler_UpdateDeck_ReturnsBadRequestOnInvalidID(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)

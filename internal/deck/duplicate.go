@@ -48,6 +48,7 @@ func (s *Service) DuplicateDeck(ctx context.Context, userID string, sourceID str
 		Visibility:           visibility,
 		Bracket:              source.Bracket,
 		BackgroundScryfallID: source.BackgroundScryfallID,
+		BackgroundFace:       source.BackgroundFace,
 	}, func(store CompositionStore, created Deck) error {
 		content, err := readDeckContent(ctx, store, ownerID, sourceID)
 		if err != nil {

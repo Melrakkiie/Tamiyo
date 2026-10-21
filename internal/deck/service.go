@@ -27,6 +27,10 @@ func (s *Service) CreateDeck(ctx context.Context, userID string, d Deck) (Deck, 
 }
 
 func (s *Service) UpdateDeck(ctx context.Context, userID string, id string, req updateDeckRequest) (Deck, error) {
+	if req.BackgroundFace != nil && req.BackgroundScryfallID == nil {
+		return Deck{}, ErrBackgroundFaceWithoutPrinting
+	}
+
 	existing, err := s.repo.FindByID(ctx, userID, id)
 	if err != nil {
 		return Deck{}, err

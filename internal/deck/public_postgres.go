@@ -17,6 +17,7 @@ type publicDeckRow struct {
 	Format               string         `db:"format"`
 	Bracket              *int           `db:"bracket"`
 	BackgroundScryfallID *string        `db:"background_scryfall_id"`
+	BackgroundFace       string         `db:"background_face"`
 	CommanderScryfallID  *string        `db:"commander_scryfall_id"`
 	CommanderName        *string        `db:"commander_name"`
 	PartnerScryfallID    *string        `db:"partner_scryfall_id"`
@@ -36,7 +37,7 @@ const identityLettersSQL = `ARRAY(SELECT DISTINCT letter FROM regexp_split_to_ta
 
 const publicDecksSQL = `
 	WITH base AS (
-		SELECT d.id, d.user_id, d.name, d.format, d.bracket, d.background_scryfall_id, d.added, d.updated,
+		SELECT d.id, d.user_id, d.name, d.format, d.bracket, d.background_scryfall_id, d.background_face, d.added, d.updated,
 			u.display_name, u.avatar_scryfall_id,
 			coalesce(cc.scryfall_id, cp.scryfall_id) AS commander_scryfall_id,
 			coalesce(cc.name, cp.name) AS commander_name,
@@ -72,7 +73,7 @@ const publicDecksSQL = `
 			END AS identity
 		FROM base
 	)
-	SELECT id, user_id, name, format, bracket, background_scryfall_id, added, updated, display_name, avatar_scryfall_id,
+	SELECT id, user_id, name, format, bracket, background_scryfall_id, background_face, added, updated, display_name, avatar_scryfall_id,
 		commander_scryfall_id, commander_name, partner_scryfall_id, partner_name, card_count, likes_count, liked_at, identity
 	FROM decks
 `
@@ -91,6 +92,7 @@ func toPublicDeck(row publicDeckRow) PublicDeck {
 		Format:               row.Format,
 		Bracket:              row.Bracket,
 		BackgroundScryfallID: row.BackgroundScryfallID,
+		BackgroundFace:       row.BackgroundFace,
 		CommanderScryfallID:  row.CommanderScryfallID,
 		CommanderName:        row.CommanderName,
 		PartnerScryfallID:    row.PartnerScryfallID,

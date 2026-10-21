@@ -37,6 +37,7 @@ type PublicDeck struct {
 	Format               string
 	Bracket              *int
 	BackgroundScryfallID *string
+	BackgroundFace       string
 	CommanderScryfallID  *string
 	CommanderName        *string
 	PartnerScryfallID    *string
