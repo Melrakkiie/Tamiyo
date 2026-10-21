@@ -195,12 +195,12 @@ func TestGetDeckStats_ACardWithoutAStoredPrintingCountsAsUnknown(t *testing.T) {
 	assert.Equal(t, 1, stats.ManaCurve[0].Count)
 }
 
-func TestGetDeckStats_UnknownDeckReturnsErrDeckNotFound(t *testing.T) {
+func TestGetDeckStats_UnknownDeckReturnsErrNotFound(t *testing.T) {
 	f := newInsightsFixture(t, "commander")
 
 	_, err := f.service().GetDeckStats(context.Background(), f.userID, "00000000-0000-0000-0000-000000000999")
 
-	assert.ErrorIs(t, err, ErrDeckNotFound)
+	assert.ErrorIs(t, err, deck.ErrNotFound)
 }
 
 func TestGetDeckStats_CountsPendingCardsWithTheirQuantities(t *testing.T) {

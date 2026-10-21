@@ -2,7 +2,6 @@ package deckinsights
 
 import "errors"
 
-var ErrDeckNotFound = errors.New("deck does not exist")
 var ErrUnknownFormat = errors.New("deck format is not a format scryfall recognizes")
 
 type LegalityIssue struct {
