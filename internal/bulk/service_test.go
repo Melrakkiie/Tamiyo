@@ -184,6 +184,9 @@ type fakeDeckService struct {
 
 	owners map[string]string
 
+	reads   []deckRead
+	readErr error
+
 	placed       []placedPlan
 	placeSummary *deck.PlacementSummary
 	placeErr     error
@@ -233,19 +236,33 @@ func (f *fakeDeckService) GetSharedDeck(ctx context.Context, id string) (string,
 	return "", deck.Deck{}, deck.ErrNotFound
 }
 
-func (f *fakeDeckService) GetVisibleDeck(ctx context.Context, userID string, id string) (deck.VisibleDeck, error) {
-	d, err := f.GetDeck(ctx, userID, id)
-	if err == nil {
-		return deck.VisibleDeck{OwnerID: userID, Deck: d, Mine: true}, nil
+type deckRead struct {
+	viewerID string
+	deckID   string
+	reach    deck.Reach
+}
+
+// ReadDeck records the read and returns the fixture deck whatever the reach:
+// a deck with no entry in owners is the viewer's, any other someone else's.
+func (f *fakeDeckService) ReadDeck(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (deck.ReadDeck, error) {
+	f.reads = append(f.reads, deckRead{viewerID: viewerID, deckID: deckID, reach: reach})
+	if f.readErr != nil {
+		return deck.ReadDeck{}, f.readErr
 	}
-	if !errors.Is(err, deck.ErrNotFound) {
-		return deck.VisibleDeck{}, err
+	for _, d := range f.decks {
+		if d.ID != deckID {
+			continue
+		}
+		ownerID := f.owners[deckID]
+		if ownerID == "" {
+			ownerID = viewerID
+		}
+		return deck.ReadDeck{
+			OwnerID: ownerID, Mine: f.owners[deckID] == "", Deck: d,
+			Entries: f.entries[deckID], Tags: f.tags.ByCardName(),
+		}, nil
 	}
-	ownerID, shared, err := f.GetSharedDeck(ctx, id)
-	if err != nil {
-		return deck.VisibleDeck{}, err
-	}
-	return deck.VisibleDeck{OwnerID: ownerID, Deck: shared}, nil
+	return deck.ReadDeck{}, deck.ErrNotFound
 }
 
 func (f *fakeDeckService) GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error) {
