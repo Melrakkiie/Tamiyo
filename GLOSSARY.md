@@ -27,3 +27,13 @@ _Avoid_: Turned card, reversed card
 **Deck art**:
 The art of one face of one printing, chosen to represent a deck; the commander's front face when the owner chose none.
 _Avoid_: Deck image, background, cover
+
+### Deck statistics
+
+**Total mana value**:
+The sum of the mana values of the main board's nonland cards, each counted once per copy. Shown as "Coût de mana total" in the interface.
+_Avoid_: Total mana cost, total CMC
+
+**Combo**:
+A set of cards that together produce a notable result (an infinite loop, a win), as listed by Commander Spellbook. A deck has a combo only when every one of its cards is in the main board, with any card the combo needs as commander set as the deck's commander.
+_Avoid_: Synergy, interaction, almost-combo
