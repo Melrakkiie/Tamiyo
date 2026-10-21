@@ -210,7 +210,7 @@ func tamiyoDeckFixture() *fakeDeckService {
 			{Name: "Duress", ScryfallID: duressM19, SetCode: "m19", CollectorNumber: "94", Board: deck.BoardSideboard, OwnedCardIDs: []int{4}},
 			{Name: "Duress", ScryfallID: duressM19, SetCode: "m19", CollectorNumber: "94", Foil: true, Board: deck.BoardConsidering, Pending: []deck.PendingPart{{ID: 9, Quantity: 1}}},
 		}},
-		tags: deck.DeckTags{Tags: []string{"Pioche", "Ramp"}, Cards: []deck.TaggedCard{{Name: "Sol Ring", Tags: []string{"Ramp"}}}},
+		tags: map[string][]string{"sol ring": {"Ramp"}},
 	}
 }
 

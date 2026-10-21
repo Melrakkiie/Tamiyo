@@ -157,7 +157,7 @@ type duplication struct {
 }
 
 type fakeDeckService struct {
-	tags deck.DeckTags
+	tags map[string][]string
 
 	decks       []deck.Deck
 	nextID      int
@@ -252,7 +252,7 @@ func (f *fakeDeckService) ReadDeck(ctx context.Context, viewerID string, deckID 
 		}
 		return deck.ReadDeck{
 			OwnerID: ownerID, Mine: ownerID == viewerID, Deck: d,
-			Entries: f.entries[deckID], Tags: f.tags.ByCardName(),
+			Entries: f.entries[deckID], Tags: f.tags,
 		}, nil
 	}
 	return deck.ReadDeck{}, deck.ErrNotFound
