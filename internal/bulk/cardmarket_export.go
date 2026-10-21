@@ -2,7 +2,6 @@ package bulk
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -56,19 +55,11 @@ func (s *Service) ExportCardmarketDeck(ctx context.Context, userID string, deckI
 		return err
 	}
 
-	d, err := s.decks.GetDeck(ctx, userID, deckID)
-	if err != nil {
-		if errors.Is(err, deck.ErrNotFound) {
-			return ErrDeckNotFound
-		}
-		return err
-	}
-
-	entries, err := s.entriesInBoards(ctx, userID, d.ID, boards)
+	own, err := s.decks.ReadDeck(ctx, userID, deckID, deck.ReachOwn)
 	if err != nil {
 		return err
 	}
-	return s.writeCardmarketDeck(ctx, entries, opts, w)
+	return s.writeCardmarketDeck(ctx, deck.EntriesInBoards(own.Entries, boardList(boards)), opts, w)
 }
 
 func (s *Service) writeCardmarketDeck(ctx context.Context, entries []deck.DeckEntry, opts DeckExportOptions, w io.Writer) error {

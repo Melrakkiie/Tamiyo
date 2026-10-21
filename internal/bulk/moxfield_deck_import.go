@@ -3,7 +3,6 @@ package bulk
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -98,9 +97,6 @@ func placementLines(lines []moxfieldDeckLine, resolved map[string]ResolvedCard) 
 func (s *Service) placeLines(ctx context.Context, userID string, deckID string, plan deck.PlacementPlan, summary *Summary) error {
 	placed, err := s.decks.PlaceCards(ctx, userID, deckID, plan)
 	if err != nil {
-		if errors.Is(err, deck.ErrNotFound) {
-			return ErrDeckNotFound
-		}
 		return err
 	}
 	summary.CardsLinked += placed.CardsLinked
@@ -140,9 +136,6 @@ func lineTags(lines []moxfieldDeckLine, resolved map[string]ResolvedCard) []deck
 
 func (s *Service) ImportIntoDeck(ctx context.Context, userID string, deckID string, opts DeckImportOptions, r io.Reader) (Summary, error) {
 	if _, err := s.decks.GetDeck(ctx, userID, deckID); err != nil {
-		if errors.Is(err, deck.ErrNotFound) {
-			return Summary{}, ErrDeckNotFound
-		}
 		return Summary{}, err
 	}
 

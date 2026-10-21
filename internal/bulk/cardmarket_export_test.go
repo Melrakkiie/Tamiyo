@@ -78,8 +78,20 @@ func TestExportCardmarketDeck_Errors(t *testing.T) {
 	err := svc.ExportCardmarketDeck(context.Background(), testUserID, fixtureDeckID, DeckExportOptions{Printings: true}, &bytes.Buffer{})
 	assert.ErrorIs(t, err, ErrScryfallUnavailable)
 
-	err = svc.ExportCardmarketDeck(context.Background(), testUserID, "00000000-0000-0000-0000-000000000099", DeckExportOptions{}, &bytes.Buffer{})
-	assert.ErrorIs(t, err, ErrDeckNotFound)
+	decks := tamiyoDeckFixture()
+	decks.readErr = deck.ErrNotFound
+	svc = NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+	err = svc.ExportCardmarketDeck(context.Background(), testUserID, fixtureDeckID, DeckExportOptions{}, &bytes.Buffer{})
+	assert.ErrorIs(t, err, deck.ErrNotFound)
+}
+
+func TestExportCardmarketDeck_ReadsTheViewersOwnDeck(t *testing.T) {
+	decks := tamiyoDeckFixture()
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+
+	require.NoError(t, svc.ExportCardmarketDeck(context.Background(), testUserID, fixtureDeckID, DeckExportOptions{}, &bytes.Buffer{}))
+
+	assert.Equal(t, []deckRead{{viewerID: testUserID, deckID: fixtureDeckID, reach: deck.ReachOwn}}, decks.reads)
 }
 
 func TestExportSharedDeck_Cardmarket(t *testing.T) {

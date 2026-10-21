@@ -53,7 +53,6 @@ type storageService interface {
 type deckService interface {
 	GetAllDecks(ctx context.Context, userID string, filter deck.Filter) ([]deck.Deck, int, error)
 	GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error)
-	GetDeckContent(ctx context.Context, userID string, deckID string) (deck.DeckContent, error)
 	ReadDeck(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (deck.ReadDeck, error)
 	CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error)
 	DuplicateDeck(ctx context.Context, userID string, sourceID string, req deck.DuplicateRequest) (deck.DuplicateResult, error)
@@ -62,7 +61,6 @@ type deckService interface {
 	PlaceCards(ctx context.Context, userID string, deckID string, plan deck.PlacementPlan) (deck.PlacementSummary, error)
 	CollectOwnDeck(ctx context.Context, userID string, deckID string, req deck.OwnDeckCollect) (deck.CollectSummary, error)
 	CollectSharedDeck(ctx context.Context, userID string, deckID string, req deck.SharedDeckCollect) (deck.CollectSummary, error)
-	GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error)
 }
 
 type Service struct {

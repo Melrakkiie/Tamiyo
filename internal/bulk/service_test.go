@@ -165,7 +165,6 @@ type fakeDeckService struct {
 	linkedCards map[string][]int
 
 	cardsByDeck   map[string][]deck.DeckCard
-	getDeckErr    error
 	createDeckErr error
 
 	duplicated      []duplication
@@ -174,7 +173,6 @@ type fakeDeckService struct {
 
 	pending        []deck.PendingCard
 	entries        map[string][]deck.DeckEntry
-	getContentErr  error
 	ownCollects    []deck.OwnDeckCollect
 	sharedCollects []deck.SharedDeckCollect
 	collectResult  deck.CollectSummary
@@ -233,8 +231,9 @@ type deckRead struct {
 	reach    deck.Reach
 }
 
-// ReadDeck records the read and returns the fixture deck whatever the reach:
-// a deck with no entry in owners is the viewer's, any other someone else's.
+// ReadDeck records the read and returns the fixture deck: a deck with no
+// entry in owners is the viewer's, any other someone else's and shared, so
+// only the own reach misses it.
 func (f *fakeDeckService) ReadDeck(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (deck.ReadDeck, error) {
 	f.reads = append(f.reads, deckRead{viewerID: viewerID, deckID: deckID, reach: reach})
 	if f.readErr != nil {
@@ -244,20 +243,19 @@ func (f *fakeDeckService) ReadDeck(ctx context.Context, viewerID string, deckID 
 		if d.ID != deckID {
 			continue
 		}
+		if reach == deck.ReachOwn && f.owners[deckID] != "" && f.owners[deckID] != viewerID {
+			return deck.ReadDeck{}, deck.ErrNotFound
+		}
 		ownerID := f.owners[deckID]
 		if ownerID == "" {
 			ownerID = viewerID
 		}
 		return deck.ReadDeck{
-			OwnerID: ownerID, Mine: f.owners[deckID] == "", Deck: d,
+			OwnerID: ownerID, Mine: ownerID == viewerID, Deck: d,
 			Entries: f.entries[deckID], Tags: f.tags.ByCardName(),
 		}, nil
 	}
 	return deck.ReadDeck{}, deck.ErrNotFound
-}
-
-func (f *fakeDeckService) GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error) {
-	return f.tags, nil
 }
 
 func (f *fakeDeckService) CollectOwnDeck(ctx context.Context, userID string, deckID string, req deck.OwnDeckCollect) (deck.CollectSummary, error) {
@@ -281,9 +279,6 @@ func (f *fakeDeckService) GetAllDecks(ctx context.Context, userID string, filter
 }
 
 func (f *fakeDeckService) GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error) {
-	if f.getDeckErr != nil {
-		return deck.Deck{}, f.getDeckErr
-	}
 	if owner := f.owners[id]; owner != "" && owner != userID {
 		return deck.Deck{}, deck.ErrNotFound
 	}
@@ -297,17 +292,6 @@ func (f *fakeDeckService) GetDeck(ctx context.Context, userID string, id string)
 
 func (f *fakeDeckService) GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error) {
 	return f.cardsByDeck[id], nil
-}
-
-func (f *fakeDeckService) GetDeckContent(ctx context.Context, userID string, deckID string) (deck.DeckContent, error) {
-	d, err := f.GetDeck(ctx, userID, deckID)
-	if err != nil {
-		return deck.DeckContent{}, err
-	}
-	if f.getContentErr != nil {
-		return deck.DeckContent{}, f.getContentErr
-	}
-	return deck.DeckContent{Deck: d, Entries: f.entries[deckID]}, nil
 }
 
 func (f *fakeDeckService) CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error) {
@@ -842,7 +826,7 @@ func TestImportIntoDeck_ReturnsDeckNotFound(t *testing.T) {
 
 	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader("1 Sol Ring\n"))
 
-	assert.ErrorIs(t, err, ErrDeckNotFound)
+	assert.ErrorIs(t, err, deck.ErrNotFound)
 }
 
 func TestImportIntoDeck_ReturnsErrorWhenScryfallResolveFails(t *testing.T) {
@@ -871,7 +855,7 @@ func TestImportIntoDeck_ReturnsDeckNotFoundWhenTheDeckGoesAwayWhilePlacing(t *te
 
 	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader("1 Sol Ring (SLD) 1011\n"))
 
-	assert.ErrorIs(t, err, ErrDeckNotFound)
+	assert.ErrorIs(t, err, deck.ErrNotFound)
 }
 
 func TestImportManaBox_StoresColorsAndTypeFromScryfall(t *testing.T) {

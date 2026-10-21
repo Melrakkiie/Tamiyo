@@ -2,7 +2,6 @@ package bulk
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -103,22 +102,11 @@ func (s *Service) ExportTamiyoCollection(ctx context.Context, userID string, sto
 }
 
 func (s *Service) ExportTamiyoDeck(ctx context.Context, userID string, deckID string, withTags bool, w io.Writer) error {
-	content, err := s.decks.GetDeckContent(ctx, userID, deckID)
+	own, err := s.decks.ReadDeck(ctx, userID, deckID, deck.ReachOwn)
 	if err != nil {
-		if errors.Is(err, deck.ErrNotFound) {
-			return ErrDeckNotFound
-		}
-		return fmt.Errorf("loading deck content: %w", err)
+		return err
 	}
-	var tags map[string][]string
-	if withTags {
-		deckTags, err := s.decks.GetCardTags(ctx, userID, content.Deck.ID)
-		if err != nil {
-			return fmt.Errorf("loading tags: %w", err)
-		}
-		tags = deckTags.ByCardName()
-	}
-	return writeTamiyoDeck(w, content.Deck, content.Entries, withTags, tags)
+	return writeTamiyoDeck(w, own.Deck, own.Entries, withTags, own.Tags)
 }
 
 // writeTamiyoDeck takes tags keyed by deck.CardNameKey.
