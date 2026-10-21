@@ -63,6 +63,7 @@ func computeStats(entries []deck.DeckEntry, printings map[string]Printing) DeckS
 	}
 
 	stats.NonlandCount = nonlandCount
+	stats.TotalManaValue = totalManaValue
 	if nonlandCount > 0 {
 		stats.AverageManaValue = totalManaValue / float64(nonlandCount)
 	}
