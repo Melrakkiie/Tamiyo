@@ -33,6 +33,7 @@ type userService interface {
 type insightsService interface {
 	GetDeckLegality(ctx context.Context, userID string, deckID string) (deckinsights.LegalityReport, error)
 	GetDeckStats(ctx context.Context, userID string, deckID string) (deckinsights.DeckStats, error)
+	GetDeckCombos(ctx context.Context, userID string, deckID string) (deckinsights.DeckCombos, error)
 }
 
 type Owner struct {
@@ -161,6 +162,14 @@ func (s *Service) GetSharedDeckStats(ctx context.Context, deckID string) (deckin
 		return deckinsights.DeckStats{}, err
 	}
 	return s.insights.GetDeckStats(ctx, ownerID, d.ID)
+}
+
+func (s *Service) GetSharedDeckCombos(ctx context.Context, deckID string) (deckinsights.DeckCombos, error) {
+	ownerID, d, err := s.resolve(ctx, deckID)
+	if err != nil {
+		return deckinsights.DeckCombos{}, err
+	}
+	return s.insights.GetDeckCombos(ctx, ownerID, d.ID)
 }
 
 func sharedCard(e deck.DeckEntry, tags []string) Card {
