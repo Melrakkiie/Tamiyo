@@ -208,7 +208,7 @@ Three read-only, player-facing routes analyze a deck — nothing persisted, comp
 
 - `GET /deck/:id/legality` — checks every card against the deck's own format; for `commander` specifically, also checks singleton (one copy per card name, basic lands excepted), color identity against the deck's commanders (the union of both identities with a second commander), and that the two commanders can be paired (Partner, Partner with, Friends forever, Choose a Background, Doctor's companion…).
 - `GET /deck/:id/stats` — total mana value, mana curve, color breakdown and card types (lands excluded from the curve/colors/average, since they skew every one of those without adding anything), and the main board's value.
-- `GET /deck/:id/combos` — the combos the main board holds, looked up on Commander Spellbook's `find-my-combos` by the API (its CORS policy rules out a browser call, see [ADR 0010](./docs/adr/0010-commander-spellbook-is-called-by-the-api.md); client in [`internal/commanderspellbook`](./internal/commanderspellbook)), each with its cards, results and commanderspellbook.com link; `502` when Commander Spellbook is unavailable.
+- `GET /deck/:id/combos` — the combos the main board holds, looked up on Commander Spellbook's `find-my-combos` by the API (its CORS policy rules out a browser call, see [ADR 0011](./docs/adr/0011-commander-spellbook-is-called-by-the-api.md); client in [`internal/commanderspellbook`](./internal/commanderspellbook)), each with its cards, results and commanderspellbook.com link; `502` when Commander Spellbook is unavailable.
 
 See [`doc/API.md`](./doc/API.md#deck-insights) for the exact response shapes and known limitations (e.g. no named singleton exceptions like Relentless Rats).
 

@@ -1,5 +1,5 @@
 // Package commanderspellbook finds the combos a deck holds through Commander
-// Spellbook's find-my-combos endpoint (ADR 0010).
+// Spellbook's find-my-combos endpoint (ADR 0011).
 package commanderspellbook
 
 import (
@@ -9,11 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 )
 
 const (
 	findMyCombosURL = "https://backend.commanderspellbook.com/find-my-combos"
+	comboPageURL    = "https://commanderspellbook.com/combo/"
 	userAgent       = "Tamiyo/1.0 (+https://github.com/Melrakkiie/Tamiyo)"
 	requestTimeout  = 10 * time.Second
 	retryDelay      = 1 * time.Second
@@ -26,6 +28,11 @@ type Combo struct {
 	ID      string
 	Cards   []string
 	Results []string
+}
+
+// URL is the combo's page on commanderspellbook.com.
+func (c Combo) URL() string {
+	return comboPageURL + url.PathEscape(c.ID) + "/"
 }
 
 // Client calls Commander Spellbook. Its zero value is not usable; build one
@@ -89,7 +96,6 @@ func (c *Client) fetch(ctx context.Context, commanders []string, main []string) 
 		return nil, fmt.Errorf("encoding find-my-combos request: %w", err)
 	}
 
-	// A 429 is retried once, after a short wait; anything else fails at once.
 	for attempt := 0; ; attempt++ {
 		combos, err := c.post(ctx, payload)
 		if !errors.Is(err, errRateLimited) || attempt == maxRetries {
@@ -113,6 +119,9 @@ func (c *Client) post(ctx context.Context, payload []byte) ([]Combo, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", userAgent)
+	// Accept-Encoding is deliberately not set: Go's transport then asks for
+	// gzip itself and decodes the answer, and setting it by hand would turn
+	// that transparent decompression off.
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
