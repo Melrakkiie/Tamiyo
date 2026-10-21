@@ -35,11 +35,29 @@ func (s *Service) ExportDeck(ctx context.Context, userID string, deckID string, 
 	if err != nil {
 		return err
 	}
-	var tags map[string][]string
-	if opts.WithTags {
-		tags = own.Tags
+	return s.writeReadDeck(ctx, own, opts, w)
+}
+
+// writeReadDeck writes a read deck in opts.Format for both the own and the
+// shared exports. The cardmarket boards are validated after the read here,
+// so the own export also validates them before its read.
+func (s *Service) writeReadDeck(ctx context.Context, read deck.ReadDeck, opts DeckExportOptions, w io.Writer) error {
+	switch opts.Format {
+	case DeckExportTamiyo:
+		return writeTamiyoDeck(w, read, opts.WithTags)
+	case DeckExportCardmarket:
+		boards, err := cardmarketBoards(opts)
+		if err != nil {
+			return err
+		}
+		return s.writeCardmarketDeck(ctx, deck.EntriesInBoards(read.Entries, boardList(boards)), opts, w)
+	default:
+		var tags map[string][]string
+		if opts.WithTags {
+			tags = read.Tags
+		}
+		return writeTextDeck(w, opts.Format, read.Entries, tags)
 	}
-	return writeTextDeck(w, format, own.Entries, tags)
 }
 
 // writeTextDeck writes a moxfield, plain or arena list; only moxfield shows
@@ -64,23 +82,7 @@ func (s *Service) ExportSharedDeck(ctx context.Context, deckID string, opts Deck
 	if err != nil {
 		return err
 	}
-	var tags map[string][]string
-	if opts.WithTags {
-		tags = shared.Tags
-	}
-
-	switch opts.Format {
-	case DeckExportTamiyo:
-		return writeTamiyoDeck(w, shared.Deck, shared.Entries, opts.WithTags, tags)
-	case DeckExportCardmarket:
-		boards, err := cardmarketBoards(opts)
-		if err != nil {
-			return err
-		}
-		return s.writeCardmarketDeck(ctx, deck.EntriesInBoards(shared.Entries, boardList(boards)), opts, w)
-	default:
-		return writeTextDeck(w, opts.Format, shared.Entries, tags)
-	}
+	return s.writeReadDeck(ctx, shared, opts, w)
 }
 
 func splitByBoard(entries []deck.DeckEntry) deckExportBoards {
