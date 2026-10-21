@@ -17,27 +17,23 @@ const ownerID = "11111111-1111-1111-1111-111111111111"
 const deckID = "22222222-2222-2222-2222-222222222222"
 
 type fakeDecks struct {
-	ownerID   string
-	deck      deck.Deck
-	sharedErr error
-	entries   []deck.DeckEntry
-	tags      deck.DeckTags
-	tagsErr   error
+	read    deck.ReadDeck
+	readErr error
 
-	lastShareID string
-	lastUserID  string
-	lastDeckID  string
+	lastReadID string
+	lastReach  deck.Reach
 
 	publicDecks      []deck.PublicDeck
 	lastPublicFilter deck.PublicFilter
 }
 
-func (f *fakeDecks) GetSharedDeck(ctx context.Context, deckID string) (string, deck.Deck, error) {
-	f.lastShareID = deckID
-	if f.sharedErr != nil {
-		return "", deck.Deck{}, f.sharedErr
+func (f *fakeDecks) ReadDeck(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (deck.ReadDeck, error) {
+	f.lastReadID = deckID
+	f.lastReach = reach
+	if f.readErr != nil {
+		return deck.ReadDeck{}, f.readErr
 	}
-	return f.ownerID, f.deck, nil
+	return f.read, nil
 }
 
 func (f *fakeDecks) CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error) {
@@ -49,8 +45,12 @@ func (f *fakeDecks) BrowsePublicDecks(ctx context.Context, filter deck.PublicFil
 	return f.publicDecks, len(f.publicDecks), nil
 }
 
+func (f *fakeDecks) GetSharedDeck(ctx context.Context, deckID string) (string, deck.Deck, error) {
+	return "", deck.Deck{}, deck.ErrNotFound
+}
+
 func (f *fakeDecks) GetCardTags(ctx context.Context, userID string, deckID string) (deck.DeckTags, error) {
-	return f.tags, f.tagsErr
+	return deck.DeckTags{}, nil
 }
 
 func (f *fakeDecks) GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error) {
@@ -58,9 +58,7 @@ func (f *fakeDecks) GetDeck(ctx context.Context, userID string, id string) (deck
 }
 
 func (f *fakeDecks) GetDeckContent(ctx context.Context, userID string, deckID string) (deck.DeckContent, error) {
-	f.lastUserID = userID
-	f.lastDeckID = deckID
-	return deck.DeckContent{Deck: f.deck, Entries: f.entries}, nil
+	return deck.DeckContent{}, nil
 }
 
 type fakeUsers struct {
@@ -102,30 +100,37 @@ func (f *fakeInsights) GetDeckCombos(ctx context.Context, userID string, deckID 
 	return f.combos, f.err
 }
 
-func TestService_GetSharedDeckCombos_ComputesAsTheOwner(t *testing.T) {
+func sharedRead() deck.ReadDeck {
+	return deck.ReadDeck{OwnerID: ownerID, Deck: deck.Deck{ID: deckID, Name: "Otters"}}
+}
+
+func TestService_GetSharedDeckCombos_ComputesTheSharedDeckAsItsOwner(t *testing.T) {
+	decks := &fakeDecks{read: sharedRead()}
 	insights := &fakeInsights{combos: deckinsights.DeckCombos{Combos: []deckinsights.Combo{{ID: "1-2"}}}}
-	service := newService(&fakeDecks{ownerID: ownerID, deck: deck.Deck{ID: "00000000-0000-0000-0000-000000000009"}}, insights)
+	service := newService(decks, insights)
 
 	combos, err := service.GetSharedDeckCombos(context.Background(), deckID)
 
 	require.NoError(t, err)
 	require.Len(t, combos.Combos, 1)
+	assert.Equal(t, deck.ReachShared, decks.lastReach)
+	assert.Equal(t, deckID, decks.lastReadID)
 	assert.Equal(t, ownerID, insights.lastUserID)
-	assert.Equal(t, "00000000-0000-0000-0000-000000000009", insights.lastDeckID)
+	assert.Equal(t, deckID, insights.lastDeckID)
 }
 
-func TestService_GetSharedDeckCombos_DoesNotComputeForAHiddenDeck(t *testing.T) {
+func TestService_GetSharedDeckCombos_DoesNotComputeForADeckOutOfReach(t *testing.T) {
 	insights := &fakeInsights{}
-	service := newService(&fakeDecks{sharedErr: deck.ErrNotFound}, insights)
+	service := newService(&fakeDecks{readErr: deck.ErrNotFound}, insights)
 
 	_, err := service.GetSharedDeckCombos(context.Background(), deckID)
 
-	assert.ErrorIs(t, err, ErrNotFound)
+	assert.ErrorIs(t, err, deck.ErrNotFound)
 	assert.Empty(t, insights.lastUserID)
 }
 
 func TestService_GetSharedDeckCombos_PropagatesInsightErrors(t *testing.T) {
-	service := newService(&fakeDecks{ownerID: ownerID, deck: deck.Deck{ID: "00000000-0000-0000-0000-000000000009"}}, &fakeInsights{err: deckinsights.ErrCombosUnavailable})
+	service := newService(&fakeDecks{read: sharedRead()}, &fakeInsights{err: deckinsights.ErrCombosUnavailable})
 
 	_, err := service.GetSharedDeckCombos(context.Background(), deckID)
 
@@ -142,42 +147,29 @@ func newService(decks *fakeDecks, insights *fakeInsights) *Service {
 	return NewService(decks, users, insights)
 }
 
-func TestService_GetSharedDeck_LoadsCardsAsTheOwner(t *testing.T) {
-	decks := &fakeDecks{ownerID: ownerID, deck: deck.Deck{ID: "00000000-0000-0000-0000-000000000009", Name: "Otters"}}
+func TestService_GetSharedDeck_ReadsTheSharedDeckWithItsOwnersProfile(t *testing.T) {
+	decks := &fakeDecks{read: sharedRead()}
 	service := newService(decks, &fakeInsights{})
 
 	shared, err := service.GetSharedDeck(context.Background(), deckID)
 
 	require.NoError(t, err)
-
-	assert.Equal(t, deckID, decks.lastShareID)
-	assert.Equal(t, ownerID, decks.lastUserID)
-	assert.Equal(t, "00000000-0000-0000-0000-000000000009", decks.lastDeckID)
+	assert.Equal(t, deck.ReachShared, decks.lastReach)
+	assert.Equal(t, deckID, decks.lastReadID)
 	assert.Equal(t, "Otters", shared.Deck.Name)
 	assert.Equal(t, Owner{ID: ownerID, DisplayName: strPtr("Alice"), AvatarScryfallID: strPtr("art")}, shared.Owner)
 }
 
-func TestService_GetSharedDeck_MapsMissingDeckToErrNotFound(t *testing.T) {
-	service := newService(&fakeDecks{sharedErr: deck.ErrNotFound}, &fakeInsights{})
-
-	_, err := service.GetSharedDeck(context.Background(), deckID)
-
-	assert.ErrorIs(t, err, ErrNotFound)
-}
-
 func TestService_GetSharedDeck_ShowsEachDeckContentEntryAsOneCardSortedByName(t *testing.T) {
-	decks := &fakeDecks{
-		ownerID: ownerID,
-		deck:    deck.Deck{ID: "00000000-0000-0000-0000-000000000009"},
-		entries: []deck.DeckEntry{
-			{Name: "Tamiyo", ScryfallID: "t", SetCode: "neo", Board: deck.BoardMain, Slot: deck.SlotCommander, Pending: []deck.PendingPart{{ID: 8, Quantity: 1}}},
-			{Name: "Island", ScryfallID: "i", SetCode: "neo", Board: deck.BoardMain, OwnedCardIDs: []int{3}, Pending: []deck.PendingPart{{ID: 5, Quantity: 2}}},
-			{Name: "Island", ScryfallID: "i", SetCode: "neo", Board: deck.BoardMain, Proxy: true, OwnedCardIDs: []int{2}},
-			{Name: "Tamiyo", ScryfallID: "t", SetCode: "neo", Board: deck.BoardMain, OwnedCardIDs: []int{1}},
-			{Name: "Brainstorm", ScryfallID: "b", SetCode: "ice", Board: deck.BoardSideboard, Foil: true, Pending: []deck.PendingPart{{ID: 6, Quantity: 4}}, ManaValue: 1, Colors: strPtr("U"), CardType: strPtr("Instant"), ColorIdentity: strPtr("U")},
-		},
+	read := sharedRead()
+	read.Entries = []deck.DeckEntry{
+		{Name: "Tamiyo", ScryfallID: "t", SetCode: "neo", Board: deck.BoardMain, Slot: deck.SlotCommander, Pending: []deck.PendingPart{{ID: 8, Quantity: 1}}},
+		{Name: "Island", ScryfallID: "i", SetCode: "neo", Board: deck.BoardMain, OwnedCardIDs: []int{3}, Pending: []deck.PendingPart{{ID: 5, Quantity: 2}}},
+		{Name: "Island", ScryfallID: "i", SetCode: "neo", Board: deck.BoardMain, Proxy: true, OwnedCardIDs: []int{2}},
+		{Name: "Tamiyo", ScryfallID: "t", SetCode: "neo", Board: deck.BoardMain, OwnedCardIDs: []int{1}},
+		{Name: "Brainstorm", ScryfallID: "b", SetCode: "ice", Board: deck.BoardSideboard, Foil: true, Pending: []deck.PendingPart{{ID: 6, Quantity: 4}}, ManaValue: 1, Colors: strPtr("U"), CardType: strPtr("Instant"), ColorIdentity: strPtr("U")},
 	}
-	service := newService(decks, &fakeInsights{})
+	service := newService(&fakeDecks{read: read}, &fakeInsights{})
 
 	shared, err := service.GetSharedDeck(context.Background(), deckID)
 
@@ -192,21 +184,18 @@ func TestService_GetSharedDeck_ShowsEachDeckContentEntryAsOneCardSortedByName(t 
 }
 
 func TestService_GetSharedDeck_AddsEachCardsTagsWhateverThePrinting(t *testing.T) {
-	decks := &fakeDecks{
-		ownerID: ownerID,
-		deck:    deck.Deck{ID: "00000000-0000-0000-0000-000000000009"},
-		entries: []deck.DeckEntry{
-			{Name: "Island", ScryfallID: "i", SetCode: "neo", OwnedCardIDs: []int{1}},
-			{Name: "Island", ScryfallID: "i", SetCode: "neo", Foil: true, OwnedCardIDs: []int{2}},
-			{Name: "Fire // Ice", ScryfallID: "f", SetCode: "mh2", OwnedCardIDs: []int{3}},
-			{Name: "Brainstorm", ScryfallID: "b", SetCode: "ice", Pending: []deck.PendingPart{{ID: 6, Quantity: 1}}},
-		},
-		tags: deck.DeckTags{Cards: []deck.TaggedCard{
-			{Name: "Island", Tags: []string{"Terrain"}},
-			{Name: "Fire / Ice", Tags: []string{"Removal", "Pioche"}},
-		}},
+	read := sharedRead()
+	read.Entries = []deck.DeckEntry{
+		{Name: "Island", ScryfallID: "i", SetCode: "neo", OwnedCardIDs: []int{1}},
+		{Name: "Island", ScryfallID: "i", SetCode: "neo", Foil: true, OwnedCardIDs: []int{2}},
+		{Name: "Fire // Ice", ScryfallID: "f", SetCode: "mh2", OwnedCardIDs: []int{3}},
+		{Name: "Brainstorm", ScryfallID: "b", SetCode: "ice", Pending: []deck.PendingPart{{ID: 6, Quantity: 1}}},
 	}
-	service := newService(decks, &fakeInsights{})
+	read.Tags = map[string][]string{
+		"island":     {"Terrain"},
+		"fire / ice": {"Removal", "Pioche"},
+	}
+	service := newService(&fakeDecks{read: read}, &fakeInsights{})
 
 	shared, err := service.GetSharedDeck(context.Background(), deckID)
 
@@ -218,54 +207,58 @@ func TestService_GetSharedDeck_AddsEachCardsTagsWhateverThePrinting(t *testing.T
 	assert.Equal(t, []string{"Terrain"}, shared.Cards[3].Tags)
 }
 
-func TestService_GetSharedDeck_PropagatesTagErrors(t *testing.T) {
-	decks := &fakeDecks{ownerID: ownerID, deck: deck.Deck{ID: deckID}, tagsErr: errors.New("db is down")}
-	service := newService(decks, &fakeInsights{})
+func TestService_GetSharedDeck_PropagatesReadErrors(t *testing.T) {
+	boom := errors.New("db is down")
+	service := newService(&fakeDecks{readErr: boom}, &fakeInsights{})
 
 	_, err := service.GetSharedDeck(context.Background(), deckID)
 
-	require.Error(t, err)
+	assert.ErrorIs(t, err, boom)
 }
 
 func TestService_GetSharedDeckLegality_ChecksAsTheOwnerAndHidesCardIDs(t *testing.T) {
+	decks := &fakeDecks{read: sharedRead()}
 	insights := &fakeInsights{report: deckinsights.LegalityReport{
 		Format: "commander",
 		Issues: []deckinsights.LegalityIssue{{CardID: 12, CardName: "Black Lotus", Reason: "banned in commander"}},
 	}}
-	service := newService(&fakeDecks{ownerID: ownerID, deck: deck.Deck{ID: "00000000-0000-0000-0000-000000000009"}}, insights)
+	service := newService(decks, insights)
 
 	report, err := service.GetSharedDeckLegality(context.Background(), deckID)
 
 	require.NoError(t, err)
+	assert.Equal(t, deck.ReachShared, decks.lastReach)
 	assert.Equal(t, ownerID, insights.lastUserID)
-	assert.Equal(t, "00000000-0000-0000-0000-000000000009", insights.lastDeckID)
+	assert.Equal(t, deckID, insights.lastDeckID)
 	assert.Equal(t, []deckinsights.LegalityIssue{{CardName: "Black Lotus", Reason: "banned in commander"}}, report.Issues)
 }
 
-func TestService_GetSharedDeckStats_ComputesAsTheOwner(t *testing.T) {
+func TestService_GetSharedDeckStats_ComputesTheSharedDeckAsItsOwner(t *testing.T) {
+	decks := &fakeDecks{read: sharedRead()}
 	insights := &fakeInsights{stats: deckinsights.DeckStats{CardCount: 100}}
-	service := newService(&fakeDecks{ownerID: ownerID, deck: deck.Deck{ID: "00000000-0000-0000-0000-000000000009"}}, insights)
+	service := newService(decks, insights)
 
 	stats, err := service.GetSharedDeckStats(context.Background(), deckID)
 
 	require.NoError(t, err)
 	assert.Equal(t, 100, stats.CardCount)
+	assert.Equal(t, deck.ReachShared, decks.lastReach)
 	assert.Equal(t, ownerID, insights.lastUserID)
 }
 
-func TestService_GetSharedDeckStats_DoesNotComputeForAHiddenDeck(t *testing.T) {
+func TestService_GetSharedDeckStats_DoesNotComputeForADeckOutOfReach(t *testing.T) {
 	insights := &fakeInsights{}
-	service := newService(&fakeDecks{sharedErr: deck.ErrNotFound}, insights)
+	service := newService(&fakeDecks{readErr: deck.ErrNotFound}, insights)
 
 	_, err := service.GetSharedDeckStats(context.Background(), deckID)
 
-	assert.ErrorIs(t, err, ErrNotFound)
+	assert.ErrorIs(t, err, deck.ErrNotFound)
 	assert.Empty(t, insights.lastUserID)
 }
 
 func TestService_GetSharedDeckStats_PropagatesInsightErrors(t *testing.T) {
 	boom := errors.New("boom")
-	service := newService(&fakeDecks{ownerID: ownerID, deck: deck.Deck{ID: "00000000-0000-0000-0000-000000000009"}}, &fakeInsights{err: boom})
+	service := newService(&fakeDecks{read: sharedRead()}, &fakeInsights{err: boom})
 
 	_, err := service.GetSharedDeckStats(context.Background(), deckID)
 
