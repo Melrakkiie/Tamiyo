@@ -46,7 +46,7 @@ func (fakeStore) Printings(ctx context.Context, scryfallIDs []string) (map[strin
 // --- GetDeckLegality ------------------------------------------------------
 
 func TestGetDeckLegality_UnknownDeckReturnsErrDeckNotFound(t *testing.T) {
-	svc := NewService(&fakeDeckService{}, fakeStore{})
+	svc := NewService(&fakeDeckService{}, fakeStore{}, nil)
 
 	_, err := svc.GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000999")
 
@@ -56,7 +56,7 @@ func TestGetDeckLegality_UnknownDeckReturnsErrDeckNotFound(t *testing.T) {
 
 func TestGetDeckLegality_PropagatesADeckContentError(t *testing.T) {
 	boom := errors.New("db down")
-	svc := NewService(&fakeDeckService{err: boom}, fakeStore{})
+	svc := NewService(&fakeDeckService{err: boom}, fakeStore{}, nil)
 
 	_, err := svc.GetDeckLegality(context.Background(), testUserID, testDeckID)
 

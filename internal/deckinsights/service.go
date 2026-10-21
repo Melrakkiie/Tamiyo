@@ -26,12 +26,13 @@ type store interface {
 }
 
 type Service struct {
-	decks deckService
-	store store
+	decks  deckService
+	store  store
+	combos comboFinder
 }
 
-func NewService(decks deckService, store store) *Service {
-	return &Service{decks: decks, store: store}
+func NewService(decks deckService, store store, combos comboFinder) *Service {
+	return &Service{decks: decks, store: store, combos: combos}
 }
 
 func (s *Service) GetDeckLegality(ctx context.Context, userID string, deckID string) (LegalityReport, error) {
