@@ -58,7 +58,7 @@ func cleanTag(raw string) (string, error) {
 }
 
 func (s *Service) deckCardNames(ctx context.Context, userID string, deckID string) (map[string]string, error) {
-	content, err := s.getDeckContent(ctx, userID, deckID)
+	content, err := readDeckContent(ctx, s.repo, userID, deckID)
 	if err != nil {
 		return nil, err
 	}

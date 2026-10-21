@@ -25,7 +25,7 @@ type ReadDeck struct {
 	Mine bool
 	Deck Deck
 	// Entries are the owned and pending copies merged and ordered as by
-	// getDeckContent.
+	// readDeckContent.
 	Entries []DeckEntry
 	// Tags maps a CardNameKey to the sorted tags of that card (ADR-0006).
 	// Only cards in Entries appear.
