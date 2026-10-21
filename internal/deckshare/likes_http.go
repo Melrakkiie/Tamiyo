@@ -42,7 +42,6 @@ func (h *Handler) respondLike(ctx *gin.Context, change func(context.Context, str
 	status, err := change(ctx.Request.Context(), userID, deckID)
 	if err != nil {
 		apierr.Respond(ctx, err,
-			apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: deck.ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: ErrLikeOwnDeck, Status: http.StatusBadRequest},
 		)

@@ -2,7 +2,6 @@ package deckshare
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
 
@@ -10,8 +9,6 @@ import (
 	"Melrakkiie/Tamiyo/internal/deckinsights"
 	"Melrakkiie/Tamiyo/internal/user"
 )
-
-var ErrNotFound = errors.New("shared deck not found")
 
 type deckService interface {
 	ReadDeck(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (deck.ReadDeck, error)

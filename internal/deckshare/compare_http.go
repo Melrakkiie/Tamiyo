@@ -151,10 +151,7 @@ func (h *Handler) respondComparison(ctx *gin.Context, userID string, invalidIDSt
 
 	comparison, err := h.service.CompareDecks(ctx.Request.Context(), userID, deckID, otherID)
 	if err != nil {
-		apierr.Respond(ctx, err,
-			apierr.Mapping{Err: ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
-			apierr.Mapping{Err: deck.ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
-		)
+		apierr.Respond(ctx, err, apierr.Mapping{Err: deck.ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"})
 		return
 	}
 
