@@ -206,7 +206,7 @@ curl -X GET "localhost:8080/deck/<deck-id>/export?format=moxfield" \
 Two read-only, player-facing routes analyze a deck — nothing persisted, computed fresh from [Scryfall](https://scryfall.com/) data on every call (see [`internal/scryfall`](./internal/scryfall) for the shared client, also used by Bulk Import):
 
 - `GET /deck/:id/legality` — checks every card against the deck's own format; for `commander` specifically, also checks singleton (one copy per card name, basic lands excepted), color identity against the deck's commanders (the union of both identities with a second commander), and that the two commanders can be paired (Partner, Partner with, Friends forever, Choose a Background, Doctor's companion…).
-- `GET /deck/:id/stats` — mana curve, color breakdown and card types (lands excluded from the curve/colors/average, since they skew every one of those without adding anything), and the main board's value.
+- `GET /deck/:id/stats` — total mana value, mana curve, color breakdown and card types (lands excluded from the curve/colors/average, since they skew every one of those without adding anything), and the main board's value.
 
 See [`doc/API.md`](./doc/API.md#deck-insights) for the exact response shapes and known limitations (e.g. no named singleton exceptions like Relentless Rats).
 
