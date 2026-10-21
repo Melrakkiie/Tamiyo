@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -16,6 +17,7 @@ const (
 	userAgent       = "Tamiyo/1.0 (+https://github.com/Melrakkiie/Tamiyo)"
 	requestTimeout  = 10 * time.Second
 	retryDelay      = 1 * time.Second
+	maxRetries      = 1
 )
 
 // Combo is one combo Commander Spellbook lists for a deck: its id, the names
@@ -71,6 +73,23 @@ func (c *Client) fetch(ctx context.Context, commanders []string, main []string) 
 		return nil, fmt.Errorf("encoding find-my-combos request: %w", err)
 	}
 
+	// A 429 is retried once, after a short wait; anything else fails at once.
+	for attempt := 0; ; attempt++ {
+		combos, err := c.post(ctx, payload)
+		if !errors.Is(err, errRateLimited) || attempt == maxRetries {
+			return combos, err
+		}
+		select {
+		case <-time.After(c.retryDelay):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+}
+
+var errRateLimited = errors.New("commander spellbook rate limit reached")
+
+func (c *Client) post(ctx context.Context, payload []byte) ([]Combo, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("building find-my-combos request: %w", err)
@@ -84,6 +103,9 @@ func (c *Client) fetch(ctx context.Context, commanders []string, main []string) 
 		return nil, fmt.Errorf("calling commander spellbook: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, errRateLimited
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("commander spellbook returned status %d", resp.StatusCode)
 	}

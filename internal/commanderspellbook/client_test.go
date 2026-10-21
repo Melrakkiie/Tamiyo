@@ -96,3 +96,41 @@ func TestClient_ReturnsAnErrorOnAServerError(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, 1, requestCount)
 }
+
+func TestClient_RetriesOnceOn429ThenSucceeds(t *testing.T) {
+	var requestCount int
+	var bodies []string
+	client := withFakeSpellbook(t, func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		encoded, _ := json.Marshal(body)
+		bodies = append(bodies, string(encoded))
+		if requestCount == 1 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		_, _ = w.Write([]byte(`{"results": {"included": [{"id": "1-2", "uses": [], "produces": []}]}}`))
+	})
+
+	combos, err := client.FindCombos(context.Background(), nil, []string{"Curiosity"})
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, requestCount)
+	assert.Equal(t, bodies[0], bodies[1], "the retry resends the same deck")
+	require.Len(t, combos, 1)
+	assert.Equal(t, "1-2", combos[0].ID)
+}
+
+func TestClient_GivesUpAfterASecond429(t *testing.T) {
+	var requestCount int
+	client := withFakeSpellbook(t, func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.WriteHeader(http.StatusTooManyRequests)
+	})
+
+	_, err := client.FindCombos(context.Background(), nil, []string{"Curiosity"})
+
+	require.Error(t, err)
+	assert.Equal(t, 2, requestCount)
+}
