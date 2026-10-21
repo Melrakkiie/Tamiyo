@@ -147,7 +147,7 @@ func TestRoutes_EachSentinelMapsToTheSameStatusOnBothFamilies(t *testing.T) {
 		{"unknown deck", deck.ErrNotFound, http.StatusNotFound, `{"error": "deck not found"}`},
 		{"unknown format", ErrUnknownFormat, http.StatusBadRequest, `{"error": "` + ErrUnknownFormat.Error() + `"}`},
 		{"combos unavailable", fmt.Errorf("%w: status 503", ErrCombosUnavailable), http.StatusBadGateway, `{"error": "commander spellbook is unavailable"}`},
-		{"anything else", assertAnError{}, http.StatusInternalServerError, ""},
+		{"anything else", errUnexpected{}, http.StatusInternalServerError, ""},
 	}
 	for _, f := range families {
 		for _, route := range insightRoutes {
@@ -210,17 +210,19 @@ func TestSharedRoutes_ReadAsTheSignedInViewerWhenThereIsOne(t *testing.T) {
 	assert.Equal(t, otherUserID, service.lastViewerID)
 }
 
-func TestSharedLegality_ReturnsTheReportWithoutCardIDs(t *testing.T) {
-	service := &fakeInsightsService{legality: LegalityReport{Format: "commander", Issues: []LegalityIssue{
-		{CardName: "Channel", Board: deck.BoardMain, Reason: "banned in commander"},
-	}}}
+func TestLegality_OnlyTheSharedRouteBlanksTheCardIDs(t *testing.T) {
+	channel := legalPrinting(1, "Channel", "Sorcery", nil)
+	channel.BannedFormats = []string{"commander"}
+	router := setupRouter(NewService(readerWith(deckOf("commander", owned(channel, 7))), storeOf(channel), nil))
 
-	w := get(setupRouter(service), "/shared/decks/"+handlerDeckID+"/legality")
+	shared := get(router, "/shared/decks/"+testDeckID+"/legality")
+	private := get(router, "/deck/"+testDeckID+"/legality")
 
-	require.Equal(t, http.StatusOK, w.Code)
-	assert.JSONEq(t, `{"format": "commander", "legal": false, "issues": [
-		{"card_name": "Channel", "board": "main", "reason": "banned in commander"}
-	]}`, w.Body.String())
+	require.Equal(t, http.StatusOK, shared.Code)
+	require.Equal(t, http.StatusOK, private.Code)
+	assert.NotContains(t, shared.Body.String(), "card_id")
+	assert.Contains(t, shared.Body.String(), "banned in commander")
+	assert.Contains(t, private.Body.String(), `"card_id": 7`)
 }
 
 func TestGetDeckStats_ReturnsStatsOnSuccess(t *testing.T) {
@@ -257,6 +259,6 @@ func TestGetDeckCombos_ReturnsTheCombosOnSuccess(t *testing.T) {
 	}
 }
 
-type assertAnError struct{}
+type errUnexpected struct{}
 
-func (assertAnError) Error() string { return "something went wrong" }
+func (errUnexpected) Error() string { return "something went wrong" }
