@@ -48,14 +48,9 @@ func (s *Service) GetDeckLegality(ctx context.Context, userID string, deckID str
 }
 
 func (s *Service) GetDeckStats(ctx context.Context, userID string, deckID string) (DeckStats, error) {
-	content, err := s.loadDeck(ctx, userID, deckID)
+	main, printings, err := s.loadMainBoard(ctx, userID, deckID)
 	if err != nil {
 		return DeckStats{}, err
-	}
-	main := mainBoard(content.Entries)
-	printings, err := s.store.Printings(ctx, scryfallIDs(main))
-	if err != nil {
-		return DeckStats{}, fmt.Errorf("loading printings: %w", err)
 	}
 	values, err := s.store.DeckValues(ctx, userID, deckID)
 	if err != nil {
@@ -70,6 +65,19 @@ func (s *Service) GetDeckStats(ctx context.Context, userID string, deckID string
 		Considering: roundToCents(values.Considering),
 	}
 	return stats, nil
+}
+
+func (s *Service) loadMainBoard(ctx context.Context, userID string, deckID string) ([]deck.DeckEntry, map[string]Printing, error) {
+	content, err := s.loadDeck(ctx, userID, deckID)
+	if err != nil {
+		return nil, nil, err
+	}
+	main := mainBoard(content.Entries)
+	printings, err := s.store.Printings(ctx, scryfallIDs(main))
+	if err != nil {
+		return nil, nil, fmt.Errorf("loading printings: %w", err)
+	}
+	return main, printings, nil
 }
 
 func (s *Service) loadDeck(ctx context.Context, userID string, deckID string) (deck.DeckContent, error) {

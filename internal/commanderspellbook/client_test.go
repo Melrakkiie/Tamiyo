@@ -83,6 +83,11 @@ func TestClient_KeepsOnlyTheCombosTheDeckIncludes(t *testing.T) {
 	}}, combos)
 }
 
+func TestCombo_URLPointsToItsPageWithTheIDEscaped(t *testing.T) {
+	assert.Equal(t, "https://commanderspellbook.com/combo/123-456/", Combo{ID: "123-456"}.URL())
+	assert.Equal(t, "https://commanderspellbook.com/combo/a%2Fb/", Combo{ID: "a/b"}.URL())
+}
+
 func TestClient_ReturnsAnErrorOnAServerError(t *testing.T) {
 	var requestCount int
 	client := withFakeSpellbook(t, func(w http.ResponseWriter, r *http.Request) {

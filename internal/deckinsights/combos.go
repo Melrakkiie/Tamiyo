@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 
 	"Melrakkiie/Tamiyo/internal/commanderspellbook"
 	"Melrakkiie/Tamiyo/internal/deck"
@@ -28,21 +27,14 @@ type Combo struct {
 	URL     string   `json:"url"`
 }
 
-// DeckCombos is the combos a deck holds.
 type DeckCombos struct {
 	Combos []Combo `json:"combos"`
 }
 
-// GetDeckCombos returns the combos the user's deck holds.
 func (s *Service) GetDeckCombos(ctx context.Context, userID string, deckID string) (DeckCombos, error) {
-	content, err := s.loadDeck(ctx, userID, deckID)
+	main, printings, err := s.loadMainBoard(ctx, userID, deckID)
 	if err != nil {
 		return DeckCombos{}, err
-	}
-	main := mainBoard(content.Entries)
-	printings, err := s.store.Printings(ctx, scryfallIDs(main))
-	if err != nil {
-		return DeckCombos{}, fmt.Errorf("loading printings: %w", err)
 	}
 
 	commanders, others := comboDeckList(main, printings)
@@ -60,7 +52,7 @@ func (s *Service) GetDeckCombos(ctx context.Context, userID string, deckID strin
 			ID:      c.ID,
 			Cards:   c.Cards,
 			Results: c.Results,
-			URL:     "https://commanderspellbook.com/combo/" + url.PathEscape(c.ID) + "/",
+			URL:     c.URL(),
 		})
 	}
 	return DeckCombos{Combos: combos}, nil
