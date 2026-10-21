@@ -1,5 +1,6 @@
-.PHONY: test test-unit test-integration test-all coverage coverage-all build vet lint govulncheck check install-hooks db-reset migrate-up migrate-down migrate-status
+.PHONY: test test-unit test-integration test-all coverage coverage-all build vet lint govulncheck check check-stack-up check-stack-down install-hooks db-reset migrate-up migrate-down migrate-status
 
+PORT ?= 8081
 GOOSE_DB_STRING := "host=localhost port=5432 user=login password=password dbname=tamiyo_db sslmode=disable"
 GOOSE_DIR := _devops/database/migrations
 
@@ -42,6 +43,12 @@ govulncheck:
 
 check: build vet lint govulncheck test-all
 	@echo "Build, vet, lint, govulncheck et tests OK"
+
+check-stack-up:
+	_devops/check-stack.sh up $(PORT)
+
+check-stack-down:
+	_devops/check-stack.sh down $(PORT)
 
 db-reset:
 	docker compose down -v

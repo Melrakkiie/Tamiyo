@@ -10,6 +10,7 @@ make lint                        # golangci-lint, integration-tagged files inclu
 make test-unit                   # go test ./internal/...
 go test ./internal/... -tags=integration   # integration tests, real Postgres via testcontainers (needs Docker)
 make check                       # build, vet, lint, govulncheck, all tests
+make check-stack-up PORT=8081    # this checkout's API on :PORT/api + throwaway Postgres + seed account, for checking a branch in the front; make check-stack-down PORT=8081 stops it
 ```
 
 Run the relevant tests and the linter before calling a change done. Integration tests live in `*_test.go` files tagged `//go:build integration`.

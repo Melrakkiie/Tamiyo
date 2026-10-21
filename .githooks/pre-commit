@@ -12,6 +12,21 @@ if git rev-parse --verify -q origin/main >/dev/null; then
     fi
 fi
 
+# Le front génère son client depuis doc/openapi.yaml : une spec invalide ne
+# se verrait qu'au `npm run gen:api`, après le merge.
+if git diff --cached --name-only --diff-filter=ACM | grep -qx 'doc/openapi.yaml'; then
+    if command -v npx >/dev/null 2>&1; then
+        echo "pre-commit: lint de doc/openapi.yaml..."
+        if ! npx --yes @redocly/cli@2.59.0 lint doc/openapi.yaml >/dev/null 2>&1; then
+            npx --yes @redocly/cli@2.59.0 lint doc/openapi.yaml >&2 || true
+            echo "pre-commit: doc/openapi.yaml invalide. Commit annulé." >&2
+            exit 1
+        fi
+    else
+        echo "pre-commit: npx absent, lint de doc/openapi.yaml ignoré." >&2
+    fi
+fi
+
 # N'exécute le hook que s'il y a des fichiers .go dans le commit — évite
 # de lancer build/vet/lint pour un commit qui ne touche que la doc, etc.
 staged_go_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.go')

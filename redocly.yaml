@@ -1,0 +1,8 @@
+# `redocly lint doc/openapi.yaml` (CI and pre-commit) guards the spec the front
+# generates its client from: structural errors fail, style rules stay off.
+extends:
+  - minimal
+rules:
+  operation-operationId: off
+  tag-description: off
+  no-server-example.com: off

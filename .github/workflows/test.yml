@@ -50,6 +50,16 @@ jobs:
         with:
           version: v2.13.2
 
+  openapi:
+    name: OpenAPI spec
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Lint doc/openapi.yaml
+        run: npx --yes @redocly/cli@2.59.0 lint doc/openapi.yaml
+
   migrations:
     name: Delivered migrations unchanged
     # A migration already on main has run in production: a change adds a new
