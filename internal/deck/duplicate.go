@@ -2,7 +2,6 @@ package deck
 
 import (
 	"context"
-	"errors"
 	"strings"
 )
 
@@ -26,11 +25,10 @@ type DuplicateResult struct {
 // The copy uses the user's free owned copies first and pending cards for the
 // rest. It keeps boards, commanders, finishes, proxy state and tags.
 func (s *Service) DuplicateDeck(ctx context.Context, userID string, sourceID string, req DuplicateRequest) (DuplicateResult, error) {
-	visible, err := s.GetVisibleDeck(ctx, userID, sourceID)
+	ownerID, source, err := s.findWithinReach(ctx, userID, sourceID, ReachVisible)
 	if err != nil {
 		return DuplicateResult{}, err
 	}
-	ownerID, source := visible.OwnerID, visible.Deck
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
 		name = source.Name + copySuffix
@@ -76,18 +74,11 @@ type VisibleDeck struct {
 
 // GetVisibleDeck finds the user's own deck, or else a deck shared by its owner.
 func (s *Service) GetVisibleDeck(ctx context.Context, userID string, deckID string) (VisibleDeck, error) {
-	d, err := s.repo.FindByID(ctx, userID, deckID)
-	if err == nil {
-		return VisibleDeck{OwnerID: userID, Deck: d, Mine: true}, nil
-	}
-	if !errors.Is(err, ErrNotFound) {
-		return VisibleDeck{}, err
-	}
-	ownerID, shared, err := s.repo.FindShared(ctx, deckID)
+	ownerID, d, err := s.findWithinReach(ctx, userID, deckID, ReachVisible)
 	if err != nil {
 		return VisibleDeck{}, err
 	}
-	return VisibleDeck{OwnerID: ownerID, Deck: shared}, nil
+	return VisibleDeck{OwnerID: ownerID, Deck: d, Mine: userID != "" && ownerID == userID}, nil
 }
 
 func duplicationPlan(entries []DeckEntry, tagRows []CardTag) PlacementPlan {
