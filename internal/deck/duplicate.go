@@ -65,22 +65,6 @@ func (s *Service) DuplicateDeck(ctx context.Context, userID string, sourceID str
 	return DuplicateResult{Deck: created, Placement: placement}, nil
 }
 
-// VisibleDeck is a deck the user can see: their own, or one shared by its owner.
-type VisibleDeck struct {
-	OwnerID string
-	Deck    Deck
-	Mine    bool
-}
-
-// GetVisibleDeck finds the user's own deck, or else a deck shared by its owner.
-func (s *Service) GetVisibleDeck(ctx context.Context, userID string, deckID string) (VisibleDeck, error) {
-	ownerID, d, err := s.findWithinReach(ctx, userID, deckID, ReachVisible)
-	if err != nil {
-		return VisibleDeck{}, err
-	}
-	return VisibleDeck{OwnerID: ownerID, Deck: d, Mine: userID != "" && ownerID == userID}, nil
-}
-
 func duplicationPlan(entries []DeckEntry, tagRows []CardTag) PlacementPlan {
 	plan := PlacementPlan{Lines: make([]PlacementLine, 0, len(entries))}
 	for _, e := range entries {

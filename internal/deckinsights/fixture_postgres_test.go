@@ -160,9 +160,9 @@ func (f insightsFixture) deckService() *deck.Service {
 // cardList is the deck's card list as the deck pages show it.
 func (f insightsFixture) cardList(t *testing.T) []deck.DeckEntry {
 	t.Helper()
-	content, err := f.deckService().GetDeckContent(context.Background(), f.userID, f.deckID)
+	read, err := f.deckService().ReadDeck(context.Background(), f.userID, f.deckID, deck.ReachOwn)
 	require.NoError(t, err)
-	return content.Entries
+	return read.Entries
 }
 
 func (f insightsFixture) service() *Service {
