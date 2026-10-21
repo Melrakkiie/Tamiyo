@@ -115,7 +115,7 @@ func TestLikeHandlers(t *testing.T) {
 	}{
 		"unauthenticated": {"", "/deck/" + theirDeck + "/like", nil, http.StatusUnauthorized},
 		"invalid id":      {viewerID, "/deck/nope/like", nil, http.StatusNotFound},
-		"not visible":     {viewerID, "/deck/" + privateID + "/like", ErrNotFound, http.StatusNotFound},
+		"not visible":     {viewerID, "/deck/" + privateID + "/like", deck.ErrNotFound, http.StatusNotFound},
 		"own deck":        {viewerID, "/deck/" + myDeckID + "/like", ErrLikeOwnDeck, http.StatusBadRequest},
 	}
 	for name, tc := range cases {

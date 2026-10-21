@@ -131,7 +131,7 @@ func TestGetSharedDeckCombos_UnavailableReturnsBadGateway(t *testing.T) {
 }
 
 func TestGetSharedDeckCombos_MissingOrPrivateDeckReturnsNotFound(t *testing.T) {
-	router := setupRouter(&fakeSharedService{err: ErrNotFound})
+	router := setupRouter(&fakeSharedService{err: deck.ErrNotFound})
 
 	w := get(router, "/shared/decks/"+deckID+"/combos")
 
@@ -214,11 +214,12 @@ func TestGetSharedDeck_MalformedShareIDReturnsNotFound(t *testing.T) {
 }
 
 func TestGetSharedDeck_HiddenDeckReturnsNotFound(t *testing.T) {
-	router := setupRouter(&fakeSharedService{err: ErrNotFound})
+	router := setupRouter(&fakeSharedService{err: deck.ErrNotFound})
 
 	w := get(router, "/shared/decks/"+deckID)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.JSONEq(t, `{"error":"deck not found"}`, w.Body.String())
 }
 
 func TestGetSharedDeckLegality_ReturnsReport(t *testing.T) {
@@ -361,6 +362,6 @@ func TestCollectionOwnership_ReturnsTheViewersCounts(t *testing.T) {
 
 func TestCollectionOwnership_Errors(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, get(setupProtectedRouter(&fakeSharedService{}, ""), "/deck/"+deckID+"/ownership").Code)
-	assert.Equal(t, http.StatusNotFound, get(setupProtectedRouter(&fakeSharedService{err: ErrNotFound}, "33333333-3333-3333-3333-333333333333"), "/deck/"+deckID+"/ownership").Code)
+	assert.Equal(t, http.StatusNotFound, get(setupProtectedRouter(&fakeSharedService{err: deck.ErrNotFound}, "33333333-3333-3333-3333-333333333333"), "/deck/"+deckID+"/ownership").Code)
 	assert.Equal(t, http.StatusNotFound, get(setupProtectedRouter(&fakeSharedService{}, "33333333-3333-3333-3333-333333333333"), "/deck/nope/ownership").Code)
 }

@@ -226,7 +226,7 @@ func TestCompareSharedDecksHandler_NeedsNoViewer(t *testing.T) {
 	assert.Equal(t, "", service.lastUserID)
 	assert.Equal(t, theirDeck, service.lastOtherID)
 	assert.Equal(t, http.StatusNotFound, get(router, "/shared/decks/nope/compare/"+theirDeck).Code)
-	assert.Equal(t, http.StatusNotFound, get(setupRouter(&fakeSharedService{err: ErrNotFound}), "/shared/decks/"+theirDeck+"/compare/"+privateID).Code)
+	assert.Equal(t, http.StatusNotFound, get(setupRouter(&fakeSharedService{err: deck.ErrNotFound}), "/shared/decks/"+theirDeck+"/compare/"+privateID).Code)
 }
 
 func TestCompareDecks_PropagatesUnexpectedErrors(t *testing.T) {
@@ -280,7 +280,7 @@ func TestCompareDecksHandler_Errors(t *testing.T) {
 		"unauthenticated": {"", "/deck/" + myDeckID + "/compare/" + theirDeck, nil, http.StatusUnauthorized},
 		"invalid deck id": {viewerID, "/deck/nope/compare/" + theirDeck, nil, http.StatusBadRequest},
 		"invalid other":   {viewerID, "/deck/" + myDeckID + "/compare/nope", nil, http.StatusBadRequest},
-		"not visible":     {viewerID, "/deck/" + myDeckID + "/compare/" + privateID, ErrNotFound, http.StatusNotFound},
+		"not visible":     {viewerID, "/deck/" + myDeckID + "/compare/" + privateID, deck.ErrNotFound, http.StatusNotFound},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -406,7 +406,7 @@ func TestVisibleDeckHandler_Errors(t *testing.T) {
 	}{
 		"unauthenticated": {"", "/deck/" + myDeckID + "/content", nil, http.StatusUnauthorized},
 		"invalid id":      {viewerID, "/deck/nope/content", nil, http.StatusNotFound},
-		"not visible":     {viewerID, "/deck/" + privateID + "/content", ErrNotFound, http.StatusNotFound},
+		"not visible":     {viewerID, "/deck/" + privateID + "/content", deck.ErrNotFound, http.StatusNotFound},
 		"failure":         {viewerID, "/deck/" + myDeckID + "/content", errors.New("db is down"), http.StatusInternalServerError},
 	}
 	for name, tc := range cases {
