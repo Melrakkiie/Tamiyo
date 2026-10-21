@@ -34,6 +34,7 @@ type Client struct {
 	httpClient *http.Client
 	url        string
 	retryDelay time.Duration
+	cache      *comboCache
 }
 
 func NewClient() *Client {
@@ -41,13 +42,28 @@ func NewClient() *Client {
 }
 
 func newClient(url string, retryDelay time.Duration) *Client {
-	return &Client{httpClient: &http.Client{Timeout: requestTimeout}, url: url, retryDelay: retryDelay}
+	return &Client{
+		httpClient: &http.Client{Timeout: requestTimeout},
+		url:        url,
+		retryDelay: retryDelay,
+		cache:      newComboCache(time.Now, cacheMaxEntries),
+	}
 }
 
 // FindCombos returns the combos fully included in a deck whose commander zone
 // holds commanders and whose main board holds main, both given as card names.
+// An answer is kept for 24 hours; failures are never kept.
 func (c *Client) FindCombos(ctx context.Context, commanders []string, main []string) ([]Combo, error) {
-	return c.fetch(ctx, commanders, main)
+	key := cacheKey(commanders, main)
+	if combos, ok := c.cache.get(key); ok {
+		return combos, nil
+	}
+	combos, err := c.fetch(ctx, commanders, main)
+	if err != nil {
+		return nil, err
+	}
+	c.cache.put(key, combos)
+	return combos, nil
 }
 
 type wireCard struct {

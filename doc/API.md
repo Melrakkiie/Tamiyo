@@ -1251,7 +1251,7 @@ How the owner last displayed the deck's cards, so the deck page opens the same w
 
 ## Deck Insights
 
-Three read-only routes analyze a deck's cards; nothing here persists anything. Legality and statistics are both computed from the printings Tamiyo stores and refreshes daily (see [Prices and values](#prices-and-values)), so they can be up to a day behind Scryfall, like card search. Combos are looked up on [Commander Spellbook](https://commanderspellbook.com/) on each call.
+Three read-only routes analyze a deck's cards; nothing here persists anything. Legality and statistics are both computed from the printings Tamiyo stores and refreshes daily (see [Prices and values](#prices-and-values)), so they can be up to a day behind Scryfall, like card search. Combos are looked up on [Commander Spellbook](https://commanderspellbook.com/); the answer for a given list of cards is kept in memory for 24 hours (whatever the order of the cards), so a deck whose cards haven't changed is answered without calling Commander Spellbook again. A failed lookup is never kept.
 
 **Errors common to all three**
 - `400` — `:id` is not a UUID, or (legality only) the deck's own `format` field isn't a format Scryfall recognizes
