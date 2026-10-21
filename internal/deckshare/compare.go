@@ -2,7 +2,6 @@ package deckshare
 
 import (
 	"context"
-	"errors"
 	"sort"
 	"strings"
 
@@ -102,45 +101,26 @@ func (s *Service) CompareDecks(ctx context.Context, userID string, deckID string
 	return comparison, nil
 }
 
-func (s *Service) resolveVisible(ctx context.Context, userID string, deckID string) (string, deck.Deck, error) {
-	if userID == "" {
-		return s.resolve(ctx, deckID)
-	}
-	d, err := s.decks.GetDeck(ctx, userID, deckID)
-	if err == nil {
-		return userID, d, nil
-	}
-	if !errors.Is(err, deck.ErrNotFound) {
-		return "", deck.Deck{}, err
-	}
-	return s.resolve(ctx, deckID)
-}
-
 func (s *Service) loadVisibleDeck(ctx context.Context, userID string, deckID string) (ComparedDeck, []Card, error) {
-	ownerID, d, err := s.resolveVisible(ctx, userID, deckID)
+	read, err := s.decks.ReadDeck(ctx, userID, deckID, deck.ReachVisible)
 	if err != nil {
 		return ComparedDeck{}, nil, err
 	}
 
-	owner, all, err := s.loadContent(ctx, ownerID, d)
+	owner, err := s.owner(ctx, read.OwnerID)
 	if err != nil {
 		return ComparedDeck{}, nil, err
 	}
 
-	cards := make([]Card, 0, len(all))
-	for _, c := range all {
-		if deck.InMainBoard(c.Board) {
-			cards = append(cards, c)
-		}
-	}
+	cards := sharedCards(read.MainBoard(), nil)
 	total := 0
 	for _, c := range cards {
 		total += c.Quantity
 	}
 	return ComparedDeck{
-		Deck:      d,
+		Deck:      read.Deck,
 		Owner:     owner,
-		Mine:      ownerID == userID,
+		Mine:      read.Mine,
 		CardCount: total,
 	}, cards, nil
 }
