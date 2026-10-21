@@ -29,7 +29,7 @@ var (
 // combosOf looks up the combos of the test user's own deck read, against
 // store, through finder.
 func combosOf(read deck.ReadDeck, store fakeStore, finder comboFinder) (DeckCombos, error) {
-	return NewService(readerWith(read), store, finder).GetDeckCombos(context.Background(), testUserID, read.Deck.ID)
+	return NewService(readerWith(read), store, finder).GetDeckCombos(context.Background(), testUserID, read.Deck.ID, deck.ReachOwn)
 }
 
 func TestGetDeckCombos_SendsTheCommandersApartFromTheMainBoard(t *testing.T) {
@@ -159,7 +159,7 @@ func TestGetDeckCombos_UnknownDeckReturnsErrNotFound(t *testing.T) {
 	finder := &recordingFinder{}
 	svc := NewService(readerWith(deckOf("commander", owned(curiosity, 1))), storeOf(curiosity), finder)
 
-	_, err := svc.GetDeckCombos(context.Background(), testUserID, "00000000-0000-0000-0000-000000000999")
+	_, err := svc.GetDeckCombos(context.Background(), testUserID, "00000000-0000-0000-0000-000000000999", deck.ReachOwn)
 
 	assert.ErrorIs(t, err, deck.ErrNotFound)
 	assert.Zero(t, finder.calls)

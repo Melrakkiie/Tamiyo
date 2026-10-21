@@ -15,178 +15,246 @@ import (
 	"Melrakkiie/Tamiyo/internal/deck"
 )
 
+const handlerDeckID = "00000000-0000-0000-0000-000000000007"
+
 type fakeInsightsService struct {
 	legality LegalityReport
 	stats    DeckStats
 	combos   DeckCombos
 	err      error
 
-	lastUserID string
-	lastDeckID string
+	lastViewerID string
+	lastDeckID   string
+	lastReach    deck.Reach
+	calls        int
 }
 
-func (f *fakeInsightsService) GetDeckLegality(ctx context.Context, userID string, deckID string) (LegalityReport, error) {
-	f.lastUserID = userID
+func (f *fakeInsightsService) record(viewerID string, deckID string, reach deck.Reach) {
+	f.calls++
+	f.lastViewerID = viewerID
 	f.lastDeckID = deckID
+	f.lastReach = reach
+}
+
+func (f *fakeInsightsService) GetDeckLegality(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (LegalityReport, error) {
+	f.record(viewerID, deckID, reach)
 	return f.legality, f.err
 }
 
-func (f *fakeInsightsService) GetDeckStats(ctx context.Context, userID string, deckID string) (DeckStats, error) {
-	f.lastUserID = userID
-	f.lastDeckID = deckID
+func (f *fakeInsightsService) GetDeckStats(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (DeckStats, error) {
+	f.record(viewerID, deckID, reach)
 	return f.stats, f.err
 }
 
-func (f *fakeInsightsService) GetDeckCombos(ctx context.Context, userID string, deckID string) (DeckCombos, error) {
-	f.lastUserID = userID
-	f.lastDeckID = deckID
+func (f *fakeInsightsService) GetDeckCombos(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (DeckCombos, error) {
+	f.record(viewerID, deckID, reach)
 	return f.combos, f.err
 }
 
+// setupRouter registers the private routes behind a middleware that
+// authenticates testUserID, and the shared routes without any.
 func setupRouter(service insightsService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.Use(func(c *gin.Context) {
+	handler := NewHandler(service)
+	protected := router.Group("")
+	protected.Use(func(c *gin.Context) {
 		c.Set("user_id", testUserID)
 		c.Next()
 	})
-	NewHandler(service).RegisterRoutes(router)
+	handler.RegisterRoutes(protected)
+	handler.RegisterSharedRoutes(router.Group(""))
 	return router
 }
 
-func TestGetDeckLegality_ReturnsReportOnSuccess(t *testing.T) {
-	service := &fakeInsightsService{legality: LegalityReport{Format: "commander", Legal: true}}
-	router := setupRouter(service)
+// setupUnauthenticatedRouter registers both families with nobody signed in.
+func setupUnauthenticatedRouter(service insightsService) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	handler := NewHandler(service)
+	handler.RegisterRoutes(router.Group(""))
+	handler.RegisterSharedRoutes(router.Group(""))
+	return router
+}
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000007/legality", nil)
+func get(router *gin.Engine, path string) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+	return w
+}
+
+// family is a route family: where its routes live and who reads through it.
+type family struct {
+	name   string
+	prefix string
+	reach  deck.Reach
+	viewer string
+	// badIDStatus and badIDBody are the answer to a malformed deck id.
+	badIDStatus int
+	badIDBody   string
+}
+
+var families = []family{
+	{name: "private", prefix: "/deck/", reach: deck.ReachOwn, viewer: testUserID,
+		badIDStatus: http.StatusBadRequest, badIDBody: `{"error": "invalid id"}`},
+	{name: "shared", prefix: "/shared/decks/", reach: deck.ReachShared, viewer: "",
+		badIDStatus: http.StatusNotFound, badIDBody: `{"error": "deck not found"}`},
+}
+
+var insightRoutes = []string{"legality", "stats", "combos"}
+
+func TestRoutes_ReadTheDeckWithTheReachAndViewerOfTheirFamily(t *testing.T) {
+	for _, f := range families {
+		for _, route := range insightRoutes {
+			t.Run(f.name+"/"+route, func(t *testing.T) {
+				service := &fakeInsightsService{}
+
+				w := get(setupRouter(service), f.prefix+handlerDeckID+"/"+route)
+
+				require.Equal(t, http.StatusOK, w.Code)
+				assert.Equal(t, 1, service.calls)
+				assert.Equal(t, f.viewer, service.lastViewerID)
+				assert.Equal(t, handlerDeckID, service.lastDeckID)
+				assert.Equal(t, f.reach, service.lastReach)
+			})
+		}
+	}
+}
+
+func TestRoutes_InvalidIDIsRejectedAsEachFamilyAlwaysDid(t *testing.T) {
+	for _, f := range families {
+		for _, route := range insightRoutes {
+			t.Run(f.name+"/"+route, func(t *testing.T) {
+				service := &fakeInsightsService{}
+
+				w := get(setupRouter(service), f.prefix+"not-a-number/"+route)
+
+				assert.Equal(t, f.badIDStatus, w.Code)
+				assert.JSONEq(t, f.badIDBody, w.Body.String())
+				assert.Zero(t, service.calls)
+			})
+		}
+	}
+}
+
+func TestRoutes_EachSentinelMapsToTheSameStatusOnBothFamilies(t *testing.T) {
+	cases := []struct {
+		name   string
+		err    error
+		status int
+		body   string
+	}{
+		{"unknown deck", deck.ErrNotFound, http.StatusNotFound, `{"error": "deck not found"}`},
+		{"unknown format", ErrUnknownFormat, http.StatusBadRequest, `{"error": "` + ErrUnknownFormat.Error() + `"}`},
+		{"combos unavailable", fmt.Errorf("%w: status 503", ErrCombosUnavailable), http.StatusBadGateway, `{"error": "commander spellbook is unavailable"}`},
+		{"anything else", assertAnError{}, http.StatusInternalServerError, ""},
+	}
+	for _, f := range families {
+		for _, route := range insightRoutes {
+			for _, c := range cases {
+				t.Run(f.name+"/"+route+"/"+c.name, func(t *testing.T) {
+					w := get(setupRouter(&fakeInsightsService{err: c.err}), f.prefix+handlerDeckID+"/"+route)
+
+					assert.Equal(t, c.status, w.Code)
+					if c.body != "" {
+						assert.JSONEq(t, c.body, w.Body.String())
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestPrivateRoutes_RejectAnUnauthenticatedRequest(t *testing.T) {
+	for _, route := range insightRoutes {
+		t.Run(route, func(t *testing.T) {
+			service := &fakeInsightsService{}
+
+			w := get(setupUnauthenticatedRouter(service), "/deck/"+handlerDeckID+"/"+route)
+
+			assert.Equal(t, http.StatusUnauthorized, w.Code)
+			assert.JSONEq(t, `{"error": "unauthenticated"}`, w.Body.String())
+			assert.Zero(t, service.calls)
+		})
+	}
+}
+
+func TestSharedRoutes_AcceptAnAnonymousRequest(t *testing.T) {
+	for _, route := range insightRoutes {
+		t.Run(route, func(t *testing.T) {
+			service := &fakeInsightsService{}
+
+			w := get(setupUnauthenticatedRouter(service), "/shared/decks/"+handlerDeckID+"/"+route)
+
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.Equal(t, "", service.lastViewerID)
+			assert.Equal(t, deck.ReachShared, service.lastReach)
+		})
+	}
+}
+
+func TestSharedRoutes_ReadAsTheSignedInViewerWhenThereIsOne(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	service := &fakeInsightsService{}
+	viewer := router.Group("")
+	viewer.Use(func(c *gin.Context) {
+		c.Set("user_id", otherUserID)
+		c.Next()
+	})
+	NewHandler(service).RegisterSharedRoutes(viewer)
+
+	w := get(router, "/shared/decks/"+handlerDeckID+"/stats")
 
 	require.Equal(t, http.StatusOK, w.Code)
-	var got LegalityReport
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
-	assert.True(t, got.Legal)
-	assert.Equal(t, testUserID, service.lastUserID)
-	assert.Equal(t, "00000000-0000-0000-0000-000000000007", service.lastDeckID)
+	assert.Equal(t, otherUserID, service.lastViewerID)
 }
 
-func TestGetDeckLegality_InvalidIDReturnsBadRequest(t *testing.T) {
-	router := setupRouter(&fakeInsightsService{})
+func TestSharedLegality_ReturnsTheReportWithoutCardIDs(t *testing.T) {
+	service := &fakeInsightsService{legality: LegalityReport{Format: "commander", Issues: []LegalityIssue{
+		{CardName: "Channel", Board: deck.BoardMain, Reason: "banned in commander"},
+	}}}
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/not-a-number/legality", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	w := get(setupRouter(service), "/shared/decks/"+handlerDeckID+"/legality")
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
-
-func TestGetDeckLegality_UnknownDeckReturnsNotFound(t *testing.T) {
-	router := setupRouter(&fakeInsightsService{err: deck.ErrNotFound})
-
-	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000999/legality", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusNotFound, w.Code)
-}
-
-func TestGetDeckLegality_UnknownFormatReturnsBadRequest(t *testing.T) {
-	router := setupRouter(&fakeInsightsService{err: ErrUnknownFormat})
-
-	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/legality", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
-
-func TestGetDeckLegality_UnknownErrorReturnsInternalServerError(t *testing.T) {
-	router := setupRouter(&fakeInsightsService{err: assertAnError{}})
-
-	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/legality", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.JSONEq(t, `{"format": "commander", "legal": false, "issues": [
+		{"card_name": "Channel", "board": "main", "reason": "banned in commander"}
+	]}`, w.Body.String())
 }
 
 func TestGetDeckStats_ReturnsStatsOnSuccess(t *testing.T) {
-	service := &fakeInsightsService{stats: DeckStats{CardCount: 42}}
-	router := setupRouter(service)
+	for _, f := range families {
+		t.Run(f.name, func(t *testing.T) {
+			w := get(setupRouter(&fakeInsightsService{stats: DeckStats{CardCount: 42}}), f.prefix+handlerDeckID+"/stats")
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000007/stats", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusOK, w.Code)
-	var got DeckStats
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
-	assert.Equal(t, 42, got.CardCount)
-}
-
-func TestGetDeckStats_UnknownDeckReturnsNotFound(t *testing.T) {
-	router := setupRouter(&fakeInsightsService{err: deck.ErrNotFound})
-
-	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000999/stats", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusNotFound, w.Code)
+			require.Equal(t, http.StatusOK, w.Code)
+			var got DeckStats
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+			assert.Equal(t, 42, got.CardCount)
+		})
+	}
 }
 
 func TestGetDeckCombos_ReturnsTheCombosOnSuccess(t *testing.T) {
-	service := &fakeInsightsService{combos: DeckCombos{Combos: []Combo{{
-		ID: "1414-2730", Cards: []string{"Niv-Mizzet, Parun", "Curiosity"}, Results: []string{"Infinite damage"},
-		URL: "https://commanderspellbook.com/combo/1414-2730/",
-	}}}}
-	router := setupRouter(service)
+	for _, f := range families {
+		t.Run(f.name, func(t *testing.T) {
+			service := &fakeInsightsService{combos: DeckCombos{Combos: []Combo{{
+				ID: "1414-2730", Cards: []string{"Niv-Mizzet, Parun", "Curiosity"}, Results: []string{"Infinite damage"},
+				URL: "https://commanderspellbook.com/combo/1414-2730/",
+			}}}}
 
-	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000007/combos", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+			w := get(setupRouter(service), f.prefix+handlerDeckID+"/combos")
 
-	require.Equal(t, http.StatusOK, w.Code)
-	assert.JSONEq(t, `{"combos": [{
-		"id": "1414-2730",
-		"cards": ["Niv-Mizzet, Parun", "Curiosity"],
-		"results": ["Infinite damage"],
-		"url": "https://commanderspellbook.com/combo/1414-2730/"
-	}]}`, w.Body.String())
-	assert.Equal(t, testUserID, service.lastUserID)
-	assert.Equal(t, "00000000-0000-0000-0000-000000000007", service.lastDeckID)
-}
-
-func TestGetDeckCombos_UnavailableSpellbookReturnsBadGateway(t *testing.T) {
-	router := setupRouter(&fakeInsightsService{err: fmt.Errorf("%w: status 503", ErrCombosUnavailable)})
-
-	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/combos", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusBadGateway, w.Code)
-	assert.JSONEq(t, `{"error": "commander spellbook is unavailable"}`, w.Body.String())
-}
-
-func TestGetDeckCombos_UnknownDeckReturnsNotFound(t *testing.T) {
-	router := setupRouter(&fakeInsightsService{err: deck.ErrNotFound})
-
-	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000999/combos", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusNotFound, w.Code)
-}
-
-func TestGetDeckLegality_ReturnsUnauthorizedWhenNotAuthenticated(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-	NewHandler(&fakeInsightsService{}).RegisterRoutes(router)
-
-	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/legality", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
+			require.Equal(t, http.StatusOK, w.Code)
+			assert.JSONEq(t, `{"combos": [{
+				"id": "1414-2730",
+				"cards": ["Niv-Mizzet, Parun", "Curiosity"],
+				"results": ["Infinite damage"],
+				"url": "https://commanderspellbook.com/combo/1414-2730/"
+			}]}`, w.Body.String())
+		})
+	}
 }
 
 type assertAnError struct{}

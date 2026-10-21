@@ -35,7 +35,7 @@ var (
 // statsOf is the statistics of the test user's own deck read, against store.
 func statsOf(t *testing.T, read deck.ReadDeck, store fakeStore) DeckStats {
 	t.Helper()
-	stats, err := NewService(readerWith(read), store, nil).GetDeckStats(context.Background(), testUserID, read.Deck.ID)
+	stats, err := NewService(readerWith(read), store, nil).GetDeckStats(context.Background(), testUserID, read.Deck.ID, deck.ReachOwn)
 	require.NoError(t, err)
 	return stats
 }
@@ -143,7 +143,7 @@ func TestGetDeckStats_ACardWithoutAStoredPrintingCountsAsUnknown(t *testing.T) {
 func TestGetDeckStats_UnknownDeckReturnsErrNotFound(t *testing.T) {
 	svc := NewService(readerWith(deckOf("commander")), storeOf(), nil)
 
-	_, err := svc.GetDeckStats(context.Background(), testUserID, "00000000-0000-0000-0000-000000000999")
+	_, err := svc.GetDeckStats(context.Background(), testUserID, "00000000-0000-0000-0000-000000000999", deck.ReachOwn)
 
 	assert.ErrorIs(t, err, deck.ErrNotFound)
 }

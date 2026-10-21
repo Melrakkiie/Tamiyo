@@ -34,8 +34,10 @@ func NewService(decks deckReader, store store, combos comboFinder) *Service {
 	return &Service{decks: decks, store: store, combos: combos}
 }
 
-func (s *Service) GetDeckLegality(ctx context.Context, userID string, deckID string) (LegalityReport, error) {
-	read, err := s.readOwnDeck(ctx, userID, deckID)
+// GetDeckLegality checks the deck viewerID reads within reach. A shared read
+// blanks the card ids of the issues.
+func (s *Service) GetDeckLegality(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (LegalityReport, error) {
+	read, err := s.readDeck(ctx, viewerID, deckID, reach)
 	if err != nil {
 		return LegalityReport{}, err
 	}
@@ -43,15 +45,24 @@ func (s *Service) GetDeckLegality(ctx context.Context, userID string, deckID str
 	if err != nil {
 		return LegalityReport{}, fmt.Errorf("loading printings: %w", err)
 	}
-	return checkLegality(read, printings)
+	report, err := checkLegality(read, printings)
+	if err != nil {
+		return LegalityReport{}, err
+	}
+	if reach == deck.ReachShared {
+		report = report.withoutCardIDs()
+	}
+	return report, nil
 }
 
-func (s *Service) GetDeckStats(ctx context.Context, userID string, deckID string) (DeckStats, error) {
-	main, printings, err := s.loadMainBoard(ctx, userID, deckID)
+// GetDeckStats computes the statistics of the deck viewerID reads within
+// reach. Values are the owner's, whoever is viewing.
+func (s *Service) GetDeckStats(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (DeckStats, error) {
+	read, main, printings, err := s.loadMainBoard(ctx, viewerID, deckID, reach)
 	if err != nil {
 		return DeckStats{}, err
 	}
-	values, err := s.store.DeckValues(ctx, userID, deckID)
+	values, err := s.store.DeckValues(ctx, read.OwnerID, read.Deck.ID)
 	if err != nil {
 		return DeckStats{}, fmt.Errorf("loading deck values: %w", err)
 	}
@@ -66,21 +77,21 @@ func (s *Service) GetDeckStats(ctx context.Context, userID string, deckID string
 	return stats, nil
 }
 
-func (s *Service) loadMainBoard(ctx context.Context, userID string, deckID string) ([]deck.DeckEntry, map[string]Printing, error) {
-	read, err := s.readOwnDeck(ctx, userID, deckID)
+func (s *Service) loadMainBoard(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (deck.ReadDeck, []deck.DeckEntry, map[string]Printing, error) {
+	read, err := s.readDeck(ctx, viewerID, deckID, reach)
 	if err != nil {
-		return nil, nil, err
+		return deck.ReadDeck{}, nil, nil, err
 	}
 	main := read.MainBoard()
 	printings, err := s.store.Printings(ctx, scryfallIDs(main))
 	if err != nil {
-		return nil, nil, fmt.Errorf("loading printings: %w", err)
+		return deck.ReadDeck{}, nil, nil, fmt.Errorf("loading printings: %w", err)
 	}
-	return main, printings, nil
+	return read, main, printings, nil
 }
 
-func (s *Service) readOwnDeck(ctx context.Context, userID string, deckID string) (deck.ReadDeck, error) {
-	read, err := s.decks.ReadDeck(ctx, userID, deckID, deck.ReachOwn)
+func (s *Service) readDeck(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (deck.ReadDeck, error) {
+	read, err := s.decks.ReadDeck(ctx, viewerID, deckID, reach)
 	if err != nil {
 		return deck.ReadDeck{}, fmt.Errorf("reading deck: %w", err)
 	}

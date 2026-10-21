@@ -8,15 +8,11 @@ import (
 
 	"Melrakkiie/Tamiyo/internal/apierr"
 	"Melrakkiie/Tamiyo/internal/deck"
-	"Melrakkiie/Tamiyo/internal/deckinsights"
 )
 
 type sharedDeckService interface {
 	GetSharedDeck(ctx context.Context, deckID string) (SharedDeck, error)
 	GetVisibleDeck(ctx context.Context, userID string, deckID string) (SharedDeck, error)
-	GetSharedDeckLegality(ctx context.Context, deckID string) (deckinsights.LegalityReport, error)
-	GetSharedDeckStats(ctx context.Context, deckID string) (deckinsights.DeckStats, error)
-	GetSharedDeckCombos(ctx context.Context, deckID string) (deckinsights.DeckCombos, error)
 	CompareDecks(ctx context.Context, userID string, deckID string, otherID string) (Comparison, error)
 	BrowsePublicDecks(ctx context.Context, filter deck.PublicFilter) ([]deck.PublicDeck, int, error)
 	CollectionOwnership(ctx context.Context, viewerID string, deckID string) ([]OwnedCard, error)
@@ -121,9 +117,6 @@ func NewHandler(service sharedDeckService) *Handler {
 func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.GET("/shared/decks", h.browsePublicDecks)
 	router.GET("/shared/decks/:id", h.getSharedDeck)
-	router.GET("/shared/decks/:id/legality", h.getSharedDeckLegality)
-	router.GET("/shared/decks/:id/stats", h.getSharedDeckStats)
-	router.GET("/shared/decks/:id/combos", h.getSharedDeckCombos)
 	router.GET("/shared/decks/:id/compare/:other_id", h.compareSharedDecks)
 }
 
@@ -151,55 +144,8 @@ func (h *Handler) getSharedDeck(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, toResponse(shared))
 }
 
-func (h *Handler) getSharedDeckLegality(ctx *gin.Context) {
-	deckID, ok := parseDeckID(ctx)
-	if !ok {
-		return
-	}
-
-	report, err := h.service.GetSharedDeckLegality(ctx.Request.Context(), deckID)
-	if err != nil {
-		h.respondError(ctx, err)
-		return
-	}
-
-	ctx.JSON(http.StatusOK, report)
-}
-
-func (h *Handler) getSharedDeckStats(ctx *gin.Context) {
-	deckID, ok := parseDeckID(ctx)
-	if !ok {
-		return
-	}
-
-	stats, err := h.service.GetSharedDeckStats(ctx.Request.Context(), deckID)
-	if err != nil {
-		h.respondError(ctx, err)
-		return
-	}
-
-	ctx.JSON(http.StatusOK, stats)
-}
-
-func (h *Handler) getSharedDeckCombos(ctx *gin.Context) {
-	deckID, ok := parseDeckID(ctx)
-	if !ok {
-		return
-	}
-
-	combos, err := h.service.GetSharedDeckCombos(ctx.Request.Context(), deckID)
-	if err != nil {
-		h.respondError(ctx, err)
-		return
-	}
-
-	ctx.JSON(http.StatusOK, combos)
-}
-
 func (h *Handler) respondError(ctx *gin.Context, err error) {
 	apierr.Respond(ctx, err,
 		apierr.Mapping{Err: deck.ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
-		apierr.Mapping{Err: deckinsights.ErrUnknownFormat, Status: http.StatusBadRequest},
-		apierr.Mapping{Err: deckinsights.ErrCombosUnavailable, Status: http.StatusBadGateway, Message: deckinsights.ErrCombosUnavailable.Error()},
 	)
 }

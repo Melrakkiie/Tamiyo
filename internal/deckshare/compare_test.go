@@ -109,7 +109,7 @@ func names(cards []ComparedCard) []string {
 
 func TestCompareDecks_SplitsCardsByNameIgnoringPrintings(t *testing.T) {
 	store := compareStore()
-	svc := NewService(store, compareUsers(), &fakeInsights{})
+	svc := NewService(store, compareUsers())
 
 	comparison, err := svc.CompareDecks(context.Background(), viewerID, myDeckID, theirDeck)
 
@@ -139,7 +139,7 @@ func TestCompareDecks_SplitsCardsByNameIgnoringPrintings(t *testing.T) {
 
 func TestCompareDecks_DescribesBothDecks(t *testing.T) {
 	store := compareStore()
-	svc := NewService(store, compareUsers(), &fakeInsights{})
+	svc := NewService(store, compareUsers())
 
 	comparison, err := svc.CompareDecks(context.Background(), viewerID, myDeckID, theirDeck)
 
@@ -153,7 +153,7 @@ func TestCompareDecks_DescribesBothDecks(t *testing.T) {
 }
 
 func TestCompareDecks_TwoDecksSharedByOthers(t *testing.T) {
-	svc := NewService(compareStore(), compareUsers(), &fakeInsights{})
+	svc := NewService(compareStore(), compareUsers())
 
 	comparison, err := svc.CompareDecks(context.Background(), viewerID, theirDeck, theirDeck)
 
@@ -183,7 +183,7 @@ func TestCompareSharedDecksHandler_NeedsNoViewer(t *testing.T) {
 func TestCompareDecks_PropagatesUnexpectedErrors(t *testing.T) {
 	store := compareStore()
 	store.readErr = errors.New("db is down")
-	svc := NewService(store, compareUsers(), &fakeInsights{})
+	svc := NewService(store, compareUsers())
 
 	_, err := svc.CompareDecks(context.Background(), viewerID, myDeckID, theirDeck)
 
@@ -250,7 +250,7 @@ func TestCompareDecks_OnlyComparesTheMainBoards(t *testing.T) {
 		deck.DeckEntry{Name: "Opt", ScryfallID: "opt", Board: deck.BoardConsidering, Pending: []deck.PendingPart{{ID: 10, Quantity: 1}}},
 	)
 	store.reads[myDeckID] = mine
-	svc := NewService(store, compareUsers(), &fakeInsights{})
+	svc := NewService(store, compareUsers())
 
 	comparison, err := svc.CompareDecks(context.Background(), viewerID, myDeckID, theirDeck)
 
@@ -263,7 +263,7 @@ func TestCompareDecks_OnlyComparesTheMainBoards(t *testing.T) {
 func TestCollectionOwnership_CountsTheViewersCopiesByName(t *testing.T) {
 	store := compareStore()
 	store.owned = map[string]int{"sol ring": 3, "fire / ice": 1}
-	svc := NewService(store, compareUsers(), &fakeInsights{})
+	svc := NewService(store, compareUsers())
 
 	owned, err := svc.CollectionOwnership(context.Background(), viewerID, theirDeck)
 
@@ -281,7 +281,7 @@ func TestCollectionOwnership_CountsTheViewersCopiesByName(t *testing.T) {
 
 func TestGetVisibleDeck_LoadsTheViewersOwnPrivateDeck(t *testing.T) {
 	store := compareStore()
-	svc := NewService(store, compareUsers(), &fakeInsights{})
+	svc := NewService(store, compareUsers())
 
 	visible, err := svc.GetVisibleDeck(context.Background(), viewerID, myDeckID)
 
@@ -295,7 +295,7 @@ func TestGetVisibleDeck_LoadsTheViewersOwnPrivateDeck(t *testing.T) {
 }
 
 func TestGetVisibleDeck_ShowsTheOwnerOfSomeoneElsesSharedDeck(t *testing.T) {
-	svc := NewService(compareStore(), compareUsers(), &fakeInsights{})
+	svc := NewService(compareStore(), compareUsers())
 
 	visible, err := svc.GetVisibleDeck(context.Background(), viewerID, theirDeck)
 
