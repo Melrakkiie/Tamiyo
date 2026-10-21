@@ -84,6 +84,9 @@ func (c *Client) fetch(ctx context.Context, commanders []string, main []string) 
 		return nil, fmt.Errorf("calling commander spellbook: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("commander spellbook returned status %d", resp.StatusCode)
+	}
 
 	// Only the "included" list is decoded; the other lists (combos the deck
 	// almost has, or would have with other commanders or colors) are dropped.

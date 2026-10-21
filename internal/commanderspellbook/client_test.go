@@ -82,3 +82,17 @@ func TestClient_KeepsOnlyTheCombosTheDeckIncludes(t *testing.T) {
 		Results: []string{"Infinite damage", "Infinite card draw"},
 	}}, combos)
 }
+
+func TestClient_ReturnsAnErrorOnAServerError(t *testing.T) {
+	var requestCount int
+	client := withFakeSpellbook(t, func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"results": {"included": []}}`))
+	})
+
+	_, err := client.FindCombos(context.Background(), nil, []string{"Curiosity"})
+
+	require.Error(t, err)
+	assert.Equal(t, 1, requestCount)
+}
