@@ -26,14 +26,6 @@ var (
 	ErrNoBoards           = errors.New("boards must list at least one of: main, sideboard, considering")
 )
 
-func (s *Service) visibleDeck(ctx context.Context, userID string, deckID string) (deck.VisibleDeck, error) {
-	visible, err := s.decks.GetVisibleDeck(ctx, userID, deckID)
-	if errors.Is(err, deck.ErrNotFound) {
-		return deck.VisibleDeck{}, ErrDeckNotFound
-	}
-	return visible, err
-}
-
 type DuplicateRequest struct {
 	Name       string `json:"name"`
 	FolderID   *int   `json:"folder_id"`
@@ -111,8 +103,11 @@ func (s *Service) CollectDeck(ctx context.Context, userID string, deckID string,
 	if err != nil {
 		return Summary{}, err
 	}
-	source, err := s.visibleDeck(ctx, userID, deckID)
+	source, err := s.decks.ReadDeck(ctx, userID, deckID, deck.ReachVisible)
 	if err != nil {
+		if errors.Is(err, deck.ErrNotFound) {
+			return Summary{}, ErrDeckNotFound
+		}
 		return Summary{}, err
 	}
 	if (req.Mode == CollectPending && !source.Mine) || (req.Mode == CollectMissing && source.Mine) {

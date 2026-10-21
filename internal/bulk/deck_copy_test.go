@@ -114,6 +114,28 @@ func TestCollectDeck_OnSomeoneElsesDeckUsesTheSharedCollect(t *testing.T) {
 	}
 }
 
+func TestCollectDeck_ReadsTheDeckAsVisibleToTheViewer(t *testing.T) {
+	decks := sharedDeckFixture()
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+
+	_, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{Mode: CollectAll, Boards: []string{deck.BoardMain}})
+
+	require.NoError(t, err)
+	assert.Equal(t, []deckRead{{viewerID: testUserID, deckID: fixtureDeckID, reach: deck.ReachVisible}}, decks.reads)
+}
+
+func TestCollectDeck_ADeckOutOfReachIsNotFound(t *testing.T) {
+	decks := sharedDeckFixture()
+	decks.readErr = deck.ErrNotFound
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, &fakeResolver{})
+
+	_, err := svc.CollectDeck(context.Background(), testUserID, fixtureDeckID, CollectRequest{Mode: CollectAll, Boards: []string{deck.BoardMain}})
+
+	assert.ErrorIs(t, err, ErrDeckNotFound)
+	assert.Empty(t, decks.sharedCollects)
+	assert.Empty(t, decks.ownCollects)
+}
+
 func TestCollectDeck_ReturnsTheDeckModuleFailureWithoutASummary(t *testing.T) {
 	decks := tamiyoDeckFixture()
 	decks.collectErr = errors.New("boom")

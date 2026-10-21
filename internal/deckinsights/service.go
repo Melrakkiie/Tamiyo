@@ -2,14 +2,13 @@ package deckinsights
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"Melrakkiie/Tamiyo/internal/deck"
 )
 
-type deckService interface {
-	GetDeckContent(ctx context.Context, userID string, deckID string) (deck.DeckContent, error)
+type deckReader interface {
+	ReadDeck(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (deck.ReadDeck, error)
 }
 
 type valueReader interface {
@@ -26,25 +25,25 @@ type store interface {
 }
 
 type Service struct {
-	decks  deckService
+	decks  deckReader
 	store  store
 	combos comboFinder
 }
 
-func NewService(decks deckService, store store, combos comboFinder) *Service {
+func NewService(decks deckReader, store store, combos comboFinder) *Service {
 	return &Service{decks: decks, store: store, combos: combos}
 }
 
 func (s *Service) GetDeckLegality(ctx context.Context, userID string, deckID string) (LegalityReport, error) {
-	content, err := s.loadDeck(ctx, userID, deckID)
+	read, err := s.readOwnDeck(ctx, userID, deckID)
 	if err != nil {
 		return LegalityReport{}, err
 	}
-	printings, err := s.store.Printings(ctx, scryfallIDs(content.Entries))
+	printings, err := s.store.Printings(ctx, scryfallIDs(read.Entries))
 	if err != nil {
 		return LegalityReport{}, fmt.Errorf("loading printings: %w", err)
 	}
-	return checkLegality(content.Deck, content.Entries, printings)
+	return checkLegality(read, printings)
 }
 
 func (s *Service) GetDeckStats(ctx context.Context, userID string, deckID string) (DeckStats, error) {
@@ -68,11 +67,11 @@ func (s *Service) GetDeckStats(ctx context.Context, userID string, deckID string
 }
 
 func (s *Service) loadMainBoard(ctx context.Context, userID string, deckID string) ([]deck.DeckEntry, map[string]Printing, error) {
-	content, err := s.loadDeck(ctx, userID, deckID)
+	read, err := s.readOwnDeck(ctx, userID, deckID)
 	if err != nil {
 		return nil, nil, err
 	}
-	main := mainBoard(content.Entries)
+	main := read.MainBoard()
 	printings, err := s.store.Printings(ctx, scryfallIDs(main))
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading printings: %w", err)
@@ -80,15 +79,14 @@ func (s *Service) loadMainBoard(ctx context.Context, userID string, deckID strin
 	return main, printings, nil
 }
 
-func (s *Service) loadDeck(ctx context.Context, userID string, deckID string) (deck.DeckContent, error) {
-	content, err := s.decks.GetDeckContent(ctx, userID, deckID)
+// readOwnDeck reads the user's own deck. It answers deck.ErrNotFound when
+// the user has no such deck.
+func (s *Service) readOwnDeck(ctx context.Context, userID string, deckID string) (deck.ReadDeck, error) {
+	read, err := s.decks.ReadDeck(ctx, userID, deckID, deck.ReachOwn)
 	if err != nil {
-		if errors.Is(err, deck.ErrNotFound) {
-			return deck.DeckContent{}, ErrDeckNotFound
-		}
-		return deck.DeckContent{}, fmt.Errorf("loading deck content: %w", err)
+		return deck.ReadDeck{}, fmt.Errorf("reading deck: %w", err)
 	}
-	return content, nil
+	return read, nil
 }
 
 func scryfallIDs(entries []deck.DeckEntry) []string {
