@@ -227,15 +227,6 @@ func (f *fakeDeckService) DuplicateDeck(ctx context.Context, userID string, sour
 	return f.duplicateResult, f.duplicateErr
 }
 
-func (f *fakeDeckService) GetSharedDeck(ctx context.Context, id string) (string, deck.Deck, error) {
-	for _, d := range f.decks {
-		if d.ID == id && f.owners[id] != "" {
-			return f.owners[id], d, nil
-		}
-	}
-	return "", deck.Deck{}, deck.ErrNotFound
-}
-
 type deckRead struct {
 	viewerID string
 	deckID   string

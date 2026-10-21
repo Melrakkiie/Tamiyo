@@ -38,22 +38,27 @@ func (s *Service) ExportDeck(ctx context.Context, userID string, deckID string, 
 		}
 		return fmt.Errorf("loading deck content: %w", err)
 	}
-	boards := splitByBoard(content.Entries)
+	var tags map[string][]string
+	if format == DeckExportMoxfield && opts.WithTags {
+		deckTags, err := s.decks.GetCardTags(ctx, userID, content.Deck.ID)
+		if err != nil {
+			return fmt.Errorf("loading tags: %w", err)
+		}
+		tags = deckTags.ByCardName()
+	}
+	return writeTextDeck(w, format, content.Entries, tags)
+}
 
+// writeTextDeck writes a moxfield, plain or arena list; only moxfield shows
+// the tags, keyed by deck.CardNameKey.
+func writeTextDeck(w io.Writer, format string, entries []deck.DeckEntry, tags map[string][]string) error {
+	boards := splitByBoard(entries)
 	switch format {
 	case DeckExportPlain:
 		return writePlainDeck(w, boards)
 	case DeckExportArena:
 		return writeArenaDeck(w, boards)
 	default:
-		tags := map[string][]string{}
-		if opts.WithTags {
-			deckTags, err := s.decks.GetCardTags(ctx, userID, content.Deck.ID)
-			if err != nil {
-				return fmt.Errorf("loading tags: %w", err)
-			}
-			tags = deckTags.ByCardName()
-		}
 		return writeMoxfieldDeck(w, boards, tags)
 	}
 }
@@ -62,14 +67,30 @@ func (s *Service) ExportSharedDeck(ctx context.Context, deckID string, opts Deck
 	if _, known := deckExportFilenames[opts.Format]; !known {
 		return ErrUnknownExportFormat
 	}
-	ownerID, d, err := s.decks.GetSharedDeck(ctx, deckID)
+	shared, err := s.decks.ReadDeck(ctx, "", deckID, deck.ReachShared)
 	if err != nil {
 		if errors.Is(err, deck.ErrNotFound) {
 			return ErrDeckNotFound
 		}
 		return err
 	}
-	return s.exportDeckAs(ctx, ownerID, d.ID, opts, w)
+	var tags map[string][]string
+	if opts.WithTags {
+		tags = shared.Tags
+	}
+
+	switch opts.Format {
+	case DeckExportTamiyo:
+		return writeTamiyoDeck(w, shared.Deck, shared.Entries, opts.WithTags, tags)
+	case DeckExportCardmarket:
+		boards, err := cardmarketBoards(opts)
+		if err != nil {
+			return err
+		}
+		return s.writeCardmarketDeck(ctx, deck.EntriesInBoards(shared.Entries, boardList(boards)), opts, w)
+	default:
+		return writeTextDeck(w, opts.Format, shared.Entries, tags)
+	}
 }
 
 func splitByBoard(entries []deck.DeckEntry) deckExportBoards {
