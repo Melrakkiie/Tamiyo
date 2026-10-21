@@ -12,9 +12,9 @@ import (
 )
 
 type insightsService interface {
-	GetDeckLegality(ctx context.Context, userID string, deckID string) (LegalityReport, error)
-	GetDeckStats(ctx context.Context, userID string, deckID string) (DeckStats, error)
-	GetDeckCombos(ctx context.Context, userID string, deckID string) (DeckCombos, error)
+	GetDeckLegality(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (LegalityReport, error)
+	GetDeckStats(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (DeckStats, error)
+	GetDeckCombos(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (DeckCombos, error)
 }
 
 type Handler struct {
@@ -25,74 +25,73 @@ func NewHandler(service insightsService) *Handler {
 	return &Handler{service: service}
 }
 
+// RegisterRoutes registers the insights of the signed-in user's own decks;
+// router must require authentication.
 func (h *Handler) RegisterRoutes(router gin.IRoutes) {
-	router.GET("/deck/:id/legality", h.getDeckLegality)
-	router.GET("/deck/:id/stats", h.getDeckStats)
-	router.GET("/deck/:id/combos", h.getDeckCombos)
+	router.GET("/deck/:id/legality", private(boxed(h.service.GetDeckLegality)))
+	router.GET("/deck/:id/stats", private(boxed(h.service.GetDeckStats)))
+	router.GET("/deck/:id/combos", private(boxed(h.service.GetDeckCombos)))
 }
 
-func (h *Handler) getDeckCombos(ctx *gin.Context) {
-	userID, deckID, ok := h.authAndParseID(ctx)
-	if !ok {
-		return
-	}
+// RegisterSharedRoutes registers the insights of shared decks, readable by
+// anyone, signed in or not.
+func (h *Handler) RegisterSharedRoutes(router gin.IRoutes) {
+	router.GET("/shared/decks/:id/legality", shared(boxed(h.service.GetDeckLegality)))
+	router.GET("/shared/decks/:id/stats", shared(boxed(h.service.GetDeckStats)))
+	router.GET("/shared/decks/:id/combos", shared(boxed(h.service.GetDeckCombos)))
+}
 
-	combos, err := h.service.GetDeckCombos(ctx.Request.Context(), userID, deckID)
+type insight func(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (any, error)
+
+func boxed[T any](compute func(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (T, error)) insight {
+	return func(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (any, error) {
+		return compute(ctx, viewerID, deckID, reach)
+	}
+}
+
+// private serves insight to the signed-in user, for their own decks.
+func private(compute insight) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		userID, authed := auth.UserIDFromContext(ctx)
+		if !authed {
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+			return
+		}
+		deckID, valid := deck.ParseID(ctx.Param("id"))
+		if !valid {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+			return
+		}
+
+		respond(ctx, compute, userID, deckID, deck.ReachOwn, ctx.IndentedJSON)
+	}
+}
+
+// shared serves insight to whoever is viewing, anonymous included, for shared
+// decks. A malformed id answers like an unknown deck.
+func shared(compute insight) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		viewerID, _ := auth.UserIDFromContext(ctx)
+		deckID, valid := deck.ParseID(ctx.Param("id"))
+		if !valid {
+			respondError(ctx, deck.ErrNotFound)
+			return
+		}
+
+		respond(ctx, compute, viewerID, deckID, deck.ReachShared, ctx.JSON)
+	}
+}
+
+func respond(ctx *gin.Context, compute insight, viewerID string, deckID string, reach deck.Reach, render func(code int, body any)) {
+	body, err := compute(ctx.Request.Context(), viewerID, deckID, reach)
 	if err != nil {
-		h.respondError(ctx, err)
+		respondError(ctx, err)
 		return
 	}
-
-	ctx.IndentedJSON(http.StatusOK, combos)
+	render(http.StatusOK, body)
 }
 
-func (h *Handler) getDeckLegality(ctx *gin.Context) {
-	userID, deckID, ok := h.authAndParseID(ctx)
-	if !ok {
-		return
-	}
-
-	report, err := h.service.GetDeckLegality(ctx.Request.Context(), userID, deckID)
-	if err != nil {
-		h.respondError(ctx, err)
-		return
-	}
-
-	ctx.IndentedJSON(http.StatusOK, report)
-}
-
-func (h *Handler) getDeckStats(ctx *gin.Context) {
-	userID, deckID, ok := h.authAndParseID(ctx)
-	if !ok {
-		return
-	}
-
-	stats, err := h.service.GetDeckStats(ctx.Request.Context(), userID, deckID)
-	if err != nil {
-		h.respondError(ctx, err)
-		return
-	}
-
-	ctx.IndentedJSON(http.StatusOK, stats)
-}
-
-func (h *Handler) authAndParseID(ctx *gin.Context) (userID string, deckID string, ok bool) {
-	userID, authed := auth.UserIDFromContext(ctx)
-	if !authed {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
-		return "", "", false
-	}
-
-	deckID, valid := deck.ParseID(ctx.Param("id"))
-	if !valid {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return "", "", false
-	}
-
-	return userID, deckID, true
-}
-
-func (h *Handler) respondError(ctx *gin.Context, err error) {
+func respondError(ctx *gin.Context, err error) {
 	apierr.Respond(ctx, err,
 		apierr.Mapping{Err: deck.ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 		apierr.Mapping{Err: ErrUnknownFormat, Status: http.StatusBadRequest},

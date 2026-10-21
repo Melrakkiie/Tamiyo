@@ -6,7 +6,6 @@ import (
 	"sort"
 
 	"Melrakkiie/Tamiyo/internal/deck"
-	"Melrakkiie/Tamiyo/internal/deckinsights"
 	"Melrakkiie/Tamiyo/internal/user"
 )
 
@@ -22,12 +21,6 @@ type deckService interface {
 
 type userService interface {
 	GetUser(ctx context.Context, userID string) (user.User, error)
-}
-
-type insightsService interface {
-	GetDeckLegality(ctx context.Context, userID string, deckID string) (deckinsights.LegalityReport, error)
-	GetDeckStats(ctx context.Context, userID string, deckID string) (deckinsights.DeckStats, error)
-	GetDeckCombos(ctx context.Context, userID string, deckID string) (deckinsights.DeckCombos, error)
 }
 
 type Owner struct {
@@ -59,13 +52,12 @@ type SharedDeck struct {
 }
 
 type Service struct {
-	decks    deckService
-	users    userService
-	insights insightsService
+	decks deckService
+	users userService
 }
 
-func NewService(decks deckService, users userService, insights insightsService) *Service {
-	return &Service{decks: decks, users: users, insights: insights}
+func NewService(decks deckService, users userService) *Service {
+	return &Service{decks: decks, users: users}
 }
 
 func (s *Service) GetSharedDeck(ctx context.Context, deckID string) (SharedDeck, error) {
@@ -111,37 +103,6 @@ func (s *Service) GetVisibleDeck(ctx context.Context, userID string, deckID stri
 
 func (s *Service) BrowsePublicDecks(ctx context.Context, filter deck.PublicFilter) ([]deck.PublicDeck, int, error) {
 	return s.decks.BrowsePublicDecks(ctx, filter)
-}
-
-func (s *Service) GetSharedDeckLegality(ctx context.Context, deckID string) (deckinsights.LegalityReport, error) {
-	read, err := s.decks.ReadDeck(ctx, "", deckID, deck.ReachShared)
-	if err != nil {
-		return deckinsights.LegalityReport{}, err
-	}
-	report, err := s.insights.GetDeckLegality(ctx, read.OwnerID, read.Deck.ID)
-	if err != nil {
-		return deckinsights.LegalityReport{}, err
-	}
-	for i := range report.Issues {
-		report.Issues[i].CardID = 0
-	}
-	return report, nil
-}
-
-func (s *Service) GetSharedDeckStats(ctx context.Context, deckID string) (deckinsights.DeckStats, error) {
-	read, err := s.decks.ReadDeck(ctx, "", deckID, deck.ReachShared)
-	if err != nil {
-		return deckinsights.DeckStats{}, err
-	}
-	return s.insights.GetDeckStats(ctx, read.OwnerID, read.Deck.ID)
-}
-
-func (s *Service) GetSharedDeckCombos(ctx context.Context, deckID string) (deckinsights.DeckCombos, error) {
-	read, err := s.decks.ReadDeck(ctx, "", deckID, deck.ReachShared)
-	if err != nil {
-		return deckinsights.DeckCombos{}, err
-	}
-	return s.insights.GetDeckCombos(ctx, read.OwnerID, read.Deck.ID)
 }
 
 func sharedCard(e deck.DeckEntry, tags []string) Card {

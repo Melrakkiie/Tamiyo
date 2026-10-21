@@ -3,7 +3,6 @@
 package deckinsights
 
 import (
-	"context"
 	"os"
 	"testing"
 
@@ -24,7 +23,7 @@ func TestMain(m *testing.M) {
 func getTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
 	_, err := testDB.Exec(`
-		TRUNCATE TABLE tamiyo.deck_pending_cards, tamiyo.card_deck, tamiyo.deck, tamiyo.cards, tamiyo.user_preferences,
+		TRUNCATE TABLE tamiyo.deck_pending_cards, tamiyo.card_deck, tamiyo.deck, tamiyo.cards,
 			tamiyo.users, tamiyo.printings, tamiyo.exchange_rates
 		RESTART IDENTITY CASCADE
 	`)
@@ -91,7 +90,7 @@ type copyOptions struct {
 }
 
 // insightsFixture is one user's deck in a real database, filled through
-// ownedCopy and pendingCard, read back through service.
+// ownedCopy and pendingCard, read back through the store.
 type insightsFixture struct {
 	db     *sqlx.DB
 	userID string
@@ -108,8 +107,17 @@ func newInsightsFixture(t *testing.T, format string) insightsFixture {
 	return insightsFixture{db: db, userID: userID, deckID: deckID}
 }
 
-// ownedCopy adds one physical copy of p to the deck and returns its card id.
-func (f insightsFixture) ownedCopy(t *testing.T, p printing, opts copyOptions) int {
+// otherDeck is another deck of the same user.
+func (f insightsFixture) otherDeck(t *testing.T) insightsFixture {
+	t.Helper()
+	other := f
+	err := f.db.Get(&other.deckID, `INSERT INTO tamiyo.deck (user_id, name, format) VALUES ($1, 'Other', 'commander') RETURNING id`, f.userID)
+	require.NoError(t, err)
+	return other
+}
+
+// ownedCopy adds one physical copy of p to the deck.
+func (f insightsFixture) ownedCopy(t *testing.T, p printing, opts copyOptions) {
 	t.Helper()
 	var id int
 	err := f.db.Get(&id, `
@@ -120,60 +128,16 @@ func (f insightsFixture) ownedCopy(t *testing.T, p printing, opts copyOptions) i
 	require.NoError(t, err)
 	_, err = f.db.Exec(`INSERT INTO tamiyo.card_deck (card_id, deck_id, board) VALUES ($1, $2, $3)`, id, f.deckID, boardOrMain(opts.board))
 	require.NoError(t, err)
-	return id
 }
 
-// pendingCard adds quantity copies of p the user doesn't own yet and returns the pending card id.
-func (f insightsFixture) pendingCard(t *testing.T, p printing, quantity int, opts copyOptions) int {
-	t.Helper()
-	created, err := deck.NewPostgresRepository(f.db).CreatePendingCard(context.Background(), f.userID, deck.PendingCard{
-		DeckID: f.deckID, Name: p.Name, ScryfallID: p.ScryfallID, SetCode: p.SetCode, CollectorNumber: p.CollectorNumber,
-		Foil: opts.foil, Proxy: opts.proxy, Board: boardOrMain(opts.board), Quantity: quantity,
-	})
-	require.NoError(t, err)
-	return created.ID
-}
-
-// setCommanders fills the deck's commander slots; nil leaves a slot empty.
-func (f insightsFixture) setCommanders(t *testing.T, commanderID, commanderPendingID, partnerID, partnerPendingID *int) {
+// pendingCard adds quantity copies of p the user doesn't own yet.
+func (f insightsFixture) pendingCard(t *testing.T, p printing, quantity int, opts copyOptions) {
 	t.Helper()
 	_, err := f.db.Exec(`
-		UPDATE tamiyo.deck SET commander_id = $2, commander_pending_id = $3, partner_id = $4, partner_pending_id = $5 WHERE id = $1
-	`, f.deckID, commanderID, commanderPendingID, partnerID, partnerPendingID)
+		INSERT INTO tamiyo.deck_pending_cards (user_id, deck_id, name, scryfall_id, set_code, collector_number, foil, proxy, board, quantity)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	`, f.userID, f.deckID, p.Name, p.ScryfallID, p.SetCode, p.CollectorNumber, opts.foil, opts.proxy, boardOrMain(opts.board), quantity)
 	require.NoError(t, err)
-}
-
-// setPriceCurrency sets the currency the deck's card list shows prices in.
-func (f insightsFixture) setPriceCurrency(t *testing.T, currency string) {
-	t.Helper()
-	_, err := f.db.Exec(`
-		INSERT INTO tamiyo.user_preferences (user_id, price_currency) VALUES ($1, $2)
-		ON CONFLICT (user_id) DO UPDATE SET price_currency = EXCLUDED.price_currency
-	`, f.userID, currency)
-	require.NoError(t, err)
-}
-
-func (f insightsFixture) deckService() *deck.Service {
-	return deck.NewService(deck.NewPostgresRepository(f.db))
-}
-
-// cardList is the deck's card list as the deck pages show it.
-func (f insightsFixture) cardList(t *testing.T) []deck.DeckEntry {
-	t.Helper()
-	read, err := f.deckService().ReadDeck(context.Background(), f.userID, f.deckID, deck.ReachOwn)
-	require.NoError(t, err)
-	return read.Entries
-}
-
-func (f insightsFixture) service() *Service {
-	return NewService(f.deckService(), NewPostgresRepository(f.db), nil)
-}
-
-func (f insightsFixture) stats(t *testing.T) DeckStats {
-	t.Helper()
-	stats, err := f.service().GetDeckStats(context.Background(), f.userID, f.deckID)
-	require.NoError(t, err)
-	return stats
 }
 
 func boardOrMain(board string) string {
