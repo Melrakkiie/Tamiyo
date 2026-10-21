@@ -132,7 +132,7 @@ func main() {
 	insightsService := deckinsights.NewService(deckService, deckinsights.NewPostgresRepository(db), commanderspellbook.NewClient())
 	insightsHandler := deckinsights.NewHandler(insightsService)
 
-	shareService := deckshare.NewService(deckService, userService, insightsService)
+	shareService := deckshare.NewService(deckService, userService)
 	shareHandler := deckshare.NewHandler(shareService)
 
 	followHandler := follow.NewHandler(follow.NewService(follow.NewPostgresRepository(db)))
@@ -166,6 +166,7 @@ func main() {
 	passwordResetHandler.RegisterRoutes(api, ratelimit.Middleware(authLimiter))
 	emailChangeHandler.RegisterRoutes(api, ratelimit.Middleware(authLimiter))
 	shareHandler.RegisterRoutes(api.Group("", ratelimit.Middleware(shareLimiter)))
+	insightsHandler.RegisterSharedRoutes(api.Group("", ratelimit.Middleware(shareLimiter)))
 	importHandler.RegisterPublicRoutes(api.Group("", ratelimit.Middleware(shareLimiter)))
 	exchangeRateHandler.RegisterRoutes(api)
 

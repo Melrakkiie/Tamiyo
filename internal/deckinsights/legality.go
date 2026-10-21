@@ -63,6 +63,20 @@ func checkDeckSize(report *LegalityReport, format string, cardCount int) {
 	report.Legal = false
 }
 
+// withoutCardIDs is the report with the card id of every issue blanked, for
+// readers who don't own the deck.
+func (r LegalityReport) withoutCardIDs() LegalityReport {
+	issues := make([]LegalityIssue, len(r.Issues))
+	for i, issue := range r.Issues {
+		issue.CardID = 0
+		issues[i] = issue
+	}
+	if len(issues) > 0 {
+		r.Issues = issues
+	}
+	return r
+}
+
 func checkLegality(read deck.ReadDeck, printings map[string]Printing) (LegalityReport, error) {
 	d, entries := read.Deck, read.Entries
 	format := strings.ToLower(strings.TrimSpace(d.Format))

@@ -43,9 +43,14 @@ func (f *fakeDeckReader) ReadDeck(ctx context.Context, viewerID string, deckID s
 type fakeStore struct {
 	printings map[string]Printing
 	values    DeckValues
+	// valuesByOwner, when set, answers only for the owners it holds.
+	valuesByOwner map[string]DeckValues
 }
 
 func (f fakeStore) DeckValues(ctx context.Context, userID string, deckID string) (DeckValues, error) {
+	if f.valuesByOwner != nil {
+		return f.valuesByOwner[userID], nil
+	}
 	return f.values, nil
 }
 
@@ -135,7 +140,7 @@ func unstored(name, scryfallID string) Printing {
 func TestGetDeckLegality_UnknownDeckReturnsErrNotFound(t *testing.T) {
 	svc := NewService(&fakeDeckReader{}, fakeStore{}, nil)
 
-	_, err := svc.GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000999")
+	_, err := svc.GetDeckLegality(context.Background(), testUserID, "00000000-0000-0000-0000-000000000999", deck.ReachOwn)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, deck.ErrNotFound)
@@ -145,7 +150,7 @@ func TestGetDeckLegality_PropagatesADeckReadError(t *testing.T) {
 	boom := errors.New("db down")
 	svc := NewService(&fakeDeckReader{err: boom}, fakeStore{}, nil)
 
-	_, err := svc.GetDeckLegality(context.Background(), testUserID, testDeckID)
+	_, err := svc.GetDeckLegality(context.Background(), testUserID, testDeckID, deck.ReachOwn)
 
 	assert.ErrorIs(t, err, boom)
 	assert.NotErrorIs(t, err, deck.ErrNotFound)
@@ -161,7 +166,7 @@ func TestGetDeckStats_AnotherUsersSharedDeckReturnsErrNotFound(t *testing.T) {
 	})
 	svc := NewService(reader, fakeStore{}, nil)
 
-	_, err := svc.GetDeckStats(context.Background(), testUserID, testDeckID)
+	_, err := svc.GetDeckStats(context.Background(), testUserID, testDeckID, deck.ReachOwn)
 
 	assert.ErrorIs(t, err, deck.ErrNotFound)
 }
@@ -179,8 +184,72 @@ func TestGetDeckStats_CountsOnlyTheMainBoardOfTheOwnersDeck(t *testing.T) {
 	})
 	svc := NewService(reader, fakeStore{}, nil)
 
-	stats, err := svc.GetDeckStats(context.Background(), testUserID, testDeckID)
+	stats, err := svc.GetDeckStats(context.Background(), testUserID, testDeckID, deck.ReachOwn)
 
 	require.NoError(t, err)
 	assert.Equal(t, 3, stats.CardCount)
+}
+
+// --- shared reach ------------------------------------------------------------
+
+// sharedDeckOf is a public commander deck of otherUserID holding entries.
+func sharedDeckOf(entries ...deck.DeckEntry) deck.ReadDeck {
+	return deck.ReadDeck{
+		OwnerID: otherUserID,
+		Deck:    deck.Deck{ID: testDeckID, Format: "commander", Visibility: deck.VisibilityPublic},
+		Entries: entries,
+	}
+}
+
+func TestGetDeckLegality_SharedReachHidesCardIDs(t *testing.T) {
+	channel := legalPrinting(1, "Channel", "Sorcery", nil)
+	channel.BannedFormats = []string{"commander"}
+	svc := NewService(readerWith(sharedDeckOf(owned(channel, 7))), storeOf(channel), nil)
+
+	report, err := svc.GetDeckLegality(context.Background(), "", testDeckID, deck.ReachShared)
+
+	require.NoError(t, err)
+	assert.Equal(t, []LegalityIssue{{CardName: "Channel", Board: deck.BoardMain, Reason: "banned in commander"}}, ignoringDeckSize(report).Issues)
+}
+
+func TestGetDeckLegality_OwnReachKeepsCardIDs(t *testing.T) {
+	channel := legalPrinting(1, "Channel", "Sorcery", nil)
+	channel.BannedFormats = []string{"commander"}
+	svc := NewService(readerWith(deckOf("commander", owned(channel, 7))), storeOf(channel), nil)
+
+	report, err := svc.GetDeckLegality(context.Background(), testUserID, testDeckID, deck.ReachOwn)
+
+	require.NoError(t, err)
+	assert.Equal(t, 7, ignoringDeckSize(report).Issues[0].CardID)
+}
+
+func TestGetDeckStats_SharedReachShowsTheOwnersValues(t *testing.T) {
+	store := storeOf(solRing)
+	store.valuesByOwner = map[string]DeckValues{otherUserID: {
+		Owned:       Value{EUR: 14, USD: 18},
+		Pending:     Value{EUR: 8, USD: 10},
+		Sideboard:   Value{EUR: 9, USD: 11},
+		Considering: Value{EUR: 1, USD: 2},
+	}}
+	svc := NewService(readerWith(sharedDeckOf(owned(solRing, 1))), store, nil)
+
+	for _, viewer := range []string{"", testUserID} {
+		stats, err := svc.GetDeckStats(context.Background(), viewer, testDeckID, deck.ReachShared)
+
+		require.NoError(t, err)
+		assert.Equal(t, Value{EUR: 22, USD: 28}, stats.Value)
+		assert.Equal(t, Value{EUR: 14, USD: 18}, stats.OwnedValue)
+		assert.Equal(t, Value{EUR: 8, USD: 10}, stats.PendingValue)
+		assert.Equal(t, BoardValues{Sideboard: Value{EUR: 9, USD: 11}, Considering: Value{EUR: 1, USD: 2}}, stats.BoardValues)
+	}
+}
+
+func TestGetDeckCombos_SharedReachLooksUpTheSharedDeck(t *testing.T) {
+	finder := &recordingFinder{}
+	svc := NewService(readerWith(sharedDeckOf(owned(curiosity, 1))), storeOf(curiosity), finder)
+
+	_, err := svc.GetDeckCombos(context.Background(), "", testDeckID, deck.ReachShared)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Curiosity"}, finder.main)
 }

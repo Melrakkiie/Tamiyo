@@ -51,7 +51,7 @@ func (f *fakeDeckStore) GetLikedDecks(ctx context.Context, userID string, page i
 
 func TestService_LikeSomeoneElsesSharedDeck(t *testing.T) {
 	store := compareStore()
-	svc := NewService(store, compareUsers(), &fakeInsights{})
+	svc := NewService(store, compareUsers())
 	ctx := context.Background()
 
 	status, err := svc.LikeDeck(ctx, viewerID, theirDeck)
@@ -78,7 +78,7 @@ func TestService_LikeSomeoneElsesSharedDeck(t *testing.T) {
 
 func TestService_LikeRules(t *testing.T) {
 	store := compareStore()
-	svc := NewService(store, compareUsers(), &fakeInsights{})
+	svc := NewService(store, compareUsers())
 	ctx := context.Background()
 
 	_, err := svc.LikeDeck(ctx, viewerID, myDeckID)

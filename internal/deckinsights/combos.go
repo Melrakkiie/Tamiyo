@@ -31,8 +31,8 @@ type DeckCombos struct {
 	Combos []Combo `json:"combos"`
 }
 
-func (s *Service) GetDeckCombos(ctx context.Context, userID string, deckID string) (DeckCombos, error) {
-	main, printings, err := s.loadMainBoard(ctx, userID, deckID)
+func (s *Service) GetDeckCombos(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (DeckCombos, error) {
+	_, main, printings, err := s.loadMainBoard(ctx, viewerID, deckID, reach)
 	if err != nil {
 		return DeckCombos{}, err
 	}

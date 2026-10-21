@@ -41,7 +41,7 @@ func ignoringDeckSize(report LegalityReport) LegalityReport {
 }
 
 func legalityReport(read deck.ReadDeck, store fakeStore) (LegalityReport, error) {
-	return NewService(readerWith(read), store, nil).GetDeckLegality(context.Background(), testUserID, read.Deck.ID)
+	return NewService(readerWith(read), store, nil).GetDeckLegality(context.Background(), testUserID, read.Deck.ID, deck.ReachOwn)
 }
 
 // legalityOf is the legality report of the test user's own deck read,
