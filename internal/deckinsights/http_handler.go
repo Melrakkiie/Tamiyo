@@ -14,6 +14,7 @@ import (
 type insightsService interface {
 	GetDeckLegality(ctx context.Context, userID string, deckID string) (LegalityReport, error)
 	GetDeckStats(ctx context.Context, userID string, deckID string) (DeckStats, error)
+	GetDeckCombos(ctx context.Context, userID string, deckID string) (DeckCombos, error)
 }
 
 type Handler struct {
@@ -27,6 +28,22 @@ func NewHandler(service insightsService) *Handler {
 func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.GET("/deck/:id/legality", h.getDeckLegality)
 	router.GET("/deck/:id/stats", h.getDeckStats)
+	router.GET("/deck/:id/combos", h.getDeckCombos)
+}
+
+func (h *Handler) getDeckCombos(ctx *gin.Context) {
+	userID, deckID, ok := h.authAndParseID(ctx)
+	if !ok {
+		return
+	}
+
+	combos, err := h.service.GetDeckCombos(ctx.Request.Context(), userID, deckID)
+	if err != nil {
+		h.respondError(ctx, err)
+		return
+	}
+
+	ctx.IndentedJSON(http.StatusOK, combos)
 }
 
 func (h *Handler) getDeckLegality(ctx *gin.Context) {
@@ -79,5 +96,6 @@ func (h *Handler) respondError(ctx *gin.Context, err error) {
 	apierr.Respond(ctx, err,
 		apierr.Mapping{Err: ErrDeckNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 		apierr.Mapping{Err: ErrUnknownFormat, Status: http.StatusBadRequest},
+		apierr.Mapping{Err: ErrCombosUnavailable, Status: http.StatusBadGateway, Message: ErrCombosUnavailable.Error()},
 	)
 }
