@@ -4,6 +4,16 @@ A Magic: The Gathering collection manager: the cards a user owns, where they are
 
 ## Language
 
+### Copies
+
+**Finish**:
+The surface of a copy: regular or foil, among those its printing comes in. A physical fact of the copy: changing it means taking another copy.
+_Avoid_: Treatment, foiling
+
+**Foil**:
+The shiny finish, Scryfall's etched finish included. Shown as "foil" in the interface.
+_Avoid_: Etched (as a finish of its own), holo, shiny
+
 ### Card images
 
 **Printing**:
