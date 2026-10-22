@@ -47,3 +47,13 @@ _Avoid_: Total mana cost, total CMC
 **Combo**:
 A set of cards that together produce a notable result (an infinite loop, a win), as listed by Commander Spellbook. A deck has a combo only when every one of its cards is in the main board, with any card the combo needs as commander set as the deck's commander.
 _Avoid_: Synergy, interaction, almost-combo
+
+### Languages
+
+**Interface language**:
+The language a user reads Tamiyo in, chosen by the user; it also sets how numbers and dates are written and how names are sorted.
+_Avoid_: Locale, app language, site language
+
+**Card text language**:
+The language a card's printed name and rules text are shown in: the interface language unless the user picks the other one for that card.
+_Avoid_: Card language, translation
