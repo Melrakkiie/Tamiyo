@@ -253,6 +253,25 @@ func TestPostgresRepository_UpsertStoresDeckInsightFields(t *testing.T) {
 	assert.Zero(t, manaValue)
 }
 
+func TestPostgresRepository_UpsertStoresAndClearsTheGameChangerFlag(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+	const a = "11111111-1111-1111-1111-111111111111"
+	gameChanger := func() bool {
+		t.Helper()
+		var flag bool
+		require.NoError(t, db.QueryRow(`SELECT game_changer FROM tamiyo.printings WHERE scryfall_id = $1`, a).Scan(&flag))
+		return flag
+	}
+
+	require.NoError(t, repo.Upsert(ctx, []Printing{{ScryfallID: a, TypeLine: "Artifact", LegalFormats: []string{}, GameChanger: true}}))
+	assert.True(t, gameChanger())
+
+	require.NoError(t, repo.Upsert(ctx, []Printing{{ScryfallID: a, TypeLine: "Artifact", LegalFormats: []string{}}}))
+	assert.False(t, gameChanger())
+}
+
 func TestPostgresRepository_IDsToRefreshIncludesPendingOnlyPrintings(t *testing.T) {
 	db := getTestDB(t)
 	repo := NewPostgresRepository(db)

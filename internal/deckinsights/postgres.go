@@ -37,10 +37,11 @@ func (r *PostgresRepository) Printings(ctx context.Context, scryfallIDs []string
 		LegalFormats      pq.StringArray `db:"legal_formats"`
 		BannedFormats     pq.StringArray `db:"banned_formats"`
 		RestrictedFormats pq.StringArray `db:"restricted_formats"`
+		GameChanger       bool           `db:"game_changer"`
 	}
 	err := r.db.SelectContext(ctx, &rows, `
 		SELECT scryfall_id::text AS scryfall_id, name, type_line, COALESCE(oracle_text, '') AS oracle_text, keywords,
-			mana_value::float8 AS mana_value, colors, color_identity, legal_formats, banned_formats, restricted_formats
+			mana_value::float8 AS mana_value, colors, color_identity, legal_formats, banned_formats, restricted_formats, game_changer
 		FROM tamiyo.printings
 		WHERE scryfall_id = ANY($1::uuid[]) AND type_line <> ''
 	`, pq.Array(scryfallIDs))
@@ -52,6 +53,7 @@ func (r *PostgresRepository) Printings(ctx context.Context, scryfallIDs []string
 			ScryfallID: row.ScryfallID, Name: row.Name, TypeLine: row.TypeLine, OracleText: row.OracleText,
 			Keywords: row.Keywords, ManaValue: row.ManaValue, Colors: row.Colors, ColorIdentity: row.ColorIdentity,
 			LegalFormats: row.LegalFormats, BannedFormats: row.BannedFormats, RestrictedFormats: row.RestrictedFormats,
+			GameChanger: row.GameChanger,
 		}
 	}
 	return byID, nil

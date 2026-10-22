@@ -103,7 +103,7 @@ func TestPostgresRepository_Printings_ReadsEachStoredPrintingByScryfallID(t *tes
 	ring := printing{
 		ScryfallID: "55555555-0000-0000-0000-000000000001", Name: "Sol Ring", TypeLine: "Artifact", OracleText: "{T}: Add {C}{C}.",
 		ManaValue: 1, ColorIdentity: []string{}, LegalFormats: []string{"commander", "vintage"}, RestrictedFormats: []string{"vintage"},
-		BannedFormats: []string{"legacy"},
+		BannedFormats: []string{"legacy"}, GameChanger: true,
 	}
 	bolt := printing{
 		ScryfallID: "55555555-0000-0000-0000-000000000002", Name: "Lightning Bolt", TypeLine: "Instant",
@@ -120,6 +120,7 @@ func TestPostgresRepository_Printings_ReadsEachStoredPrintingByScryfallID(t *tes
 			ScryfallID: ring.ScryfallID, Name: "Sol Ring", TypeLine: "Artifact", OracleText: "{T}: Add {C}{C}.",
 			Keywords: []string{}, ManaValue: 1, Colors: []string{}, ColorIdentity: []string{},
 			LegalFormats: []string{"commander", "vintage"}, BannedFormats: []string{"legacy"}, RestrictedFormats: []string{"vintage"},
+			GameChanger: true,
 		},
 		bolt.ScryfallID: {
 			ScryfallID: bolt.ScryfallID, Name: "Lightning Bolt", TypeLine: "Instant",

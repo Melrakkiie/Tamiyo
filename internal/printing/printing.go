@@ -37,6 +37,7 @@ type Printing struct {
 	Powers            []string
 	Toughnesses       []string
 	Prices            scryfall.Prices
+	GameChanger       bool
 }
 
 type Repository interface {
@@ -69,6 +70,7 @@ func FromScryfall(card scryfall.Card) Printing {
 		Colors:            nonNil(card.Colors),
 		ColorIdentity:     nonNil(card.ColorIdentity),
 		Powers:            card.Powers, Toughnesses: card.Toughnesses, Prices: card.Prices,
+		GameChanger: card.GameChanger,
 	}
 }
 

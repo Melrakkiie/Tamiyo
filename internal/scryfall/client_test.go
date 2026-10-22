@@ -385,3 +385,22 @@ func TestClient_ParsesPrices(t *testing.T) {
 	require.NotNil(t, prices.USDEtched)
 	assert.Equal(t, 9.75, *prices.USDEtched)
 }
+
+func TestClient_ReadsTheGameChangerFlag(t *testing.T) {
+	withFakeScryfall(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":[{"id":"11111111-1111-1111-1111-111111111111","game_changer":true},{"id":"22222222-2222-2222-2222-222222222222","game_changer":false},{"id":"33333333-3333-3333-3333-333333333333"}]}`))
+	})
+
+	cards, err := NewClient().Fetch(context.Background(), []Identifier{
+		{ID: "11111111-1111-1111-1111-111111111111"},
+		{ID: "22222222-2222-2222-2222-222222222222"},
+		{ID: "33333333-3333-3333-3333-333333333333"},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, cards, 3)
+	assert.True(t, cards[0].GameChanger)
+	assert.False(t, cards[1].GameChanger)
+	assert.False(t, cards[2].GameChanger)
+}

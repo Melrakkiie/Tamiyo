@@ -20,6 +20,7 @@ func computeStats(entries []deck.DeckEntry, printings map[string]Printing) DeckS
 	curve := make(map[int]*ManaCurveBucket)
 	cardIndex := make(map[int]map[string]int)
 	backFaceIndex := make(map[string]int)
+	gameChangers := make(map[string]bool)
 	var totalManaValue float64
 	var nonlandCount int
 
@@ -31,6 +32,9 @@ func computeStats(entries []deck.DeckEntry, printings map[string]Printing) DeckS
 		if !ok {
 			stats.TypeBreakdown["Unknown"] += quantity
 			continue
+		}
+		if p.GameChanger {
+			gameChangers[deck.CardNameKey(e.Name)] = true
 		}
 
 		t := scryfall.PrimaryType(p.TypeLine)
@@ -64,6 +68,7 @@ func computeStats(entries []deck.DeckEntry, printings map[string]Printing) DeckS
 
 	stats.NonlandCount = nonlandCount
 	stats.TotalManaValue = totalManaValue
+	stats.GameChangerCount = len(gameChangers)
 	if nonlandCount > 0 {
 		stats.AverageManaValue = totalManaValue / float64(nonlandCount)
 	}

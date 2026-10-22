@@ -96,6 +96,11 @@ func TestFromScryfall_KeepsTheManaValue(t *testing.T) {
 	assert.Equal(t, 3.0, p.ManaValue)
 }
 
+func TestFromScryfall_KeepsTheGameChangerFlag(t *testing.T) {
+	assert.True(t, FromScryfall(scryfall.Card{ID: "a", GameChanger: true}).GameChanger)
+	assert.False(t, FromScryfall(scryfall.Card{ID: "a"}).GameChanger)
+}
+
 func TestFromScryfall_KeepsTheEnglishName(t *testing.T) {
 	p := FromScryfall(scryfall.Card{ID: "a", Name: "Sol Ring"})
 

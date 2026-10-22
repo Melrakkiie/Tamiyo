@@ -52,6 +52,9 @@ type DeckStats struct {
 	OwnedValue       Value             `json:"owned_value"`
 	PendingValue     Value             `json:"pending_value"`
 	BoardValues      BoardValues       `json:"board_values"`
+	// GameChangerCount is the number of distinct cards of the main board
+	// whose stored printing is a game changer.
+	GameChangerCount int `json:"game_changer_count"`
 }
 
 type BoardValues struct {
@@ -78,6 +81,9 @@ type Printing struct {
 	LegalFormats      []string // legal or restricted
 	BannedFormats     []string
 	RestrictedFormats []string
+	// GameChanger is Scryfall's flag for a card on Wizards' Commander game
+	// changer list.
+	GameChanger bool
 }
 
 // DeckValues holds a deck's values before rounding, priced by tamiyo.card_price.
