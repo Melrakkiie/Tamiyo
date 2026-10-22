@@ -142,6 +142,7 @@ type DeckCard struct {
 	ColorIdentity   *string
 	Board           string
 	Price           *float64
+	GameChanger     bool
 	Added           time.Time
 	Updated         time.Time
 }
