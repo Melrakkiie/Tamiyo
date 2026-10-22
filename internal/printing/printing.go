@@ -2,6 +2,7 @@ package printing
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"sort"
 	"strings"
@@ -43,6 +44,9 @@ type Printing struct {
 type Repository interface {
 	IDsToRefresh(ctx context.Context, staleBefore time.Time, limit int) ([]string, error)
 	Upsert(ctx context.Context, printings []Printing) error
+	// MarkRefreshed stamps printings as refreshed without changing their
+	// data, so they stop coming back first.
+	MarkRefreshed(ctx context.Context, ids []string) error
 }
 
 type Fetcher interface {
@@ -105,7 +109,13 @@ func (r *Refresher) RefreshBatch(ctx context.Context) (int, error) {
 		identifiers[i] = scryfall.Identifier{ID: id}
 	}
 	cards, err := r.fetcher.Fetch(ctx, identifiers)
-	if err != nil {
+	rejected := map[string]bool{}
+	var rejectedErr *scryfall.RejectedError
+	if errors.As(err, &rejectedErr) {
+		for _, identifier := range rejectedErr.Identifiers {
+			rejected[strings.ToLower(identifier.ID)] = true
+		}
+	} else if err != nil {
 		return 0, err
 	}
 
@@ -114,7 +124,14 @@ func (r *Refresher) RefreshBatch(ctx context.Context) (int, error) {
 		found[strings.ToLower(card.ID)] = FromScryfall(card)
 	}
 	printings := make([]Printing, 0, len(ids))
+	var rejectedIDs []string
 	for _, id := range ids {
+		// A rejected printing keeps its data: a request Scryfall refuses
+		// whole would otherwise blank every printing.
+		if rejected[strings.ToLower(id)] {
+			rejectedIDs = append(rejectedIDs, id)
+			continue
+		}
 		p, ok := found[strings.ToLower(id)]
 		if !ok {
 			p = Printing{
@@ -127,6 +144,12 @@ func (r *Refresher) RefreshBatch(ctx context.Context) (int, error) {
 	}
 	if err := r.repo.Upsert(ctx, printings); err != nil {
 		return 0, err
+	}
+	if len(rejectedIDs) > 0 {
+		r.logger.Warn("scryfall rejected printings", zap.Strings("scryfall_ids", rejectedIDs))
+		if err := r.repo.MarkRefreshed(ctx, rejectedIDs); err != nil {
+			return 0, err
+		}
 	}
 	return len(ids), nil
 }

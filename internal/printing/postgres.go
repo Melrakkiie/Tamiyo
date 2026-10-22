@@ -80,6 +80,15 @@ func (r *PostgresRepository) Upsert(ctx context.Context, printings []Printing) e
 	return tx.Commit()
 }
 
+func (r *PostgresRepository) MarkRefreshed(ctx context.Context, ids []string) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO tamiyo.printings (scryfall_id, type_line)
+		SELECT id, '' FROM unnest($1::uuid[]) AS id
+		ON CONFLICT (scryfall_id) DO UPDATE SET refreshed_at = now()
+	`, pq.Array(ids))
+	return err
+}
+
 func setManaValue(ctx context.Context, tx *sqlx.Tx, scryfallID string, manaValue float64) error {
 	if _, err := tx.ExecContext(ctx, `UPDATE tamiyo.cards SET mana_value = $2 WHERE scryfall_id = $1 AND mana_value <> $2`, scryfallID, manaValue); err != nil {
 		return err

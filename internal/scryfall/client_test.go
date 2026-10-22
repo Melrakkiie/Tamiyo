@@ -178,18 +178,23 @@ func TestClient_BatchesOver75Identifiers(t *testing.T) {
 }
 
 func TestClient_ReturnsErrorOnNonOKStatus(t *testing.T) {
+	var requestCount int
 	withFakeScryfall(t, func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
 		w.WriteHeader(http.StatusInternalServerError)
 	})
 
 	client := NewClient()
-	_, err := client.Fetch(context.Background(), []Identifier{{Set: "znr", CollectorNumber: "90"}})
+	_, err := client.Fetch(context.Background(), []Identifier{{Set: "znr", CollectorNumber: "90"}, {Set: "znr", CollectorNumber: "91"}})
 
 	require.Error(t, err)
+	var rejected *RejectedError
+	assert.NotErrorAs(t, err, &rejected)
+	assert.Equal(t, 1, requestCount)
 }
 
-// rejectingScryfall answers 400 to any request holding the rejected ID, as
-// Scryfall does for an ID it deems invalid, and finds every other ID.
+// Scryfall answers 400 to a batch holding an ID it deems invalid, instead of
+// listing that ID in not_found.
 func rejectingScryfall(t *testing.T, rejected string) *[]int {
 	t.Helper()
 	var requestSizes []int
@@ -220,12 +225,14 @@ func identifiersByID(count int) []Identifier {
 	return identifiers
 }
 
-func TestClient_SkipsAnIdentifierScryfallRejectsAndKeepsTheRestOfItsBatch(t *testing.T) {
+func TestClient_ReportsAnIdentifierScryfallRejectsAndKeepsTheRestOfItsBatch(t *testing.T) {
 	rejectingScryfall(t, "id-2")
 
 	cards, err := NewClient().Fetch(context.Background(), identifiersByID(5))
 
-	require.NoError(t, err)
+	var rejected *RejectedError
+	require.ErrorAs(t, err, &rejected)
+	assert.Equal(t, []Identifier{{ID: "id-2"}}, rejected.Identifiers)
 	ids := make([]string, len(cards))
 	for i, card := range cards {
 		ids[i] = card.ID
@@ -238,22 +245,12 @@ func TestClient_KeepsFetchingTheBatchesAfterARejectedIdentifier(t *testing.T) {
 
 	cards, err := NewClient().Fetch(context.Background(), identifiersByID(80))
 
-	require.NoError(t, err)
+	var rejected *RejectedError
+	require.ErrorAs(t, err, &rejected)
+	assert.Equal(t, []Identifier{{ID: "id-10"}}, rejected.Identifiers)
 	assert.Len(t, cards, 79)
+	// 80 identifiers: the batch of 75 holding id-10, then the last 5.
 	assert.Equal(t, 5, (*requestSizes)[len(*requestSizes)-1])
-}
-
-func TestClient_StillFailsWhenScryfallFailsOtherwise(t *testing.T) {
-	var requestCount int
-	withFakeScryfall(t, func(w http.ResponseWriter, r *http.Request) {
-		requestCount++
-		w.WriteHeader(http.StatusInternalServerError)
-	})
-
-	_, err := NewClient().Fetch(context.Background(), identifiersByID(5))
-
-	require.Error(t, err)
-	assert.Equal(t, 1, requestCount)
 }
 
 func TestClient_RetriesOn429ThenSucceeds(t *testing.T) {

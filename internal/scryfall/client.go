@@ -19,6 +19,15 @@ var retryBaseDelay = 1 * time.Second
 // invalid triggers instead of a not_found entry.
 var errRejected = errors.New("scryfall rejected the batch")
 
+// RejectedError lists the identifiers Scryfall rejected.
+type RejectedError struct {
+	Identifiers []Identifier
+}
+
+func (e *RejectedError) Error() string {
+	return fmt.Sprintf("scryfall rejected %d identifiers", len(e.Identifiers))
+}
+
 const (
 	batchSize  = 75
 	maxRetries = 5
@@ -254,8 +263,12 @@ func NewClient() *Client {
 	return &Client{httpClient: &http.Client{Timeout: 10 * time.Second}}
 }
 
+// Fetch returns the cards Scryfall finds. When Scryfall rejects some
+// identifiers, it returns the cards found for the others with a
+// *RejectedError.
 func (c *Client) Fetch(ctx context.Context, identifiers []Identifier) ([]Card, error) {
 	var found []Card
+	var rejected []Identifier
 
 	for start := 0; start < len(identifiers); start += batchSize {
 		end := start + batchSize
@@ -263,36 +276,40 @@ func (c *Client) Fetch(ctx context.Context, identifiers []Identifier) ([]Card, e
 			end = len(identifiers)
 		}
 
-		batch, err := c.fetchSplitting(ctx, identifiers[start:end])
+		batch, batchRejected, err := c.fetchSplitting(ctx, identifiers[start:end])
 		if err != nil {
 			return nil, err
 		}
 		found = append(found, batch...)
+		rejected = append(rejected, batchRejected...)
 	}
 
+	if len(rejected) > 0 {
+		return found, &RejectedError{Identifiers: rejected}
+	}
 	return found, nil
 }
 
-// fetchSplitting halves a batch Scryfall rejects until it isolates the
-// rejected identifiers, which it then treats as not found.
-func (c *Client) fetchSplitting(ctx context.Context, batch []Identifier) ([]Card, error) {
+// fetchSplitting halves a rejected batch until each rejected identifier
+// stands alone, so the rest of the batch is still fetched.
+func (c *Client) fetchSplitting(ctx context.Context, batch []Identifier) ([]Card, []Identifier, error) {
 	cards, err := c.fetchBatch(ctx, batch)
 	if !errors.Is(err, errRejected) {
-		return cards, err
+		return cards, nil, err
 	}
 	if len(batch) == 1 {
-		return nil, nil
+		return nil, batch, nil
 	}
 	half := len(batch) / 2
-	first, err := c.fetchSplitting(ctx, batch[:half])
+	first, firstRejected, err := c.fetchSplitting(ctx, batch[:half])
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	second, err := c.fetchSplitting(ctx, batch[half:])
+	second, secondRejected, err := c.fetchSplitting(ctx, batch[half:])
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return append(first, second...), nil
+	return append(first, second...), append(firstRejected, secondRejected...), nil
 }
 
 func (c *Client) fetchBatch(ctx context.Context, batch []Identifier) ([]Card, error) {

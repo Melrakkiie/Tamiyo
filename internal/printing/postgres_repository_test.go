@@ -146,6 +146,30 @@ func TestPostgresRepository_IDsToRefreshAndUpsert(t *testing.T) {
 	assert.Equal(t, []string{"commander"}, formats)
 }
 
+func TestPostgresRepository_MarkRefreshedKeepsTheDataAndStopsTheRefresh(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+	alice := seedUser(t, db, "alice@example.com")
+	const known = "11111111-1111-1111-1111-111111111111"
+	const unknown = "22222222-2222-2222-2222-222222222222"
+	seedCard(t, db, alice, known)
+	seedCard(t, db, alice, unknown)
+	require.NoError(t, repo.Upsert(ctx, []Printing{{ScryfallID: known, Name: "Sol Ring", TypeLine: "Artifact", LegalFormats: []string{"commander"}}}))
+	_, err := db.Exec(`UPDATE tamiyo.printings SET refreshed_at = now() - interval '2 days' WHERE scryfall_id = $1`, known)
+	require.NoError(t, err)
+
+	require.NoError(t, repo.MarkRefreshed(ctx, []string{known, unknown}))
+
+	ids, err := repo.IDsToRefresh(ctx, time.Now().Add(-24*time.Hour), 10)
+	require.NoError(t, err)
+	assert.Empty(t, ids)
+	var name, typeLine string
+	require.NoError(t, db.QueryRow(`SELECT name, type_line FROM tamiyo.printings WHERE scryfall_id = $1`, known).Scan(&name, &typeLine))
+	assert.Equal(t, "Sol Ring", name)
+	assert.Equal(t, "Artifact", typeLine)
+}
+
 func TestPostgresRepository_UpsertStoresPrices(t *testing.T) {
 	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
