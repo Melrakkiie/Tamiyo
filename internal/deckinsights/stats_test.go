@@ -30,6 +30,22 @@ var (
 	// littleGirl has a half mana value.
 	littleGirl = Printing{ScryfallID: "22222222-0000-0000-0000-00000000000d", Name: "Little Girl",
 		TypeLine: "Creature — Human Child", ManaValue: 0.5, Colors: []string{"W"}}
+	// Game changers: rhysticStudy and rhysticStudyRetro are two printings of
+	// one card.
+	kinnan = Printing{ScryfallID: "22222222-0000-0000-0000-00000000000e", Name: "Kinnan, Bonder Prodigy",
+		TypeLine: "Legendary Creature — Human Druid", ManaValue: 2, Colors: []string{"G", "U"}, GameChanger: true}
+	rhysticStudy = Printing{ScryfallID: "22222222-0000-0000-0000-00000000000f", Name: "Rhystic Study",
+		TypeLine: "Enchantment", ManaValue: 3, Colors: []string{"U"}, GameChanger: true}
+	rhysticStudyRetro = Printing{ScryfallID: "22222222-0000-0000-0000-000000000010", Name: "Rhystic Study",
+		TypeLine: "Enchantment", ManaValue: 3, Colors: []string{"U"}, GameChanger: true}
+	cyclonicRift = Printing{ScryfallID: "22222222-0000-0000-0000-000000000011", Name: "Cyclonic Rift",
+		TypeLine: "Instant", ManaValue: 2, Colors: []string{"U"}, GameChanger: true}
+	gaeasCradle = Printing{ScryfallID: "22222222-0000-0000-0000-000000000012", Name: "Gaea's Cradle",
+		TypeLine: "Legendary Land", GameChanger: true}
+	demonicTutor = Printing{ScryfallID: "22222222-0000-0000-0000-000000000013", Name: "Demonic Tutor",
+		TypeLine: "Sorcery", ManaValue: 2, Colors: []string{"B"}, GameChanger: true}
+	vampiricTutor = Printing{ScryfallID: "22222222-0000-0000-0000-000000000014", Name: "Vampiric Tutor",
+		TypeLine: "Instant", ManaValue: 1, Colors: []string{"B"}, GameChanger: true}
 )
 
 // statsOf is the statistics of the test user's own deck read, against store.
@@ -200,6 +216,37 @@ func TestGetDeckStats_OnlyCountsTheMainBoard(t *testing.T) {
 	assert.InDelta(t, 2.0, stats.TotalManaValue, 1e-9)
 	assert.Equal(t, 2, stats.CardCount)
 	assert.Equal(t, map[string]int{"Land": 1, "Artifact": 1}, stats.TypeBreakdown)
+}
+
+func TestGetDeckStats_CountsEachGameChangerOfTheMainBoardOnce(t *testing.T) {
+	foilRhystic := owned(rhysticStudy, 3)
+	foilRhystic.Foil = true
+	read := deckOf("commander",
+		inSlot(deck.SlotCommander, owned(kinnan, 1)),
+		owned(rhysticStudy, 1, 2),
+		foilRhystic,
+		pending(rhysticStudyRetro, 2),
+		pending(cyclonicRift, 1),
+		owned(gaeasCradle, 4),
+		owned(solRing, 5),
+	)
+
+	stats := statsOf(t, read, storeOf(kinnan, rhysticStudy, rhysticStudyRetro, cyclonicRift, gaeasCradle, solRing))
+
+	assert.Equal(t, 4, stats.GameChangerCount)
+}
+
+func TestGetDeckStats_GameChangerCountIgnoresSideBoardsAndUnstoredCards(t *testing.T) {
+	read := deckOf("commander",
+		owned(solRing, 1),
+		owned(unstored("Mana Crypt", "22222222-0000-0000-0000-000000000015"), 2),
+		onBoard(deck.BoardSideboard, owned(demonicTutor, 3)),
+		onBoard(deck.BoardConsidering, pending(vampiricTutor, 1)),
+	)
+
+	stats := statsOf(t, read, storeOf(solRing, demonicTutor, vampiricTutor))
+
+	assert.Zero(t, stats.GameChangerCount)
 }
 
 func TestGetDeckStats_TotalManaValueSumsHalfManaValuesPerCopy(t *testing.T) {

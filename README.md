@@ -25,7 +25,7 @@ tamiyo/
 │   ├── deckshare/        # public, read-only shared deck routes
 │   ├── scryfall/         # shared Scryfall API client (used by bulk and the printing refresher)
 │   ├── commanderspellbook/ # Commander Spellbook client (deck combos)
-│   ├── printing/         # background refresh of printings' names, mana values, type lines, legalities, power and toughness
+│   ├── printing/         # background refresh of printings' names, mana values, type lines, legalities, power and toughness, game changer flags
 │   ├── follow/           # users following each other
 │   └── config/           # environment configuration
 ├── _devops/database/     # goose SQL migrations (embedded, applied on API boot)

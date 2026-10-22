@@ -48,6 +48,10 @@ _Avoid_: Total mana cost, total CMC
 A set of cards that together produce a notable result (an infinite loop, a win), as listed by Commander Spellbook. A deck has a combo only when every one of its cards is in the main board, with any card the combo needs as commander set as the deck's commander.
 _Avoid_: Synergy, interaction, almost-combo
 
+**Game changer**:
+A card on Wizards of the Coast's Commander list of cards that strongly raise a deck's power, as flagged by Scryfall. Counted in a commander deck's statistics, once per distinct card in the main board. Shown as "Game changer" in the interface.
+_Avoid_: Staple, power card, banned-list card
+
 ### Languages
 
 **Interface language**:

@@ -236,6 +236,16 @@ func TestGetDeckStats_SharedReachShowsTheOwnersValues(t *testing.T) {
 	}
 }
 
+func TestGetDeckStats_SharedReachCountsGameChangers(t *testing.T) {
+	read := sharedDeckOf(inSlot(deck.SlotCommander, owned(kinnan, 1)), owned(rhysticStudy, 2), owned(solRing, 3))
+	svc := NewService(readerWith(read), storeOf(kinnan, rhysticStudy, solRing), nil)
+
+	stats, err := svc.GetDeckStats(context.Background(), "", testDeckID, deck.ReachShared)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, stats.GameChangerCount)
+}
+
 func TestGetDeckCombos_SharedReachLooksUpTheSharedDeck(t *testing.T) {
 	finder := &recordingFinder{}
 	svc := NewService(readerWith(sharedDeckOf(owned(curiosity, 1))), storeOf(curiosity), finder)

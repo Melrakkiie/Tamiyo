@@ -1326,7 +1326,8 @@ Summarizes the deck's composition: mana curve, color breakdown, and primary card
   "board_values": {
     "sideboard": { "eur": 18.6, "usd": 21.4 },
     "considering": { "eur": 0, "usd": 0 }
-  }
+  },
+  "game_changer_count": 3
 }
 ```
 
@@ -1337,6 +1338,8 @@ A multicolor card counts once per color it has in `color_breakdown`; a dual-type
 `total_mana_value` is the sum of the mana values of the `main` board's nonland cards, each counted once per copy (pending copies included; sideboard, considering, lands and cards without a known printing left out). A modal double-faced card with a spell front counts its front face's mana value. It has the same scope as `average_mana_value`, which is this total divided by `nonland_count`, and can be fractional (half mana values).
 
 `value` is the [value](#prices-and-values) of the `main` board, owned and pending cards, proxies left out, from the stored printing prices the deck's card list shows, rounded to the cent. `owned_value` and `pending_value` split it between the cards the deck holds and its [pending cards](#pending-cards-deckidpending); each is rounded on its own, so their sum can differ from `value` by a cent. `board_values` gives the value of the `sideboard` and `considering` boards the same way, owned and pending cards together, proxies left out.
+
+`game_changer_count` is the number of [game changers](../GLOSSARY.md) in the `main` board: distinct cards, counted once by name whatever their number of copies or printings, whose stored printing Scryfall flags with `game_changer`. Commanders and pending cards count; the `sideboard`, `considering` and cards without a stored printing don't. The flag is refreshed with the rest of the printing once a day, so it follows Wizards' updates to the list. It is filled for every format; showing it only for commander decks is up to the client.
 
 ### `GET /deck/:id/combos`
 

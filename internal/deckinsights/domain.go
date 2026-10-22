@@ -52,6 +52,9 @@ type DeckStats struct {
 	OwnedValue       Value             `json:"owned_value"`
 	PendingValue     Value             `json:"pending_value"`
 	BoardValues      BoardValues       `json:"board_values"`
+	// GameChangerCount is the number of distinct cards of the main board
+	// whose stored printing is a game changer.
+	GameChangerCount int `json:"game_changer_count"`
 }
 
 type BoardValues struct {
