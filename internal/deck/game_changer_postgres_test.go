@@ -34,6 +34,30 @@ func TestFindCardsByDeckID_FlagsTheCardsWhosePrintingIsAGameChanger(t *testing.T
 	assert.Equal(t, map[string]bool{bolt.name: true, island.name: false, tymna.name: false}, flags)
 }
 
+func TestDeckContent_FlagsTheEntriesWhosePrintingIsAGameChanger(t *testing.T) {
+	f := newContentFixture(t)
+	f.storePrinting(t, bolt, true)
+	f.storePrinting(t, tymna, true)
+	f.ownedCopy(t, bolt, copyOptions{})
+	f.pendingCard(t, bolt, 2, copyOptions{board: BoardSideboard})
+	commander := f.pendingCard(t, tymna, 1, copyOptions{})
+	f.setCommanders(t, nil, &commander, nil, nil)
+	f.ownedCopy(t, island, copyOptions{})
+
+	var flags []string
+	for _, e := range f.content(t).Entries {
+		if e.GameChanger {
+			flags = append(flags, e.Board+" "+e.Name+commanderLabel(e))
+		}
+	}
+
+	assert.Equal(t, []string{
+		"main Tymna the Weaver (commander)",
+		"main Lightning Bolt",
+		"sideboard Lightning Bolt",
+	}, flags)
+}
+
 func TestPendingCards_FlagTheCardsWhosePrintingIsAGameChanger(t *testing.T) {
 	f := newContentFixture(t)
 	f.storePrinting(t, bolt, true)
