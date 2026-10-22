@@ -26,6 +26,7 @@ type ComparedCard struct {
 	OtherQuantity  int
 	Commander      bool
 	OtherCommander bool
+	GameChanger    bool
 }
 
 type Comparison struct {
@@ -64,6 +65,7 @@ func (s *Service) CompareDecks(ctx context.Context, userID string, deckID string
 				byName[key] = entry
 				order = append(order, key)
 			}
+			entry.GameChanger = entry.GameChanger || c.GameChanger
 			if other {
 				entry.OtherQuantity += c.Quantity
 				entry.OtherCommander = entry.OtherCommander || c.Commander

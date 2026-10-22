@@ -5687,7 +5687,10 @@ components:
           type: boolean
         other_commander:
           type: boolean
-      required: [name, scryfall_id, mana_value, colors, card_type, color_identity, quantity, other_quantity, commander, other_commander]
+        game_changer:
+          type: boolean
+          description: Whether the card is a game changer according to Scryfall, in either deck's stored printing.
+      required: [name, scryfall_id, mana_value, colors, card_type, color_identity, quantity, other_quantity, commander, other_commander, game_changer]
 
     DeckComparison:
       type: object
