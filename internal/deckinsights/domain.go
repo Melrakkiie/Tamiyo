@@ -81,7 +81,6 @@ type Printing struct {
 	LegalFormats      []string // legal or restricted
 	BannedFormats     []string
 	RestrictedFormats []string
-	GameChanger       bool
 }
 
 // DeckValues holds a deck's values before rounding, priced by tamiyo.card_price.

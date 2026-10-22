@@ -122,6 +122,12 @@ func onBoard(board string, e deck.DeckEntry) deck.DeckEntry {
 	return e
 }
 
+// gameChanger flags e as the deck read does for a card whose stored printing is a game changer.
+func gameChanger(e deck.DeckEntry) deck.DeckEntry {
+	e.GameChanger = true
+	return e
+}
+
 func inSlot(slot deck.CommanderSlot, e deck.DeckEntry) deck.DeckEntry {
 	e.Slot = slot
 	return e
@@ -237,7 +243,7 @@ func TestGetDeckStats_SharedReachShowsTheOwnersValues(t *testing.T) {
 }
 
 func TestGetDeckStats_SharedReachCountsGameChangers(t *testing.T) {
-	read := sharedDeckOf(inSlot(deck.SlotCommander, owned(kinnan, 1)), owned(rhysticStudy, 2), owned(solRing, 3))
+	read := sharedDeckOf(inSlot(deck.SlotCommander, gameChanger(owned(kinnan, 1))), gameChanger(owned(rhysticStudy, 2)), owned(solRing, 3))
 	svc := NewService(readerWith(read), storeOf(kinnan, rhysticStudy, solRing), nil)
 
 	stats, err := svc.GetDeckStats(context.Background(), "", testDeckID, deck.ReachShared)

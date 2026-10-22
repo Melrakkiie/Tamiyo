@@ -52,7 +52,6 @@ type printing struct {
 	USD               *float64
 	USDFoil           *float64
 	USDEtched         *float64
-	GameChanger       bool
 }
 
 func seedPrintings(t *testing.T, db *sqlx.DB, printings ...printing) {
@@ -60,12 +59,12 @@ func seedPrintings(t *testing.T, db *sqlx.DB, printings ...printing) {
 	for _, p := range printings {
 		_, err := db.Exec(`
 			INSERT INTO tamiyo.printings (scryfall_id, name, type_line, oracle_text, keywords, mana_value, colors, color_identity,
-				legal_formats, banned_formats, restricted_formats, eur, eur_foil, usd, usd_foil, usd_etched, game_changer)
+				legal_formats, banned_formats, restricted_formats, eur, eur_foil, usd, usd_foil, usd_etched)
 			VALUES ($1, $2, $3, NULLIF($4, ''), COALESCE($5::text[], '{}'), $6, COALESCE($7::text[], '{}'), COALESCE($8::text[], '{}'),
-				COALESCE($9::text[], '{}'), COALESCE($10::text[], '{}'), COALESCE($11::text[], '{}'), $12, $13, $14, $15, $16, $17)
+				COALESCE($9::text[], '{}'), COALESCE($10::text[], '{}'), COALESCE($11::text[], '{}'), $12, $13, $14, $15, $16)
 		`, p.ScryfallID, p.Name, p.TypeLine, p.OracleText, pq.Array(p.Keywords), p.ManaValue, pq.Array(p.Colors), pq.Array(p.ColorIdentity),
 			pq.Array(p.LegalFormats), pq.Array(p.BannedFormats), pq.Array(p.RestrictedFormats),
-			p.EUR, p.EURFoil, p.USD, p.USDFoil, p.USDEtched, p.GameChanger)
+			p.EUR, p.EURFoil, p.USD, p.USDFoil, p.USDEtched)
 		require.NoError(t, err)
 	}
 }

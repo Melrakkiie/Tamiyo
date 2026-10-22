@@ -33,7 +33,7 @@ func computeStats(entries []deck.DeckEntry, printings map[string]Printing) DeckS
 			stats.TypeBreakdown["Unknown"] += quantity
 			continue
 		}
-		if p.GameChanger {
+		if e.GameChanger {
 			gameChangers[deck.CardNameKey(e.Name)] = true
 		}
 
