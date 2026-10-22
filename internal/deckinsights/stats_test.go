@@ -33,19 +33,19 @@ var (
 	// Game changers: rhysticStudy and rhysticStudyRetro are two printings of
 	// one card.
 	kinnan = Printing{ScryfallID: "22222222-0000-0000-0000-00000000000e", Name: "Kinnan, Bonder Prodigy",
-		TypeLine: "Legendary Creature — Human Druid", ManaValue: 2, Colors: []string{"G", "U"}, GameChanger: true}
+		TypeLine: "Legendary Creature — Human Druid", ManaValue: 2, Colors: []string{"G", "U"}}
 	rhysticStudy = Printing{ScryfallID: "22222222-0000-0000-0000-00000000000f", Name: "Rhystic Study",
-		TypeLine: "Enchantment", ManaValue: 3, Colors: []string{"U"}, GameChanger: true}
+		TypeLine: "Enchantment", ManaValue: 3, Colors: []string{"U"}}
 	rhysticStudyRetro = Printing{ScryfallID: "22222222-0000-0000-0000-000000000010", Name: "Rhystic Study",
-		TypeLine: "Enchantment", ManaValue: 3, Colors: []string{"U"}, GameChanger: true}
+		TypeLine: "Enchantment", ManaValue: 3, Colors: []string{"U"}}
 	cyclonicRift = Printing{ScryfallID: "22222222-0000-0000-0000-000000000011", Name: "Cyclonic Rift",
-		TypeLine: "Instant", ManaValue: 2, Colors: []string{"U"}, GameChanger: true}
+		TypeLine: "Instant", ManaValue: 2, Colors: []string{"U"}}
 	gaeasCradle = Printing{ScryfallID: "22222222-0000-0000-0000-000000000012", Name: "Gaea's Cradle",
-		TypeLine: "Legendary Land", GameChanger: true}
+		TypeLine: "Legendary Land"}
 	demonicTutor = Printing{ScryfallID: "22222222-0000-0000-0000-000000000013", Name: "Demonic Tutor",
-		TypeLine: "Sorcery", ManaValue: 2, Colors: []string{"B"}, GameChanger: true}
+		TypeLine: "Sorcery", ManaValue: 2, Colors: []string{"B"}}
 	vampiricTutor = Printing{ScryfallID: "22222222-0000-0000-0000-000000000014", Name: "Vampiric Tutor",
-		TypeLine: "Instant", ManaValue: 1, Colors: []string{"B"}, GameChanger: true}
+		TypeLine: "Instant", ManaValue: 1, Colors: []string{"B"}}
 )
 
 // statsOf is the statistics of the test user's own deck read, against store.
@@ -219,15 +219,15 @@ func TestGetDeckStats_OnlyCountsTheMainBoard(t *testing.T) {
 }
 
 func TestGetDeckStats_CountsEachGameChangerOfTheMainBoardOnce(t *testing.T) {
-	foilRhystic := owned(rhysticStudy, 3)
+	foilRhystic := gameChanger(owned(rhysticStudy, 3))
 	foilRhystic.Foil = true
 	read := deckOf("commander",
-		inSlot(deck.SlotCommander, owned(kinnan, 1)),
-		owned(rhysticStudy, 1, 2),
+		inSlot(deck.SlotCommander, gameChanger(owned(kinnan, 1))),
+		gameChanger(owned(rhysticStudy, 1, 2)),
 		foilRhystic,
-		pending(rhysticStudyRetro, 2),
-		pending(cyclonicRift, 1),
-		owned(gaeasCradle, 4),
+		gameChanger(pending(rhysticStudyRetro, 2)),
+		gameChanger(pending(cyclonicRift, 1)),
+		gameChanger(owned(gaeasCradle, 4)),
 		owned(solRing, 5),
 	)
 
@@ -239,9 +239,9 @@ func TestGetDeckStats_CountsEachGameChangerOfTheMainBoardOnce(t *testing.T) {
 func TestGetDeckStats_GameChangerCountIgnoresSideBoardsAndUnstoredCards(t *testing.T) {
 	read := deckOf("commander",
 		owned(solRing, 1),
-		owned(unstored("Mana Crypt", "22222222-0000-0000-0000-000000000015"), 2),
-		onBoard(deck.BoardSideboard, owned(demonicTutor, 3)),
-		onBoard(deck.BoardConsidering, pending(vampiricTutor, 1)),
+		gameChanger(owned(unstored("Mana Crypt", "22222222-0000-0000-0000-000000000015"), 2)),
+		onBoard(deck.BoardSideboard, gameChanger(owned(demonicTutor, 3))),
+		onBoard(deck.BoardConsidering, gameChanger(pending(vampiricTutor, 1))),
 	)
 
 	stats := statsOf(t, read, storeOf(solRing, demonicTutor, vampiricTutor))
