@@ -1464,13 +1464,14 @@ A deck's color identity is its commanders' (the union of both when it has two), 
       "card_type": "Land",
       "color_identity": "U",
       "commander": false,
+      "game_changer": false,
       "tags": ["Terrain"]
     }
   ]
 }
 ```
 
-The owner's copies and the deck's pending cards are merged into one list, one entry per printing, finish, proxy state and [board](#boards) with its `quantity`, sorted by name. Each entry has its `board` (`main`, `sideboard` or `considering`). Nothing tells owned and pending cards apart, and storages, card ids and the proxy flag are left out: proxies are only kept in entries of their own, apart from real copies of the same printing. The commander, and the second commander, are always their own entries with `commander: true`. `tags` are the owner's [card tags](#card-tags-deckidtags), shared by every printing of the card. `card_count` counts every card of `main`, pending ones included. `owner` has the shape of [`GET /users/:id`](#get-usersid).
+The owner's copies and the deck's pending cards are merged into one list, one entry per printing, finish, proxy state and [board](#boards) with its `quantity`, sorted by name. Each entry has its `board` (`main`, `sideboard` or `considering`). Nothing tells owned and pending cards apart, and storages, card ids and the proxy flag are left out: proxies are only kept in entries of their own, apart from real copies of the same printing. The commander, and the second commander, are always their own entries with `commander: true`. `game_changer` flags a [game changer](../GLOSSARY.md) like on the [owner's deck cards](#get-deckidcards), on every board. `tags` are the owner's [card tags](#card-tags-deckidtags), shared by every printing of the card. `card_count` counts every card of `main`, pending ones included. `owner` has the shape of [`GET /users/:id`](#get-usersid).
 
 **Errors:** `404` unknown, private or malformed id · `429` rate limit exceeded
 

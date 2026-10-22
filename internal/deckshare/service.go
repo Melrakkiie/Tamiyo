@@ -41,6 +41,7 @@ type Card struct {
 	CardType        *string
 	ColorIdentity   *string
 	Commander       bool
+	GameChanger     bool
 	Board           string
 	Tags            []string
 }
@@ -118,6 +119,7 @@ func sharedCard(e deck.DeckEntry, tags []string) Card {
 		CardType:        e.CardType,
 		ColorIdentity:   e.ColorIdentity,
 		Commander:       e.IsCommander(),
+		GameChanger:     e.GameChanger,
 		Board:           e.Board,
 		Tags:            tags,
 	}

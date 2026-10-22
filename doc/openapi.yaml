@@ -5607,6 +5607,12 @@ components:
         commander:
           type: boolean
           description: True for the deck's commander, which is always listed on its own.
+        game_changer:
+          type: boolean
+          description: >
+            Whether the card's stored printing is a game changer according to
+            Scryfall (refreshed daily). false when the printing is not stored
+            yet. Filled for every format and every board.
         board:
           $ref: "#/components/schemas/DeckBoard"
         tags:
@@ -5614,7 +5620,7 @@ components:
           description: The owner's tags for this card, shared by every printing.
           items:
             type: string
-      required: [name, scryfall_id, set_code, collector_number, foil, quantity, mana_value, colors, card_type, color_identity, commander, board, tags]
+      required: [name, scryfall_id, set_code, collector_number, foil, quantity, mana_value, colors, card_type, color_identity, commander, game_changer, board, tags]
 
     SharedDeck:
       type: object
