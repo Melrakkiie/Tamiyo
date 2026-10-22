@@ -178,14 +178,79 @@ func TestClient_BatchesOver75Identifiers(t *testing.T) {
 }
 
 func TestClient_ReturnsErrorOnNonOKStatus(t *testing.T) {
+	var requestCount int
 	withFakeScryfall(t, func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
 		w.WriteHeader(http.StatusInternalServerError)
 	})
 
 	client := NewClient()
-	_, err := client.Fetch(context.Background(), []Identifier{{Set: "znr", CollectorNumber: "90"}})
+	_, err := client.Fetch(context.Background(), []Identifier{{Set: "znr", CollectorNumber: "90"}, {Set: "znr", CollectorNumber: "91"}})
 
 	require.Error(t, err)
+	var rejected *RejectedError
+	assert.NotErrorAs(t, err, &rejected)
+	assert.Equal(t, 1, requestCount)
+}
+
+// Scryfall answers 400 to a batch holding an ID it deems invalid, instead of
+// listing that ID in not_found.
+func rejectingScryfall(t *testing.T, rejected string) *[]int {
+	t.Helper()
+	var requestSizes []int
+	withFakeScryfall(t, func(w http.ResponseWriter, r *http.Request) {
+		var body collectionRequest
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		requestSizes = append(requestSizes, len(body.Identifiers))
+
+		data := make([]wireCard, 0, len(body.Identifiers))
+		for _, id := range body.Identifiers {
+			if id.ID == rejected {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			data = append(data, wireCard{ID: id.ID})
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(collectionResponse{Data: data})
+	})
+	return &requestSizes
+}
+
+func identifiersByID(count int) []Identifier {
+	identifiers := make([]Identifier, count)
+	for i := range identifiers {
+		identifiers[i] = Identifier{ID: "id-" + strconv.Itoa(i)}
+	}
+	return identifiers
+}
+
+func TestClient_ReportsAnIdentifierScryfallRejectsAndKeepsTheRestOfItsBatch(t *testing.T) {
+	rejectingScryfall(t, "id-2")
+
+	cards, err := NewClient().Fetch(context.Background(), identifiersByID(5))
+
+	var rejected *RejectedError
+	require.ErrorAs(t, err, &rejected)
+	assert.Equal(t, []Identifier{{ID: "id-2"}}, rejected.Identifiers)
+	ids := make([]string, len(cards))
+	for i, card := range cards {
+		ids[i] = card.ID
+	}
+	assert.ElementsMatch(t, []string{"id-0", "id-1", "id-3", "id-4"}, ids)
+}
+
+func TestClient_KeepsFetchingTheBatchesAfterARejectedIdentifier(t *testing.T) {
+	requestSizes := rejectingScryfall(t, "id-10")
+
+	cards, err := NewClient().Fetch(context.Background(), identifiersByID(80))
+
+	var rejected *RejectedError
+	require.ErrorAs(t, err, &rejected)
+	assert.Equal(t, []Identifier{{ID: "id-10"}}, rejected.Identifiers)
+	assert.Len(t, cards, 79)
+	// 80 identifiers: the batch of 75 holding id-10, then the last 5.
+	assert.Equal(t, 5, (*requestSizes)[len(*requestSizes)-1])
 }
 
 func TestClient_RetriesOn429ThenSucceeds(t *testing.T) {

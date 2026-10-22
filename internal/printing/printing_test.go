@@ -3,6 +3,7 @@ package printing
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -14,11 +15,12 @@ import (
 )
 
 type fakeRepo struct {
-	batches   [][]string
-	upserted  []Printing
-	lastStale time.Time
-	lastLimit int
-	err       error
+	batches         [][]string
+	upserted        []Printing
+	markedRefreshed []string
+	lastStale       time.Time
+	lastLimit       int
+	err             error
 }
 
 func (f *fakeRepo) IDsToRefresh(ctx context.Context, staleBefore time.Time, limit int) ([]string, error) {
@@ -40,14 +42,29 @@ func (f *fakeRepo) Upsert(ctx context.Context, printings []Printing) error {
 	return nil
 }
 
+func (f *fakeRepo) MarkRefreshed(ctx context.Context, ids []string) error {
+	f.markedRefreshed = append(f.markedRefreshed, ids...)
+	return nil
+}
+
 type fakeFetcher struct {
 	cards     []scryfall.Card
+	rejected  []string
 	err       error
 	requested []scryfall.Identifier
 }
 
 func (f *fakeFetcher) Fetch(ctx context.Context, identifiers []scryfall.Identifier) ([]scryfall.Card, error) {
 	f.requested = append(f.requested, identifiers...)
+	var rejected []scryfall.Identifier
+	for _, id := range identifiers {
+		if slices.Contains(f.rejected, id.ID) {
+			rejected = append(rejected, id)
+		}
+	}
+	if rejected != nil {
+		return f.cards, &scryfall.RejectedError{Identifiers: rejected}
+	}
 	return f.cards, f.err
 }
 
@@ -182,6 +199,23 @@ func TestRefreshAll_StopsWhenEverythingIsFresh(t *testing.T) {
 	NewRefresher(repo, fetcher, zap.NewNop()).refreshAll(context.Background())
 
 	assert.Len(t, repo.upserted, 2)
+}
+
+func TestRefreshAll_KeepsARejectedPrintingAndRefreshesTheRestOfTheRun(t *testing.T) {
+	repo := &fakeRepo{batches: [][]string{{"a", "rejected"}, {"c"}}}
+	fetcher := &fakeFetcher{
+		cards:    []scryfall.Card{{ID: "a", Name: "Sol Ring"}, {ID: "c", Name: "Brainstorm"}},
+		rejected: []string{"rejected"},
+	}
+
+	NewRefresher(repo, fetcher, zap.NewNop()).refreshAll(context.Background())
+
+	names := map[string]string{}
+	for _, p := range repo.upserted {
+		names[p.ScryfallID] = p.Name
+	}
+	assert.Equal(t, map[string]string{"a": "Sol Ring", "c": "Brainstorm"}, names)
+	assert.Equal(t, []string{"rejected"}, repo.markedRefreshed)
 }
 
 func TestRun_StopsWithItsContext(t *testing.T) {
