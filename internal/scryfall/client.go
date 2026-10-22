@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -13,6 +14,10 @@ import (
 
 var collectionURL = "https://api.scryfall.com/cards/collection"
 var retryBaseDelay = 1 * time.Second
+
+// errRejected is Scryfall's 400 on a batch, which an identifier it deems
+// invalid triggers instead of a not_found entry.
+var errRejected = errors.New("scryfall rejected the batch")
 
 const (
 	batchSize  = 75
@@ -258,7 +263,7 @@ func (c *Client) Fetch(ctx context.Context, identifiers []Identifier) ([]Card, e
 			end = len(identifiers)
 		}
 
-		batch, err := c.fetchBatch(ctx, identifiers[start:end])
+		batch, err := c.fetchSplitting(ctx, identifiers[start:end])
 		if err != nil {
 			return nil, err
 		}
@@ -266,6 +271,28 @@ func (c *Client) Fetch(ctx context.Context, identifiers []Identifier) ([]Card, e
 	}
 
 	return found, nil
+}
+
+// fetchSplitting halves a batch Scryfall rejects until it isolates the
+// rejected identifiers, which it then treats as not found.
+func (c *Client) fetchSplitting(ctx context.Context, batch []Identifier) ([]Card, error) {
+	cards, err := c.fetchBatch(ctx, batch)
+	if !errors.Is(err, errRejected) {
+		return cards, err
+	}
+	if len(batch) == 1 {
+		return nil, nil
+	}
+	half := len(batch) / 2
+	first, err := c.fetchSplitting(ctx, batch[:half])
+	if err != nil {
+		return nil, err
+	}
+	second, err := c.fetchSplitting(ctx, batch[half:])
+	if err != nil {
+		return nil, err
+	}
+	return append(first, second...), nil
 }
 
 func (c *Client) fetchBatch(ctx context.Context, batch []Identifier) ([]Card, error) {
@@ -315,6 +342,9 @@ func (c *Client) fetchBatch(ctx context.Context, batch []Identifier) ([]Card, er
 			_ = resp.Body.Close()
 		}()
 
+		if resp.StatusCode == http.StatusBadRequest {
+			return nil, errRejected
+		}
 		if resp.StatusCode != http.StatusOK {
 			return nil, fmt.Errorf("scryfall returned status %d", resp.StatusCode)
 		}

@@ -188,6 +188,74 @@ func TestClient_ReturnsErrorOnNonOKStatus(t *testing.T) {
 	require.Error(t, err)
 }
 
+// rejectingScryfall answers 400 to any request holding the rejected ID, as
+// Scryfall does for an ID it deems invalid, and finds every other ID.
+func rejectingScryfall(t *testing.T, rejected string) *[]int {
+	t.Helper()
+	var requestSizes []int
+	withFakeScryfall(t, func(w http.ResponseWriter, r *http.Request) {
+		var body collectionRequest
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		requestSizes = append(requestSizes, len(body.Identifiers))
+
+		data := make([]wireCard, 0, len(body.Identifiers))
+		for _, id := range body.Identifiers {
+			if id.ID == rejected {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			data = append(data, wireCard{ID: id.ID})
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(collectionResponse{Data: data})
+	})
+	return &requestSizes
+}
+
+func identifiersByID(count int) []Identifier {
+	identifiers := make([]Identifier, count)
+	for i := range identifiers {
+		identifiers[i] = Identifier{ID: "id-" + strconv.Itoa(i)}
+	}
+	return identifiers
+}
+
+func TestClient_SkipsAnIdentifierScryfallRejectsAndKeepsTheRestOfItsBatch(t *testing.T) {
+	rejectingScryfall(t, "id-2")
+
+	cards, err := NewClient().Fetch(context.Background(), identifiersByID(5))
+
+	require.NoError(t, err)
+	ids := make([]string, len(cards))
+	for i, card := range cards {
+		ids[i] = card.ID
+	}
+	assert.ElementsMatch(t, []string{"id-0", "id-1", "id-3", "id-4"}, ids)
+}
+
+func TestClient_KeepsFetchingTheBatchesAfterARejectedIdentifier(t *testing.T) {
+	requestSizes := rejectingScryfall(t, "id-10")
+
+	cards, err := NewClient().Fetch(context.Background(), identifiersByID(80))
+
+	require.NoError(t, err)
+	assert.Len(t, cards, 79)
+	assert.Equal(t, 5, (*requestSizes)[len(*requestSizes)-1])
+}
+
+func TestClient_StillFailsWhenScryfallFailsOtherwise(t *testing.T) {
+	var requestCount int
+	withFakeScryfall(t, func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+
+	_, err := NewClient().Fetch(context.Background(), identifiersByID(5))
+
+	require.Error(t, err)
+	assert.Equal(t, 1, requestCount)
+}
+
 func TestClient_RetriesOn429ThenSucceeds(t *testing.T) {
 	withFastRetries(t)
 

@@ -184,6 +184,19 @@ func TestRefreshAll_StopsWhenEverythingIsFresh(t *testing.T) {
 	assert.Len(t, repo.upserted, 2)
 }
 
+func TestRefreshAll_StoresARejectedPrintingAsMissingAndRefreshesTheNextBatches(t *testing.T) {
+	repo := &fakeRepo{batches: [][]string{{"a", "rejected"}, {"c"}}}
+	fetcher := &fakeFetcher{cards: []scryfall.Card{{ID: "a", Name: "Sol Ring"}, {ID: "c", Name: "Brainstorm"}}}
+
+	NewRefresher(repo, fetcher, zap.NewNop()).refreshAll(context.Background())
+
+	names := map[string]string{}
+	for _, p := range repo.upserted {
+		names[p.ScryfallID] = p.Name
+	}
+	assert.Equal(t, map[string]string{"a": "Sol Ring", "rejected": "", "c": "Brainstorm"}, names)
+}
+
 func TestRun_StopsWithItsContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

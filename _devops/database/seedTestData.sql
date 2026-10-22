@@ -52,10 +52,10 @@ INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number
     ('11111111-1111-1111-1111-111111111111', 'Arcane Signet',     '3d4c5b6a-7e8f-4901-9a2b-3c4d5e6f7a8b', 'cmr', '333', false, 3),
     ('11111111-1111-1111-1111-111111111111', 'Swords to Plowshares','8b7a6c5d-4e3f-4201-9c8b-7a6d5e4f3c2b','stx', '30', false, 3),
 
-    ('11111111-1111-1111-1111-111111111111', 'Tarmogoyf',         '3a1b2c3d-4e5f-6789-0abc-def123456789', 'mm3', '156', true,  4),
+    ('11111111-1111-1111-1111-111111111111', 'Tarmogoyf',         '2b49dfb7-dbe7-4a2b-b9de-c620a0db2e47', 'mm3', '141', true,  4),
     ('11111111-1111-1111-1111-111111111111', 'Counterspell',      '1b3f2f0c-4a8e-4c3d-9f2a-7e5b6c8d9a1f', 'mh2', '267', false, 4),
 
-    ('11111111-1111-1111-1111-111111111111', 'Brainstorm',        '2c1d0e9f-8a7b-4c6d-5e4f-3a2b1c0d9e8f', 'ema', '42',  false, 5),
+    ('11111111-1111-1111-1111-111111111111', 'Brainstorm',        '3e4e6787-af32-44f2-ac56-6f348254aa6d', 'ema', '40',  false, 5),
     ('11111111-1111-1111-1111-111111111111', 'Serra Angel',       '9e8d7c6b-5a4f-4321-8b0a-9c8d7e6f5a4b', 'dom', '25',  false, 5),
     ('11111111-1111-1111-1111-111111111111', 'Shivan Dragon',     '5f4e3d2c-1b0a-4987-9e8d-7c6b5a4f3e2d', 'lea', '175', false, 5),
 
