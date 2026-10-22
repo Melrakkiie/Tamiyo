@@ -195,7 +195,7 @@ func TestCompareDecksHandler_ReturnsTheComparison(t *testing.T) {
 	service := &fakeSharedService{compared: Comparison{
 		Deck:        ComparedDeck{Deck: deck.Deck{ID: myDeckID, Name: "Mine"}, Mine: true, CardCount: 3},
 		Other:       ComparedDeck{Deck: deck.Deck{ID: theirDeck, Name: "Theirs"}, Owner: Owner{ID: strangerID, DisplayName: strPtr("Alice")}, CardCount: 2},
-		Common:      []ComparedCard{{Name: "Sol Ring", ScryfallID: "sol", Colors: strPtr(""), Quantity: 1, OtherQuantity: 2}},
+		Common:      []ComparedCard{{Name: "Sol Ring", ScryfallID: "sol", Colors: strPtr(""), Quantity: 1, OtherQuantity: 2, GameChanger: true}},
 		OnlyInDeck:  []ComparedCard{{Name: "Atraxa", Quantity: 1, Commander: true}},
 		OnlyInOther: []ComparedCard{},
 	}}
@@ -217,6 +217,8 @@ func TestCompareDecksHandler_ReturnsTheComparison(t *testing.T) {
 	assert.Equal(t, 2.0, common["other_quantity"])
 	assert.Equal(t, "", common["colors"])
 	assert.Nil(t, common["color_identity"])
+	assert.Equal(t, true, common["game_changer"])
+	assert.Equal(t, false, body["only_in_deck"].([]any)[0].(map[string]any)["game_changer"])
 	assert.Equal(t, true, body["only_in_deck"].([]any)[0].(map[string]any)["commander"])
 	assert.Equal(t, []any{}, body["only_in_other"])
 }
@@ -345,4 +347,34 @@ func TestVisibleDeckHandler_Errors(t *testing.T) {
 			assert.Equal(t, tc.want, get(router, tc.path).Code)
 		})
 	}
+}
+
+func TestCompareDecks_FlagsGameChangersWhateverTheDeck(t *testing.T) {
+	store := compareStore()
+	mine := store.reads[myDeckID]
+	mine.Entries = append(mine.Entries, deck.DeckEntry{Name: "Rhystic Study", ScryfallID: "rs-a", GameChanger: true, OwnedCardIDs: []int{30}})
+	store.reads[myDeckID] = mine
+	theirs := store.reads[theirDeck]
+	theirs.Entries = append(theirs.Entries,
+		deck.DeckEntry{Name: "Rhystic Study", ScryfallID: "rs-b", OwnedCardIDs: []int{31}},
+		deck.DeckEntry{Name: "Sol Ring", ScryfallID: "sol-gc", GameChanger: true, OwnedCardIDs: []int{32}},
+		deck.DeckEntry{Name: "Necropotence", ScryfallID: "necro", GameChanger: true, OwnedCardIDs: []int{33}},
+	)
+	store.reads[theirDeck] = theirs
+	svc := NewService(store, compareUsers())
+
+	comparison, err := svc.CompareDecks(context.Background(), viewerID, myDeckID, theirDeck)
+
+	require.NoError(t, err)
+	flags := map[string]bool{}
+	for _, list := range [][]ComparedCard{comparison.Common, comparison.OnlyInDeck, comparison.OnlyInOther} {
+		for _, c := range list {
+			flags[c.Name] = c.GameChanger
+		}
+	}
+	assert.True(t, flags["Rhystic Study"], "flagged in the first deck only")
+	assert.True(t, flags["Sol Ring"], "flagged in the other deck only")
+	assert.True(t, flags["Necropotence"], "only in the other deck")
+	assert.False(t, flags["Island"])
+	assert.False(t, flags["Counterspell"])
 }

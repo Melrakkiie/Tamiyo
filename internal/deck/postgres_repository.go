@@ -113,6 +113,7 @@ type cardRow struct {
 	ColorIdentity   *string   `db:"color_identity"`
 	Board           string    `db:"board"`
 	Price           *float64  `db:"price"`
+	GameChanger     bool      `db:"game_changer"`
 	Added           time.Time `db:"added"`
 	Updated         time.Time `db:"updated"`
 }
@@ -258,6 +259,15 @@ func priceColumn(table string) string {
 	return `CAST(tamiyo.card_price(` + table + `.scryfall_id, ` + table + `.foil, COALESCE((
 		SELECT pr.price_currency FROM tamiyo.user_preferences pr WHERE pr.user_id = ` + table + `.user_id
 	), 'eur')) AS float8) AS price`
+}
+
+// gameChangerColumn reads the game changer flag of the row's stored printing,
+// false when the printing is not stored yet. It is a scalar subquery so that it
+// also fits RETURNING clauses.
+func gameChangerColumn(table string) string {
+	return `COALESCE((
+		SELECT pr.game_changer FROM tamiyo.printings pr WHERE pr.scryfall_id = ` + table + `.scryfall_id
+	), false) AS game_changer`
 }
 
 func (r *compositionQueries) FindByID(ctx context.Context, userID string, id string) (Deck, error) {
@@ -431,7 +441,7 @@ func (r *PostgresRepository) Delete(ctx context.Context, userID string, id strin
 func (r *compositionQueries) FindCardsByDeckID(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]DeckCard, error) {
 	query := `
 		SELECT c.id, c.name, c.scryfall_id, c.set_code, c.collector_number, c.foil, c.proxy, c.storage_id, c.mana_value, c.colors, c.card_type, c.color_identity, cd.board, c.added, c.updated,
-		    ` + priceColumn("c") + `
+		    ` + priceColumn("c") + `, ` + gameChangerColumn("c") + `
 		FROM tamiyo.cards c
 		JOIN tamiyo.card_deck cd ON c.id = cd.card_id
 		WHERE cd.deck_id = $1 AND c.user_id = $2

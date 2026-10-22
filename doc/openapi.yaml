@@ -4428,7 +4428,13 @@ components:
               description: >
                 Price of one copy in the price_currency preference, with the
                 same fallbacks as the collection value. null when unknown.
-          required: [board, price]
+            game_changer:
+              type: boolean
+              description: >
+                Whether the card's stored printing is a game changer according
+                to Scryfall (refreshed daily). false when the printing is not
+                stored yet. Filled for every format.
+          required: [board, price, game_changer]
 
     LegalityIssue:
       type: object
@@ -4551,7 +4557,16 @@ components:
             the cent on its own.
         board_values:
           $ref: "#/components/schemas/BoardValues"
-      required: [card_count, land_count, nonland_count, average_mana_value, total_mana_value, mana_curve, color_breakdown, type_breakdown, back_face_lands, value, owned_value, pending_value, board_values]
+        game_changer_count:
+          type: integer
+          minimum: 0
+          description: >
+            Number of distinct cards (by name, not by copy) of the main board
+            whose stored printing Scryfall flags as a game changer (Wizards'
+            Commander list), commanders and pending cards included, sideboard
+            and considering left out. A card whose printing isn't stored yet
+            doesn't count. Filled for every format.
+      required: [card_count, land_count, nonland_count, average_mana_value, total_mana_value, mana_curve, color_breakdown, type_breakdown, back_face_lands, value, owned_value, pending_value, board_values, game_changer_count]
 
     DeckCombos:
       type: object
@@ -5090,6 +5105,12 @@ components:
           description: >
             Price of one copy in the price_currency preference, with the same
             fallbacks as the collection value. null when unknown.
+        game_changer:
+          type: boolean
+          description: >
+            Whether the card's stored printing is a game changer according to
+            Scryfall (refreshed daily). false when the printing is not stored
+            yet. Filled for every format.
         added:
           type: string
         owned_copies:
@@ -5104,7 +5125,7 @@ components:
           description: >
             Among them, the copies of this exact printing. Only computed by
             GET /deck/{id}/pending, 0 elsewhere.
-      required: [id, deck_id, name, scryfall_id, set_code, collector_number, foil, proxy, quantity, mana_value, board, price, added, owned_copies, owned_same_printing]
+      required: [id, deck_id, name, scryfall_id, set_code, collector_number, foil, proxy, quantity, mana_value, board, price, game_changer, added, owned_copies, owned_same_printing]
 
     AddPendingCardRequest:
       type: object
@@ -5586,6 +5607,12 @@ components:
         commander:
           type: boolean
           description: True for the deck's commander, which is always listed on its own.
+        game_changer:
+          type: boolean
+          description: >
+            Whether the card's stored printing is a game changer according to
+            Scryfall (refreshed daily). false when the printing is not stored
+            yet. Filled for every format and every board.
         board:
           $ref: "#/components/schemas/DeckBoard"
         tags:
@@ -5593,7 +5620,7 @@ components:
           description: The owner's tags for this card, shared by every printing.
           items:
             type: string
-      required: [name, scryfall_id, set_code, collector_number, foil, quantity, mana_value, colors, card_type, color_identity, commander, board, tags]
+      required: [name, scryfall_id, set_code, collector_number, foil, quantity, mana_value, colors, card_type, color_identity, commander, game_changer, board, tags]
 
     SharedDeck:
       type: object
@@ -5660,7 +5687,10 @@ components:
           type: boolean
         other_commander:
           type: boolean
-      required: [name, scryfall_id, mana_value, colors, card_type, color_identity, quantity, other_quantity, commander, other_commander]
+        game_changer:
+          type: boolean
+          description: Whether the card is a game changer according to Scryfall, in either deck's stored printing.
+      required: [name, scryfall_id, mana_value, colors, card_type, color_identity, quantity, other_quantity, commander, other_commander, game_changer]
 
     DeckComparison:
       type: object

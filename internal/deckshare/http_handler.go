@@ -56,6 +56,7 @@ type cardResponse struct {
 	CardType        *string  `json:"card_type"`
 	ColorIdentity   *string  `json:"color_identity"`
 	Commander       bool     `json:"commander"`
+	GameChanger     bool     `json:"game_changer"`
 	Board           string   `json:"board"`
 	Tags            []string `json:"tags"`
 }

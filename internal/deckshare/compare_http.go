@@ -31,6 +31,7 @@ type comparedCardResponse struct {
 	OtherQuantity  int     `json:"other_quantity"`
 	Commander      bool    `json:"commander"`
 	OtherCommander bool    `json:"other_commander"`
+	GameChanger    bool    `json:"game_changer"`
 }
 
 type comparisonResponse struct {

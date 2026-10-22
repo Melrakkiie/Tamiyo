@@ -1162,13 +1162,14 @@ GET /deck/6f0d3c5e-8a51-4c0b-9b1e-2d7c4a3f9e10/cards?sort=mana_value
     "mana_value": 1,
     "board": "main",
     "price": 2.15,
+    "game_changer": false,
     "added": "2026-01-15 10:30:00",
     "updated": "2026-01-15 10:30:00"
   }
 ]
 ```
 
-Every board is returned; each card tells its own `board`. `price` is the price of one copy in the `price_currency` [preference](#get-authmepreferences--patch-authmepreferences), with the fallbacks of the [collection value](#prices-and-values), or `null` when no price is known. Returns an empty array `[]` if the deck has no cards.
+Every board is returned; each card tells its own `board`. `price` is the price of one copy in the `price_currency` [preference](#get-authmepreferences--patch-authmepreferences), with the fallbacks of the [collection value](#prices-and-values), or `null` when no price is known. `game_changer` is `true` when the card's stored printing is a [game changer](../GLOSSARY.md) according to Scryfall (refreshed daily with the rest of the printing), `false` otherwise, including when the printing isn't stored yet. It is filled for every format; showing it only for commander decks is up to the client. Returns an empty array `[]` if the deck has no cards.
 
 **Errors:** `400` invalid id, or `sort` is not one of the allowed values · `404` deck not found
 
@@ -1209,7 +1210,7 @@ Remove a card from a deck. **Idempotent** — always returns success, whether or
 
 Cards wanted in a deck but not in the collection yet (typically picked on Scryfall from the deck page). They are stored per deck until they're added to the collection all at once. Each item has a `foil` and a `proxy` flag, and committing it creates cards with both.
 
-- `GET /deck/:id/pending` — the list, sorted by name. Each item also tells what the collection already holds, outside this deck: `owned_copies` counts the cards of the same name (any printing, ` / ` and ` // ` alike, including copies in other decks), and `owned_same_printing` those of this exact printing. Both leave out the cards of [storages locked](#storage) against this deck. A client can tell a card missing from the collection (`0`) from one owned in another printing. Both are `0` in the responses of the routes below. Every item, here and in the responses below, has a `price` like the [deck's cards](#get-deckidcards) (`null` when unknown).
+- `GET /deck/:id/pending` — the list, sorted by name. Each item also tells what the collection already holds, outside this deck: `owned_copies` counts the cards of the same name (any printing, ` / ` and ` // ` alike, including copies in other decks), and `owned_same_printing` those of this exact printing. Both leave out the cards of [storages locked](#storage) against this deck. A client can tell a card missing from the collection (`0`) from one owned in another printing. Both are `0` in the responses of the routes below. Every item, here and in the responses below, has a `price` like the [deck's cards](#get-deckidcards) (`null` when unknown) and a `game_changer` flag like theirs.
 - `POST /deck/:id/pending` — add one. Body: `name`, `scryfall_id`, `set_code`, `collector_number` (required), `foil`, `proxy` (both `false` by default), `quantity` (1–100, default 1), `mana_value`, `colors`, `card_type`, `color_identity` (same rules as `POST /cards`), `board` (`main` by default, see [Boards](#boards)). Returns `201` with the item. If the deck already has a pending card of the same printing, finish, proxy state and board (other than its pending commanders), its quantity is raised instead and that item is returned.
 - `PATCH /deck/:id/pending/:pending_id` — change how many copies it stands for, its board, or both. Body: `{ "quantity": 12 }` (1–1000) and/or `{ "board": "considering" }`. Returns the item. Moved onto a board that already has a pending card of the same printing, finish and proxy state, the two are merged and the remaining item is returned. A pending commander can't leave `main` (`409`).
 - `DELETE /deck/:id/pending/:pending_id` — remove one. `204`, or `404` if it doesn't exist.
@@ -1326,7 +1327,8 @@ Summarizes the deck's composition: mana curve, color breakdown, and primary card
   "board_values": {
     "sideboard": { "eur": 18.6, "usd": 21.4 },
     "considering": { "eur": 0, "usd": 0 }
-  }
+  },
+  "game_changer_count": 3
 }
 ```
 
@@ -1337,6 +1339,8 @@ A multicolor card counts once per color it has in `color_breakdown`; a dual-type
 `total_mana_value` is the sum of the mana values of the `main` board's nonland cards, each counted once per copy (pending copies included; sideboard, considering, lands and cards without a known printing left out). A modal double-faced card with a spell front counts its front face's mana value. It has the same scope as `average_mana_value`, which is this total divided by `nonland_count`, and can be fractional (half mana values).
 
 `value` is the [value](#prices-and-values) of the `main` board, owned and pending cards, proxies left out, from the stored printing prices the deck's card list shows, rounded to the cent. `owned_value` and `pending_value` split it between the cards the deck holds and its [pending cards](#pending-cards-deckidpending); each is rounded on its own, so their sum can differ from `value` by a cent. `board_values` gives the value of the `sideboard` and `considering` boards the same way, owned and pending cards together, proxies left out.
+
+`game_changer_count` is the number of [game changers](../GLOSSARY.md) in the `main` board: distinct cards, counted once by name whatever their number of copies or printings, whose stored printing Scryfall flags with `game_changer`. Commanders and pending cards count; the `sideboard`, `considering` and cards without a stored printing don't. The flag is refreshed with the rest of the printing once a day, so it follows Wizards' updates to the list. It is filled for every format; showing it only for commander decks is up to the client.
 
 ### `GET /deck/:id/combos`
 
@@ -1460,13 +1464,14 @@ A deck's color identity is its commanders' (the union of both when it has two), 
       "card_type": "Land",
       "color_identity": "U",
       "commander": false,
+      "game_changer": false,
       "tags": ["Terrain"]
     }
   ]
 }
 ```
 
-The owner's copies and the deck's pending cards are merged into one list, one entry per printing, finish, proxy state and [board](#boards) with its `quantity`, sorted by name. Each entry has its `board` (`main`, `sideboard` or `considering`). Nothing tells owned and pending cards apart, and storages, card ids and the proxy flag are left out: proxies are only kept in entries of their own, apart from real copies of the same printing. The commander, and the second commander, are always their own entries with `commander: true`. `tags` are the owner's [card tags](#card-tags-deckidtags), shared by every printing of the card. `card_count` counts every card of `main`, pending ones included. `owner` has the shape of [`GET /users/:id`](#get-usersid).
+The owner's copies and the deck's pending cards are merged into one list, one entry per printing, finish, proxy state and [board](#boards) with its `quantity`, sorted by name. Each entry has its `board` (`main`, `sideboard` or `considering`). Nothing tells owned and pending cards apart, and storages, card ids and the proxy flag are left out: proxies are only kept in entries of their own, apart from real copies of the same printing. The commander, and the second commander, are always their own entries with `commander: true`. `game_changer` flags a [game changer](../GLOSSARY.md) like on the [owner's deck cards](#get-deckidcards), on every board. `tags` are the owner's [card tags](#card-tags-deckidtags), shared by every printing of the card. `card_count` counts every card of `main`, pending ones included. `owner` has the shape of [`GET /users/:id`](#get-usersid).
 
 **Errors:** `404` unknown, private or malformed id · `429` rate limit exceeded
 
@@ -1520,10 +1525,10 @@ Cards are matched **by name only**: printings and finishes are ignored, and a sp
   },
   "other": { "id": "…", "name": "Kess Spellslinger", "format": "commander", "visibility": "unlisted", "owner": { "id": "…", "display_name": "Alice", "avatar_scryfall_id": null }, "mine": false, "card_count": 100 },
   "common": [
-    { "name": "Island", "scryfall_id": "fc3f6a8f-0b5e-4b5f-9a1a-1d4b0e3c4c2f", "mana_value": 0, "colors": "", "card_type": "Land", "color_identity": "U", "quantity": 12, "other_quantity": 9, "commander": false, "other_commander": false }
+    { "name": "Island", "scryfall_id": "fc3f6a8f-0b5e-4b5f-9a1a-1d4b0e3c4c2f", "mana_value": 0, "colors": "", "card_type": "Land", "color_identity": "U", "quantity": 12, "other_quantity": 9, "commander": false, "other_commander": false, "game_changer": false }
   ],
   "only_in_deck": [
-    { "name": "Kess, Dissident Mage", "scryfall_id": "…", "mana_value": 4, "colors": "UBR", "card_type": "Creature", "color_identity": "UBR", "quantity": 1, "other_quantity": 0, "commander": true, "other_commander": false }
+    { "name": "Kess, Dissident Mage", "scryfall_id": "…", "mana_value": 4, "colors": "UBR", "card_type": "Creature", "color_identity": "UBR", "quantity": 1, "other_quantity": 0, "commander": true, "other_commander": false, "game_changer": false }
   ],
   "only_in_other": []
 }
@@ -1531,6 +1536,7 @@ Cards are matched **by name only**: printings and finishes are ignored, and a sp
 
 - `common`: names in both decks, with how many copies each one has (`quantity` for `:id`, `other_quantity` for `:other_id`) — they can differ.
 - `only_in_deck` / `only_in_other`: names in only one of them (the other quantity is `0`).
+- `game_changer`: `true` when the card is a [game changer](../GLOSSARY.md) in the stored printing of either deck, `false` otherwise (also when no printing is stored). Filled for every format.
 - Every list is sorted by name and always present, possibly empty. `scryfall_id`, `mana_value`, `colors`, `card_type` and `color_identity` come from one of the matching printings, preferring `:id`'s. `commander` / `other_commander` tell whether the card is one of that deck's commanders. `mine` tells whether the deck belongs to the caller.
 
 **Errors:** `400` an id isn't a UUID · `401` unauthenticated · `404` a deck doesn't exist, or is someone else's private deck
