@@ -4428,7 +4428,13 @@ components:
               description: >
                 Price of one copy in the price_currency preference, with the
                 same fallbacks as the collection value. null when unknown.
-          required: [board, price]
+            game_changer:
+              type: boolean
+              description: >
+                Whether the card's stored printing is a game changer according
+                to Scryfall (refreshed daily). false when the printing is not
+                stored yet. Filled for every format.
+          required: [board, price, game_changer]
 
     LegalityIssue:
       type: object
@@ -5099,6 +5105,12 @@ components:
           description: >
             Price of one copy in the price_currency preference, with the same
             fallbacks as the collection value. null when unknown.
+        game_changer:
+          type: boolean
+          description: >
+            Whether the card's stored printing is a game changer according to
+            Scryfall (refreshed daily). false when the printing is not stored
+            yet. Filled for every format.
         added:
           type: string
         owned_copies:
@@ -5113,7 +5125,7 @@ components:
           description: >
             Among them, the copies of this exact printing. Only computed by
             GET /deck/{id}/pending, 0 elsewhere.
-      required: [id, deck_id, name, scryfall_id, set_code, collector_number, foil, proxy, quantity, mana_value, board, price, added, owned_copies, owned_same_printing]
+      required: [id, deck_id, name, scryfall_id, set_code, collector_number, foil, proxy, quantity, mana_value, board, price, game_changer, added, owned_copies, owned_same_printing]
 
     AddPendingCardRequest:
       type: object

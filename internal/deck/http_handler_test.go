@@ -759,6 +759,24 @@ func TestHandler_GetDeckCards_IncludesColorsAndType(t *testing.T) {
 	assert.Nil(t, response[1]["card_type"])
 }
 
+func TestHandler_GetDeckCards_FlagsGameChangers(t *testing.T) {
+	service := &fakeService{
+		getDeckCards: []DeckCard{{ID: 1, Name: "Rhystic Study", GameChanger: true}, {ID: 2, Name: "Island"}},
+	}
+	router := setupRouter(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000001/cards", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var response []map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.Len(t, response, 2)
+	assert.Equal(t, true, response[0]["game_changer"])
+	assert.Equal(t, false, response[1]["game_changer"])
+}
+
 func TestHandler_GetDeckCards_PassesManaValueSortToService(t *testing.T) {
 	service := &fakeService{}
 	router := setupRouter(service)
@@ -963,7 +981,7 @@ func TestHandler_RemoveCardFromDeck_ReturnsErrorOnServiceFailure(t *testing.T) {
 }
 
 func TestHandler_GetPendingCards_ReturnsTheList(t *testing.T) {
-	service := &fakeService{pending: []PendingCard{{ID: 1, DeckID: "00000000-0000-0000-0000-000000000002", Name: "Sol Ring", Quantity: 2, Proxy: true, OwnedCopies: 3, OwnedSamePrinting: 1}}}
+	service := &fakeService{pending: []PendingCard{{ID: 1, DeckID: "00000000-0000-0000-0000-000000000002", Name: "Sol Ring", Quantity: 2, Proxy: true, GameChanger: true, OwnedCopies: 3, OwnedSamePrinting: 1}}}
 	router := setupRouter(service)
 
 	req := httptest.NewRequest(http.MethodGet, "/deck/00000000-0000-0000-0000-000000000002/pending", nil)
@@ -981,6 +999,7 @@ func TestHandler_GetPendingCards_ReturnsTheList(t *testing.T) {
 	assert.Contains(t, w.Body.String(), `"owned_copies":3`)
 	assert.Contains(t, w.Body.String(), `"owned_same_printing":1`)
 	assert.Contains(t, w.Body.String(), `"proxy":true`)
+	assert.Contains(t, w.Body.String(), `"game_changer":true`)
 }
 
 func TestHandler_GetPendingCards_ReturnsNotFoundForAnotherUsersDeck(t *testing.T) {

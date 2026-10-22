@@ -191,6 +191,7 @@ type deckCardResponse struct {
 	ColorIdentity   *string  `json:"color_identity"`
 	Board           string   `json:"board"`
 	Price           *float64 `json:"price"`
+	GameChanger     bool     `json:"game_changer"`
 	Added           string   `json:"added"`
 	Updated         string   `json:"updated"`
 }
@@ -211,6 +212,7 @@ func toDeckCardResponse(dc DeckCard) deckCardResponse {
 		ColorIdentity:   dc.ColorIdentity,
 		Board:           dc.Board,
 		Price:           dc.Price,
+		GameChanger:     dc.GameChanger,
 		Added:           dc.Added.Format("2006-01-02 15:04:05"),
 		Updated:         dc.Updated.Format("2006-01-02 15:04:05"),
 	}
