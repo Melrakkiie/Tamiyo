@@ -81,9 +81,7 @@ type Printing struct {
 	LegalFormats      []string // legal or restricted
 	BannedFormats     []string
 	RestrictedFormats []string
-	// GameChanger is Scryfall's flag for a card on Wizards' Commander game
-	// changer list.
-	GameChanger bool
+	GameChanger       bool
 }
 
 // DeckValues holds a deck's values before rounding, priced by tamiyo.card_price.
