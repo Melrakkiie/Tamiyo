@@ -24,6 +24,7 @@ type pendingRow struct {
 	ColorIdentity   *string   `db:"color_identity"`
 	Board           string    `db:"board"`
 	Price           *float64  `db:"price"`
+	GameChanger     bool      `db:"game_changer"`
 	Added           time.Time `db:"added"`
 
 	OwnedCopies       int `db:"owned_copies"`
@@ -47,6 +48,7 @@ func (r pendingRow) toDomain() PendingCard {
 		ColorIdentity:   r.ColorIdentity,
 		Board:           r.Board,
 		Price:           r.Price,
+		GameChanger:     r.GameChanger,
 		Added:           r.Added,
 
 		OwnedCopies:       r.OwnedCopies,
@@ -55,7 +57,7 @@ func (r pendingRow) toDomain() PendingCard {
 }
 
 func pendingColumns(table string) string {
-	return `id, deck_id, name, scryfall_id, set_code, collector_number, foil, proxy, quantity, mana_value, colors, card_type, color_identity, board, added, ` + priceColumn(table)
+	return `id, deck_id, name, scryfall_id, set_code, collector_number, foil, proxy, quantity, mana_value, colors, card_type, color_identity, board, added, ` + priceColumn(table) + `, ` + gameChangerColumn(table)
 }
 
 func (r *compositionQueries) FindPendingCards(ctx context.Context, userID string, deckID string) ([]PendingCard, error) {

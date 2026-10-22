@@ -29,6 +29,7 @@ type pendingCardResponse struct {
 	ColorIdentity   *string  `json:"color_identity"`
 	Board           string   `json:"board"`
 	Price           *float64 `json:"price"`
+	GameChanger     bool     `json:"game_changer"`
 	Added           string   `json:"added"`
 
 	OwnedCopies       int `json:"owned_copies"`
@@ -52,6 +53,7 @@ func toPendingResponse(p PendingCard) pendingCardResponse {
 		ColorIdentity:   p.ColorIdentity,
 		Board:           p.Board,
 		Price:           p.Price,
+		GameChanger:     p.GameChanger,
 		Added:           p.Added.Format("2006-01-02 15:04:05"),
 
 		OwnedCopies:       p.OwnedCopies,

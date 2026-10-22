@@ -106,6 +106,25 @@ func TestService_GetSharedDeck_ShowsEachDeckContentEntryAsOneCardSortedByName(t 
 	}, shared.Cards)
 }
 
+func TestService_GetSharedDeck_FlagsGameChangersOnEveryBoard(t *testing.T) {
+	read := sharedRead()
+	read.Entries = []deck.DeckEntry{
+		{Name: "Kinnan, Bonder Prodigy", Board: deck.BoardMain, Slot: deck.SlotCommander, GameChanger: true, OwnedCardIDs: []int{1}},
+		{Name: "Rhystic Study", Board: deck.BoardConsidering, GameChanger: true, Pending: []deck.PendingPart{{ID: 2, Quantity: 1}}},
+		{Name: "Island", Board: deck.BoardMain, OwnedCardIDs: []int{3}},
+	}
+	service := newService(&fakeDecks{read: read})
+
+	shared, err := service.GetSharedDeck(context.Background(), deckID)
+
+	require.NoError(t, err)
+	flags := map[string]bool{}
+	for _, c := range shared.Cards {
+		flags[c.Name] = c.GameChanger
+	}
+	assert.Equal(t, map[string]bool{"Kinnan, Bonder Prodigy": true, "Rhystic Study": true, "Island": false}, flags)
+}
+
 func TestService_GetSharedDeck_AddsEachCardsTagsWhateverThePrinting(t *testing.T) {
 	read := sharedRead()
 	read.Entries = []deck.DeckEntry{
