@@ -53,6 +53,7 @@ type Card struct {
 	Powers          []string
 	Toughnesses     []string
 	Prices          Prices
+	GameChanger     bool
 }
 
 type Prices struct {
@@ -93,6 +94,7 @@ type wireCard struct {
 	Legalities      map[string]string `json:"legalities"`
 	CardFaces       []wireCardFace    `json:"card_faces"`
 	Prices          wirePrices        `json:"prices"`
+	GameChanger     bool              `json:"game_changer"`
 }
 
 type wirePrices struct {
@@ -161,6 +163,7 @@ func (w wireCard) toCard() Card {
 		Powers:          dedupe(powers),
 		Toughnesses:     dedupe(toughnesses),
 		Prices:          w.Prices.toPrices(),
+		GameChanger:     w.GameChanger,
 	}
 }
 
