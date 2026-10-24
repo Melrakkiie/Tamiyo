@@ -29,9 +29,11 @@ func (h *Handler) check(ctx *gin.Context) {
 	defer cancel()
 
 	if err := h.db.PingContext(pingCtx); err != nil {
+		// The route is public: the driver message (host, port, auth) goes to the request log only.
+		_ = ctx.Error(err)
 		ctx.JSON(http.StatusServiceUnavailable, gin.H{
 			"status": "unavailable",
-			"error":  err.Error(),
+			"error":  "database unreachable",
 		})
 		return
 	}

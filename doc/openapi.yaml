@@ -65,6 +65,7 @@ paths:
                     example: unavailable
                   error:
                     type: string
+                    example: database unreachable
                 required: [status, error]
 
   /auth/register:
@@ -4176,7 +4177,9 @@ components:
     BadGateway:
       description: >
         A bulk import couldn't reach or parse a response from the
-        Scryfall API while resolving Moxfield rows.
+        Scryfall API while resolving Moxfield rows. The body is
+        {"error": "could not resolve cards against scryfall"}, whatever
+        the upstream failure.
       content:
         application/json:
           schema:

@@ -92,7 +92,7 @@ func TestRespond_AttachesUnmatchedErrorToGinContextForAccessLogging(t *testing.T
 	assert.ErrorIs(t, ctx.Errors[0].Err, boom)
 }
 
-func TestRespond_DoesNotAttachErrorToGinContextWhenAMappingMatches(t *testing.T) {
+func TestRespond_DoesNotAttachErrorToGinContextWhenAMappingMatchesWithA4xxStatus(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(w)
@@ -101,6 +101,20 @@ func TestRespond_DoesNotAttachErrorToGinContextWhenAMappingMatches(t *testing.T)
 	Respond(ctx, errNotFound, Mapping{Err: errNotFound, Status: http.StatusNotFound, Message: "not found"})
 
 	assert.Empty(t, ctx.Errors)
+}
+
+func TestRespond_AttachesErrorToGinContextWhenAMappingMatchesWithA5xxStatus(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+
+	upstream := errorsJoinForTest(errConflict, errors.New("upstream answered 503"))
+	Respond(ctx, upstream, Mapping{Err: errConflict, Status: http.StatusBadGateway, Message: "upstream unavailable"})
+
+	assert.Equal(t, http.StatusBadGateway, w.Code)
+	require.Len(t, ctx.Errors, 1)
+	assert.ErrorIs(t, ctx.Errors[0].Err, upstream)
 }
 
 func errorsJoinForTest(sentinel error, msg error) error {

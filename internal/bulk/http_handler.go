@@ -91,7 +91,7 @@ func (h *Handler) refreshCardDetails(ctx *gin.Context) {
 
 	summary, err := h.service.RefreshCardDetails(ctx.Request.Context(), userID, afterID)
 	if err != nil {
-		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway})
+		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway, Message: ErrScryfallUnavailable.Error()})
 		return
 	}
 
@@ -248,7 +248,7 @@ func (h *Handler) importIntoDeck(ctx *gin.Context) {
 			apierr.Mapping{Err: deck.ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: ErrInvalidFile, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrTamiyoCollectionFile, Status: http.StatusBadRequest},
-			apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway},
+			apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway, Message: ErrScryfallUnavailable.Error()},
 		)
 		return
 	}
@@ -413,7 +413,7 @@ func (h *Handler) respondDeckExport(ctx *gin.Context, invalidIDStatus int, expor
 		apierr.Respond(ctx, err,
 			apierr.Mapping{Err: deck.ErrNotFound, Status: http.StatusNotFound, Message: "deck not found"},
 			apierr.Mapping{Err: ErrUnknownExportFormat, Status: http.StatusBadRequest},
-			apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway},
+			apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway, Message: ErrScryfallUnavailable.Error()},
 			apierr.Mapping{Err: ErrNoBoards, Status: http.StatusBadRequest},
 		)
 		return
@@ -433,7 +433,7 @@ func (h *Handler) respondImport(ctx *gin.Context, summary Summary, err error) {
 			apierr.Mapping{Err: ErrInvalidFile, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrTamiyoDeckFile, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrTargetStorageNotFound, Status: http.StatusBadRequest, Message: "storage_id does not reference an existing storage"},
-			apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway},
+			apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway, Message: ErrScryfallUnavailable.Error()},
 		)
 		return
 	}

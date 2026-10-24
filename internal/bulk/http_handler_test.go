@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -388,6 +390,18 @@ func TestImportMoxfieldCollection_ScryfallFailureReturnsBadGateway(t *testing.T)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadGateway, w.Code)
+}
+
+func TestImportMoxfieldCollection_ScryfallFailureAnswersSentinelTextWithoutUpstreamDetail(t *testing.T) {
+	upstream := fmt.Errorf("%w: %v", ErrScryfallUnavailable, errors.New("dial tcp 10.0.0.7:443: i/o timeout"))
+	router := setupRouter(&fakeImportService{err: upstream})
+
+	req := multipartRequest(t, "/import/moxfield/collection", "csv content", map[string]string{"storage_id": "7"})
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadGateway, w.Code)
+	assert.JSONEq(t, `{"error": "could not resolve cards against scryfall"}`, w.Body.String())
 }
 
 func TestImportCardList_PassesTheListAndStorage(t *testing.T) {

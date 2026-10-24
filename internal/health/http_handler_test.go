@@ -57,3 +57,25 @@ func TestHandler_Check_ReturnsServiceUnavailableWhenDatabaseIsUnreachable(t *tes
 	require.NoError(t, err)
 	assert.Equal(t, "unavailable", response["status"])
 }
+
+func TestHandler_Check_HidesPingErrorFromBodyAndKeepsItForTheRequestLog(t *testing.T) {
+	pingErr := errors.New(`pq: password authentication failed for user "tamiyo" at db.internal:5432`)
+	var logged []*gin.Error
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(ctx *gin.Context) {
+		ctx.Next()
+		logged = ctx.Errors
+	})
+	NewHandler(&fakePinger{pingErr: pingErr}).RegisterRoutes(router)
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+	assert.JSONEq(t, `{"status": "unavailable", "error": "database unreachable"}`, w.Body.String())
+	require.Len(t, logged, 1)
+	assert.ErrorIs(t, logged[0].Err, pingErr)
+}

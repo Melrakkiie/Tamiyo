@@ -1600,7 +1600,7 @@ Cards and pending cards are stored under their English Scryfall name, whatever t
 **Errors common to all five**
 - `400` — no `file` field, or the file couldn't be parsed (wrong columns, malformed line) — message explains what's wrong
 - `400` — a `storage_id` field doesn't reference an existing storage for this account
-- `502` — Scryfall (used to resolve Moxfield rows — see below) couldn't be reached or returned an unexpected response after retrying; a rate-limited (`429`) response from Scryfall is retried automatically (honoring its `Retry-After` header when present) before this is returned
+- `502` — Scryfall (used to resolve Moxfield rows — see below) couldn't be reached or returned an unexpected response after retrying; a rate-limited (`429`) response from Scryfall is retried automatically (honoring its `Retry-After` header when present) before this is returned. The body is always `{"error": "could not resolve cards against scryfall"}`
 - `401` — unauthenticated, like every other route under this section
 
 ---
@@ -1847,7 +1847,7 @@ All error responses share the same shape:
 | `409 Conflict` | Email already registered (`/auth/register`). |
 | `429 Too Many Requests` | Rate limit exceeded on `/auth/register` or `/auth/login` (see [rate limiting](#rate-limiting)). |
 | `500 Internal Server Error` | Unexpected failure (database unreachable, etc). |
-| `502 Bad Gateway` | A bulk import (see [Bulk Import](#bulk-import)) couldn't reach or parse a response from the Scryfall API. |
+| `502 Bad Gateway` | A bulk import (see [Bulk Import](#bulk-import)) couldn't reach or parse a response from the Scryfall API. Body: `{"error": "could not resolve cards against scryfall"}`. |
 
 ### Validation rules summary
 

@@ -20,6 +20,10 @@ func Respond(ctx *gin.Context, err error, mappings ...Mapping) {
 			if message == "" {
 				message = err.Error()
 			}
+			// A mapped 5xx usually wraps an upstream failure: keep its detail in the request log.
+			if m.Status >= http.StatusInternalServerError {
+				_ = ctx.Error(err)
+			}
 			ctx.JSON(m.Status, gin.H{"error": message})
 			return
 		}
