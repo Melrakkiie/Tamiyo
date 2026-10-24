@@ -2,6 +2,7 @@ package httplog
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -46,9 +47,21 @@ func TestMiddleware_LogsInfoOnSuccess(t *testing.T) {
 	assert.Equal(t, zap.InfoLevel, entry.Level)
 	fields := entry.ContextMap()
 	assert.Equal(t, "GET", fields["method"])
-	assert.Equal(t, "/test?foo=bar", fields["path"])
+	assert.Equal(t, "/test", fields["path"])
 	assert.EqualValues(t, http.StatusOK, fields["status"])
 	assert.NotContains(t, fields, "error")
+}
+
+func TestMiddleware_KeepsQueryStringOutOfLog(t *testing.T) {
+	logger, logs := newObservedLogger()
+	router := setupRouter(logger, func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	doRequest(router)
+
+	require.Equal(t, 1, logs.Len())
+	for key, value := range logs.All()[0].ContextMap() {
+		assert.NotContains(t, fmt.Sprint(value), "foo=bar", "field %q", key)
+	}
 }
 
 func TestMiddleware_LogsWarnOnClientError(t *testing.T) {

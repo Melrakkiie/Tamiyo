@@ -11,10 +11,8 @@ import (
 func Middleware(logger *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
+		// The query string is never logged: it can carry searches, emails or tokens.
 		path := c.Request.URL.Path
-		if raw := c.Request.URL.RawQuery; raw != "" {
-			path += "?" + raw
-		}
 
 		c.Next()
 
