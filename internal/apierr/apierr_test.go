@@ -70,14 +70,13 @@ func TestRespond_TriesMappingsInOrderAndUsesFirstMatch(t *testing.T) {
 	assert.Equal(t, "first", body["error"])
 }
 
-func TestRespond_FallsBackTo500AndAttachesErrorWhenNoMappingMatches(t *testing.T) {
-	boom := errors.New("db is down")
+func TestRespond_AnswersGeneric500WithoutLeakingErrorWhenNoMappingMatches(t *testing.T) {
+	boom := errors.New(`pq: duplicate key value violates unique constraint "cards_secret_idx"`)
 	w := respond(t, boom, Mapping{Err: errNotFound, Status: http.StatusNotFound})
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	var body map[string]string
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	assert.Equal(t, "db is down", body["error"])
+	assert.JSONEq(t, `{"error": "internal server error"}`, w.Body.String())
+	assert.NotContains(t, w.Body.String(), "cards_secret_idx")
 }
 
 func TestRespond_AttachesUnmatchedErrorToGinContextForAccessLogging(t *testing.T) {
