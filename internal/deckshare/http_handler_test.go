@@ -120,7 +120,7 @@ func get(router *gin.Engine, path string) *httptest.ResponseRecorder {
 
 func TestGetSharedDeck_ReturnsDeckOwnerAndCardsWithoutAuthentication(t *testing.T) {
 	service := &fakeSharedService{shared: SharedDeck{
-		Deck:  deck.Deck{ID: deckID, Name: "Otters", Format: "commander", Visibility: deck.VisibilityUnlisted, LikesCount: 7, Added: time.Now(), Updated: time.Now()},
+		Deck:  deck.Deck{ID: deckID, Name: "Otters", Format: "commander", Visibility: deck.VisibilityUnlisted, CardCount: 4, LikesCount: 7, Added: time.Now(), Updated: time.Now()},
 		Owner: Owner{ID: ownerID, DisplayName: strPtr("Alice")},
 		Cards: []Card{{Name: "Island", ScryfallID: "i", Quantity: 3, Tags: []string{"Terrain"}}, {Name: "Tamiyo", ScryfallID: "t", Quantity: 1, Commander: true, GameChanger: true}},
 	}}
@@ -176,25 +176,6 @@ func TestGetSharedDeck_HiddenDeckReturnsNotFound(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
 	assert.JSONEq(t, `{"error":"deck not found"}`, w.Body.String())
-}
-
-func TestGetSharedDeck_CountsOnlyTheMainBoard(t *testing.T) {
-	service := &fakeSharedService{shared: SharedDeck{
-		Deck: deck.Deck{ID: deckID, Name: "Otters", Added: time.Now(), Updated: time.Now()},
-		Cards: []Card{
-			{Name: "Island", ScryfallID: "i", Quantity: 3, Board: deck.BoardMain},
-			{Name: "Duress", ScryfallID: "d", Quantity: 2, Board: deck.BoardSideboard},
-			{Name: "Opt", ScryfallID: "o", Quantity: 1, Board: deck.BoardConsidering},
-		},
-	}}
-
-	w := get(setupRouter(service), "/shared/decks/"+deckID)
-
-	require.Equal(t, http.StatusOK, w.Code)
-	var got map[string]any
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
-	assert.Equal(t, float64(3), got["deck"].(map[string]any)["card_count"])
-	assert.Equal(t, "sideboard", got["cards"].([]any)[1].(map[string]any)["board"])
 }
 
 func TestBrowsePublicDecks_ReturnsAPageWithoutAuthentication(t *testing.T) {

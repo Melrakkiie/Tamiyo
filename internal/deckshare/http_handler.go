@@ -69,11 +69,7 @@ type sharedDeckResponse struct {
 
 func toResponse(shared SharedDeck) sharedDeckResponse {
 	cards := make([]cardResponse, 0, len(shared.Cards))
-	total := 0
 	for _, c := range shared.Cards {
-		if deck.InMainBoard(c.Board) {
-			total += c.Quantity
-		}
 		response := cardResponse(c)
 		response.Tags = nonNilTags(response.Tags)
 		cards = append(cards, response)
@@ -90,7 +86,7 @@ func toResponse(shared SharedDeck) sharedDeckResponse {
 			BackgroundFace:       d.BackgroundFace,
 			CommanderScryfallID:  d.CommanderScryfallID,
 			PartnerScryfallID:    d.PartnerScryfallID,
-			CardCount:            total,
+			CardCount:            d.CardCount,
 			LikesCount:           d.LikesCount,
 			Added:                d.Added.Format("2006-01-02 15:04:05"),
 			Updated:              d.Updated.Format("2006-01-02 15:04:05"),
