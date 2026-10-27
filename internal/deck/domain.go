@@ -171,7 +171,13 @@ func MainBoardSQL(alias string) string {
 // copy in its main board, owned or pending.
 func CardCountSQL(deck string) string {
 	return "((SELECT count(*) FROM tamiyo.card_deck own WHERE own.deck_id = " + deck + ".id AND " + MainBoardSQL("own") + ")" +
-		" + (SELECT COALESCE(SUM(pen.quantity), 0) FROM tamiyo.deck_pending_cards pen WHERE pen.deck_id = " + deck + ".id AND " + MainBoardSQL("pen") + "))"
+		" + " + PendingCountSQL(deck) + ")"
+}
+
+// PendingCountSQL is the copies of a deck's main board still pending, for the
+// alias of its deck table.
+func PendingCountSQL(deck string) string {
+	return "(SELECT COALESCE(SUM(pen.quantity), 0) FROM tamiyo.deck_pending_cards pen WHERE pen.deck_id = " + deck + ".id AND " + MainBoardSQL("pen") + ")"
 }
 
 var ErrCommanderBoard = errors.New("the commander stays in the main deck")

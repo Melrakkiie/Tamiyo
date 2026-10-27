@@ -35,7 +35,7 @@ type publicDeckRow struct {
 
 const identityLettersSQL = `ARRAY(SELECT DISTINCT letter FROM regexp_split_to_table(upper(coalesce(%s, '')), '') AS letter WHERE letter IN ('W', 'U', 'B', 'R', 'G'))`
 
-const publicDecksSQL = `
+var publicDecksSQL = `
 	WITH base AS (
 		SELECT d.id, d.user_id, d.name, d.format, d.bracket, d.background_scryfall_id, d.background_face, d.added, d.updated,
 			u.display_name, u.avatar_scryfall_id,
@@ -46,15 +46,15 @@ const publicDecksSQL = `
 			CASE WHEN cc.id IS NOT NULL OR cp.id IS NOT NULL
 				THEN coalesce(cc.color_identity, cp.color_identity, '') || coalesce(pc.color_identity, pp.color_identity, '')
 			END AS commander_identity,
-			%[7]s AS card_count,
+			` + CardCountSQL("d") + ` AS card_count,
 			(SELECT count(*) FROM tamiyo.deck_likes l WHERE l.deck_id = d.id) AS likes_count,
 			%[1]s AS liked_at,
 			(
 				SELECT string_agg(identity, '') FROM (
 					SELECT c.color_identity AS identity FROM tamiyo.card_deck cd JOIN tamiyo.cards c ON c.id = cd.card_id
-					WHERE cd.deck_id = d.id AND %[5]s
+					WHERE cd.deck_id = d.id AND ` + MainBoardSQL("cd") + `
 					UNION ALL
-					SELECT p.color_identity FROM tamiyo.deck_pending_cards p WHERE p.deck_id = d.id AND %[6]s
+					SELECT p.color_identity FROM tamiyo.deck_pending_cards p WHERE p.deck_id = d.id AND ` + MainBoardSQL("p") + `
 				) identities
 			) AS cards_identity
 		FROM tamiyo.deck d
@@ -81,7 +81,6 @@ func publicDecksQuery(likedAt string, where string) string {
 	return fmt.Sprintf(publicDecksSQL, likedAt, where,
 		fmt.Sprintf(identityLettersSQL, "commander_identity"),
 		fmt.Sprintf(identityLettersSQL, "cards_identity"),
-		MainBoardSQL("cd"), MainBoardSQL("p"), CardCountSQL("d"),
 	)
 }
 
