@@ -168,7 +168,7 @@ func TestGetDeckStats_CardCountOverKnownPrintingsFollowsTheDecksCardCountRule(t 
 
 	stats := statsOf(t, deckOf("commander", entries...), storeOf(kinnan, rhysticStudy, solRing, mountain))
 
-	deckCardCount := 0 // main board, owned or pending, commanders included
+	deckCardCount := 0
 	for _, e := range entries {
 		if deck.InMainBoard(e.Board) {
 			deckCardCount += e.Quantity()

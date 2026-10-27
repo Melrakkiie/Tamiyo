@@ -135,7 +135,7 @@ func TestGetSharedDeck_ReturnsDeckOwnerAndCardsWithoutAuthentication(t *testing.
 	gotDeck := got["deck"].(map[string]any)
 	assert.Equal(t, "Otters", gotDeck["name"])
 	assert.Equal(t, deckID, gotDeck["id"])
-	assert.Equal(t, float64(4), gotDeck["card_count"])
+	assert.Equal(t, float64(service.shared.Deck.CardCount), gotDeck["card_count"])
 	assert.Equal(t, float64(7), gotDeck["likes_count"])
 	assert.Equal(t, "Alice", got["owner"].(map[string]any)["display_name"])
 	cards := got["cards"].([]any)

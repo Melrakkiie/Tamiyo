@@ -22,7 +22,6 @@ func TestPostgresRepository_EveryRouteReturnsTheSameCardCount(t *testing.T) {
 	partner := f.pendingCard(t, tymna, 1, copyOptions{})
 	f.pendingCard(t, island, 2, copyOptions{})
 	f.setCommanders(t, &commander, nil, nil, &partner)
-	// The other boards add nothing.
 	f.ownedCopy(t, bolt, copyOptions{board: BoardSideboard})
 	f.pendingCard(t, island, 3, copyOptions{board: BoardSideboard})
 	f.ownedCopy(t, bolt, copyOptions{board: BoardConsidering})
@@ -46,13 +45,7 @@ func TestPostgresRepository_EveryRouteReturnsTheSameCardCount(t *testing.T) {
 
 	list, _, err := f.repo.FindAll(ctx, f.userID, Filter{Page: 1, Limit: 24, SortField: "name"})
 	require.NoError(t, err)
-	var listed *Deck
-	for i := range list {
-		if list[i].ID == contentDeckID {
-			listed = &list[i]
-		}
-	}
-	require.NotNil(t, listed)
+	listed := findDeck(t, list, func(d Deck) string { return d.ID })
 	assert.Equal(t, wantCount, listed.CardCount)
 	assert.Equal(t, wantPending, listed.PendingCount)
 
@@ -63,12 +56,18 @@ func TestPostgresRepository_EveryRouteReturnsTheSameCardCount(t *testing.T) {
 
 	public, _, err := f.repo.FindPublic(ctx, PublicFilter{Page: 1, Limit: 24, SortField: "card_count", SortDesc: true})
 	require.NoError(t, err)
-	var browsed *PublicDeck
-	for i := range public {
-		if public[i].ID == contentDeckID {
-			browsed = &public[i]
+	browsed := findDeck(t, public, func(d PublicDeck) string { return d.ID })
+	assert.Equal(t, wantCount, browsed.CardCount)
+}
+
+func findDeck[T any](t *testing.T, decks []T, id func(T) string) T {
+	t.Helper()
+	for _, d := range decks {
+		if id(d) == contentDeckID {
+			return d
 		}
 	}
-	require.NotNil(t, browsed)
-	assert.Equal(t, wantCount, browsed.CardCount)
+	require.FailNow(t, "deck not in the results")
+	var none T
+	return none
 }
