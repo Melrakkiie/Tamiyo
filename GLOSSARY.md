@@ -42,6 +42,10 @@ _Avoid_: Deck image, background, cover
 The cards of a deck outside the sideboard and the cards being considered, commander and partner included.
 _Avoid_: Main deck, mainboard, maindeck
 
+**Card count**:
+The number of copies in a deck's main board, owned or pending, proxies and commanders included.
+_Avoid_: Deck size, total cards
+
 ### Deck statistics
 
 **Total mana value**:
