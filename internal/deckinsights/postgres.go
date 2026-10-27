@@ -6,6 +6,8 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
+
+	"Melrakkiie/Tamiyo/internal/deck"
 )
 
 // PostgresRepository reads what deck insights need from the database.
@@ -71,6 +73,7 @@ func (r *PostgresRepository) DeckValues(ctx context.Context, userID string, deck
 		ConsideringEUR float64 `db:"considering_eur"`
 		ConsideringUSD float64 `db:"considering_usd"`
 	}
+	mainBoard := deck.MainBoardSQL("")
 	err := r.db.GetContext(ctx, &row, `
 		WITH copies AS (
 			SELECT cd.board, c.scryfall_id, c.foil, 1 AS quantity, false AS pending
@@ -89,10 +92,10 @@ func (r *PostgresRepository) DeckValues(ctx context.Context, userID string, deck
 			FROM copies
 		)
 		SELECT
-			COALESCE(SUM(eur) FILTER (WHERE board NOT IN ('sideboard', 'considering') AND NOT pending), 0)::float8 AS owned_eur,
-			COALESCE(SUM(usd) FILTER (WHERE board NOT IN ('sideboard', 'considering') AND NOT pending), 0)::float8 AS owned_usd,
-			COALESCE(SUM(eur) FILTER (WHERE board NOT IN ('sideboard', 'considering') AND pending), 0)::float8 AS pending_eur,
-			COALESCE(SUM(usd) FILTER (WHERE board NOT IN ('sideboard', 'considering') AND pending), 0)::float8 AS pending_usd,
+			COALESCE(SUM(eur) FILTER (WHERE `+mainBoard+` AND NOT pending), 0)::float8 AS owned_eur,
+			COALESCE(SUM(usd) FILTER (WHERE `+mainBoard+` AND NOT pending), 0)::float8 AS owned_usd,
+			COALESCE(SUM(eur) FILTER (WHERE `+mainBoard+` AND pending), 0)::float8 AS pending_eur,
+			COALESCE(SUM(usd) FILTER (WHERE `+mainBoard+` AND pending), 0)::float8 AS pending_usd,
 			COALESCE(SUM(eur) FILTER (WHERE board = 'sideboard'), 0)::float8 AS sideboard_eur,
 			COALESCE(SUM(usd) FILTER (WHERE board = 'sideboard'), 0)::float8 AS sideboard_usd,
 			COALESCE(SUM(eur) FILTER (WHERE board = 'considering'), 0)::float8 AS considering_eur,
