@@ -157,6 +157,29 @@ func InMainBoard(board string) bool {
 	return board != BoardSideboard && board != BoardConsidering
 }
 
+// MainBoardSQL is InMainBoard as an SQL condition on the board column of the
+// table alias, or on the bare board column when alias is empty.
+func MainBoardSQL(alias string) string {
+	column := "board"
+	if alias != "" {
+		column = alias + ".board"
+	}
+	return column + " NOT IN ('" + BoardSideboard + "', '" + BoardConsidering + "')"
+}
+
+// CardCountSQL is a deck's card count for the alias of its deck table: every
+// copy in its main board, owned or pending.
+func CardCountSQL(deck string) string {
+	return "((SELECT count(*) FROM tamiyo.card_deck own WHERE own.deck_id = " + deck + ".id AND " + MainBoardSQL("own") + ")" +
+		" + " + PendingCountSQL(deck) + ")"
+}
+
+// PendingCountSQL is the copies of a deck's main board still pending, for the
+// alias of its deck table.
+func PendingCountSQL(deck string) string {
+	return "(SELECT COALESCE(SUM(pen.quantity), 0) FROM tamiyo.deck_pending_cards pen WHERE pen.deck_id = " + deck + ".id AND " + MainBoardSQL("pen") + ")"
+}
+
 var ErrCommanderBoard = errors.New("the commander stays in the main deck")
 
 type Filter struct {

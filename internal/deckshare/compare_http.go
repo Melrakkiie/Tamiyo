@@ -50,7 +50,7 @@ func toComparedDeckResponse(c ComparedDeck) comparedDeckResponse {
 		Visibility: c.Deck.Visibility,
 		Owner:      ownerResponse(c.Owner),
 		Mine:       c.Mine,
-		CardCount:  c.CardCount,
+		CardCount:  c.Deck.CardCount,
 	}
 }
 

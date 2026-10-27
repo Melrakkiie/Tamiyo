@@ -68,7 +68,7 @@ func compareStore() *fakeDeckStore {
 		myDeckID: {
 			OwnerID: viewerID,
 			Mine:    true,
-			Deck:    deck.Deck{ID: myDeckID, Name: "Mine", Format: "commander", Visibility: deck.VisibilityPrivate, CommanderID: intPtr(1)},
+			Deck:    deck.Deck{ID: myDeckID, Name: "Mine", Format: "commander", Visibility: deck.VisibilityPrivate, CommanderID: intPtr(1), CardCount: 70},
 			Entries: []deck.DeckEntry{
 				{Name: "Atraxa, Praetors' Voice", ScryfallID: "atraxa-cmr", ManaValue: 4, Slot: deck.SlotCommander, OwnedCardIDs: []int{1}},
 				{Name: "Counterspell", ScryfallID: "cs", Pending: []deck.PendingPart{{ID: 9, Quantity: 2}}},
@@ -80,7 +80,7 @@ func compareStore() *fakeDeckStore {
 		},
 		theirDeck: {
 			OwnerID: strangerID,
-			Deck:    deck.Deck{ID: theirDeck, Name: "Theirs", Format: "commander", Visibility: deck.VisibilityUnlisted},
+			Deck:    deck.Deck{ID: theirDeck, Name: "Theirs", Format: "commander", Visibility: deck.VisibilityUnlisted, CardCount: 60},
 			Entries: []deck.DeckEntry{
 				{Name: "Fire / Ice", ScryfallID: "fire-other", OwnedCardIDs: []int{23}},
 				{Name: "Island", ScryfallID: "island-b", OwnedCardIDs: []int{21}},
@@ -145,10 +145,10 @@ func TestCompareDecks_DescribesBothDecks(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, comparison.Deck.Mine)
-	assert.Equal(t, 7, comparison.Deck.CardCount)
+	assert.Equal(t, 70, comparison.Deck.Deck.CardCount)
 	assert.False(t, comparison.Other.Mine)
 	assert.Equal(t, "Alice", *comparison.Other.Owner.DisplayName)
-	assert.Equal(t, 5, comparison.Other.CardCount)
+	assert.Equal(t, 60, comparison.Other.Deck.CardCount)
 	assert.Equal(t, []deck.Reach{deck.ReachVisible, deck.ReachVisible}, store.reaches)
 }
 
@@ -193,8 +193,8 @@ func TestCompareDecks_PropagatesUnexpectedErrors(t *testing.T) {
 
 func TestCompareDecksHandler_ReturnsTheComparison(t *testing.T) {
 	service := &fakeSharedService{compared: Comparison{
-		Deck:        ComparedDeck{Deck: deck.Deck{ID: myDeckID, Name: "Mine"}, Mine: true, CardCount: 3},
-		Other:       ComparedDeck{Deck: deck.Deck{ID: theirDeck, Name: "Theirs"}, Owner: Owner{ID: strangerID, DisplayName: strPtr("Alice")}, CardCount: 2},
+		Deck:        ComparedDeck{Deck: deck.Deck{ID: myDeckID, Name: "Mine", CardCount: 3}, Mine: true},
+		Other:       ComparedDeck{Deck: deck.Deck{ID: theirDeck, Name: "Theirs", CardCount: 2}, Owner: Owner{ID: strangerID, DisplayName: strPtr("Alice")}},
 		Common:      []ComparedCard{{Name: "Sol Ring", ScryfallID: "sol", Colors: strPtr(""), Quantity: 1, OtherQuantity: 2, GameChanger: true}},
 		OnlyInDeck:  []ComparedCard{{Name: "Atraxa", Quantity: 1, Commander: true}},
 		OnlyInOther: []ComparedCard{},
@@ -259,7 +259,6 @@ func TestCompareDecks_OnlyComparesTheMainBoards(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"Lightning Bolt"}, names(comparison.OnlyInOther))
 	assert.Equal(t, []string{"Atraxa, Praetors' Voice", "Counterspell"}, names(comparison.OnlyInDeck))
-	assert.Equal(t, 7, comparison.Deck.CardCount)
 }
 
 func TestCollectionOwnership_CountsTheViewersCopiesByName(t *testing.T) {
@@ -309,7 +308,7 @@ func TestGetVisibleDeck_ShowsTheOwnerOfSomeoneElsesSharedDeck(t *testing.T) {
 
 func TestVisibleDeckHandler_ReturnsTheSharedDeckShape(t *testing.T) {
 	service := &fakeSharedService{shared: SharedDeck{
-		Deck:  deck.Deck{ID: myDeckID, Name: "Mine", Visibility: deck.VisibilityPrivate},
+		Deck:  deck.Deck{ID: myDeckID, Name: "Mine", Visibility: deck.VisibilityPrivate, CardCount: 3},
 		Owner: Owner{ID: viewerID},
 		Cards: []Card{{Name: "Island", ScryfallID: "i", Quantity: 3, Board: deck.BoardMain}, {Name: "Opt", Quantity: 1, Board: deck.BoardSideboard}},
 	}}

@@ -9,10 +9,9 @@ import (
 )
 
 type ComparedDeck struct {
-	Deck      deck.Deck
-	Owner     Owner
-	Mine      bool
-	CardCount int
+	Deck  deck.Deck
+	Owner Owner
+	Mine  bool
 }
 
 type ComparedCard struct {
@@ -115,14 +114,5 @@ func (s *Service) loadVisibleDeck(ctx context.Context, userID string, deckID str
 	}
 
 	cards := sharedCards(read.MainBoard(), nil)
-	total := 0
-	for _, c := range cards {
-		total += c.Quantity
-	}
-	return ComparedDeck{
-		Deck:      read.Deck,
-		Owner:     owner,
-		Mine:      read.Mine,
-		CardCount: total,
-	}, cards, nil
+	return ComparedDeck{Deck: read.Deck, Owner: owner, Mine: read.Mine}, cards, nil
 }

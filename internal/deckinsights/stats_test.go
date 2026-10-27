@@ -156,6 +156,29 @@ func TestGetDeckStats_ACardWithoutAStoredPrintingCountsAsUnknown(t *testing.T) {
 	assert.Equal(t, 1, stats.ManaCurve[0].Count)
 }
 
+func TestGetDeckStats_CardCountOverKnownPrintingsFollowsTheDecksCardCountRule(t *testing.T) {
+	entries := []deck.DeckEntry{
+		inSlot(deck.SlotCommander, owned(kinnan, 1)),
+		inSlot(deck.SlotPartner, pending(rhysticStudy, 1)),
+		owned(solRing, 2, 3),
+		pending(mountain, 3),
+		onBoard(deck.BoardSideboard, owned(solRing, 4, 5, 6, 7, 8)),
+		onBoard(deck.BoardConsidering, pending(mountain, 4)),
+	}
+
+	stats := statsOf(t, deckOf("commander", entries...), storeOf(kinnan, rhysticStudy, solRing, mountain))
+
+	deckCardCount := 0
+	for _, e := range entries {
+		if deck.InMainBoard(e.Board) {
+			deckCardCount += e.Quantity()
+		}
+	}
+	assert.Equal(t, 7, deckCardCount)
+	assert.Equal(t, deckCardCount, stats.CardCount)
+	assert.NotContains(t, stats.TypeBreakdown, "Unknown")
+}
+
 func TestGetDeckStats_UnknownDeckReturnsErrNotFound(t *testing.T) {
 	svc := NewService(readerWith(deckOf("commander")), storeOf(), nil)
 

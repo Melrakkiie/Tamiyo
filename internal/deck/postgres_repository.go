@@ -187,17 +187,15 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 			d.bracket AS bracket,
 			d.folder_id AS folder_id,
 			d.favorite AS favorite,
-			(SELECT COALESCE(SUM(p.quantity), 0) FROM tamiyo.deck_pending_cards p WHERE p.deck_id = d.id AND p.board = 'main') AS pending_count,
+			` + PendingCountSQL("d") + ` AS pending_count,
 			(SELECT count(*) FROM tamiyo.deck_likes l WHERE l.deck_id = d.id) AS likes_count,
 			` + commanderScryfallIDsSQL("d.") + `,
 			` + colorIdentitySQL("d.") + `,
 		    d.added AS added,
 			d.updated as updated,
-		    COUNT(cd.card_id) AS card_count
+		    ` + CardCountSQL("d") + ` AS card_count
 		FROM tamiyo.deck d
-		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id AND cd.board = 'main'
 	` + whereClause + `
-		GROUP BY d.id, d.name, d.format, d.commander_id, d.commander_pending_id, d.partner_id, d.partner_pending_id, d.background_scryfall_id, d.background_face, d.visibility, d.bracket, d.folder_id, d.favorite, d.added, d.updated
 	` + orderByClause(filter) + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 
 	pagedArgs := append(args, filter.Limit, offset)
@@ -286,17 +284,15 @@ func (r *compositionQueries) FindByID(ctx context.Context, userID string, id str
 			d.bracket AS bracket,
 			d.folder_id AS folder_id,
 			d.favorite AS favorite,
-			(SELECT COALESCE(SUM(p.quantity), 0) FROM tamiyo.deck_pending_cards p WHERE p.deck_id = d.id AND p.board = 'main') AS pending_count,
+			` + PendingCountSQL("d") + ` AS pending_count,
 			(SELECT count(*) FROM tamiyo.deck_likes l WHERE l.deck_id = d.id) AS likes_count,
 			` + commanderScryfallIDsSQL("d.") + `,
 			` + colorIdentitySQL("d.") + `,
 		    d.added AS added,
 			d.updated as updated,
-		    COUNT(cd.card_id) AS card_count
+		    ` + CardCountSQL("d") + ` AS card_count
 		FROM tamiyo.deck d
-		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id AND cd.board = 'main'
 		WHERE d.id = $1 AND d.user_id = $2
-		GROUP BY d.id, d.name, d.format, d.commander_id, d.commander_pending_id, d.partner_id, d.partner_pending_id, d.background_scryfall_id, d.background_face, d.visibility, d.bracket, d.folder_id, d.favorite, d.added, d.updated
 	`
 
 	var row deckRow
@@ -327,17 +323,15 @@ func (r *PostgresRepository) FindShared(ctx context.Context, id string) (string,
 			d.bracket AS bracket,
 			d.folder_id AS folder_id,
 			d.favorite AS favorite,
-			(SELECT COALESCE(SUM(p.quantity), 0) FROM tamiyo.deck_pending_cards p WHERE p.deck_id = d.id AND p.board = 'main') AS pending_count,
+			` + PendingCountSQL("d") + ` AS pending_count,
 			(SELECT count(*) FROM tamiyo.deck_likes l WHERE l.deck_id = d.id) AS likes_count,
 			` + commanderScryfallIDsSQL("d.") + `,
 			` + colorIdentitySQL("d.") + `,
 		    d.added AS added,
 			d.updated as updated,
-		    COUNT(cd.card_id) AS card_count
+		    ` + CardCountSQL("d") + ` AS card_count
 		FROM tamiyo.deck d
-		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id AND cd.board = 'main'
 		WHERE d.id = $1 AND d.visibility IN ('public', 'unlisted')
-		GROUP BY d.id, d.user_id, d.name, d.format, d.commander_id, d.commander_pending_id, d.partner_id, d.partner_pending_id, d.background_scryfall_id, d.background_face, d.visibility, d.bracket, d.folder_id, d.favorite, d.added, d.updated
 	`
 
 	var row deckRow
@@ -517,11 +511,11 @@ func colorIdentitySQL(deck string) string {
 			(
 				SELECT string_agg(coalesce(identities.identity, ''), '') FROM (
 					SELECT c.color_identity AS identity FROM tamiyo.card_deck link JOIN tamiyo.cards c ON c.id = link.card_id
-					WHERE link.deck_id = %[1]sid AND link.board = 'main'
+					WHERE link.deck_id = %[1]sid AND %[2]s
 					UNION ALL
-					SELECT p.color_identity FROM tamiyo.deck_pending_cards p WHERE p.deck_id = %[1]sid AND p.board = 'main'
+					SELECT p.color_identity FROM tamiyo.deck_pending_cards p WHERE p.deck_id = %[1]sid AND %[3]s
 				) identities
-			) AS cards_color_identity`, deck)
+			) AS cards_color_identity`, deck, MainBoardSQL("link"), MainBoardSQL("p"))
 }
 
 func (r deckRow) colorIdentity() *string {

@@ -5478,10 +5478,10 @@ components:
           description: Commander bracket, 1 (Exhibition) to 5 (cEDH); null when not set.
         card_count:
           type: integer
-          description: Cards of the main board.
+          description: Copies in the main board, owned or pending.
         pending_count:
           type: integer
-          description: Copies waiting in the main board's pending list (not in the collection yet), not counted in card_count.
+          description: Copies waiting in the main board's pending list (not in the collection yet), included in card_count.
         likes_count:
           type: integer
           description: How many users liked the deck.

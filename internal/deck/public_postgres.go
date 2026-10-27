@@ -35,7 +35,7 @@ type publicDeckRow struct {
 
 const identityLettersSQL = `ARRAY(SELECT DISTINCT letter FROM regexp_split_to_table(upper(coalesce(%s, '')), '') AS letter WHERE letter IN ('W', 'U', 'B', 'R', 'G'))`
 
-const publicDecksSQL = `
+var publicDecksSQL = `
 	WITH base AS (
 		SELECT d.id, d.user_id, d.name, d.format, d.bracket, d.background_scryfall_id, d.background_face, d.added, d.updated,
 			u.display_name, u.avatar_scryfall_id,
@@ -46,16 +46,15 @@ const publicDecksSQL = `
 			CASE WHEN cc.id IS NOT NULL OR cp.id IS NOT NULL
 				THEN coalesce(cc.color_identity, cp.color_identity, '') || coalesce(pc.color_identity, pp.color_identity, '')
 			END AS commander_identity,
-			(SELECT count(*) FROM tamiyo.card_deck cd WHERE cd.deck_id = d.id AND cd.board = 'main')
-				+ (SELECT coalesce(sum(p.quantity), 0) FROM tamiyo.deck_pending_cards p WHERE p.deck_id = d.id AND p.board = 'main') AS card_count,
+			` + CardCountSQL("d") + ` AS card_count,
 			(SELECT count(*) FROM tamiyo.deck_likes l WHERE l.deck_id = d.id) AS likes_count,
 			%[1]s AS liked_at,
 			(
 				SELECT string_agg(identity, '') FROM (
 					SELECT c.color_identity AS identity FROM tamiyo.card_deck cd JOIN tamiyo.cards c ON c.id = cd.card_id
-					WHERE cd.deck_id = d.id AND cd.board = 'main'
+					WHERE cd.deck_id = d.id AND ` + MainBoardSQL("cd") + `
 					UNION ALL
-					SELECT p.color_identity FROM tamiyo.deck_pending_cards p WHERE p.deck_id = d.id AND p.board = 'main'
+					SELECT p.color_identity FROM tamiyo.deck_pending_cards p WHERE p.deck_id = d.id AND ` + MainBoardSQL("p") + `
 				) identities
 			) AS cards_identity
 		FROM tamiyo.deck d
@@ -158,11 +157,11 @@ func (r *PostgresRepository) FindPublic(ctx context.Context, filter PublicFilter
 		add(func(pos int) string {
 			return fmt.Sprintf(`(EXISTS (
 				SELECT 1 FROM tamiyo.card_deck cd JOIN tamiyo.cards c ON c.id = cd.card_id
-				WHERE cd.deck_id = decks.id AND cd.board = 'main' AND %s
+				WHERE cd.deck_id = decks.id AND %s AND %s
 			) OR EXISTS (
 				SELECT 1 FROM tamiyo.deck_pending_cards p
-				WHERE p.deck_id = decks.id AND p.board = 'main' AND %s
-			))`, containsSQL("c.name", pos), containsSQL("p.name", pos))
+				WHERE p.deck_id = decks.id AND %s AND %s
+			))`, MainBoardSQL("cd"), containsSQL("c.name", pos), MainBoardSQL("p"), containsSQL("p.name", pos))
 		}, filter.Card)
 	}
 	if filter.Colorless {
