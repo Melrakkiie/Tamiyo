@@ -193,11 +193,9 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 			` + colorIdentitySQL("d.") + `,
 		    d.added AS added,
 			d.updated as updated,
-		    COUNT(cd.card_id) AS card_count
+		    ` + CardCountSQL("d") + ` AS card_count
 		FROM tamiyo.deck d
-		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id AND ` + MainBoardSQL("cd") + `
 	` + whereClause + `
-		GROUP BY d.id, d.name, d.format, d.commander_id, d.commander_pending_id, d.partner_id, d.partner_pending_id, d.background_scryfall_id, d.background_face, d.visibility, d.bracket, d.folder_id, d.favorite, d.added, d.updated
 	` + orderByClause(filter) + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 
 	pagedArgs := append(args, filter.Limit, offset)
@@ -292,11 +290,9 @@ func (r *compositionQueries) FindByID(ctx context.Context, userID string, id str
 			` + colorIdentitySQL("d.") + `,
 		    d.added AS added,
 			d.updated as updated,
-		    COUNT(cd.card_id) AS card_count
+		    ` + CardCountSQL("d") + ` AS card_count
 		FROM tamiyo.deck d
-		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id AND ` + MainBoardSQL("cd") + `
 		WHERE d.id = $1 AND d.user_id = $2
-		GROUP BY d.id, d.name, d.format, d.commander_id, d.commander_pending_id, d.partner_id, d.partner_pending_id, d.background_scryfall_id, d.background_face, d.visibility, d.bracket, d.folder_id, d.favorite, d.added, d.updated
 	`
 
 	var row deckRow
@@ -333,11 +329,9 @@ func (r *PostgresRepository) FindShared(ctx context.Context, id string) (string,
 			` + colorIdentitySQL("d.") + `,
 		    d.added AS added,
 			d.updated as updated,
-		    COUNT(cd.card_id) AS card_count
+		    ` + CardCountSQL("d") + ` AS card_count
 		FROM tamiyo.deck d
-		LEFT JOIN tamiyo.card_deck cd ON d.id = cd.deck_id AND ` + MainBoardSQL("cd") + `
 		WHERE d.id = $1 AND d.visibility IN ('public', 'unlisted')
-		GROUP BY d.id, d.user_id, d.name, d.format, d.commander_id, d.commander_pending_id, d.partner_id, d.partner_pending_id, d.background_scryfall_id, d.background_face, d.visibility, d.bracket, d.folder_id, d.favorite, d.added, d.updated
 	`
 
 	var row deckRow

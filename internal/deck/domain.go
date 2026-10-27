@@ -167,6 +167,13 @@ func MainBoardSQL(alias string) string {
 	return column + " NOT IN ('" + BoardSideboard + "', '" + BoardConsidering + "')"
 }
 
+// CardCountSQL is a deck's card count for the alias of its deck table: every
+// copy in its main board, owned or pending.
+func CardCountSQL(deck string) string {
+	return "((SELECT count(*) FROM tamiyo.card_deck own WHERE own.deck_id = " + deck + ".id AND " + MainBoardSQL("own") + ")" +
+		" + (SELECT COALESCE(SUM(pen.quantity), 0) FROM tamiyo.deck_pending_cards pen WHERE pen.deck_id = " + deck + ".id AND " + MainBoardSQL("pen") + "))"
+}
+
 var ErrCommanderBoard = errors.New("the commander stays in the main deck")
 
 type Filter struct {

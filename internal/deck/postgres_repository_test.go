@@ -1499,16 +1499,16 @@ func TestPostgresRepository_Boards(t *testing.T) {
 
 	found, err := repo.FindByID(ctx, userID, deckID)
 	require.NoError(t, err)
-	assert.Equal(t, 1, found.CardCount)
+	assert.Equal(t, 3, found.CardCount)
 	assert.Equal(t, 2, found.PendingCount)
 	_, shared, err := repo.FindShared(ctx, deckID)
 	require.NoError(t, err)
-	assert.Equal(t, 1, shared.CardCount)
+	assert.Equal(t, 3, shared.CardCount)
 	all, _, err := repo.FindAll(ctx, userID, Filter{Page: 1, Limit: 25, SortField: "name"})
 	require.NoError(t, err)
 	for _, d := range all {
 		if d.ID == deckID {
-			assert.Equal(t, 1, d.CardCount)
+			assert.Equal(t, 3, d.CardCount)
 			assert.Equal(t, 2, d.PendingCount)
 		}
 	}

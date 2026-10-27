@@ -46,8 +46,7 @@ const publicDecksSQL = `
 			CASE WHEN cc.id IS NOT NULL OR cp.id IS NOT NULL
 				THEN coalesce(cc.color_identity, cp.color_identity, '') || coalesce(pc.color_identity, pp.color_identity, '')
 			END AS commander_identity,
-			(SELECT count(*) FROM tamiyo.card_deck cd WHERE cd.deck_id = d.id AND %[5]s)
-				+ (SELECT coalesce(sum(p.quantity), 0) FROM tamiyo.deck_pending_cards p WHERE p.deck_id = d.id AND %[6]s) AS card_count,
+			%[7]s AS card_count,
 			(SELECT count(*) FROM tamiyo.deck_likes l WHERE l.deck_id = d.id) AS likes_count,
 			%[1]s AS liked_at,
 			(
@@ -82,7 +81,7 @@ func publicDecksQuery(likedAt string, where string) string {
 	return fmt.Sprintf(publicDecksSQL, likedAt, where,
 		fmt.Sprintf(identityLettersSQL, "commander_identity"),
 		fmt.Sprintf(identityLettersSQL, "cards_identity"),
-		MainBoardSQL("cd"), MainBoardSQL("p"),
+		MainBoardSQL("cd"), MainBoardSQL("p"), CardCountSQL("d"),
 	)
 }
 
