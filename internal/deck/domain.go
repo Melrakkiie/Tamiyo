@@ -157,6 +157,16 @@ func InMainBoard(board string) bool {
 	return board != BoardSideboard && board != BoardConsidering
 }
 
+// MainBoardSQL is InMainBoard as an SQL condition on the board column of the
+// table alias, or on the bare board column when alias is empty.
+func MainBoardSQL(alias string) string {
+	column := "board"
+	if alias != "" {
+		column = alias + ".board"
+	}
+	return column + " NOT IN ('" + BoardSideboard + "', '" + BoardConsidering + "')"
+}
+
 var ErrCommanderBoard = errors.New("the commander stays in the main deck")
 
 type Filter struct {
