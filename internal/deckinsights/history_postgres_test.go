@@ -149,6 +149,34 @@ func TestPostgresRepository_GetDeckHistory_DeletingACollectionCardInADeckChanges
 	assert.Equal(t, 1, f.pendingQuantity(t, "Lightning Bolt"))
 }
 
+func TestPostgresRepository_GetDeckHistory_DeletingACollectionCardInTwoDecksChangesNothing(t *testing.T) {
+	f := newHistoryFixture(t)
+	second := f.otherDeck(t)
+	secondHistory := historyFixture{insightsFixture: second, decks: f.decks, cards: f.cards, service: f.service}
+	id := f.collectionCopy(t, historyBolt, copyOptions{})
+	require.NoError(t, f.decks.PutCardInDeck(context.Background(), f.userID, f.deckID, id, deck.BoardMain))
+	require.NoError(t, f.decks.PutCardInDeck(context.Background(), f.userID, second.deckID, id, deck.BoardSideboard))
+	before, secondBefore := f.history(t), secondHistory.history(t)
+
+	require.NoError(t, f.cards.DeleteCard(context.Background(), f.userID, id))
+
+	assert.Equal(t, before, f.history(t))
+	assert.Equal(t, secondBefore, secondHistory.history(t))
+}
+
+func TestPostgresRepository_GetDeckHistory_DeletingACollectionCardMergedIntoAPendingRowChangesNothing(t *testing.T) {
+	f := newHistoryFixture(t)
+	f.place(t, f.deckID, historyBolt, deck.BoardMain, 1)
+	id := f.collectionCopy(t, historyBolt, copyOptions{})
+	require.NoError(t, f.decks.PutCardInDeck(context.Background(), f.userID, f.deckID, id, deck.BoardMain))
+	before := f.history(t)
+
+	require.NoError(t, f.cards.DeleteCard(context.Background(), f.userID, id))
+
+	assert.Equal(t, before, f.history(t))
+	assert.Equal(t, 2, f.pendingQuantity(t, "Lightning Bolt"))
+}
+
 func (f historyFixture) pendingQuantity(t *testing.T, name string) int {
 	t.Helper()
 	var q int
