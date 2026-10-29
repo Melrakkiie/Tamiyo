@@ -15,6 +15,7 @@ type insightsService interface {
 	GetDeckLegality(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (LegalityReport, error)
 	GetDeckStats(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (DeckStats, error)
 	GetDeckCombos(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (DeckCombos, error)
+	GetDeckHistory(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (DeckHistory, error)
 }
 
 type Handler struct {
@@ -31,6 +32,7 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes) {
 	router.GET("/deck/:id/legality", private(boxed(h.service.GetDeckLegality)))
 	router.GET("/deck/:id/stats", private(boxed(h.service.GetDeckStats)))
 	router.GET("/deck/:id/combos", private(boxed(h.service.GetDeckCombos)))
+	router.GET("/deck/:id/history", private(boxed(h.service.GetDeckHistory)))
 }
 
 // RegisterSharedRoutes registers the insights of shared decks, readable by
@@ -39,6 +41,7 @@ func (h *Handler) RegisterSharedRoutes(router gin.IRoutes) {
 	router.GET("/shared/decks/:id/legality", shared(boxed(h.service.GetDeckLegality)))
 	router.GET("/shared/decks/:id/stats", shared(boxed(h.service.GetDeckStats)))
 	router.GET("/shared/decks/:id/combos", shared(boxed(h.service.GetDeckCombos)))
+	router.GET("/shared/decks/:id/history", shared(boxed(h.service.GetDeckHistory)))
 }
 
 type insight func(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (any, error)

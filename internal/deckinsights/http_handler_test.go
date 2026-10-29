@@ -21,6 +21,7 @@ type fakeInsightsService struct {
 	legality LegalityReport
 	stats    DeckStats
 	combos   DeckCombos
+	history  DeckHistory
 	err      error
 
 	lastViewerID string
@@ -101,7 +102,7 @@ var families = []family{
 		badIDStatus: http.StatusNotFound, badIDBody: `{"error": "deck not found"}`},
 }
 
-var insightRoutes = []string{"legality", "stats", "combos"}
+var insightRoutes = []string{"legality", "stats", "combos", "history"}
 
 func TestRoutes_ReadTheDeckWithTheReachAndViewerOfTheirFamily(t *testing.T) {
 	for _, f := range families {
@@ -262,3 +263,8 @@ func TestGetDeckCombos_ReturnsTheCombosOnSuccess(t *testing.T) {
 type errUnexpected struct{}
 
 func (errUnexpected) Error() string { return "something went wrong" }
+
+func (f *fakeInsightsService) GetDeckHistory(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (DeckHistory, error) {
+	f.record(viewerID, deckID, reach)
+	return f.history, f.err
+}
