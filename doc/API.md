@@ -1355,13 +1355,15 @@ Days follow Europe/Paris time. The whole history comes in one response, without 
     {
       "date": "2026-10-29",
       "boards": [
-        { "board": "main", "changes": [ { "name": "Island", "count": 2 }, { "name": "Sol Ring", "count": -1 } ] }
+        { "board": "main", "changes": [ { "name": "Island", "count": 2, "set_code": "lea", "collector_number": "1", "foil": false }, { "name": "Sol Ring", "count": -1 } ] }
       ]
     }
   ]
 }
 ```
 `days` come newest first, `boards` in the order `main`, `sideboard`, `considering` (empty ones left out), `changes` sorted by `name`. `count` is positive for an addition, negative for a removal, never zero. A deck with no history answers `{"days": []}`.
+
+Each change may also carry `set_code`, `collector_number` and `foil`: the printing and finish of one copy behind the line, an added copy for an addition, a removed copy for a removal. A day that mixed printings of one name remembers one of them. The three fields are omitted on lines recorded before they were remembered. Proxy status is not remembered.
 
 **Errors:** `400` invalid id · `401` unauthenticated · `404` deck not found, or not owned by the authenticated user
 

@@ -53,15 +53,37 @@ func (f historyFixture) history(t *testing.T) DeckHistory {
 	return h
 }
 
-// changes flattens today's history to "board name" -> count.
-func today(h DeckHistory) map[string]int {
-	out := map[string]int{}
+// annotated is a history line's count and remembered printing.
+type annotated struct {
+	Count  int
+	Set    string
+	Number string
+	Foil   bool
+}
+
+// lines flattens the history to "board name" -> annotated line; a line
+// without annotation has an empty Set.
+func lines(h DeckHistory) map[string]annotated {
+	out := map[string]annotated{}
 	for _, d := range h.Days {
 		for _, b := range d.Boards {
 			for _, c := range b.Changes {
-				out[b.Board+" "+c.Name] = c.Count
+				a := annotated{Count: c.Count}
+				if c.SetCode != nil {
+					a.Set, a.Number, a.Foil = *c.SetCode, *c.CollectorNumber, *c.Foil
+				}
+				out[b.Board+" "+c.Name] = a
 			}
 		}
+	}
+	return out
+}
+
+// today flattens the history to "board name" -> count.
+func today(h DeckHistory) map[string]int {
+	out := map[string]int{}
+	for k, a := range lines(h) {
+		out[k] = a.Count
 	}
 	return out
 }
@@ -83,8 +105,8 @@ func TestPostgresRepository_GetDeckHistory_PlacingGivesAdditionsOnTheirBoard(t *
 	require.Len(t, h.Days, 1)
 	wantDate := time.Now().In(mustParis(t)).Format("2006-01-02")
 	assert.Equal(t, HistoryDay{Date: wantDate, Boards: []HistoryBoard{
-		{Board: "main", Changes: []HistoryChange{{Name: "Lightning Bolt", Count: 2}}},
-		{Board: "sideboard", Changes: []HistoryChange{{Name: "Island", Count: 3}}},
+		{Board: "main", Changes: []HistoryChange{{Name: "Lightning Bolt", Count: 2, SetCode: ptr("lea"), CollectorNumber: ptr("2"), Foil: ptr(false)}}},
+		{Board: "sideboard", Changes: []HistoryChange{{Name: "Island", Count: 3, SetCode: ptr("lea"), CollectorNumber: ptr("1"), Foil: ptr(false)}}},
 	}}, h.Days[0])
 }
 
@@ -125,7 +147,7 @@ func TestPostgresRepository_GetDeckHistory_MovingBetweenBoardsIsARemovalAndAnAdd
 func TestPostgresRepository_GetDeckHistory_PendingQuantityAndBoardChanges(t *testing.T) {
 	f := newHistoryFixture(t)
 	f.place(t, f.deckID, historyIsland, deck.BoardMain, 2)
-	id := f.pendingID(t, "Island", deck.BoardMain)
+	id := f.pendingID(t, historyIsland.ScryfallID, deck.BoardMain)
 
 	five, side := 5, deck.BoardSideboard
 	_, err := f.decks.UpdatePendingCard(context.Background(), f.userID, f.deckID, id, &five, nil)

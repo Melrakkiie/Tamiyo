@@ -116,6 +116,12 @@ type HistoryBoard struct {
 type HistoryChange struct {
 	Name  string `json:"name"`
 	Count int    `json:"count"`
+	// SetCode, CollectorNumber and Foil name a copy behind the line (an
+	// added one for an addition, a removed one for a removal); nil on lines
+	// recorded before they were remembered.
+	SetCode         *string `json:"set_code,omitempty"`
+	CollectorNumber *string `json:"collector_number,omitempty"`
+	Foil            *bool   `json:"foil,omitempty"`
 }
 
 // HistoryRow is one stored balance of deck_history.
@@ -124,4 +130,8 @@ type HistoryRow struct {
 	Board string
 	Name  string
 	Count int
+
+	SetCode         *string `db:"set_code"`
+	CollectorNumber *string `db:"collector_number"`
+	Foil            *bool   `db:"foil"`
 }

@@ -45,26 +45,26 @@ func TestPostgresRepository_GetDeckHistory_SwitchingFinishToAnotherCopyChangesNo
 	f.collectionCopy(t, historyIsland, copyOptions{})
 	f.place(t, f.deckID, historyIsland, deck.BoardMain, 1)
 	f.collectionCopy(t, historyIsland, copyOptions{foil: true})
-	before := f.history(t)
+	before := today(f.history(t))
 
 	summary, err := f.decks.SwitchFinish(context.Background(), f.userID, f.deckID, deck.CardSelection{CardIDs: f.ownedIDs(t, f.deckID)}, true)
 
 	require.NoError(t, err)
 	require.Equal(t, 1, summary.CardsLinked)
-	assert.Equal(t, before, f.history(t))
+	assert.Equal(t, before, today(f.history(t)))
 }
 
 func TestPostgresRepository_GetDeckHistory_SwitchingFinishToAPendingCardChangesNothing(t *testing.T) {
 	f := newHistoryFixture(t)
 	f.collectionCopy(t, historyIsland, copyOptions{})
 	f.place(t, f.deckID, historyIsland, deck.BoardSideboard, 1)
-	before := f.history(t)
+	before := today(f.history(t))
 
 	summary, err := f.decks.SwitchFinish(context.Background(), f.userID, f.deckID, deck.CardSelection{CardIDs: f.ownedIDs(t, f.deckID)}, true)
 
 	require.NoError(t, err)
 	require.Equal(t, 1, summary.CardsPending)
-	assert.Equal(t, before, f.history(t))
+	assert.Equal(t, before, today(f.history(t)))
 }
 
 func TestPostgresRepository_GetDeckHistory_SwitchingProxyChangesNothing(t *testing.T) {
@@ -73,15 +73,15 @@ func TestPostgresRepository_GetDeckHistory_SwitchingProxyChangesNothing(t *testi
 	f.place(t, f.deckID, historyBolt, deck.BoardMain, 1)
 	f.collectionCopy(t, historyBolt, copyOptions{proxy: true})
 	f.place(t, f.deckID, historyIsland, deck.BoardMain, 1)
-	before := f.history(t)
+	before := today(f.history(t))
 
 	// The Bolt finds a proxy copy, the pending Island falls back to a pending proxy.
-	selection := deck.CardSelection{CardIDs: f.ownedIDs(t, f.deckID), PendingIDs: []int{f.pendingID(t, "Island", deck.BoardMain)}}
+	selection := deck.CardSelection{CardIDs: f.ownedIDs(t, f.deckID), PendingIDs: []int{f.pendingID(t, historyIsland.ScryfallID, deck.BoardMain)}}
 	summary, err := f.decks.SwitchProxy(context.Background(), f.userID, f.deckID, selection, true)
 
 	require.NoError(t, err)
 	require.Equal(t, 2, summary.CardsLinked+summary.CardsPending)
-	assert.Equal(t, before, f.history(t))
+	assert.Equal(t, before, today(f.history(t)))
 }
 
 func TestPostgresRepository_GetDeckHistory_SplittingPrintingsChangesNothing(t *testing.T) {
@@ -90,14 +90,14 @@ func TestPostgresRepository_GetDeckHistory_SplittingPrintingsChangesNothing(t *t
 	f.collectionCopy(t, historyIsland, copyOptions{})
 	f.collectionCopy(t, historyIsland, copyOptions{})
 	f.place(t, f.deckID, historyIsland, deck.BoardSideboard, 2)
-	before := f.history(t)
+	before := today(f.history(t))
 	alt := deck.PrintingChoice{ScryfallID: historyIslandAlt.ScryfallID, SetCode: historyIslandAlt.SetCode, CollectorNumber: historyIslandAlt.CollectorNumber}
 
 	summary, err := f.decks.SplitPrintings(context.Background(), f.userID, f.deckID, deck.CardSelection{CardIDs: f.ownedIDs(t, f.deckID)}, []deck.PrintingChoice{alt, alt})
 
 	require.NoError(t, err)
 	require.Equal(t, 2, summary.CardsRemoved)
-	assert.Equal(t, before, f.history(t))
+	assert.Equal(t, before, today(f.history(t)))
 }
 
 func TestPostgresRepository_GetDeckHistory_SettingACommanderAmongTheMainBoardChangesNothing(t *testing.T) {
@@ -184,7 +184,7 @@ func TestPostgresRepository_GetDeckHistory_DuplicatingADeckStartsTheCopyWithItsC
 	f.place(t, f.deckID, historyIsland, deck.BoardSideboard, 3)
 	// The source's own history has a card that left again: it must not reach the copy.
 	f.place(t, f.deckID, historyIsland, deck.BoardMain, 1)
-	require.NoError(t, f.decks.RemovePendingCard(context.Background(), f.userID, f.deckID, f.pendingID(t, "Island", deck.BoardMain)))
+	require.NoError(t, f.decks.RemovePendingCard(context.Background(), f.userID, f.deckID, f.pendingID(t, historyIsland.ScryfallID, deck.BoardMain)))
 	sourceBefore := f.history(t)
 
 	result, err := f.decks.DuplicateDeck(context.Background(), f.userID, f.deckID, deck.DuplicateRequest{})
@@ -196,10 +196,10 @@ func TestPostgresRepository_GetDeckHistory_DuplicatingADeckStartsTheCopyWithItsC
 	assert.Equal(t, sourceBefore, f.history(t))
 }
 
-func (f historyFixture) pendingID(t *testing.T, name, board string) int {
+func (f historyFixture) pendingID(t *testing.T, scryfallID, board string) int {
 	t.Helper()
 	var id int
-	require.NoError(t, f.db.Get(&id, `SELECT id FROM tamiyo.deck_pending_cards WHERE deck_id = $1 AND name = $2 AND board = $3`, f.deckID, name, board))
+	require.NoError(t, f.db.Get(&id, `SELECT id FROM tamiyo.deck_pending_cards WHERE deck_id = $1 AND scryfall_id = $2 AND board = $3`, f.deckID, scryfallID, board))
 	return id
 }
 

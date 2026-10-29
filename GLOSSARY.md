@@ -75,11 +75,11 @@ The day-by-day record of the cards added to and removed from each board of a dec
 _Avoid_: Changelog, log, revisions
 
 **Addition**:
-A card name whose number of copies on a board grew over a day, by that many copies; a move between boards is a removal from one and an addition to the other. Shown as "Ajout" in the interface.
+A card name whose number of copies on a board grew over a day, by that many copies; a move between boards is a removal from one and an addition to the other. The line remembers the printing and finish of one of its added copies. Shown as "Ajout" in the interface.
 _Avoid_: Entry (a deck entry is a pile), in
 
 **Removal**:
-A card name whose number of copies on a board shrank over a day, by that many copies. Shown as "Retrait" in the interface.
+A card name whose number of copies on a board shrank over a day, by that many copies. The line remembers the printing and finish of one of its removed copies. Shown as "Retrait" in the interface.
 _Avoid_: Exit, out, cut
 
 ### Languages
