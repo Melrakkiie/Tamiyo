@@ -83,8 +83,8 @@ func TestPostgresRepository_GetDeckHistory_PlacingGivesAdditionsOnTheirBoard(t *
 	require.Len(t, h.Days, 1)
 	wantDate := time.Now().In(mustParis(t)).Format("2006-01-02")
 	assert.Equal(t, HistoryDay{Date: wantDate, Boards: []HistoryBoard{
-		{Board: "main", Changes: []HistoryChange{{Name: "Lightning Bolt", Count: 2}}},
-		{Board: "sideboard", Changes: []HistoryChange{{Name: "Island", Count: 3}}},
+		{Board: "main", Changes: []HistoryChange{{Name: "Lightning Bolt", Count: 2, SetCode: ptr("lea"), CollectorNumber: ptr("2"), Foil: ptr(false)}}},
+		{Board: "sideboard", Changes: []HistoryChange{{Name: "Island", Count: 3, SetCode: ptr("lea"), CollectorNumber: ptr("1"), Foil: ptr(false)}}},
 	}}, h.Days[0])
 }
 
@@ -125,7 +125,7 @@ func TestPostgresRepository_GetDeckHistory_MovingBetweenBoardsIsARemovalAndAnAdd
 func TestPostgresRepository_GetDeckHistory_PendingQuantityAndBoardChanges(t *testing.T) {
 	f := newHistoryFixture(t)
 	f.place(t, f.deckID, historyIsland, deck.BoardMain, 2)
-	id := f.pendingID(t, "Island", deck.BoardMain)
+	id := f.pendingID(t, historyIsland.ScryfallID, deck.BoardMain)
 
 	five, side := 5, deck.BoardSideboard
 	_, err := f.decks.UpdatePendingCard(context.Background(), f.userID, f.deckID, id, &five, nil)

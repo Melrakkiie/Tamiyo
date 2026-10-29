@@ -117,7 +117,7 @@ func (r *PostgresRepository) DeckValues(ctx context.Context, userID string, deck
 func (r *PostgresRepository) DeckHistoryRows(ctx context.Context, userID string, deckID string) ([]HistoryRow, error) {
 	var rows []HistoryRow
 	err := r.db.SelectContext(ctx, &rows, `
-		SELECT h.day::text AS date, h.board, h.name, h.count
+		SELECT h.day::text AS date, h.board, h.name, h.count, h.set_code, h.collector_number, h.foil
 		FROM tamiyo.deck_history h
 		JOIN tamiyo.deck d ON d.id = h.deck_id
 		WHERE d.user_id = $1 AND h.deck_id = $2

@@ -51,7 +51,7 @@ func groupHistory(rows []HistoryRow) DeckHistory {
 			day.Boards = append(day.Boards, HistoryBoard{Board: r.Board})
 		}
 		board := &day.Boards[len(day.Boards)-1]
-		board.Changes = append(board.Changes, HistoryChange{Name: r.Name, Count: r.Count})
+		board.Changes = append(board.Changes, HistoryChange{Name: r.Name, Count: r.Count, SetCode: r.SetCode, CollectorNumber: r.CollectorNumber, Foil: r.Foil})
 	}
 	return history
 }

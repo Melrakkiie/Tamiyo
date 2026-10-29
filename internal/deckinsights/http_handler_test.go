@@ -268,3 +268,24 @@ func TestGetDeckCombos_ReturnsTheCombosOnSuccess(t *testing.T) {
 type errUnexpected struct{}
 
 func (errUnexpected) Error() string { return "something went wrong" }
+
+func TestGetDeckHistory_ReturnsThePrintingOnlyOnAnnotatedLines(t *testing.T) {
+	for _, f := range families {
+		t.Run(f.name, func(t *testing.T) {
+			service := &fakeInsightsService{history: DeckHistory{Days: []HistoryDay{{Date: "2026-10-29", Boards: []HistoryBoard{{Board: "main", Changes: []HistoryChange{
+				{Name: "Sol Ring", Count: 2, SetCode: ptr("c21"), CollectorNumber: ptr("263"), Foil: ptr(true)},
+				{Name: "Island", Count: -1},
+			}}}}}}}
+
+			w := get(setupRouter(service), f.prefix+handlerDeckID+"/history")
+
+			require.Equal(t, http.StatusOK, w.Code)
+			assert.JSONEq(t, `{"days": [{"date": "2026-10-29", "boards": [{"board": "main", "changes": [
+				{"name": "Sol Ring", "count": 2, "set_code": "c21", "collector_number": "263", "foil": true},
+				{"name": "Island", "count": -1}
+			]}]}]}`, w.Body.String())
+		})
+	}
+}
+
+func ptr[T any](v T) *T { return &v }
