@@ -21,7 +21,7 @@ tamiyo/
 │   ├── storage/          # storage domain (binders, boxes, deckboxes)
 │   ├── deck/             # deck domain, including deck ↔ card relationship
 │   ├── bulk/             # bulk import/export routes (ManaBox, Moxfield)
-│   ├── deckinsights/     # deck legality, stats + combos routes
+│   ├── deckinsights/     # deck legality, stats, combos + history routes
 │   ├── deckshare/        # public, read-only shared deck routes
 │   ├── scryfall/         # shared Scryfall API client (used by bulk and the printing refresher)
 │   ├── commanderspellbook/ # Commander Spellbook client (deck combos)
@@ -204,11 +204,12 @@ curl -X GET "localhost:8080/deck/<deck-id>/export?format=moxfield" \
 
 ## Deck Insights
 
-Three read-only, player-facing routes analyze a deck — nothing persisted, computed fresh from [Scryfall](https://scryfall.com/) data on every call (see [`internal/scryfall`](./internal/scryfall) for the shared client, also used by Bulk Import), and for combos from [Commander Spellbook](https://commanderspellbook.com/):
+Four read-only, player-facing routes analyze a deck — all but history computed fresh from [Scryfall](https://scryfall.com/) data on every call (see [`internal/scryfall`](./internal/scryfall) for the shared client, also used by Bulk Import), and for combos from [Commander Spellbook](https://commanderspellbook.com/):
 
 - `GET /deck/:id/legality` — checks every card against the deck's own format; for `commander` specifically, also checks singleton (one copy per card name, basic lands excepted), color identity against the deck's commanders (the union of both identities with a second commander), and that the two commanders can be paired (Partner, Partner with, Friends forever, Choose a Background, Doctor's companion…).
 - `GET /deck/:id/stats` — total mana value, mana curve, color breakdown and card types (lands excluded from the curve/colors/average, since they skew every one of those without adding anything), and the main board's value.
 - `GET /deck/:id/combos` — the combos the main board holds, looked up on Commander Spellbook's `find-my-combos` by the API (its CORS policy rules out a browser call, see [ADR 0011](./docs/adr/0011-commander-spellbook-is-called-by-the-api.md); client in [`internal/commanderspellbook`](./internal/commanderspellbook)), each with its cards, results and commanderspellbook.com link; `502` when Commander Spellbook is unavailable.
+- `GET /deck/:id/history` — the deck's history, day by day (Europe/Paris), newest first: per board, the net additions and removals of each card name. Unlike the others it is recorded, by database triggers ([ADR 0013](./docs/adr/0013-deck-history-is-recorded-by-triggers.md)), from the release of this route on; swaps of the same name (commit, finish, proxy, printing) net to zero.
 
 See [`doc/API.md`](./doc/API.md#deck-insights) for the exact response shapes and known limitations (e.g. no named singleton exceptions like Relentless Rats).
 
@@ -216,6 +217,7 @@ See [`doc/API.md`](./doc/API.md#deck-insights) for the exact response shapes and
 curl localhost:8080/deck/<deck-id>/legality -H "Authorization: Bearer <token>"
 curl localhost:8080/deck/<deck-id>/stats -H "Authorization: Bearer <token>"
 curl localhost:8080/deck/<deck-id>/combos -H "Authorization: Bearer <token>"
+curl localhost:8080/deck/<deck-id>/history -H "Authorization: Bearer <token>"
 ```
 
 ### Sideboard and considering

@@ -94,3 +94,34 @@ type DeckValues struct {
 func (v Value) Plus(other Value) Value {
 	return Value{EUR: v.EUR + other.EUR, USD: v.USD + other.USD}
 }
+
+// DeckHistory is the net change in copies of a deck, day by day, newest day
+// first.
+type DeckHistory struct {
+	Days []HistoryDay `json:"days"`
+}
+
+type HistoryDay struct {
+	Date   string         `json:"date"`
+	Boards []HistoryBoard `json:"boards"`
+}
+
+type HistoryBoard struct {
+	Board   string          `json:"board"`
+	Changes []HistoryChange `json:"changes"`
+}
+
+// HistoryChange is a card name's net balance: positive for an addition,
+// negative for a removal, never zero.
+type HistoryChange struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+// HistoryRow is one stored balance of deck_history.
+type HistoryRow struct {
+	Date  string
+	Board string
+	Name  string
+	Count int
+}

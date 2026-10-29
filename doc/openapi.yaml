@@ -2902,6 +2902,40 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /deck/{id}/history:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    get:
+      tags: [deck-insights]
+      summary: History of a deck
+      description: >
+        Net change in copies of each card name, day by day (Europe/Paris),
+        per board. Recorded from the release of this route on. The whole
+        history comes in one response.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeckHistory"
+        "400":
+          description: id is not a UUID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Deck not found, or not owned by the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /deck/{id}/combos:
     parameters:
       - $ref: "#/components/parameters/DeckID"
@@ -3127,6 +3161,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DeckStats"
+        "404":
+          description: >
+            No deck has this id, or the deck is private.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/SharedTooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /shared/decks/{id}/history:
+    parameters:
+      - $ref: "#/components/parameters/DeckID"
+    get:
+      tags: [shared-decks]
+      summary: History of a shared deck
+      description: Same history as GET /deck/{id}/history. Works without authentication.
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeckHistory"
         "404":
           description: >
             No deck has this id, or the deck is private.
@@ -4501,6 +4562,44 @@ components:
           type: string
           description: Primary type of the card, as in type_breakdown.
       required: [name, scryfall_id, quantity, type]
+
+    DeckHistory:
+      type: object
+      required: [days]
+      properties:
+        days:
+          type: array
+          description: Newest day first. Empty for a deck with no history.
+          items:
+            type: object
+            required: [date, boards]
+            properties:
+              date:
+                type: string
+                format: date
+                description: Day in Europe/Paris time.
+              boards:
+                type: array
+                description: In the order main, sideboard, considering; empty boards left out.
+                items:
+                  type: object
+                  required: [board, changes]
+                  properties:
+                    board:
+                      type: string
+                      enum: [main, sideboard, considering]
+                    changes:
+                      type: array
+                      description: Sorted by name.
+                      items:
+                        type: object
+                        required: [name, count]
+                        properties:
+                          name:
+                            type: string
+                          count:
+                            type: integer
+                            description: Positive for an addition, negative for a removal, never zero.
 
     DeckStats:
       type: object

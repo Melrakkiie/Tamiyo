@@ -68,6 +68,20 @@ _Avoid_: Synergy, interaction, almost-combo
 A card on Wizards of the Coast's Commander list of cards that strongly raise a deck's power, as flagged by Scryfall. Counted in a commander deck's statistics, once per distinct card in the main board. Shown as "Game changer" in the interface.
 _Avoid_: Staple, power card, banned-list card
 
+### Deck history
+
+**Deck history**:
+The day-by-day record of the cards added to and removed from each board of a deck, counted by card name: changing a card's printing, finish or proxy status, or committing a pending card, changes nothing. Starts when the deck is created; seen by whoever can see the deck. Shown as "Historique" in the interface.
+_Avoid_: Changelog, log, revisions
+
+**Addition**:
+A card name whose number of copies on a board grew over a day, by that many copies; a move between boards is a removal from one and an addition to the other. Shown as "Ajout" in the interface.
+_Avoid_: Entry (a deck entry is a pile), in
+
+**Removal**:
+A card name whose number of copies on a board shrank over a day, by that many copies. Shown as "Retrait" in the interface.
+_Avoid_: Exit, out, cut
+
 ### Languages
 
 **Interface language**:

@@ -116,8 +116,8 @@ func (f insightsFixture) otherDeck(t *testing.T) insightsFixture {
 	return other
 }
 
-// ownedCopy adds one physical copy of p to the deck.
-func (f insightsFixture) ownedCopy(t *testing.T, p printing, opts copyOptions) {
+// collectionCopy adds one physical copy of p to the collection, outside every deck.
+func (f insightsFixture) collectionCopy(t *testing.T, p printing, opts copyOptions) int {
 	t.Helper()
 	var id int
 	err := f.db.Get(&id, `
@@ -126,7 +126,14 @@ func (f insightsFixture) ownedCopy(t *testing.T, p printing, opts copyOptions) {
 		RETURNING id
 	`, f.userID, p.Name, p.ScryfallID, p.SetCode, p.CollectorNumber, opts.foil, opts.proxy)
 	require.NoError(t, err)
-	_, err = f.db.Exec(`INSERT INTO tamiyo.card_deck (card_id, deck_id, board) VALUES ($1, $2, $3)`, id, f.deckID, boardOrMain(opts.board))
+	return id
+}
+
+// ownedCopy adds one physical copy of p to the deck.
+func (f insightsFixture) ownedCopy(t *testing.T, p printing, opts copyOptions) {
+	t.Helper()
+	id := f.collectionCopy(t, p, opts)
+	_, err := f.db.Exec(`INSERT INTO tamiyo.card_deck (card_id, deck_id, board) VALUES ($1, $2, $3)`, id, f.deckID, boardOrMain(opts.board))
 	require.NoError(t, err)
 }
 

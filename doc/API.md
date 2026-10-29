@@ -1342,6 +1342,29 @@ A multicolor card counts once per color it has in `color_breakdown`; a dual-type
 
 `game_changer_count` is the number of [game changers](../GLOSSARY.md) in the `main` board: distinct cards, counted once by name whatever their number of copies or printings, whose stored printing Scryfall flags with `game_changer`. Commanders and pending cards count; the `sideboard`, `considering` and cards without a stored printing don't. The flag is refreshed with the rest of the printing once a day, so it follows Wizards' updates to the list. It is filled for every format; showing it only for commander decks is up to the client.
 
+### `GET /deck/:id/history`
+
+Lists the deck's history: the net change in copies of each card name, day by day, per board. Placing a card, adding a pending card or raising its quantity is an addition; removing it or lowering the quantity is a removal; moving a card between boards is a removal from one and an addition to the other. Swapping one copy for another of the same name (committing a pending card, switching finish or proxy, changing printing, a collection card deleted that turns into a pending card) changes nothing. Changes to the same name and board on the same day net out: a zero balance leaves no line. History is recorded from the release of this route on, not reconstructed, and is deleted with the deck.
+
+Days follow Europe/Paris time. The whole history comes in one response, without pagination.
+
+**Response `200 OK`**
+```json
+{
+  "days": [
+    {
+      "date": "2026-10-29",
+      "boards": [
+        { "board": "main", "changes": [ { "name": "Island", "count": 2 }, { "name": "Sol Ring", "count": -1 } ] }
+      ]
+    }
+  ]
+}
+```
+`days` come newest first, `boards` in the order `main`, `sideboard`, `considering` (empty ones left out), `changes` sorted by `name`. `count` is positive for an addition, negative for a removal, never zero. A deck with no history answers `{"days": []}`.
+
+**Errors:** `400` invalid id · `401` unauthenticated · `404` deck not found, or not owned by the authenticated user
+
 ### `GET /deck/:id/combos`
 
 Lists the [combos](../GLOSSARY.md) the deck holds, as found by Commander Spellbook's `find-my-combos`: only combos whose every card is in the `main` board, with any card the combo needs as commander set as the deck's commander or second commander. Tamiyo sends the `main` board only, pending cards included, each card once by its stored printing's name (both faces of a double-faced card, `A // B`), the commander and second commander apart from the other cards. A card whose printing isn't stored yet is left out. A deck with nothing on its `main` board answers an empty list without calling Commander Spellbook.
@@ -1484,6 +1507,12 @@ Same report as [`GET /deck/:id/legality`](#get-deckidlegality), without `card_id
 ### `GET /shared/decks/:id/stats`
 
 Same statistics as [`GET /deck/:id/stats`](#get-deckidstats).
+
+**Errors:** `404` as above · `429` rate limit exceeded
+
+### `GET /shared/decks/:id/history`
+
+Same history as [`GET /deck/:id/history`](#get-deckidhistory).
 
 **Errors:** `404` as above · `429` rate limit exceeded
 
