@@ -46,25 +46,6 @@ func (f historyFixture) place(t *testing.T, deckID string, p printing, board str
 	require.NoError(t, err)
 }
 
-// collectionCard adds a copy to the collection, outside every deck.
-func (f historyFixture) collectionCard(t *testing.T, p printing) int {
-	t.Helper()
-	var id int
-	err := f.db.Get(&id, `
-		INSERT INTO tamiyo.cards (user_id, name, scryfall_id, set_code, collector_number, foil, proxy)
-		VALUES ($1, $2, $3, $4, $5, false, false) RETURNING id
-	`, f.userID, p.Name, p.ScryfallID, p.SetCode, p.CollectorNumber)
-	require.NoError(t, err)
-	return id
-}
-
-func (f historyFixture) pendingID(t *testing.T, name string) int {
-	t.Helper()
-	var id int
-	require.NoError(t, f.db.Get(&id, `SELECT id FROM tamiyo.deck_pending_cards WHERE deck_id = $1 AND name = $2`, f.deckID, name))
-	return id
-}
-
 func (f historyFixture) history(t *testing.T) DeckHistory {
 	t.Helper()
 	h, err := f.service.GetDeckHistory(context.Background(), f.userID, f.deckID, deck.ReachOwn)
@@ -93,7 +74,7 @@ func TestPostgresRepository_GetDeckHistory_EmptyDeckReturnsNoDays(t *testing.T) 
 
 func TestPostgresRepository_GetDeckHistory_PlacingGivesAdditionsOnTheirBoard(t *testing.T) {
 	f := newHistoryFixture(t)
-	f.collectionCard(t, historyBolt)
+	f.collectionCopy(t, historyBolt, copyOptions{})
 
 	f.place(t, f.deckID, historyBolt, deck.BoardMain, 2)
 	f.place(t, f.deckID, historyIsland, deck.BoardSideboard, 3)
@@ -116,9 +97,9 @@ func mustParis(t *testing.T) *time.Location {
 
 func TestPostgresRepository_GetDeckHistory_RemovingNetsOutTheSameDayAndLeavesNoLine(t *testing.T) {
 	f := newHistoryFixture(t)
-	cardID := f.collectionCard(t, historyBolt)
-	f.collectionCard(t, historyBolt)
-	f.collectionCard(t, historyBolt)
+	cardID := f.collectionCopy(t, historyBolt, copyOptions{})
+	f.collectionCopy(t, historyBolt, copyOptions{})
+	f.collectionCopy(t, historyBolt, copyOptions{})
 	f.place(t, f.deckID, historyBolt, deck.BoardMain, 3)
 
 	require.NoError(t, f.decks.RemoveCardFromDeck(context.Background(), f.userID, f.deckID, cardID))
@@ -133,7 +114,7 @@ func TestPostgresRepository_GetDeckHistory_RemovingNetsOutTheSameDayAndLeavesNoL
 
 func TestPostgresRepository_GetDeckHistory_MovingBetweenBoardsIsARemovalAndAnAddition(t *testing.T) {
 	f := newHistoryFixture(t)
-	id := f.collectionCard(t, historyBolt)
+	id := f.collectionCopy(t, historyBolt, copyOptions{})
 	f.place(t, f.deckID, historyBolt, deck.BoardMain, 1)
 
 	require.NoError(t, f.decks.PutCardInDeck(context.Background(), f.userID, f.deckID, id, deck.BoardSideboard))
@@ -144,7 +125,7 @@ func TestPostgresRepository_GetDeckHistory_MovingBetweenBoardsIsARemovalAndAnAdd
 func TestPostgresRepository_GetDeckHistory_PendingQuantityAndBoardChanges(t *testing.T) {
 	f := newHistoryFixture(t)
 	f.place(t, f.deckID, historyIsland, deck.BoardMain, 2)
-	id := f.pendingID(t, "Island")
+	id := f.pendingID(t, "Island", deck.BoardMain)
 
 	five, side := 5, deck.BoardSideboard
 	_, err := f.decks.UpdatePendingCard(context.Background(), f.userID, f.deckID, id, &five, nil)
@@ -158,7 +139,7 @@ func TestPostgresRepository_GetDeckHistory_PendingQuantityAndBoardChanges(t *tes
 
 func TestPostgresRepository_GetDeckHistory_DeletingACollectionCardInADeckChangesNothing(t *testing.T) {
 	f := newHistoryFixture(t)
-	id := f.collectionCard(t, historyBolt)
+	id := f.collectionCopy(t, historyBolt, copyOptions{})
 	f.place(t, f.deckID, historyBolt, deck.BoardSideboard, 1)
 	before := f.history(t)
 
@@ -177,7 +158,7 @@ func (f historyFixture) pendingQuantity(t *testing.T, name string) int {
 
 func TestPostgresRepository_GetDeckHistory_DeletingADeckLeavesNoHistory(t *testing.T) {
 	f := newHistoryFixture(t)
-	f.collectionCard(t, historyBolt)
+	f.collectionCopy(t, historyBolt, copyOptions{})
 	f.place(t, f.deckID, historyBolt, deck.BoardMain, 2)
 
 	require.NoError(t, f.decks.DeleteDeck(context.Background(), f.userID, f.deckID))
@@ -189,7 +170,7 @@ func TestPostgresRepository_GetDeckHistory_DeletingADeckLeavesNoHistory(t *testi
 
 func TestPostgresRepository_GetDeckHistory_DeletingTheUserSucceeds(t *testing.T) {
 	f := newHistoryFixture(t)
-	f.collectionCard(t, historyBolt)
+	f.collectionCopy(t, historyBolt, copyOptions{})
 	f.place(t, f.deckID, historyBolt, deck.BoardMain, 1)
 
 	_, err := f.db.Exec(`DELETE FROM tamiyo.users WHERE id = $1`, f.userID)
