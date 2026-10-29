@@ -4600,6 +4600,18 @@ components:
                           count:
                             type: integer
                             description: Positive for an addition, negative for a removal, never zero.
+                          set_code:
+                            type: string
+                            description: >
+                              Set of the printing of one copy behind the line (an added copy for an
+                              addition, a removed one for a removal). Omitted on lines recorded
+                              before it was remembered.
+                          collector_number:
+                            type: string
+                            description: Collector number of that printing; omitted with set_code.
+                          foil:
+                            type: boolean
+                            description: Finish of that copy; omitted with set_code.
 
     DeckStats:
       type: object
