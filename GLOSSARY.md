@@ -38,6 +38,14 @@ _Avoid_: Turned card, reversed card
 The art of one face of one printing, chosen to represent a deck; the commander's front face when the owner chose none.
 _Avoid_: Deck image, background, cover
 
+**Board**:
+One of the three parts of a deck: the main board, the sideboard and the cards being considered. Each card of a deck is on exactly one board.
+_Avoid_: Zone, section
+
+**Deck entry**:
+The copies of one printing, with the same finish and proxy status, on one board of a deck, shown as a single pile.
+_Avoid_: Pile, stack, line
+
 **Main board**:
 The cards of a deck outside the sideboard and the cards being considered, commander and partner included.
 _Avoid_: Main deck, mainboard, maindeck
