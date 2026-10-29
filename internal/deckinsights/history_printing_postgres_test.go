@@ -12,32 +12,6 @@ import (
 	"Melrakkiie/Tamiyo/internal/deck"
 )
 
-// annotated is a history line's name, count and remembered printing.
-type annotated struct {
-	Count  int
-	Set    string
-	Number string
-	Foil   bool
-}
-
-// lines flattens the history to "board name" -> annotated line; a line
-// without annotation has an empty Set.
-func lines(h DeckHistory) map[string]annotated {
-	out := map[string]annotated{}
-	for _, d := range h.Days {
-		for _, b := range d.Boards {
-			for _, c := range b.Changes {
-				a := annotated{Count: c.Count}
-				if c.SetCode != nil {
-					a.Set, a.Number, a.Foil = *c.SetCode, *c.CollectorNumber, *c.Foil
-				}
-				out[b.Board+" "+c.Name] = a
-			}
-		}
-	}
-	return out
-}
-
 // forgetHistory starts a clean day: what was set up before no longer counts.
 func (f historyFixture) forgetHistory(t *testing.T) {
 	t.Helper()

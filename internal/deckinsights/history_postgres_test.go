@@ -53,15 +53,37 @@ func (f historyFixture) history(t *testing.T) DeckHistory {
 	return h
 }
 
-// changes flattens today's history to "board name" -> count.
-func today(h DeckHistory) map[string]int {
-	out := map[string]int{}
+// annotated is a history line's count and remembered printing.
+type annotated struct {
+	Count  int
+	Set    string
+	Number string
+	Foil   bool
+}
+
+// lines flattens the history to "board name" -> annotated line; a line
+// without annotation has an empty Set.
+func lines(h DeckHistory) map[string]annotated {
+	out := map[string]annotated{}
 	for _, d := range h.Days {
 		for _, b := range d.Boards {
 			for _, c := range b.Changes {
-				out[b.Board+" "+c.Name] = c.Count
+				a := annotated{Count: c.Count}
+				if c.SetCode != nil {
+					a.Set, a.Number, a.Foil = *c.SetCode, *c.CollectorNumber, *c.Foil
+				}
+				out[b.Board+" "+c.Name] = a
 			}
 		}
+	}
+	return out
+}
+
+// today flattens the history to "board name" -> count.
+func today(h DeckHistory) map[string]int {
+	out := map[string]int{}
+	for k, a := range lines(h) {
+		out[k] = a.Count
 	}
 	return out
 }
