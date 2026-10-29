@@ -22,6 +22,7 @@ type printingReader interface {
 type store interface {
 	valueReader
 	printingReader
+	historyReader
 }
 
 type Service struct {

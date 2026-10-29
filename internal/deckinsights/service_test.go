@@ -261,3 +261,7 @@ func TestGetDeckCombos_SharedReachLooksUpTheSharedDeck(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"Curiosity"}, finder.main)
 }
+
+func (f fakeStore) DeckHistoryRows(ctx context.Context, deckID string) ([]HistoryRow, error) {
+	return nil, nil
+}
