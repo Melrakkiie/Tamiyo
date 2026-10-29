@@ -9,7 +9,7 @@ import (
 )
 
 type historyReader interface {
-	DeckHistoryRows(ctx context.Context, deckID string) ([]HistoryRow, error)
+	DeckHistoryRows(ctx context.Context, userID string, deckID string) ([]HistoryRow, error)
 }
 
 // GetDeckHistory returns the history of the deck viewerID reads within reach.
@@ -19,7 +19,7 @@ func (s *Service) GetDeckHistory(ctx context.Context, viewerID string, deckID st
 	if err != nil {
 		return DeckHistory{}, err
 	}
-	rows, err := s.store.DeckHistoryRows(ctx, read.Deck.ID)
+	rows, err := s.store.DeckHistoryRows(ctx, read.OwnerID, read.Deck.ID)
 	if err != nil {
 		return DeckHistory{}, fmt.Errorf("loading deck history: %w", err)
 	}

@@ -54,6 +54,11 @@ func (f *fakeInsightsService) GetDeckCombos(ctx context.Context, viewerID string
 
 // setupRouter registers the private routes behind a middleware that
 // authenticates testUserID, and the shared routes without any.
+func (f *fakeInsightsService) GetDeckHistory(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (DeckHistory, error) {
+	f.record(viewerID, deckID, reach)
+	return f.history, f.err
+}
+
 func setupRouter(service insightsService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -263,8 +268,3 @@ func TestGetDeckCombos_ReturnsTheCombosOnSuccess(t *testing.T) {
 type errUnexpected struct{}
 
 func (errUnexpected) Error() string { return "something went wrong" }
-
-func (f *fakeInsightsService) GetDeckHistory(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (DeckHistory, error) {
-	f.record(viewerID, deckID, reach)
-	return f.history, f.err
-}

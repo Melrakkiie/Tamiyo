@@ -52,6 +52,10 @@ func (f fakeStore) DeckValues(ctx context.Context, userID string, deckID string)
 	return f.values, nil
 }
 
+func (f fakeStore) DeckHistoryRows(ctx context.Context, userID string, deckID string) ([]HistoryRow, error) {
+	return nil, nil
+}
+
 func (f fakeStore) Printings(ctx context.Context, scryfallIDs []string) (map[string]Printing, error) {
 	byID := make(map[string]Printing, len(scryfallIDs))
 	for _, id := range scryfallIDs {
@@ -260,8 +264,4 @@ func TestGetDeckCombos_SharedReachLooksUpTheSharedDeck(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"Curiosity"}, finder.main)
-}
-
-func (f fakeStore) DeckHistoryRows(ctx context.Context, deckID string) ([]HistoryRow, error) {
-	return nil, nil
 }

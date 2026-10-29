@@ -113,14 +113,15 @@ func (r *PostgresRepository) DeckValues(ctx context.Context, userID string, deck
 	}, nil
 }
 
-// DeckHistoryRows returns every stored balance of the deck, unordered.
-func (r *PostgresRepository) DeckHistoryRows(ctx context.Context, deckID string) ([]HistoryRow, error) {
+// DeckHistoryRows returns every stored balance of the deck owned by userID, unordered.
+func (r *PostgresRepository) DeckHistoryRows(ctx context.Context, userID string, deckID string) ([]HistoryRow, error) {
 	var rows []HistoryRow
 	err := r.db.SelectContext(ctx, &rows, `
-		SELECT day::text AS date, board, name, count
-		FROM tamiyo.deck_history
-		WHERE deck_id = $1
-	`, deckID)
+		SELECT h.day::text AS date, h.board, h.name, h.count
+		FROM tamiyo.deck_history h
+		JOIN tamiyo.deck d ON d.id = h.deck_id
+		WHERE d.user_id = $1 AND h.deck_id = $2
+	`, userID, deckID)
 	if err != nil {
 		return nil, fmt.Errorf("reading deck history: %w", err)
 	}
