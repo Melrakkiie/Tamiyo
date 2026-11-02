@@ -295,7 +295,9 @@ paths:
       tags: [auth]
       summary: Reset a password using a token from the forgot-password email
       description: >
-        Consumes a single-use reset token and sets a new password. On
+        Consumes a single-use reset token and sets a new password. A link
+        works once, and a successful reset voids the account's other
+        pending reset links. On
         success, every refresh token belonging to the account is revoked —
         all other sessions must log in again, same as /auth/password.
       security: []
