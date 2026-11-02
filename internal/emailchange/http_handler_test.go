@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"Melrakkiie/Tamiyo/internal/auth"
 	"Melrakkiie/Tamiyo/internal/user"
@@ -209,6 +210,41 @@ func TestHandler_ConfirmEmailChange_SucceedsEvenWhenTheNoticeCannotBeSent(t *tes
 	w := post(router, "/auth/confirm-email", `{"token": "change-token"}`, false)
 
 	assert.Equal(t, http.StatusNoContent, w.Code)
+}
+
+// memUsers is a one-account user.Repository: UpdateEmail unverifies it like the Postgres one.
+type memUsers struct {
+	user.Repository
+	account user.User
+}
+
+func (m *memUsers) FindByID(context.Context, string) (user.User, error) { return m.account, nil }
+
+func (m *memUsers) UpdateEmail(_ context.Context, _, email string) error {
+	m.account.Email, m.account.EmailVerifiedAt = email, nil
+	return nil
+}
+
+type recordingVerifier struct{ sent []string }
+
+func (r *recordingVerifier) IssueAndSend(_ context.Context, _, email string) error {
+	r.sent = append(r.sent, email)
+	return nil
+}
+
+func TestHandler_ConfirmEmailChange_UnverifiesTheAccountAndMailsTheNewAddress(t *testing.T) {
+	verifiedAt := time.Now()
+	users := &memUsers{account: user.User{ID: testUserID, Email: "alice@example.com", EmailVerifiedAt: &verifiedAt}}
+	verifier := &recordingVerifier{}
+	accounts := user.NewService(users, user.WithVerification(verifier, zap.NewNop()))
+	service := &fakeChangeService{consumeUserID: testUserID, consumeEmail: "new@example.com"}
+	router := setupRouter(service, accounts, &fakeMailer{})
+
+	w := post(router, "/auth/confirm-email", `{"token": "change-token"}`, false)
+
+	require.Equal(t, http.StatusNoContent, w.Code)
+	assert.Nil(t, users.account.EmailVerifiedAt)
+	assert.Equal(t, []string{"new@example.com"}, verifier.sent)
 }
 
 func TestHandler_ConfirmEmailChange_RejectsAnInvalidToken(t *testing.T) {

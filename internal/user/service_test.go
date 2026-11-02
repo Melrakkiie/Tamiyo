@@ -422,6 +422,38 @@ func TestService_ChangeEmail_PropagatesEmailAlreadyTaken(t *testing.T) {
 	assert.ErrorIs(t, err, ErrEmailAlreadyTaken)
 }
 
+func TestService_ChangeEmail_SendsExactlyOneVerificationEmailToTheNewAddress(t *testing.T) {
+	sender := &fakeVerificationSender{}
+	repo := &fakeRepository{findByIDUser: User{ID: "user-1", Email: "alice@example.com"}}
+	service := NewService(repo, WithVerification(sender, zap.NewNop()))
+
+	_, err := service.ChangeEmail(context.Background(), "user-1", "new@example.com")
+
+	require.NoError(t, err)
+	assert.Equal(t, []sentVerification{{"user-1", "new@example.com"}}, sender.sent)
+}
+
+func TestService_ChangeEmail_SucceedsWhenTheVerificationEmailFails(t *testing.T) {
+	sender := &fakeVerificationSender{err: assert.AnError}
+	repo := &fakeRepository{findByIDUser: User{ID: "user-1", Email: "alice@example.com"}}
+	service := NewService(repo, WithVerification(sender, zap.NewNop()))
+
+	old, err := service.ChangeEmail(context.Background(), "user-1", "new@example.com")
+
+	require.NoError(t, err)
+	assert.Equal(t, "alice@example.com", old)
+}
+
+func TestService_ChangeEmail_SendsNothingWhenTheUpdateFails(t *testing.T) {
+	sender := &fakeVerificationSender{}
+	repo := &fakeRepository{findByIDUser: User{ID: "user-1"}, updateEmailErr: ErrEmailAlreadyTaken}
+	service := NewService(repo, WithVerification(sender, zap.NewNop()))
+
+	_, _ = service.ChangeEmail(context.Background(), "user-1", "new@example.com")
+
+	assert.Empty(t, sender.sent)
+}
+
 func strPtr(s string) *string {
 	return &s
 }

@@ -278,7 +278,7 @@ Ask to change the authenticated account's email. **Requires `Authorization: Bear
 
 ### `POST /auth/confirm-email`
 
-Confirm an email change with the token emailed to the current address. Public, so the link works from any device; rate-limited like the other public auth routes.
+Confirm an email change with the token emailed to the current address. Public, so the link works from any device; rate-limited like the other public auth routes. The new address is not proven yet, so the account becomes unverified again (`email_verified: false` on `GET /auth/me`) and a verification email is sent to it; following that link (`POST /auth/verify-email`) verifies the account. A failed verification email does not fail the confirmation.
 
 **Body**
 

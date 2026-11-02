@@ -520,7 +520,10 @@ paths:
       description: >
         Consumes the single-use token emailed to the current address by
         /auth/email and switches the account to the new email. A notice is
-        then sent to the new address. Sessions stay open.
+        then sent to the new address. Sessions stay open. The account
+        becomes unverified again (email_verified false on /auth/me) and a
+        verification email is sent to the new address; following that link
+        verifies it. A failed verification email does not fail the call.
       security: []
       requestBody:
         required: true

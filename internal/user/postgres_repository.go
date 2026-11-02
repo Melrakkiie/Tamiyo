@@ -127,7 +127,7 @@ func (r *PostgresRepository) UpdatePassword(ctx context.Context, id string, pass
 }
 
 func (r *PostgresRepository) UpdateEmail(ctx context.Context, id string, email string) error {
-	result, err := r.db.ExecContext(ctx, `UPDATE tamiyo.users SET email = $1 WHERE id = $2`, email, id)
+	result, err := r.db.ExecContext(ctx, `UPDATE tamiyo.users SET email = $1, email_verified_at = NULL WHERE id = $2`, email, id)
 	if err != nil {
 		var pqErr *pq.Error
 		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
