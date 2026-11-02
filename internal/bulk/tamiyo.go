@@ -16,8 +16,6 @@ const (
 	TamiyoKindCollection = "collection"
 	TamiyoKindStorage    = "storage"
 	TamiyoKindDeck       = "deck"
-
-	maxTamiyoQuantity = 1000
 )
 
 type tamiyoStorage struct {
@@ -128,8 +126,8 @@ func checkTamiyoCard(index int, name, scryfallID string, quantity int) error {
 	if strings.TrimSpace(name) == "" || strings.TrimSpace(scryfallID) == "" {
 		return invalidTamiyo("card %d: name and scryfall_id are required", index+1)
 	}
-	if quantity < 1 || quantity > maxTamiyoQuantity {
-		return invalidTamiyo("card %d (%s): quantity must be between 1 and %d", index+1, name, maxTamiyoQuantity)
+	if quantity < 1 || quantity > maxImportQuantity {
+		return invalidTamiyo("card %d (%s): quantity must be between 1 and %d", index+1, name, maxImportQuantity)
 	}
 	return nil
 }
