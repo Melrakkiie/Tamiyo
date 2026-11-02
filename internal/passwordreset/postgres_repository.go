@@ -45,6 +45,27 @@ func (r *PostgresRepository) Create(ctx context.Context, t ResetToken) (ResetTok
 	return created.toDomain(), nil
 }
 
+// Consume marks the token used and returns its user in one statement, so only one caller can win.
+func (r *PostgresRepository) Consume(ctx context.Context, tokenHash string) (string, error) {
+	var userID string
+	err := r.db.GetContext(ctx, &userID, `
+		UPDATE tamiyo.password_reset_tokens
+		SET used_at = now()
+		WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()
+		RETURNING user_id
+	`, tokenHash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return userID, err
+}
+
+// InvalidatePending marks every unused reset token of the user as used.
+func (r *PostgresRepository) InvalidatePending(ctx context.Context, userID string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE tamiyo.password_reset_tokens SET used_at = now() WHERE user_id = $1 AND used_at IS NULL`, userID)
+	return err
+}
+
 func (r *PostgresRepository) FindByHash(ctx context.Context, tokenHash string) (ResetToken, error) {
 	query := `
 		SELECT id, user_id, token_hash, added, expires_at, used_at
