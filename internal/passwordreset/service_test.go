@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"Melrakkiie/Tamiyo/internal/token"
 )
 
 type fakeRepository struct {
@@ -54,7 +56,7 @@ func TestService_Issue_StoresHashNotPlaintext(t *testing.T) {
 	require.Len(t, repo.createdTokens, 1)
 	assert.Equal(t, "user-1", repo.createdTokens[0].UserID)
 	assert.NotEqual(t, plaintext, repo.createdTokens[0].TokenHash)
-	assert.Equal(t, hash(plaintext), repo.createdTokens[0].TokenHash)
+	assert.Equal(t, token.Hash(plaintext), repo.createdTokens[0].TokenHash)
 }
 
 func TestService_Issue_GeneratesDifferentTokensEachTime(t *testing.T) {

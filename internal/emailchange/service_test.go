@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"Melrakkiie/Tamiyo/internal/token"
 )
 
 type fakeRepository struct {
@@ -55,7 +57,7 @@ func TestService_Issue_StoresTheNewEmailAndTheHashNotThePlaintext(t *testing.T) 
 	created := repo.createdTokens[0]
 	assert.Equal(t, "user-1", created.UserID)
 	assert.Equal(t, "new@example.com", created.NewEmail)
-	assert.Equal(t, hash(plaintext), created.TokenHash)
+	assert.Equal(t, token.Hash(plaintext), created.TokenHash)
 	assert.NotEqual(t, plaintext, created.TokenHash)
 	assert.WithinDuration(t, time.Now().Add(time.Hour), created.ExpiresAt, 5*time.Second)
 }

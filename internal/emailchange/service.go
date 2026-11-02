@@ -2,11 +2,9 @@ package emailchange
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"time"
+
+	"Melrakkiie/Tamiyo/internal/token"
 )
 
 type Service struct {
@@ -19,7 +17,7 @@ func NewService(repo Repository, ttl time.Duration) *Service {
 }
 
 func (s *Service) Issue(ctx context.Context, userID, newEmail string) (string, error) {
-	plaintext, err := generatePlaintext()
+	plaintext, err := token.GeneratePlaintext()
 	if err != nil {
 		return "", err
 	}
@@ -27,7 +25,7 @@ func (s *Service) Issue(ctx context.Context, userID, newEmail string) (string, e
 	if _, err := s.repo.Create(ctx, ChangeToken{
 		UserID:    userID,
 		NewEmail:  newEmail,
-		TokenHash: hash(plaintext),
+		TokenHash: token.Hash(plaintext),
 		ExpiresAt: time.Now().Add(s.ttl),
 	}); err != nil {
 		return "", err
@@ -37,7 +35,7 @@ func (s *Service) Issue(ctx context.Context, userID, newEmail string) (string, e
 }
 
 func (s *Service) Consume(ctx context.Context, plaintext string) (userID, newEmail string, err error) {
-	ct, err := s.repo.FindByHash(ctx, hash(plaintext))
+	ct, err := s.repo.FindByHash(ctx, token.Hash(plaintext))
 	if err != nil {
 		if err == ErrNotFound {
 			return "", "", ErrInvalid
@@ -54,17 +52,4 @@ func (s *Service) Consume(ctx context.Context, plaintext string) (userID, newEma
 	}
 
 	return ct.UserID, ct.NewEmail, nil
-}
-
-func generatePlaintext() (string, error) {
-	buf := make([]byte, 32)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(buf), nil
-}
-
-func hash(plaintext string) string {
-	sum := sha256.Sum256([]byte(plaintext))
-	return hex.EncodeToString(sum[:])
 }

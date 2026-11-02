@@ -87,7 +87,7 @@ func TestService_IssueRefreshToken_StoresHashNotPlaintext(t *testing.T) {
 	require.Len(t, repo.createdTokens, 1)
 	assert.Equal(t, "user-1", repo.createdTokens[0].UserID)
 	assert.NotEqual(t, plaintext, repo.createdTokens[0].TokenHash)
-	assert.Equal(t, hash(plaintext), repo.createdTokens[0].TokenHash)
+	assert.Equal(t, Hash(plaintext), repo.createdTokens[0].TokenHash)
 }
 
 func TestService_IssueRefreshToken_GeneratesDifferentTokensEachTime(t *testing.T) {
@@ -124,7 +124,7 @@ func TestService_Rotate_IssuesNewTokenAndReplacesOldOne(t *testing.T) {
 	assert.Equal(t, "user-1", userID)
 	assert.NotEmpty(t, newPlaintext)
 	require.Len(t, repo.createdTokens, 1)
-	assert.Equal(t, hash(newPlaintext), repo.createdTokens[0].TokenHash)
+	assert.Equal(t, Hash(newPlaintext), repo.createdTokens[0].TokenHash)
 	assert.Equal(t, "fake-id", repo.replaced["old-id"])
 }
 
