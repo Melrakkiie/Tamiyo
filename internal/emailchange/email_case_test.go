@@ -36,7 +36,6 @@ func TestHandler_RequestEmailChange_RejectsACaseVariantOfATakenAddress(t *testin
 	assert.Empty(t, service.issuedForUser)
 }
 
-// caseAccounts checks the password with the fake and the address with the real user service.
 type caseAccounts struct {
 	*fakeAccounts
 	users *user.Service

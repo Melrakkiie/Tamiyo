@@ -268,7 +268,7 @@ Ask to change the authenticated account's email. **Requires `Authorization: Bear
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `current_password` | string | Yes | Must match the account's current password. |
-| `new_email` | string | Yes | A valid email, different from the current one. |
+| `new_email` | string | Yes | A valid email, different from the current one (case-insensitive, trimmed). |
 
 **Response `202 Accepted`**
 

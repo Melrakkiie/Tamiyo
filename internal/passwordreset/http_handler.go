@@ -7,11 +7,11 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"Melrakkiie/Tamiyo/internal/apierr"
-	"Melrakkiie/Tamiyo/internal/user"
+	"Melrakkiie/Tamiyo/internal/emailaddr"
 )
 
 type forgotPasswordRequest struct {
-	Email user.EmailInput `json:"email" binding:"required,email"`
+	Email emailaddr.Input `json:"email" binding:"required,email"`
 }
 
 type resetPasswordRequest struct {

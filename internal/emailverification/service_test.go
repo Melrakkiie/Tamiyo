@@ -102,6 +102,25 @@ func TestService_Verify_ConfirmsTheAddressTheTokenCarries(t *testing.T) {
 	assert.Equal(t, []string{"user-1:new@example.com"}, users.confirmed)
 }
 
+func TestService_Verify_ConfirmsTheNormalisedAddress(t *testing.T) {
+	repo, users := &fakeRepository{consumeUserID: "user-1", consumeEmail: "Bob@Mail.fr"}, &fakeUsers{}
+	service := NewService(repo, users, &fakeMailer{}, time.Hour)
+
+	require.NoError(t, service.Verify(context.Background(), "plain"))
+
+	assert.Equal(t, []string{"user-1:bob@mail.fr"}, users.confirmed)
+}
+
+func TestService_IssueAndSend_StoresAndMailsTheNormalisedAddress(t *testing.T) {
+	repo, mailer := &fakeRepository{}, &fakeMailer{}
+	service := NewService(repo, &fakeUsers{}, mailer, time.Hour)
+
+	require.NoError(t, service.IssueAndSend(context.Background(), "user-1", " Bob@Mail.fr "))
+
+	assert.Equal(t, "bob@mail.fr", repo.created[0].Email)
+	assert.Equal(t, "bob@mail.fr", mailer.sent[0].to)
+}
+
 func TestService_Verify_MapsNotFoundToErrInvalid(t *testing.T) {
 	users := &fakeUsers{}
 	service := NewService(&fakeRepository{consumeErr: ErrNotFound}, users, &fakeMailer{}, time.Hour)

@@ -4889,6 +4889,7 @@ components:
         email:
           type: string
           format: email
+          description: Case-insensitive; trimmed and compared lowercased.
         password:
           type: string
       required: [email, password]
@@ -5163,6 +5164,7 @@ components:
         new_email:
           type: string
           format: email
+          description: Case-insensitive; trimmed and compared lowercased.
       required: [current_password, new_email]
 
     ConfirmEmailRequest:
@@ -5185,6 +5187,7 @@ components:
         email:
           type: string
           format: email
+          description: Case-insensitive; trimmed and compared lowercased.
       required: [email]
 
     ResetPasswordRequest:

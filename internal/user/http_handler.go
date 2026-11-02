@@ -13,17 +13,18 @@ import (
 	"Melrakkiie/Tamiyo/internal/apierr"
 	"Melrakkiie/Tamiyo/internal/auth"
 	"Melrakkiie/Tamiyo/internal/authcookie"
+	"Melrakkiie/Tamiyo/internal/emailaddr"
 )
 
 type registerRequest struct {
-	Email       EmailInput `json:"email" binding:"required,email"`
-	Password    string     `json:"password" binding:"required,min=8"`
-	DisplayName *string    `json:"display_name"`
+	Email       emailaddr.Input `json:"email" binding:"required,email"`
+	Password    string          `json:"password" binding:"required,min=8"`
+	DisplayName *string         `json:"display_name"`
 }
 
 type loginRequest struct {
-	Email    EmailInput `json:"email" binding:"required,email"`
-	Password string     `json:"password" binding:"required"`
+	Email    emailaddr.Input `json:"email" binding:"required,email"`
+	Password string          `json:"password" binding:"required"`
 }
 
 type changePasswordRequest struct {

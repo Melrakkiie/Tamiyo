@@ -101,7 +101,7 @@ func main() {
 	}
 
 	userRepo := user.NewPostgresRepository(db)
-	emailVerificationService := emailverification.NewService(emailverification.NewPostgresRepository(db), user.NewService(userRepo), mailer, cfg.EmailVerificationTokenTTL)
+	emailVerificationService := emailverification.NewService(emailverification.NewPostgresRepository(db), userRepo, mailer, cfg.EmailVerificationTokenTTL)
 	userService := user.NewService(userRepo, user.WithVerification(emailVerificationService, logger))
 	emailVerificationHandler := emailverification.NewHandler(emailVerificationService, userService)
 	userHandler := user.NewHandler(userService, cfg.JWTSecret, cfg.JWTAccessTokenTTL, tokenService, refreshCookie)

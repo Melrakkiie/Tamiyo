@@ -20,10 +20,6 @@ type fakeRepository struct {
 	findByEmailErr  error
 	findByEmailArg  string
 
-	confirmEmailID    string
-	confirmEmailValue string
-	confirmEmailErr   error
-
 	findByIDUser User
 	findByIDErr  error
 
@@ -72,11 +68,6 @@ func (f *fakeRepository) Create(ctx context.Context, u User) (User, error) {
 	f.createdUser = u
 	u.ID = "fake-id"
 	return u, nil
-}
-
-func (f *fakeRepository) ConfirmEmail(ctx context.Context, id, email string) error {
-	f.confirmEmailID, f.confirmEmailValue = id, email
-	return f.confirmEmailErr
 }
 
 func (f *fakeRepository) FindByEmail(ctx context.Context, email string) (User, error) {
@@ -168,16 +159,6 @@ func TestService_ChangeEmail_SendsTheNormalisedAddress(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "new@mail.fr", sender.sent[0].email)
-}
-
-func TestService_ConfirmEmail_StoresTheNormalisedAddress(t *testing.T) {
-	repo := &fakeRepository{}
-	service := NewService(repo)
-
-	require.NoError(t, service.ConfirmEmail(context.Background(), "u1", "Old@Mail.fr"))
-
-	assert.Equal(t, "u1", repo.confirmEmailID)
-	assert.Equal(t, "old@mail.fr", repo.confirmEmailValue)
 }
 
 func TestService_Register_SendsExactlyOneVerificationEmail(t *testing.T) {
