@@ -21,6 +21,7 @@ type resetPasswordRequest struct {
 type resetService interface {
 	Issue(ctx context.Context, userID string) (string, error)
 	Consume(ctx context.Context, plaintext string) (userID string, err error)
+	InvalidatePending(ctx context.Context, userID string) error
 }
 
 type userLookup interface {
@@ -90,6 +91,11 @@ func (h *Handler) resetPassword(ctx *gin.Context) {
 	}
 
 	if err := h.tokens.RevokeAllForUser(ctx.Request.Context(), userID); err != nil {
+		apierr.Respond(ctx, err)
+		return
+	}
+
+	if err := h.service.InvalidatePending(ctx.Request.Context(), userID); err != nil {
 		apierr.Respond(ctx, err)
 		return
 	}
