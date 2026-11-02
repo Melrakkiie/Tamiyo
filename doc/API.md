@@ -56,6 +56,8 @@ Tamiyo is multi-tenant. `/health`, `/auth/register`, `/auth/login`, `/auth/refre
 
 `/health`, `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/confirm-email`, and `/auth/verify-email` are the only public routes — everything else (`/cards`, `/storage`, `/deck`, `/auth/password`, `/auth/email`, `/auth/me`) requires a valid Bearer token and only ever returns or modifies that account's own data.
 
+Email addresses are case-insensitive: every email the API receives (register, login, forgot password, email change, email verification) is trimmed and lowercased, stored lowercased, and returned lowercased by `/auth/me`. `Bob@Mail.fr` and `bob@mail.fr` are the same account, so registering or changing to a case variant of a taken address gives `409`.
+
 `/auth/register` and `/auth/login` are rate-limited per client IP (5 requests/minute by default) to blunt brute-force attempts.
 
 ### Forgotten password

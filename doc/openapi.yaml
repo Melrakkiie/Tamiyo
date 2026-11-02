@@ -4870,6 +4870,7 @@ components:
         email:
           type: string
           format: email
+          description: Case-insensitive; trimmed and stored lowercased.
         password:
           type: string
           minLength: 8
