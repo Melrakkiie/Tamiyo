@@ -8,6 +8,9 @@ import (
 	"Melrakkiie/Tamiyo/internal/deck"
 )
 
+// maxImportQuantity is the largest quantity any import accepts on one line.
+const maxImportQuantity = 1000
+
 var ErrInvalidFile = errors.New("could not parse the uploaded file")
 
 var ErrTargetStorageNotFound = errors.New("target storage does not exist")

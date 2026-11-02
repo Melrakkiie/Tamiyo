@@ -193,6 +193,35 @@ func TestParseMoxfieldDeckList_RejectsUnrecognizedLine(t *testing.T) {
 	assert.ErrorIs(t, err, ErrInvalidFile)
 }
 
+func TestParseMoxfieldCollectionCSV_QuantityMaximum(t *testing.T) {
+	header := "Count,Tradelist Count,Name,Edition,Condition,Language,Foil,Tags,Last Modified,Collector Number,Alter,Proxy,Purchase Price\n"
+	row := func(n string) string {
+		return n + ",1,Abrade,blc,Near Mint,French,,,2025-12-22 23:25:53.763000,191,False,False,0.20\n"
+	}
+
+	rows, err := parseMoxfieldCollectionCSV(strings.NewReader(header + row("1000")))
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, 1000, rows[0].Quantity)
+
+	_, err = parseMoxfieldCollectionCSV(strings.NewReader(header + row("1000") + row("1001")))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidFile)
+	assert.Contains(t, err.Error(), "line 3")
+}
+
+func TestParseMoxfieldDeckList_QuantityMaximum(t *testing.T) {
+	lines, err := parseMoxfieldDeckList(strings.NewReader("1000 Sol Ring\n"))
+	require.NoError(t, err)
+	require.Len(t, lines, 1)
+	assert.Equal(t, 1000, lines[0].Quantity)
+
+	_, err = parseMoxfieldDeckList(strings.NewReader("1000 Sol Ring\n1001 Sol Ring\n"))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidFile)
+	assert.Contains(t, err.Error(), "line 2")
+}
+
 func TestParseMoxfieldDeckList_RejectsEmptyFile(t *testing.T) {
 	_, err := parseMoxfieldDeckList(strings.NewReader("\n\n"))
 

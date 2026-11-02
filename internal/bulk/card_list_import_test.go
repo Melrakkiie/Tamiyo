@@ -107,9 +107,10 @@ func TestImportCardList_Errors(t *testing.T) {
 		list      string
 		want      error
 	}{
-		"unreadable list":  {&fakeStorageService{}, cardListResolver(), nil, "not a card line\n", ErrInvalidFile},
-		"unknown storage":  {&fakeStorageService{}, cardListResolver(), ptr(9), "1 Sol Ring\n", ErrTargetStorageNotFound},
-		"scryfall is down": {&fakeStorageService{}, &fakeResolver{err: errors.New("down")}, nil, "1 Sol Ring\n", ErrScryfallUnavailable},
+		"unreadable list":           {&fakeStorageService{}, cardListResolver(), nil, "not a card line\n", ErrInvalidFile},
+		"quantity over the maximum": {&fakeStorageService{}, cardListResolver(), nil, "1001 Sol Ring\n", ErrInvalidFile},
+		"unknown storage":           {&fakeStorageService{}, cardListResolver(), ptr(9), "1 Sol Ring\n", ErrTargetStorageNotFound},
+		"scryfall is down":          {&fakeStorageService{}, &fakeResolver{err: errors.New("down")}, nil, "1 Sol Ring\n", ErrScryfallUnavailable},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
