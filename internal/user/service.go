@@ -166,6 +166,13 @@ func (s *Service) ChangeEmail(ctx context.Context, userID, newEmail string) (str
 		return "", err
 	}
 
+	// The update unverified the account: prove the new address; a failed send is logged, never returned.
+	if s.verifier != nil {
+		if err := s.verifier.IssueAndSend(ctx, userID, newEmail); err != nil {
+			s.logger.Warn("could not send the verification email", zap.String("user_id", userID), zap.Error(err))
+		}
+	}
+
 	return u.Email, nil
 }
 
