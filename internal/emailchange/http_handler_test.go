@@ -81,18 +81,11 @@ type sentConfirmation struct {
 type fakeMailer struct {
 	confirmations []sentConfirmation
 	confirmErr    error
-	notices       []string
-	noticeErr     error
 }
 
 func (f *fakeMailer) SendEmailChangeConfirmation(ctx context.Context, toEmail, newEmail, token string) error {
 	f.confirmations = append(f.confirmations, sentConfirmation{to: toEmail, newEmail: newEmail, token: token})
 	return f.confirmErr
-}
-
-func (f *fakeMailer) SendEmailChangedNotice(ctx context.Context, toEmail string) error {
-	f.notices = append(f.notices, toEmail)
-	return f.noticeErr
 }
 
 func setupRouter(service changeService, accounts userAccounts, mailer emailSender) *gin.Engine {
@@ -190,7 +183,7 @@ func TestHandler_RequestEmailChange_ReturnsInternalServerErrorWhenTheEmailCannot
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
-func TestHandler_ConfirmEmailChange_ChangesTheEmailAndNotifiesTheNewAddress(t *testing.T) {
+func TestHandler_ConfirmEmailChange_HandsTheNewAddressToTheAccount(t *testing.T) {
 	service := &fakeChangeService{consumeUserID: testUserID, consumeEmail: "new@example.com"}
 	accounts := &fakeAccounts{oldEmail: "alice@example.com"}
 	mailer := &fakeMailer{}
@@ -202,16 +195,8 @@ func TestHandler_ConfirmEmailChange_ChangesTheEmailAndNotifiesTheNewAddress(t *t
 	assert.Equal(t, []string{"change-token"}, service.consumedTokens)
 	assert.Equal(t, testUserID, accounts.changedUserID)
 	assert.Equal(t, "new@example.com", accounts.changedTo)
-	assert.Equal(t, []string{"new@example.com"}, mailer.notices)
-}
-
-func TestHandler_ConfirmEmailChange_SucceedsEvenWhenTheNoticeCannotBeSent(t *testing.T) {
-	service := &fakeChangeService{consumeUserID: testUserID, consumeEmail: "new@example.com"}
-	router := setupRouter(service, &fakeAccounts{oldEmail: "alice@example.com"}, &fakeMailer{noticeErr: assert.AnError})
-
-	w := post(router, "/auth/confirm-email", `{"token": "change-token"}`, false)
-
-	assert.Equal(t, http.StatusNoContent, w.Code)
+	// The verification link sent by ChangeEmail is the only mail: nothing claims the change is done yet.
+	assert.Empty(t, mailer.confirmations)
 }
 
 // memUsers is a one-account store: ConfirmEmail switches the address like the Postgres one.
@@ -348,13 +333,11 @@ func TestHandler_ConfirmEmailChange_RejectsAnInvalidToken(t *testing.T) {
 
 func TestHandler_ConfirmEmailChange_ReturnsConflictWhenTheEmailWasTakenMeanwhile(t *testing.T) {
 	service := &fakeChangeService{consumeUserID: testUserID, consumeEmail: "new@example.com"}
-	mailer := &fakeMailer{}
-	router := setupRouter(service, &fakeAccounts{changeEmailErr: user.ErrEmailAlreadyTaken}, mailer)
+	router := setupRouter(service, &fakeAccounts{changeEmailErr: user.ErrEmailAlreadyTaken}, &fakeMailer{})
 
 	w := post(router, "/auth/confirm-email", `{"token": "change-token"}`, false)
 
 	assert.Equal(t, http.StatusConflict, w.Code)
-	assert.Empty(t, mailer.notices)
 }
 
 func TestHandler_ConfirmEmailChange_RequiresAToken(t *testing.T) {

@@ -203,20 +203,6 @@ func TestSMTPMailer_SendEmailChangeConfirmation_UsesRawTokenWhenNoTemplate(t *te
 	assert.Contains(t, msg, "POST /auth/confirm-email")
 }
 
-func TestSMTPMailer_SendEmailChangedNotice_IsSentToTheNewAddress(t *testing.T) {
-	srv, addr := startFakeSMTPServer(t, false)
-	host, port := splitHostPort(t, addr)
-
-	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "", "")
-
-	err := mailer.SendEmailChangedNotice(context.Background(), "new@example.com")
-	require.NoError(t, err)
-
-	msg := <-srv.received
-	assert.Contains(t, msg, "To: new@example.com")
-	assert.Contains(t, msg, "Subject: Your Tamiyo email was changed")
-}
-
 func TestSMTPMailer_SendEmailVerification_UsesVerificationURLTemplateWhenSet(t *testing.T) {
 	srv, addr := startFakeSMTPServer(t, false)
 	host, port := splitHostPort(t, addr)

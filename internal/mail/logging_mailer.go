@@ -42,10 +42,3 @@ func (m *LoggingMailer) SendEmailVerification(_ context.Context, toEmail, verifi
 	)
 	return nil
 }
-
-func (m *LoggingMailer) SendEmailChangedNotice(_ context.Context, toEmail string) error {
-	m.logger.Warn("SMTP_HOST not configured — logging email changed notice instead of sending it",
-		zap.String("to", toEmail),
-	)
-	return nil
-}

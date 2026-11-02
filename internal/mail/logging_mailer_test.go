@@ -41,18 +41,6 @@ func TestLoggingMailer_SendEmailChangeConfirmation_LogsTokenAndReturnsNil(t *tes
 	assert.Equal(t, "change-token-123", fields["email_change_token"])
 }
 
-func TestLoggingMailer_SendEmailChangedNotice_LogsAndReturnsNil(t *testing.T) {
-	core, logs := observer.New(zap.WarnLevel)
-	mailer := NewLoggingMailer(zap.New(core))
-
-	err := mailer.SendEmailChangedNotice(context.Background(), "new@example.com")
-
-	require.NoError(t, err)
-	require.Equal(t, 1, logs.Len())
-	fields := logs.All()[0].ContextMap()
-	assert.Equal(t, "new@example.com", fields["to"])
-}
-
 func TestLoggingMailer_SendEmailVerification_LogsTokenAndReturnsNil(t *testing.T) {
 	core, logs := observer.New(zap.WarnLevel)
 	mailer := NewLoggingMailer(zap.New(core))

@@ -86,12 +86,6 @@ func (m *SMTPMailer) SendEmailVerification(_ context.Context, toEmail, verificat
 	return m.send(toEmail, "Confirm your Tamiyo email address", body)
 }
 
-func (m *SMTPMailer) SendEmailChangedNotice(_ context.Context, toEmail string) error {
-	body := "This address is now the email of your Tamiyo account: sign in with it from now on."
-
-	return m.send(toEmail, "Your Tamiyo email was changed", body)
-}
-
 func (m *SMTPMailer) send(toEmail, subject, body string) error {
 	msg := strings.Join([]string{
 		"From: " + m.from,
