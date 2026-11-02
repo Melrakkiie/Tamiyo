@@ -4,12 +4,17 @@ import (
 	"bufio"
 	"context"
 	"encoding/base64"
+	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // fakeSMTPServer speaks just enough SMTP to let net/smtp.SendMail complete
@@ -120,7 +125,7 @@ func TestSMTPMailer_SendPasswordResetEmail_UsesResetURLTemplateWhenSet(t *testin
 	_ = srv
 	host, port := splitHostPort(t, addr)
 
-	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "https://app.example.com/reset?token=%s", "", "")
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "https://app.example.com/reset?token=%s", "", "", zap.NewNop())
 
 	err := mailer.SendPasswordResetEmail(context.Background(), "alice@example.com", "reset-token-123")
 	require.NoError(t, err)
@@ -136,7 +141,7 @@ func TestSMTPMailer_SendPasswordResetEmail_UsesRawTokenWhenNoTemplate(t *testing
 	srv, addr := startFakeSMTPServer(t, false)
 	host, port := splitHostPort(t, addr)
 
-	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "", "")
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "", "", zap.NewNop())
 
 	err := mailer.SendPasswordResetEmail(context.Background(), "alice@example.com", "reset-token-123")
 	require.NoError(t, err)
@@ -150,7 +155,7 @@ func TestSMTPMailer_SendPasswordResetEmail_AuthenticatesWhenUsernameSet(t *testi
 	srv, addr := startFakeSMTPServer(t, true)
 	host, port := splitHostPort(t, addr)
 
-	mailer := NewSMTPMailer(host, port, "smtp-user", "smtp-pass", "tamiyo@example.com", "", "", "")
+	mailer := NewSMTPMailer(host, port, "smtp-user", "smtp-pass", "tamiyo@example.com", "", "", "", zap.NewNop())
 
 	err := mailer.SendPasswordResetEmail(context.Background(), "alice@example.com", "reset-token-123")
 	require.NoError(t, err)
@@ -167,7 +172,7 @@ func TestSMTPMailer_SendPasswordResetEmail_ConnectionFailureReturnsError(t *test
 	require.NoError(t, ln.Close()) // nothing is listening here anymore
 
 	host, port := splitHostPort(t, addr)
-	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "", "")
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "", "", zap.NewNop())
 
 	err = mailer.SendPasswordResetEmail(context.Background(), "alice@example.com", "reset-token-123")
 	require.Error(t, err)
@@ -177,7 +182,7 @@ func TestSMTPMailer_SendEmailChangeConfirmation_UsesEmailChangeURLTemplateWhenSe
 	srv, addr := startFakeSMTPServer(t, false)
 	host, port := splitHostPort(t, addr)
 
-	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "https://app.example.com/reset?token=%s", "https://app.example.com/confirm-email?token=%s", "")
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "https://app.example.com/reset?token=%s", "https://app.example.com/confirm-email?token=%s", "", zap.NewNop())
 
 	err := mailer.SendEmailChangeConfirmation(context.Background(), "alice@example.com", "new@example.com", "change-token-123")
 	require.NoError(t, err)
@@ -193,7 +198,7 @@ func TestSMTPMailer_SendEmailChangeConfirmation_UsesRawTokenWhenNoTemplate(t *te
 	srv, addr := startFakeSMTPServer(t, false)
 	host, port := splitHostPort(t, addr)
 
-	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "", "")
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "", "", zap.NewNop())
 
 	err := mailer.SendEmailChangeConfirmation(context.Background(), "alice@example.com", "new@example.com", "change-token-123")
 	require.NoError(t, err)
@@ -207,7 +212,7 @@ func TestSMTPMailer_SendEmailVerification_UsesVerificationURLTemplateWhenSet(t *
 	srv, addr := startFakeSMTPServer(t, false)
 	host, port := splitHostPort(t, addr)
 
-	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "", "https://app.example.com/verify-email?token=%s")
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "", "https://app.example.com/verify-email?token=%s", zap.NewNop())
 
 	require.NoError(t, mailer.SendEmailVerification(context.Background(), "alice@example.com", "verify-token-123"))
 
@@ -222,7 +227,7 @@ func TestSMTPMailer_SendEmailVerification_UsesRawTokenWhenNoTemplate(t *testing.
 	srv, addr := startFakeSMTPServer(t, false)
 	host, port := splitHostPort(t, addr)
 
-	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "", "")
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "", "", zap.NewNop())
 
 	require.NoError(t, mailer.SendEmailVerification(context.Background(), "alice@example.com", "verify-token-123"))
 
@@ -230,6 +235,110 @@ func TestSMTPMailer_SendEmailVerification_UsesRawTokenWhenNoTemplate(t *testing.
 	assert.Contains(t, msg, "verify-token-123")
 	assert.Contains(t, msg, "POST /auth/verify-email")
 	assert.Contains(t, msg, "ignore this email")
+}
+
+// startSilentSMTPServer accepts connections and never answers: the
+// failure mode of an SMTP server that has hung after the TCP handshake.
+func startSilentSMTPServer(t *testing.T) (string, string) {
+	t.Helper()
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+
+	var (
+		mu    sync.Mutex
+		conns []net.Conn
+	)
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			conns = append(conns, conn)
+			mu.Unlock()
+		}
+	}()
+	t.Cleanup(func() {
+		_ = ln.Close()
+		mu.Lock()
+		defer mu.Unlock()
+		for _, c := range conns {
+			_ = c.Close()
+		}
+	})
+
+	return splitHostPort(t, ln.Addr().String())
+}
+
+func newObservedMailer(t *testing.T, timeout time.Duration) (*SMTPMailer, *observer.ObservedLogs) {
+	t.Helper()
+	host, port := startSilentSMTPServer(t)
+	core, logs := observer.New(zap.WarnLevel)
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "", "", zap.New(core))
+	mailer.timeout = timeout
+	return mailer, logs
+}
+
+func TestSMTPMailer_Send_GivesUpWhenTheServerStopsAnswering(t *testing.T) {
+	mailer, _ := newObservedMailer(t, 200*time.Millisecond)
+
+	start := time.Now()
+	err := mailer.SendPasswordResetEmail(context.Background(), "alice@example.com", "reset-token-123")
+
+	require.Error(t, err)
+	assert.Less(t, time.Since(start), 3*time.Second)
+}
+
+func TestSMTPMailer_Send_StopsWhenTheContextIsCancelled(t *testing.T) {
+	mailer, _ := newObservedMailer(t, time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err := mailer.SendPasswordResetEmail(ctx, "alice@example.com", "reset-token-123")
+
+	require.Error(t, err)
+	assert.Less(t, time.Since(start), 3*time.Second)
+}
+
+func TestSMTPMailer_Send_LogsEachFailureWithItsKindAndNeitherTokenNorAddress(t *testing.T) {
+	sends := map[string]func(m *SMTPMailer) error{
+		"password_reset": func(m *SMTPMailer) error {
+			return m.SendPasswordResetEmail(context.Background(), "alice@example.com", "secret-token")
+		},
+		"email_change_confirmation": func(m *SMTPMailer) error {
+			return m.SendEmailChangeConfirmation(context.Background(), "alice@example.com", "new@example.com", "secret-token")
+		},
+		"email_verification": func(m *SMTPMailer) error {
+			return m.SendEmailVerification(context.Background(), "alice@example.com", "secret-token")
+		},
+	}
+
+	for kind, send := range sends {
+		t.Run(kind, func(t *testing.T) {
+			mailer, logs := newObservedMailer(t, 100*time.Millisecond)
+
+			require.Error(t, send(mailer))
+
+			entries := logs.All()
+			require.Len(t, entries, 1)
+			assert.Equal(t, kind, entries[0].ContextMap()["kind"])
+			logged := entries[0].Message + " " + toString(entries[0].ContextMap())
+			assert.NotContains(t, logged, "secret-token")
+			assert.NotContains(t, logged, "alice@example.com")
+			assert.NotContains(t, logged, "new@example.com")
+		})
+	}
+}
+
+func toString(m map[string]any) string {
+	var b strings.Builder
+	for k, v := range m {
+		b.WriteString(k + "=" + fmt.Sprint(v) + " ")
+	}
+	return b.String()
 }
 
 func TestNewSMTPMailer_ImplementsMailer(t *testing.T) {
