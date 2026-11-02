@@ -2,6 +2,7 @@ package emailchange
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"Melrakkiie/Tamiyo/internal/token"
@@ -35,21 +36,9 @@ func (s *Service) Issue(ctx context.Context, userID, newEmail string) (string, e
 }
 
 func (s *Service) Consume(ctx context.Context, plaintext string) (userID, newEmail string, err error) {
-	ct, err := s.repo.FindByHash(ctx, token.Hash(plaintext))
-	if err != nil {
-		if err == ErrNotFound {
-			return "", "", ErrInvalid
-		}
-		return "", "", err
-	}
-
-	if ct.UsedAt != nil || time.Now().After(ct.ExpiresAt) {
+	userID, newEmail, err = s.repo.Consume(ctx, token.Hash(plaintext))
+	if errors.Is(err, ErrNotFound) {
 		return "", "", ErrInvalid
 	}
-
-	if err := s.repo.MarkUsed(ctx, ct.ID); err != nil {
-		return "", "", err
-	}
-
-	return ct.UserID, ct.NewEmail, nil
+	return userID, newEmail, err
 }

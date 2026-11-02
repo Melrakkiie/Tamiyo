@@ -46,25 +46,26 @@ func (r *PostgresRepository) Create(ctx context.Context, t ChangeToken) (ChangeT
 	return created.toDomain(), nil
 }
 
-func (r *PostgresRepository) FindByHash(ctx context.Context, tokenHash string) (ChangeToken, error) {
+// Consume marks the token used only if it is unused and unexpired, in one
+// statement, so concurrent callers cannot both succeed.
+func (r *PostgresRepository) Consume(ctx context.Context, tokenHash string) (userID, newEmail string, err error) {
 	query := `
-		SELECT id, user_id, new_email, token_hash, added, expires_at, used_at
-		FROM tamiyo.email_change_tokens
-		WHERE token_hash = $1
+		UPDATE tamiyo.email_change_tokens
+		SET used_at = now()
+		WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()
+		RETURNING user_id, new_email
 	`
 
-	var row changeTokenRow
+	var row struct {
+		UserID   string `db:"user_id"`
+		NewEmail string `db:"new_email"`
+	}
 	if err := r.db.GetContext(ctx, &row, query, tokenHash); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return ChangeToken{}, ErrNotFound
+			return "", "", ErrNotFound
 		}
-		return ChangeToken{}, err
+		return "", "", err
 	}
 
-	return row.toDomain(), nil
-}
-
-func (r *PostgresRepository) MarkUsed(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE tamiyo.email_change_tokens SET used_at = now() WHERE id = $1`, id)
-	return err
+	return row.UserID, row.NewEmail, nil
 }
