@@ -52,6 +52,19 @@ func TestMiddleware_LogsInfoOnSuccess(t *testing.T) {
 	assert.NotContains(t, fields, "error")
 }
 
+func TestMiddleware_LogsSocketPeerNotForwardedHeader(t *testing.T) {
+	logger, logs := newObservedLogger()
+	router := setupRouter(logger, func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.RemoteAddr = "10.1.2.3:4567"
+	req.Header.Set("X-Forwarded-For", "1.2.3.4")
+	router.ServeHTTP(httptest.NewRecorder(), req)
+
+	require.Equal(t, 1, logs.Len())
+	assert.Equal(t, "10.1.2.3:4567", logs.All()[0].ContextMap()["remote_addr"])
+}
+
 func TestMiddleware_KeepsQueryStringOutOfLog(t *testing.T) {
 	logger, logs := newObservedLogger()
 	router := setupRouter(logger, func(c *gin.Context) { c.Status(http.StatusOK) })
