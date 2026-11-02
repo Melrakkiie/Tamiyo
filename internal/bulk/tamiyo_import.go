@@ -89,6 +89,9 @@ func (s *Service) ImportTamiyoCollection(ctx context.Context, userID string, tar
 
 		colors, cardType, identity := rc.details()
 		for copy := 0; copy < c.Quantity; copy++ {
+			if err := ctx.Err(); err != nil {
+				return summary, err
+			}
 			if _, err := s.cards.CreateCard(ctx, userID, card.Card{
 				Name:            rc.Name,
 				ScryfallID:      rc.ScryfallID,

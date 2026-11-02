@@ -37,6 +37,9 @@ func (s *Service) ImportCardList(ctx context.Context, userID string, storageID *
 		name, setCode, collectorNumber := line.printing(resolvedCard)
 		colors, cardType, identity := resolvedCard.details()
 		for i := 0; i < line.Quantity; i++ {
+			if err := ctx.Err(); err != nil {
+				return summary, err
+			}
 			if _, err := s.cards.CreateCard(ctx, userID, card.Card{
 				Name:            name,
 				ScryfallID:      resolvedCard.ScryfallID,
