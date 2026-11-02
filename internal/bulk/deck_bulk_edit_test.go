@@ -117,6 +117,17 @@ func TestBulkEditDeck_Errors(t *testing.T) {
 	assert.Empty(t, decks.placed, "nothing is removed when the new cards can't be looked up")
 }
 
+func TestBulkEditDeck_RefusesAQuantityOverTheMaximum(t *testing.T) {
+	decks := tamiyoDeckFixture()
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, bulkEditResolver())
+
+	_, err := svc.BulkEditDeck(context.Background(), testUserID, fixtureDeckID, strings.NewReader("1 Island\n1001 Sol Ring\n"))
+
+	require.ErrorIs(t, err, ErrInvalidFile)
+	assert.Contains(t, err.Error(), "line 2")
+	assert.Empty(t, decks.placed)
+}
+
 func TestExportDeck_MoxfieldWithTags(t *testing.T) {
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, tamiyoDeckFixture(), &fakeResolver{})
 
