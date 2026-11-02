@@ -30,14 +30,14 @@ func (s *Service) IssueRefreshToken(ctx context.Context, userID string) (string,
 }
 
 func (s *Service) issue(ctx context.Context, userID string) (plaintext string, id string, err error) {
-	plaintext, err = generatePlaintext()
+	plaintext, err = GeneratePlaintext()
 	if err != nil {
 		return "", "", err
 	}
 
 	created, err := s.repo.Create(ctx, RefreshToken{
 		UserID:    userID,
-		TokenHash: hash(plaintext),
+		TokenHash: Hash(plaintext),
 		ExpiresAt: time.Now().Add(s.ttl),
 	})
 	if err != nil {
@@ -48,7 +48,7 @@ func (s *Service) issue(ctx context.Context, userID string) (plaintext string, i
 }
 
 func (s *Service) Rotate(ctx context.Context, plaintext string) (userID string, newPlaintext string, err error) {
-	rt, err := s.repo.FindByHash(ctx, hash(plaintext))
+	rt, err := s.repo.FindByHash(ctx, Hash(plaintext))
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return "", "", ErrInvalid
@@ -109,7 +109,7 @@ func (s *Service) activeSuccessor(ctx context.Context, rt RefreshToken) (*Refres
 }
 
 func (s *Service) Revoke(ctx context.Context, plaintext string) error {
-	rt, err := s.repo.FindByHash(ctx, hash(plaintext))
+	rt, err := s.repo.FindByHash(ctx, Hash(plaintext))
 	if err != nil {
 		if err == ErrNotFound {
 			return nil
@@ -124,7 +124,9 @@ func (s *Service) RevokeAllForUser(ctx context.Context, userID string) error {
 	return s.repo.RevokeAllForUser(ctx, userID)
 }
 
-func generatePlaintext() (string, error) {
+// GeneratePlaintext returns a secret token: 32 random bytes in URL-safe base64 without padding.
+// Every context issuing bearer or single-use tokens uses it; only Hash(plaintext) is stored.
+func GeneratePlaintext() (string, error) {
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
 		return "", err
@@ -132,7 +134,8 @@ func generatePlaintext() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-func hash(plaintext string) string {
+// Hash returns the stored form of a token: hex SHA-256 of its plaintext.
+func Hash(plaintext string) string {
 	sum := sha256.Sum256([]byte(plaintext))
 	return hex.EncodeToString(sum[:])
 }
