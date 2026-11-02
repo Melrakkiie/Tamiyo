@@ -2,10 +2,6 @@ package token
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"time"
 )
@@ -122,20 +118,4 @@ func (s *Service) Revoke(ctx context.Context, plaintext string) error {
 
 func (s *Service) RevokeAllForUser(ctx context.Context, userID string) error {
 	return s.repo.RevokeAllForUser(ctx, userID)
-}
-
-// GeneratePlaintext returns a secret token: 32 random bytes in URL-safe base64 without padding.
-// Every context issuing bearer or single-use tokens uses it; only Hash(plaintext) is stored.
-func GeneratePlaintext() (string, error) {
-	buf := make([]byte, 32)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(buf), nil
-}
-
-// Hash returns the stored form of a token: hex SHA-256 of its plaintext.
-func Hash(plaintext string) string {
-	sum := sha256.Sum256([]byte(plaintext))
-	return hex.EncodeToString(sum[:])
 }
