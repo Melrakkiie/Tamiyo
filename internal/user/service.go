@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"regexp"
 	"strings"
@@ -182,6 +183,18 @@ func (s *Service) ChangeEmail(ctx context.Context, userID, newEmail string) (str
 // NormalizeEmail is the one form an address is compared and stored in: trimmed and lowercased.
 func NormalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// EmailInput is an email request field: it is normalised while decoding, so validation sees the trimmed address.
+type EmailInput string
+
+func (e *EmailInput) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	*e = EmailInput(NormalizeEmail(s))
+	return nil
 }
 
 // ConfirmEmail stores an address proven by its owner, normalised so a token issued with capitals still writes lowercase.

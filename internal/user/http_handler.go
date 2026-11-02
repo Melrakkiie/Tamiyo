@@ -16,14 +16,14 @@ import (
 )
 
 type registerRequest struct {
-	Email       string  `json:"email" binding:"required,email"`
-	Password    string  `json:"password" binding:"required,min=8"`
-	DisplayName *string `json:"display_name"`
+	Email       EmailInput `json:"email" binding:"required,email"`
+	Password    string     `json:"password" binding:"required,min=8"`
+	DisplayName *string    `json:"display_name"`
 }
 
 type loginRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required"`
+	Email    EmailInput `json:"email" binding:"required,email"`
+	Password string     `json:"password" binding:"required"`
 }
 
 type changePasswordRequest struct {
@@ -244,7 +244,7 @@ func (h *Handler) register(ctx *gin.Context) {
 		return
 	}
 
-	created, err := h.service.Register(ctx.Request.Context(), req.Email, req.Password, req.DisplayName)
+	created, err := h.service.Register(ctx.Request.Context(), string(req.Email), req.Password, req.DisplayName)
 	if err != nil {
 		apierr.Respond(ctx, err,
 			apierr.Mapping{Err: ErrEmailAlreadyTaken, Status: http.StatusConflict, Message: "email already registered"},
@@ -263,7 +263,7 @@ func (h *Handler) login(ctx *gin.Context) {
 		return
 	}
 
-	authenticated, err := h.service.Authenticate(ctx.Request.Context(), req.Email, req.Password)
+	authenticated, err := h.service.Authenticate(ctx.Request.Context(), string(req.Email), req.Password)
 	if err != nil {
 		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrInvalidCredentials, Status: http.StatusUnauthorized, Message: "invalid email or password"})
 		return

@@ -13,8 +13,8 @@ import (
 )
 
 type requestEmailChangeRequest struct {
-	CurrentPassword string `json:"current_password" binding:"required"`
-	NewEmail        string `json:"new_email" binding:"required,email"`
+	CurrentPassword string          `json:"current_password" binding:"required"`
+	NewEmail        user.EmailInput `json:"new_email" binding:"required,email"`
 }
 
 type confirmEmailChangeRequest struct {
@@ -69,7 +69,7 @@ func (h *Handler) requestEmailChange(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	newEmail := user.NormalizeEmail(req.NewEmail)
+	newEmail := string(req.NewEmail)
 
 	currentEmail, err := h.users.CheckPassword(ctx.Request.Context(), userID, req.CurrentPassword)
 	if err != nil {

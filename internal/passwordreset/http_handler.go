@@ -7,10 +7,11 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"Melrakkiie/Tamiyo/internal/apierr"
+	"Melrakkiie/Tamiyo/internal/user"
 )
 
 type forgotPasswordRequest struct {
-	Email string `json:"email" binding:"required,email"`
+	Email user.EmailInput `json:"email" binding:"required,email"`
 }
 
 type resetPasswordRequest struct {
@@ -63,9 +64,9 @@ func (h *Handler) forgotPassword(ctx *gin.Context) {
 		return
 	}
 
-	if userID, err := h.users.FindIDByEmail(ctx.Request.Context(), req.Email); err == nil {
+	if userID, err := h.users.FindIDByEmail(ctx.Request.Context(), string(req.Email)); err == nil {
 		if token, err := h.service.Issue(ctx.Request.Context(), userID); err == nil {
-			_ = h.mailer.SendPasswordResetEmail(ctx.Request.Context(), req.Email, token)
+			_ = h.mailer.SendPasswordResetEmail(ctx.Request.Context(), string(req.Email), token)
 		}
 	}
 
