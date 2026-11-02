@@ -2412,6 +2412,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -2686,6 +2688,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -3715,6 +3719,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "500":
@@ -3768,6 +3774,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "500":
@@ -3822,6 +3830,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "500":
@@ -3928,6 +3938,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "502":
@@ -4234,6 +4246,12 @@ components:
         default: 24
 
   responses:
+    PayloadTooLarge:
+      description: The uploaded request body is larger than 10 MB; nothing is imported
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     LikeDeckNotFound:
       description: Unknown or malformed deck id, or someone else's private deck
       content:
