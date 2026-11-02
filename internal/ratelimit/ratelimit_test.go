@@ -9,6 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"Melrakkiie/Tamiyo/internal/clientip"
 )
 
 func TestLimiter_Allow_AllowsUpToMaxWithinWindow(t *testing.T) {
@@ -89,4 +91,69 @@ func TestMiddleware_Returns429WithRetryAfterOnceLimitExceeded(t *testing.T) {
 
 	assert.Equal(t, http.StatusTooManyRequests, blockedW.Code)
 	assert.NotEmpty(t, blockedW.Header().Get("Retry-After"))
+}
+
+// hit sends one request from the socket address `from` with the given headers and returns the status.
+func hit(router *gin.Engine, from string, headers map[string]string) int {
+	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	req.RemoteAddr = from + ":4000"
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	return w.Code
+}
+
+func proxiedRouter(t *testing.T, trusted ...string) *gin.Engine {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	require.NoError(t, clientip.Configure(router, trusted))
+	router.Use(Middleware(NewLimiter(2, time.Minute)))
+	router.GET("/ping", func(c *gin.Context) { c.Status(http.StatusOK) })
+	return router
+}
+
+func TestMiddleware_UntrustedSocketCountedTogetherDespiteForgedForwardedFor(t *testing.T) {
+	router := proxiedRouter(t)
+
+	assert.Equal(t, http.StatusOK, hit(router, "203.0.113.9", map[string]string{"X-Forwarded-For": "1.1.1.1"}))
+	assert.Equal(t, http.StatusOK, hit(router, "203.0.113.9", map[string]string{"X-Forwarded-For": "2.2.2.2"}))
+	assert.Equal(t, http.StatusTooManyRequests, hit(router, "203.0.113.9", map[string]string{"X-Forwarded-For": "3.3.3.3"}))
+}
+
+func TestMiddleware_TrustedProxyCountsUnderAppendedRealIPNotForgedOne(t *testing.T) {
+	router := proxiedRouter(t, "10.0.0.0/24")
+
+	assert.Equal(t, http.StatusOK, hit(router, "10.0.0.5", map[string]string{"X-Forwarded-For": "1.1.1.1, 198.51.100.7"}))
+	assert.Equal(t, http.StatusOK, hit(router, "10.0.0.5", map[string]string{"X-Forwarded-For": "2.2.2.2, 198.51.100.7"}))
+	assert.Equal(t, http.StatusTooManyRequests, hit(router, "10.0.0.5", map[string]string{"X-Forwarded-For": "3.3.3.3, 198.51.100.7"}))
+}
+
+func TestMiddleware_ClientsBehindTheSameTrustedProxyHaveSeparateCounters(t *testing.T) {
+	router := proxiedRouter(t, "10.0.0.5")
+
+	for i := 0; i < 2; i++ {
+		require.Equal(t, http.StatusOK, hit(router, "10.0.0.5", map[string]string{"X-Forwarded-For": "198.51.100.7"}))
+	}
+	require.Equal(t, http.StatusTooManyRequests, hit(router, "10.0.0.5", map[string]string{"X-Forwarded-For": "198.51.100.7"}))
+
+	assert.Equal(t, http.StatusOK, hit(router, "10.0.0.5", map[string]string{"X-Forwarded-For": "198.51.100.8"}))
+}
+
+func TestMiddleware_ForgedXRealIPFromUntrustedAddressChangesNothing(t *testing.T) {
+	router := proxiedRouter(t)
+
+	assert.Equal(t, http.StatusOK, hit(router, "203.0.113.9", map[string]string{"X-Real-IP": "1.1.1.1"}))
+	assert.Equal(t, http.StatusOK, hit(router, "203.0.113.9", map[string]string{"X-Real-IP": "2.2.2.2"}))
+	assert.Equal(t, http.StatusTooManyRequests, hit(router, "203.0.113.9", map[string]string{"X-Real-IP": "3.3.3.3"}))
+}
+
+func TestMiddleware_XRealIPIgnoredEvenFromTrustedProxy(t *testing.T) {
+	router := proxiedRouter(t, "10.0.0.5")
+
+	assert.Equal(t, http.StatusOK, hit(router, "10.0.0.5", map[string]string{"X-Real-IP": "1.1.1.1"}))
+	assert.Equal(t, http.StatusOK, hit(router, "10.0.0.5", map[string]string{"X-Real-IP": "2.2.2.2"}))
+	assert.Equal(t, http.StatusTooManyRequests, hit(router, "10.0.0.5", map[string]string{"X-Real-IP": "3.3.3.3"}))
 }

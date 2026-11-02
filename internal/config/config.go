@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -46,6 +47,9 @@ type Config struct {
 	EmailVerificationURLTemplate string `mapstructure:"EMAIL_VERIFICATION_URL_TEMPLATE"`
 
 	CORSAllowedOrigins []string
+
+	// TrustedProxies are the CIDR ranges or bare IPs whose X-Forwarded-For is believed.
+	TrustedProxies []string
 
 	DBMaxOpenConns    int
 	DBMaxIdleConns    int
@@ -108,7 +112,8 @@ func Load() (*Config, error) {
 		EmailChangeURLTemplate:       viper.GetString("EMAIL_CHANGE_URL_TEMPLATE"),
 		EmailVerificationURLTemplate: viper.GetString("EMAIL_VERIFICATION_URL_TEMPLATE"),
 
-		CORSAllowedOrigins: parseOrigins(viper.GetString("CORS_ALLOWED_ORIGINS")),
+		CORSAllowedOrigins: parseList(viper.GetString("CORS_ALLOWED_ORIGINS")),
+		TrustedProxies:     parseList(viper.GetString("TRUSTED_PROXIES")),
 
 		DBMaxOpenConns:    viper.GetInt("DB_MAX_OPEN_CONNS"),
 		DBMaxIdleConns:    viper.GetInt("DB_MAX_IDLE_CONNS"),
@@ -161,6 +166,12 @@ func validate(cfg *Config) error {
 		return fmt.Errorf("missing required environment variable(s): %s", strings.Join(missing, ", "))
 	}
 
+	for _, p := range cfg.TrustedProxies {
+		if _, _, err := net.ParseCIDR(p); err != nil && net.ParseIP(p) == nil {
+			return fmt.Errorf("invalid TRUSTED_PROXIES entry %q: want a CIDR range or an IP", p)
+		}
+	}
+
 	return nil
 }
 
@@ -173,19 +184,20 @@ func normalizeBasePath(raw string) string {
 	return "/" + trimmed
 }
 
-func parseOrigins(raw string) []string {
+// parseList splits a comma-separated setting, trimming entries and dropping empty ones.
+func parseList(raw string) []string {
 	if strings.TrimSpace(raw) == "" {
 		return nil
 	}
 
 	parts := strings.Split(raw, ",")
-	origins := make([]string, 0, len(parts))
+	items := make([]string, 0, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
 		if p != "" {
-			origins = append(origins, p)
+			items = append(items, p)
 		}
 	}
 
-	return origins
+	return items
 }

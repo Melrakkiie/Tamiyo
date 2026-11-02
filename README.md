@@ -121,6 +121,8 @@ Cross-origin browser access is denied by default: no frontend origin can read Ta
 CORS_ALLOWED_ORIGINS=http://localhost:5173
 ```
 
+The client IP used by the rate limits and the request logs is the socket address, unless the request comes from a proxy listed in `TRUSTED_PROXIES` (comma-separated CIDR ranges or IPs, empty by default): then it is the address that proxy appends to `X-Forwarded-For`. Behind Clever Cloud, set it to the load balancers' range, see [`.env.example`](./.env.example).
+
 ## Card search
 
 `GET /cards` filters by name, storage, storage type, colors (exactly / at least / at most), mana value, power and toughness (`=`, `<`, `<=`, `>`, `>=`), card type, subtype, format legality, number of colors, commander color identity, foil, and the storages open to a given deck. Its `q` parameter takes common Scryfall search syntax (`t:creature c:g mv<=3`, `o:"draw a card" -t:land`, `r>=rare or is:foil`), evaluated in SQL against the user's own cards. Type lines, oracle texts, mana costs, rarities, keywords, legalities, power and toughness come from Scryfall: the API keeps them in `tamiyo.printings`, fetching new printings within a few minutes and refreshing every printing once a day in a background job, so a ban shows up the next day. Deck legality and statistics read the same table. See [`doc/API.md`](./doc/API.md#get-cards).

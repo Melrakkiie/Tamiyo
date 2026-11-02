@@ -92,6 +92,38 @@ func TestLoad_DropsEmptyEntriesInCORSAllowedOrigins(t *testing.T) {
 	assert.Equal(t, []string{"http://localhost:5173", "https://tamiyo.example.com"}, cfg.CORSAllowedOrigins)
 }
 
+func TestLoad_TrustedProxiesEmptyWhenUnsetOrBlank(t *testing.T) {
+	setRequiredEnv(t)
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.Empty(t, cfg.TrustedProxies)
+
+	t.Setenv("TRUSTED_PROXIES", " , ")
+	cfg, err = Load()
+	require.NoError(t, err)
+	assert.Empty(t, cfg.TrustedProxies)
+}
+
+func TestLoad_ParsesTrimsAndDropsEmptyTrustedProxies(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("TRUSTED_PROXIES", " 91.208.207.0/24 ,,10.0.0.1,")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"91.208.207.0/24", "10.0.0.1"}, cfg.TrustedProxies)
+}
+
+func TestLoad_RejectsInvalidTrustedProxyNamingIt(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("TRUSTED_PROXIES", "10.0.0.1,not-an-ip")
+
+	_, err := Load()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not-an-ip")
+}
+
 func TestLoad_DefaultsAPIBasePathToEmpty(t *testing.T) {
 	setRequiredEnv(t)
 	// API_BASE_PATH is missing
