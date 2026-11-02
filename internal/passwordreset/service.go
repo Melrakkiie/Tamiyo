@@ -2,6 +2,7 @@ package passwordreset
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"Melrakkiie/Tamiyo/internal/token"
@@ -34,25 +35,14 @@ func (s *Service) Issue(ctx context.Context, userID string) (string, error) {
 }
 
 func (s *Service) Consume(ctx context.Context, plaintext string) (userID string, err error) {
-	rt, err := s.repo.FindByHash(ctx, token.Hash(plaintext))
-	if err != nil {
-		if err == ErrNotFound {
-			return "", ErrInvalid
-		}
-		return "", err
-	}
-
-	if rt.UsedAt != nil {
+	userID, err = s.repo.Consume(ctx, token.Hash(plaintext))
+	if errors.Is(err, ErrNotFound) {
 		return "", ErrInvalid
 	}
+	return userID, err
+}
 
-	if time.Now().After(rt.ExpiresAt) {
-		return "", ErrInvalid
-	}
-
-	if err := s.repo.MarkUsed(ctx, rt.ID); err != nil {
-		return "", err
-	}
-
-	return rt.UserID, nil
+// InvalidatePending voids every unused reset link of the user.
+func (s *Service) InvalidatePending(ctx context.Context, userID string) error {
+	return s.repo.InvalidatePending(ctx, userID)
 }
