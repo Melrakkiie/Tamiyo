@@ -821,6 +821,17 @@ func TestImportIntoDeck_PlainListWarnsAboutUnknownNames(t *testing.T) {
 	assert.Contains(t, summary.Warnings[0], "Not A Real Card")
 }
 
+func TestImportIntoDeck_RefusesAQuantityOverTheMaximum(t *testing.T) {
+	decks := withTargetDeck(&fakeDeckService{})
+	svc := NewService(&fakeCardService{}, &fakeStorageService{}, decks, deckImportResolver())
+
+	_, err := svc.ImportIntoDeck(context.Background(), testUserID, targetDeckID, DeckImportOptions{}, strings.NewReader("1 Sol Ring\n1001 Sol Ring\n"))
+
+	require.ErrorIs(t, err, ErrInvalidFile)
+	assert.Contains(t, err.Error(), "line 2")
+	assert.Empty(t, decks.placed)
+}
+
 func TestImportIntoDeck_ReturnsDeckNotFound(t *testing.T) {
 	svc := NewService(&fakeCardService{}, &fakeStorageService{}, &fakeDeckService{}, deckImportResolver())
 

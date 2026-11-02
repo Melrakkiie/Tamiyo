@@ -99,6 +99,17 @@ func TestImportCardList_WarnsWhenACardCannotBeCreated(t *testing.T) {
 	assert.Len(t, summary.Warnings, 2)
 }
 
+func TestImportCardList_RefusesAQuantityOverTheMaximum(t *testing.T) {
+	cards := &fakeCardService{}
+	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, cardListResolver())
+
+	_, err := svc.ImportCardList(context.Background(), testUserID, nil, strings.NewReader("1 Sol Ring\n1001 Sol Ring\n"))
+
+	require.ErrorIs(t, err, ErrInvalidFile)
+	assert.Contains(t, err.Error(), "line 2")
+	assert.Empty(t, cards.created)
+}
+
 func TestImportCardList_Errors(t *testing.T) {
 	cases := map[string]struct {
 		storages  *fakeStorageService

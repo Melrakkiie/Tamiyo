@@ -2407,11 +2407,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/ImportSummary"
         "400":
-          description: id is not a UUID, or the file is missing or can't be parsed.
+          description: id is not a UUID, or the file is missing or can't be parsed (a line with a quantity above 1000 is refused).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -2681,11 +2683,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/ImportSummary"
         "400":
-          description: id is not a UUID, the file is missing or can't be parsed, or commander_from_first_line or include_locked_storages is invalid.
+          description: id is not a UUID, the file is missing or can't be parsed (a line with a quantity above 1000 is refused), or commander_from_first_line or include_locked_storages is invalid.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -3709,12 +3713,14 @@ paths:
                 $ref: "#/components/schemas/ImportSummary"
         "400":
           description: >
-            No file field, the file couldn't be parsed, or storage_id is
-            invalid or does not reference an existing storage.
+            No file field, the file couldn't be parsed (a row with a Quantity
+            above 1000 is refused), or storage_id is invalid or does not reference an existing storage.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "500":
@@ -3762,12 +3768,14 @@ paths:
                 $ref: "#/components/schemas/ImportSummary"
         "400":
           description: >
-            No file field, the file couldn't be parsed, or storage_id does
-            not reference an existing storage.
+            No file field, the file couldn't be parsed (a row with a Count
+            above 1000 is refused), or storage_id does not reference an existing storage.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "500":
@@ -3816,12 +3824,14 @@ paths:
                 $ref: "#/components/schemas/ImportSummary"
         "400":
           description: >
-            No file field, the list couldn't be parsed, or storage_id is
-            invalid or does not reference an existing storage.
+            No file field, the list couldn't be parsed (a line with a quantity
+            above 1000 is refused), or storage_id is invalid or does not reference an existing storage.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "500":
@@ -3921,12 +3931,15 @@ paths:
         "400":
           description: >
             No file field, the file isn't a valid Tamiyo collection or
-            storage file (a deck file is refused), or storage_id is invalid
+            storage file (a deck file or a card quantity above 1000 is
+            refused), or storage_id is invalid
             or does not reference an existing storage.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "502":
@@ -4233,6 +4246,12 @@ components:
         default: 24
 
   responses:
+    PayloadTooLarge:
+      description: The uploaded request body is larger than 10 MB; nothing is imported
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     LikeDeckNotFound:
       description: Unknown or malformed deck id, or someone else's private deck
       content:

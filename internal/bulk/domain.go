@@ -8,6 +8,8 @@ import (
 	"Melrakkiie/Tamiyo/internal/deck"
 )
 
+const maxImportQuantity = 1000
+
 var ErrInvalidFile = errors.New("could not parse the uploaded file")
 
 var ErrTargetStorageNotFound = errors.New("target storage does not exist")

@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -899,4 +900,35 @@ func TestHandler_ExportSharedDeck_NeedsNoAccount(t *testing.T) {
 	w = httptest.NewRecorder()
 	missing.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/shared/decks/00000000-0000-0000-0000-000000000001/export", nil))
 	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestUploadRoutes_RefuseBodiesOverTenMegabytes(t *testing.T) {
+	paths := []string{
+		"/import/manabox",
+		"/import/moxfield/collection",
+		"/import/list",
+		"/import/tamiyo",
+		"/deck/00000000-0000-0000-0000-000000000001/import",
+		"/deck/00000000-0000-0000-0000-000000000001/bulk-edit",
+	}
+	big := strings.Repeat("a", 10<<20+1)
+
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			service := &fakeImportService{}
+			router := setupRouter(service)
+
+			// The field is written before the file: the limit must hold before it is read.
+			req := multipartRequest(t, path, big, map[string]string{"storage_id": "1"})
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+			var got map[string]string
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+			assert.Contains(t, got["error"], "too large")
+			assert.Empty(t, service.lastFileContent)
+			assert.False(t, service.tamiyoImportCalled)
+		})
+	}
 }
