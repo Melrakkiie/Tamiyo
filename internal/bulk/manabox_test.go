@@ -54,6 +54,23 @@ Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,not-a-
 	assert.ErrorIs(t, err, ErrInvalidFile)
 }
 
+func TestParseManaBoxCSV_QuantityMaximum(t *testing.T) {
+	csv := `Binder Name,Binder Type,Name,Set code,Scryfall ID,Collector number,Foil,Quantity
+Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1000
+Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1001
+`
+	_, err := parseManaBoxCSV(strings.NewReader(csv))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidFile)
+	assert.Contains(t, err.Error(), "line 3")
+
+	rows, err := parseManaBoxCSV(strings.NewReader(strings.Split(csv, "\n")[0] + "\n" + strings.Split(csv, "\n")[1] + "\n"))
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, 1000, rows[0].Quantity)
+}
+
 func TestParseManaBoxCSV_EmptyFileReturnsNoRows(t *testing.T) {
 	csv := `Binder Name,Binder Type,Name,Set code,Scryfall ID,Collector number,Foil,Quantity
 `

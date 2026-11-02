@@ -51,7 +51,7 @@ func parseMoxfieldCollectionCSV(r io.Reader) ([]moxfieldCollectionRow, error) {
 		}
 
 		quantity, err := strconv.Atoi(record[col["Count"]])
-		if err != nil || quantity < 1 {
+		if err != nil || quantity < 1 || quantity > maxImportQuantity {
 			return nil, fmt.Errorf("%w: line %d: invalid Count %q", ErrInvalidFile, line, record[col["Count"]])
 		}
 
@@ -151,7 +151,7 @@ func parseMoxfieldDeckList(r io.Reader) ([]moxfieldDeckLine, error) {
 		}
 
 		quantity, err := strconv.Atoi(matches[1])
-		if err != nil || quantity < 1 {
+		if err != nil || quantity < 1 || quantity > maxImportQuantity {
 			return nil, fmt.Errorf("%w: line %d: invalid quantity %q", ErrInvalidFile, lineNo, matches[1])
 		}
 
