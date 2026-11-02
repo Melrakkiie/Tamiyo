@@ -489,6 +489,6 @@ type multipartFile interface {
 var (
 	errMissingFile      = errors.New("a file is required (multipart field \"file\")")
 	errUnreadableFile   = errors.New("could not read the uploaded file")
-	errFileTooLarge     = errors.New("the uploaded file is too large (10 MB maximum)")
+	errFileTooLarge     = fmt.Errorf("the uploaded file is too large (%d MB maximum)", maxUploadBytes>>20)
 	errInvalidStorageID = errors.New("storage_id must be a positive integer")
 )

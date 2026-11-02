@@ -99,6 +99,17 @@ func TestImportCardList_WarnsWhenACardCannotBeCreated(t *testing.T) {
 	assert.Len(t, summary.Warnings, 2)
 }
 
+func TestImportCardList_RefusesAQuantityOverTheMaximum(t *testing.T) {
+	cards := &fakeCardService{}
+	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, cardListResolver())
+
+	_, err := svc.ImportCardList(context.Background(), testUserID, nil, strings.NewReader("1 Sol Ring\n1001 Sol Ring\n"))
+
+	require.ErrorIs(t, err, ErrInvalidFile)
+	assert.Contains(t, err.Error(), "line 2")
+	assert.Empty(t, cards.created)
+}
+
 func TestImportCardList_Errors(t *testing.T) {
 	cases := map[string]struct {
 		storages  *fakeStorageService
@@ -107,10 +118,9 @@ func TestImportCardList_Errors(t *testing.T) {
 		list      string
 		want      error
 	}{
-		"unreadable list":           {&fakeStorageService{}, cardListResolver(), nil, "not a card line\n", ErrInvalidFile},
-		"quantity over the maximum": {&fakeStorageService{}, cardListResolver(), nil, "1001 Sol Ring\n", ErrInvalidFile},
-		"unknown storage":           {&fakeStorageService{}, cardListResolver(), ptr(9), "1 Sol Ring\n", ErrTargetStorageNotFound},
-		"scryfall is down":          {&fakeStorageService{}, &fakeResolver{err: errors.New("down")}, nil, "1 Sol Ring\n", ErrScryfallUnavailable},
+		"unreadable list":  {&fakeStorageService{}, cardListResolver(), nil, "not a card line\n", ErrInvalidFile},
+		"unknown storage":  {&fakeStorageService{}, cardListResolver(), ptr(9), "1 Sol Ring\n", ErrTargetStorageNotFound},
+		"scryfall is down": {&fakeStorageService{}, &fakeResolver{err: errors.New("down")}, nil, "1 Sol Ring\n", ErrScryfallUnavailable},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

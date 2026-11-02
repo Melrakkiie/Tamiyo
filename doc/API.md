@@ -1750,7 +1750,7 @@ The lines under a `Commander` section header (the first two at most) are the dec
 
 A file starting with `{` is read as a [Tamiyo](#tamiyo-format) `deck` file: its cards go on their own boards, with their exact printing and finish, owned copies and missing ones handled as above. Each entry also keeps its proxy status: a `"proxy": true` entry only uses copies of the collection that are proxies, and becomes a pending proxy for the rest; an entry without `proxy`, or with `false`, only uses real copies. Its commanders (two at most) become the deck's commander and second commander if the deck has none yet. Its tags, when it has any, are added to the deck's [tags](#card-tags-deckidtags) (a card keeps the tags it already had); a tag that can't be set, for a card that couldn't be added, is noted in `warnings`. The file's `deck` name and format are not applied: the deck keeps its own.
 
-**Errors** (besides the common ones): `400` invalid deck id, or a Tamiyo file of kind `collection` or `storage` · `404` deck not found.
+**Errors** (besides the common ones): `400` invalid deck id, a missing or unreadable file, a quantity above 1000 on one line, or a Tamiyo file of kind `collection` or `storage` · `404` deck not found · `413` body over 10 MB.
 
 **Expected line format:** `<quantity> <name> (<set code>) <collector number>[ *F*]`, e.g. `1 Sol Ring (SLD) 1011 *F*` — Moxfield's plain-text export (deck page → **More → Export → Plain Text**). `*E*`, etched, counts as foil, and collector numbers can contain dashes, like The List's `IMA-48`. Cards with two names (e.g. double-faced cards) keep both, separated by ` / `.
 
