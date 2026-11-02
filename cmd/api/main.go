@@ -20,6 +20,7 @@ import (
 	"Melrakkiie/Tamiyo/internal/authcookie"
 	"Melrakkiie/Tamiyo/internal/bulk"
 	"Melrakkiie/Tamiyo/internal/card"
+	"Melrakkiie/Tamiyo/internal/clientip"
 	"Melrakkiie/Tamiyo/internal/commanderspellbook"
 	"Melrakkiie/Tamiyo/internal/config"
 	"Melrakkiie/Tamiyo/internal/cors"
@@ -152,6 +153,9 @@ func main() {
 	shareLimiter := ratelimit.NewLimiter(cfg.ShareRateLimitMax, cfg.ShareRateLimitWindow)
 
 	router := gin.New()
+	if err := clientip.Configure(router, cfg.TrustedProxies); err != nil {
+		logger.Fatal("invalid TRUSTED_PROXIES", zap.Error(err))
+	}
 	router.Use(httplog.Recovery(logger))
 	router.Use(httplog.Middleware(logger))
 	router.Use(security.Headers())

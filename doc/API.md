@@ -369,6 +369,8 @@ with a `Retry-After` header giving the number of seconds until the window resets
 
 The public [shared deck](#shared-decks) routes have their own limit, counted separately: 60 requests per 60-second window by default (`SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`).
 
+> The client IP is the request's socket address. The `X-Forwarded-For` header is believed only when the request comes from a proxy listed in `TRUSTED_PROXIES` (the client IP is then the address that proxy appended); `X-Real-IP` is never used.
+
 > The limiter is in-memory and per-instance. Running several replicas behind a load balancer means each instance tracks its own counter — there's no shared global limit without an external store (e.g. Redis).
 
 ---
