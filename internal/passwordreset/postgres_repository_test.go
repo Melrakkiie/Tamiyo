@@ -64,7 +64,6 @@ func TestPostgresRepository_Create_InsertsAndReturnsTokenWithID(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, created.ID)
 	assert.Equal(t, userID, created.UserID)
-	assert.Nil(t, created.UsedAt)
 }
 
 func TestPostgresRepository_Consume_ReturnsUserOnceThenErrNotFound(t *testing.T) {

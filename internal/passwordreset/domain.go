@@ -15,7 +15,6 @@ type ResetToken struct {
 	TokenHash string
 	Added     time.Time
 	ExpiresAt time.Time
-	UsedAt    *time.Time
 }
 
 type Repository interface {

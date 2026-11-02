@@ -10,13 +10,12 @@ import (
 )
 
 type changeTokenRow struct {
-	ID        string     `db:"id"`
-	UserID    string     `db:"user_id"`
-	NewEmail  string     `db:"new_email"`
-	TokenHash string     `db:"token_hash"`
-	Added     time.Time  `db:"added"`
-	ExpiresAt time.Time  `db:"expires_at"`
-	UsedAt    *time.Time `db:"used_at"`
+	ID        string    `db:"id"`
+	UserID    string    `db:"user_id"`
+	NewEmail  string    `db:"new_email"`
+	TokenHash string    `db:"token_hash"`
+	Added     time.Time `db:"added"`
+	ExpiresAt time.Time `db:"expires_at"`
 }
 
 func (r changeTokenRow) toDomain() ChangeToken {
@@ -35,7 +34,7 @@ func (r *PostgresRepository) Create(ctx context.Context, t ChangeToken) (ChangeT
 	query := `
 		INSERT INTO tamiyo.email_change_tokens (user_id, new_email, token_hash, expires_at)
 		VALUES ($1, $2, $3, $4)
-		RETURNING id, user_id, new_email, token_hash, added, expires_at, used_at
+		RETURNING id, user_id, new_email, token_hash, added, expires_at
 	`
 
 	var created changeTokenRow

@@ -10,12 +10,11 @@ import (
 )
 
 type resetTokenRow struct {
-	ID        string     `db:"id"`
-	UserID    string     `db:"user_id"`
-	TokenHash string     `db:"token_hash"`
-	Added     time.Time  `db:"added"`
-	ExpiresAt time.Time  `db:"expires_at"`
-	UsedAt    *time.Time `db:"used_at"`
+	ID        string    `db:"id"`
+	UserID    string    `db:"user_id"`
+	TokenHash string    `db:"token_hash"`
+	Added     time.Time `db:"added"`
+	ExpiresAt time.Time `db:"expires_at"`
 }
 
 func (r resetTokenRow) toDomain() ResetToken {
@@ -34,7 +33,7 @@ func (r *PostgresRepository) Create(ctx context.Context, t ResetToken) (ResetTok
 	query := `
 		INSERT INTO tamiyo.password_reset_tokens (user_id, token_hash, expires_at)
 		VALUES ($1, $2, $3)
-		RETURNING id, user_id, token_hash, added, expires_at, used_at
+		RETURNING id, user_id, token_hash, added, expires_at
 	`
 
 	var created resetTokenRow
