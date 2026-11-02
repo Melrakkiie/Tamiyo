@@ -49,18 +49,18 @@ func NewHandler(service importService) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(router gin.IRoutes) {
-	router.POST("/import/manabox", h.importManaBox)
-	router.POST("/import/moxfield/collection", h.importMoxfieldCollection)
-	router.POST("/import/list", h.importCardList)
-	router.POST("/import/tamiyo", h.importTamiyo)
+	router.POST("/import/manabox", limitUpload, h.importManaBox)
+	router.POST("/import/moxfield/collection", limitUpload, h.importMoxfieldCollection)
+	router.POST("/import/list", limitUpload, h.importCardList)
+	router.POST("/import/tamiyo", limitUpload, h.importTamiyo)
 
 	router.GET("/export/manabox", h.exportManaBox)
 	router.GET("/export/moxfield/collection", h.exportMoxfieldCollection)
 	router.GET("/export/tamiyo", h.exportTamiyoCollection)
 
 	router.POST("/cards/refresh-details", h.refreshCardDetails)
-	router.POST("/deck/:id/import", h.importIntoDeck)
-	router.POST("/deck/:id/bulk-edit", h.bulkEditDeck)
+	router.POST("/deck/:id/import", limitUpload, h.importIntoDeck)
+	router.POST("/deck/:id/bulk-edit", limitUpload, h.bulkEditDeck)
 	router.GET("/deck/:id/export", h.exportDeck)
 	router.POST("/deck/:id/duplicate", h.duplicateDeck)
 	router.POST("/deck/:id/collect", h.collectDeck)
@@ -456,6 +456,19 @@ func optionalStorageID(raw string) (*int, bool) {
 	return &id, true
 }
 
+const maxUploadBytes = 10 << 20
+
+// limitUpload caps the request body and parses the multipart form itself, so an
+// oversized upload is refused with 413 before any handler reads a form field
+// (gin's PostForm and FormFile swallow the parse error).
+func limitUpload(ctx *gin.Context) {
+	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, maxUploadBytes)
+	var tooLarge *http.MaxBytesError
+	if err := ctx.Request.ParseMultipartForm(maxUploadBytes); errors.As(err, &tooLarge) {
+		ctx.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{"error": errFileTooLarge.Error()})
+	}
+}
+
 func openUploadedFile(ctx *gin.Context) (multipartFile, error) {
 	header, err := ctx.FormFile("file")
 	if err != nil {
@@ -476,5 +489,6 @@ type multipartFile interface {
 var (
 	errMissingFile      = errors.New("a file is required (multipart field \"file\")")
 	errUnreadableFile   = errors.New("could not read the uploaded file")
+	errFileTooLarge     = errors.New("the uploaded file is too large (10 MB maximum)")
 	errInvalidStorageID = errors.New("storage_id must be a positive integer")
 )

@@ -1659,6 +1659,7 @@ Cards and pending cards are stored under their English Scryfall name, whatever t
 `warnings` is omitted entirely when empty. `cards_linked` and `cards_pending` are only ever non-zero for the deck import.
 
 **Errors common to all five**
+- `413` — the request body is larger than 10 MB (also for [`POST /deck/:id/bulk-edit`](#post-deckidbulk-edit)); the body is `{"error": "the uploaded file is too large (10 MB maximum)"}` and nothing is imported
 - `400` — no `file` field, or the file couldn't be parsed (wrong columns, malformed line) — message explains what's wrong
 - `400` — a `storage_id` field doesn't reference an existing storage for this account
 - `502` — Scryfall (used to resolve Moxfield rows — see below) couldn't be reached or returned an unexpected response after retrying; a rate-limited (`429`) response from Scryfall is retried automatically (honoring its `Retry-After` header when present) before this is returned. The body is always `{"error": "could not resolve cards against scryfall"}`
@@ -1769,7 +1770,7 @@ Replace a deck's content with a list: every card on the list ends up in the deck
 
 **Response `200 OK`** — the [import summary](#bulk-import), plus `cards_removed`, the copies that left the deck.
 
-**Errors:** `400` invalid id, missing or unreadable file · `404` deck not found · `502` Scryfall unavailable
+**Errors:** `400` invalid id, missing or unreadable file · `404` deck not found · `413` body over 10 MB · `502` Scryfall unavailable
 
 ### `POST /deck/:id/switch-foil`
 
