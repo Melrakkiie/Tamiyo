@@ -76,7 +76,10 @@ func (h *Handler) verifyEmail(ctx *gin.Context) {
 	}
 
 	if err := h.service.Verify(ctx.Request.Context(), req.Token); err != nil {
-		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrInvalid, Status: http.StatusBadRequest, Message: "invalid or expired verification token"})
+		apierr.Respond(ctx, err,
+			apierr.Mapping{Err: ErrInvalid, Status: http.StatusBadRequest, Message: "invalid or expired verification token"},
+			apierr.Mapping{Err: user.ErrEmailAlreadyTaken, Status: http.StatusConflict, Message: "email already taken"},
+		)
 		return
 	}
 

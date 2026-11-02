@@ -4,11 +4,13 @@
 ALTER TABLE tamiyo.users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMP WITH TIME ZONE;
 UPDATE tamiyo.users SET email_verified_at = now() WHERE email_verified_at IS NULL;
 
--- Only the hash is stored, like password_reset_tokens.
+-- Only the hash is stored, like password_reset_tokens. The token carries the address it proves:
+-- following the link makes that address the account's email.
 CREATE TABLE IF NOT EXISTS tamiyo.email_verification_tokens
 (
     id         UUID                        PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id    UUID                        NOT NULL REFERENCES tamiyo.users(id) ON DELETE CASCADE,
+    email      text                        NOT NULL,
     token_hash text                        NOT NULL UNIQUE,
     added      TIMESTAMP WITH TIME ZONE    NOT NULL DEFAULT now(),
     expires_at TIMESTAMP WITH TIME ZONE    NOT NULL,

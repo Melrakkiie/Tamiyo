@@ -12,6 +12,7 @@ var ErrInvalid = errors.New("invalid or expired verification token")
 type VerificationToken struct {
 	ID        string
 	UserID    string
+	Email     string // the address this token proves
 	TokenHash string
 	Added     time.Time
 	ExpiresAt time.Time
@@ -19,6 +20,6 @@ type VerificationToken struct {
 
 type Repository interface {
 	Create(ctx context.Context, t VerificationToken) (VerificationToken, error)
-	// Consume atomically marks a valid token used and returns its user; ErrNotFound if unknown, used or expired.
-	Consume(ctx context.Context, tokenHash string) (userID string, err error)
+	// Consume atomically marks a valid token used and returns its user and address; ErrNotFound if unknown, used or expired.
+	Consume(ctx context.Context, tokenHash string) (userID, email string, err error)
 }

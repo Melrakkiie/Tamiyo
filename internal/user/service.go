@@ -168,12 +168,13 @@ func (s *Service) ChangeEmail(ctx context.Context, userID, newEmail string) (str
 		return "", err
 	}
 
-	if err := s.repo.UpdateEmail(ctx, userID, newEmail); err != nil {
+	// The account keeps its address and its verification until the new one is proven (emailverification.Verify).
+	if s.verifier == nil {
+		return "", errors.New("email verification is not configured")
+	}
+	if err := s.verifier.IssueAndSend(ctx, userID, newEmail); err != nil {
 		return "", err
 	}
-
-	// The update unverified the account: prove the new address.
-	s.sendVerification(ctx, userID, newEmail)
 
 	return u.Email, nil
 }

@@ -76,6 +76,12 @@ func TestHandler_VerifyEmail_InvalidTokenIs400(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestHandler_VerifyEmail_AddressTakenMeanwhileIs409(t *testing.T) {
+	w := postVerify(&fakeVerifier{err: user.ErrEmailAlreadyTaken}, `{"token":"abc"}`)
+
+	assert.Equal(t, http.StatusConflict, w.Code)
+}
+
 func TestHandler_VerifyEmail_MissingTokenIs400(t *testing.T) {
 	verifier := &fakeVerifier{}
 

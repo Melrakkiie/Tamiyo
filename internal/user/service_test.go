@@ -26,10 +26,6 @@ type fakeRepository struct {
 	updatePasswordHash string
 	updatePasswordErr  error
 
-	updateEmailID    string
-	updateEmailValue string
-	updateEmailErr   error
-
 	updateDisplayNameID    string
 	updateDisplayNameValue *string
 	updateDisplayNameErr   error
@@ -62,15 +58,6 @@ func (f *fakeRepository) UpdateDisplayName(ctx context.Context, id string, displ
 	f.updateDisplayNameID = id
 	f.updateDisplayNameValue = displayName
 	return User{ID: id, Email: "alice@example.com", DisplayName: displayName}, nil
-}
-
-func (f *fakeRepository) UpdateEmail(ctx context.Context, id string, email string) error {
-	if f.updateEmailErr != nil {
-		return f.updateEmailErr
-	}
-	f.updateEmailID = id
-	f.updateEmailValue = email
-	return nil
 }
 
 func (f *fakeRepository) Create(ctx context.Context, u User) (User, error) {
@@ -401,27 +388,6 @@ func TestService_EmailTaken_PropagatesOtherErrors(t *testing.T) {
 	assert.ErrorIs(t, err, assert.AnError)
 }
 
-func TestService_ChangeEmail_UpdatesEmailAndReturnsTheOldOne(t *testing.T) {
-	repo := &fakeRepository{findByIDUser: User{ID: "user-1", Email: "alice@example.com"}}
-	service := NewService(repo)
-
-	old, err := service.ChangeEmail(context.Background(), "user-1", "new@example.com")
-
-	require.NoError(t, err)
-	assert.Equal(t, "alice@example.com", old)
-	assert.Equal(t, "user-1", repo.updateEmailID)
-	assert.Equal(t, "new@example.com", repo.updateEmailValue)
-}
-
-func TestService_ChangeEmail_PropagatesEmailAlreadyTaken(t *testing.T) {
-	repo := &fakeRepository{findByIDUser: User{ID: "user-1", Email: "alice@example.com"}, updateEmailErr: ErrEmailAlreadyTaken}
-	service := NewService(repo)
-
-	_, err := service.ChangeEmail(context.Background(), "user-1", "new@example.com")
-
-	assert.ErrorIs(t, err, ErrEmailAlreadyTaken)
-}
-
 func TestService_ChangeEmail_SendsExactlyOneVerificationEmailToTheNewAddress(t *testing.T) {
 	sender := &fakeVerificationSender{}
 	repo := &fakeRepository{findByIDUser: User{ID: "user-1", Email: "alice@example.com"}}
@@ -433,25 +399,14 @@ func TestService_ChangeEmail_SendsExactlyOneVerificationEmailToTheNewAddress(t *
 	assert.Equal(t, []sentVerification{{"user-1", "new@example.com"}}, sender.sent)
 }
 
-func TestService_ChangeEmail_SucceedsWhenTheVerificationEmailFails(t *testing.T) {
+func TestService_ChangeEmail_ReturnsTheErrorWhenTheVerificationEmailFails(t *testing.T) {
 	sender := &fakeVerificationSender{err: assert.AnError}
 	repo := &fakeRepository{findByIDUser: User{ID: "user-1", Email: "alice@example.com"}}
 	service := NewService(repo, WithVerification(sender, zap.NewNop()))
 
-	old, err := service.ChangeEmail(context.Background(), "user-1", "new@example.com")
+	_, err := service.ChangeEmail(context.Background(), "user-1", "new@example.com")
 
-	require.NoError(t, err)
-	assert.Equal(t, "alice@example.com", old)
-}
-
-func TestService_ChangeEmail_SendsNothingWhenTheUpdateFails(t *testing.T) {
-	sender := &fakeVerificationSender{}
-	repo := &fakeRepository{findByIDUser: User{ID: "user-1"}, updateEmailErr: ErrEmailAlreadyTaken}
-	service := NewService(repo, WithVerification(sender, zap.NewNop()))
-
-	_, _ = service.ChangeEmail(context.Background(), "user-1", "new@example.com")
-
-	assert.Empty(t, sender.sent)
+	assert.ErrorIs(t, err, assert.AnError)
 }
 
 func strPtr(s string) *string {

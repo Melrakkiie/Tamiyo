@@ -45,15 +45,16 @@ func TestPostgresRepository_Consume_ReturnsUserOnceThenErrNotFound(t *testing.T)
 	db := getTestDB(t)
 	userID := seedUser(t, db)
 	repo := NewPostgresRepository(db)
-	created, err := repo.Create(context.Background(), VerificationToken{UserID: userID, TokenHash: "h", ExpiresAt: time.Now().Add(time.Hour)})
+	created, err := repo.Create(context.Background(), VerificationToken{UserID: userID, Email: "new@example.com", TokenHash: "h", ExpiresAt: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
 	assert.NotEmpty(t, created.ID)
 
-	got, err := repo.Consume(context.Background(), "h")
+	got, email, err := repo.Consume(context.Background(), "h")
 	require.NoError(t, err)
 	assert.Equal(t, userID, got)
+	assert.Equal(t, "new@example.com", email)
 
-	_, err = repo.Consume(context.Background(), "h")
+	_, _, err = repo.Consume(context.Background(), "h")
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
@@ -75,11 +76,11 @@ func TestPostgresRepository_Consume_RejectsExpiredAndUnknown(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db)
 	repo := NewPostgresRepository(db)
-	_, err := repo.Create(context.Background(), VerificationToken{UserID: userID, TokenHash: "old", ExpiresAt: time.Now().Add(-time.Minute)})
+	_, err := repo.Create(context.Background(), VerificationToken{UserID: userID, Email: "alice@example.com", TokenHash: "old", ExpiresAt: time.Now().Add(-time.Minute)})
 	require.NoError(t, err)
 
-	_, err = repo.Consume(context.Background(), "old")
+	_, _, err = repo.Consume(context.Background(), "old")
 	assert.ErrorIs(t, err, ErrNotFound)
-	_, err = repo.Consume(context.Background(), "unknown")
+	_, _, err = repo.Consume(context.Background(), "unknown")
 	assert.ErrorIs(t, err, ErrNotFound)
 }

@@ -9,7 +9,8 @@ import (
 )
 
 type userAccounts interface {
-	MarkEmailVerified(ctx context.Context, userID string) error
+	// ConfirmEmail makes email the account's address and marks it verified; user.ErrEmailAlreadyTaken if another account has it.
+	ConfirmEmail(ctx context.Context, userID, email string) error
 }
 
 type mailer interface {
@@ -37,6 +38,7 @@ func (s *Service) IssueAndSend(ctx context.Context, userID, email string) error 
 
 	if _, err := s.repo.Create(ctx, VerificationToken{
 		UserID:    userID,
+		Email:     email,
 		TokenHash: token.Hash(plaintext),
 		ExpiresAt: time.Now().Add(s.ttl),
 	}); err != nil {
@@ -46,14 +48,15 @@ func (s *Service) IssueAndSend(ctx context.Context, userID, email string) error 
 	return s.mailer.SendEmailVerification(ctx, email, plaintext)
 }
 
-// Verify consumes the token and marks its owner's address verified; ErrInvalid if unknown, used or expired.
+// Verify consumes the token and makes its address the owner's verified email; ErrInvalid if unknown, used or expired.
+// The token stays consumed when the address was taken meanwhile (user.ErrEmailAlreadyTaken).
 func (s *Service) Verify(ctx context.Context, plaintext string) error {
-	userID, err := s.repo.Consume(ctx, token.Hash(plaintext))
+	userID, email, err := s.repo.Consume(ctx, token.Hash(plaintext))
 	if errors.Is(err, ErrNotFound) {
 		return ErrInvalid
 	}
 	if err != nil {
 		return err
 	}
-	return s.users.MarkEmailVerified(ctx, userID)
+	return s.users.ConfirmEmail(ctx, userID, email)
 }

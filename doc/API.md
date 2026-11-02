@@ -278,7 +278,7 @@ Ask to change the authenticated account's email. **Requires `Authorization: Bear
 
 ### `POST /auth/confirm-email`
 
-Confirm an email change with the token emailed to the current address. Public, so the link works from any device; rate-limited like the other public auth routes. The new address is not proven yet, so the account becomes unverified again (`email_verified: false` on `GET /auth/me`) and a verification email is sent to it; following that link (`POST /auth/verify-email`) verifies the account. A failed verification email does not fail the confirmation.
+Confirm an email change with the token emailed to the current address. Public, so the link works from any device; rate-limited like the other public auth routes. This does not switch the email yet: the new address is not proven, so a verification email is sent to it and the account keeps its current email (still used to sign in and to recover the password) and its verified state until the link in that email is followed (`POST /auth/verify-email`). If the verification email cannot be sent, the call fails with `500` and nothing changes.
 
 **Body**
 
@@ -288,15 +288,15 @@ Confirm an email change with the token emailed to the current address. Public, s
 
 **Response `204 No Content`**
 
-**Errors:** `400` missing token · `401` invalid, expired, or already-used token · `409` the new email was registered by another account in the meantime · `429` too many requests
+**Errors:** `400` missing token · `401` invalid, expired, or already-used token · `409` the new email was registered by another account in the meantime · `429` too many requests · `500` the verification email could not be sent
 
-> On success the account signs in with the new email, and a notice is sent to the new address. Sessions stay open.
+> Sessions stay open. The account signs in with the new email only once it is verified.
 
 ---
 
 ### `POST /auth/verify-email`
 
-Prove control of an account's address with the token emailed at registration (the account is still logged in right away; registering sends exactly one such email, and a failed send is logged without failing the registration). The token is single-use and valid for a day by default (`EMAIL_VERIFICATION_TOKEN_TTL_MINUTES`); the email carries a one-click link when `EMAIL_VERIFICATION_URL_TEMPLATE` is set, the raw token otherwise. Public; rate-limited like the other public auth routes.
+Prove control of an address with the token emailed to it, at registration, on resend or after an email change. Each token carries the address it proves: following it makes that address the account's email and marks it verified, in one step (after an email change, this is the moment the account switches to the new address). (At registration the account is still logged in right away; registering sends exactly one such email, and a failed send is logged without failing the registration). The token is single-use and valid for a day by default (`EMAIL_VERIFICATION_TOKEN_TTL_MINUTES`); the email carries a one-click link when `EMAIL_VERIFICATION_URL_TEMPLATE` is set, the raw token otherwise. Public; rate-limited like the other public auth routes.
 
 **Body**
 
@@ -306,7 +306,7 @@ Prove control of an account's address with the token emailed at registration (th
 
 **Response `204 No Content`**
 
-**Errors:** `400` missing token, or unknown, expired or already-used token · `429` too many requests
+**Errors:** `400` missing token, or unknown, expired or already-used token · `409` the address was registered by another account in the meantime (the token stays used) · `429` too many requests
 
 ---
 

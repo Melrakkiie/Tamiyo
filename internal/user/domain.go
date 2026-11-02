@@ -31,7 +31,6 @@ type Repository interface {
 	FindByEmail(ctx context.Context, email string) (User, error)
 	FindByID(ctx context.Context, id string) (User, error)
 	UpdatePassword(ctx context.Context, id string, passwordHash string) error
-	UpdateEmail(ctx context.Context, id string, email string) error
 	UpdateDisplayName(ctx context.Context, id string, displayName *string) (User, error)
 	UpdateAvatar(ctx context.Context, id string, avatarScryfallID *string) (User, error)
 	Delete(ctx context.Context, id string) error

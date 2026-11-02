@@ -16,9 +16,9 @@ type fakeRepository struct {
 	created   []VerificationToken
 	createErr error
 
-	consumeUserID string
-	consumeErr    error
-	consumedHash  string
+	consumeUserID, consumeEmail string
+	consumeErr                  error
+	consumedHash                string
 }
 
 func (f *fakeRepository) Create(ctx context.Context, t VerificationToken) (VerificationToken, error) {
@@ -29,18 +29,18 @@ func (f *fakeRepository) Create(ctx context.Context, t VerificationToken) (Verif
 	return t, nil
 }
 
-func (f *fakeRepository) Consume(ctx context.Context, tokenHash string) (string, error) {
+func (f *fakeRepository) Consume(ctx context.Context, tokenHash string) (string, string, error) {
 	f.consumedHash = tokenHash
-	return f.consumeUserID, f.consumeErr
+	return f.consumeUserID, f.consumeEmail, f.consumeErr
 }
 
 type fakeUsers struct {
-	verified []string
-	err      error
+	confirmed []string // "userID:email"
+	err       error
 }
 
-func (f *fakeUsers) MarkEmailVerified(ctx context.Context, userID string) error {
-	f.verified = append(f.verified, userID)
+func (f *fakeUsers) ConfirmEmail(ctx context.Context, userID, email string) error {
+	f.confirmed = append(f.confirmed, userID+":"+email)
 	return f.err
 }
 
@@ -68,6 +68,7 @@ func TestService_IssueAndSend_StoresHashAndMailsPlaintext(t *testing.T) {
 	require.Len(t, mailer.sent, 1)
 	assert.Equal(t, "alice@example.com", mailer.sent[0].to)
 	assert.Equal(t, "user-1", repo.created[0].UserID)
+	assert.Equal(t, "alice@example.com", repo.created[0].Email)
 	assert.NotEqual(t, mailer.sent[0].token, repo.created[0].TokenHash)
 	assert.Equal(t, token.Hash(mailer.sent[0].token), repo.created[0].TokenHash)
 	assert.WithinDuration(t, time.Now().Add(time.Hour), repo.created[0].ExpiresAt, time.Minute)
@@ -91,14 +92,14 @@ func TestService_IssueAndSend_ReturnsMailerError(t *testing.T) {
 	assert.ErrorIs(t, err, errBoom)
 }
 
-func TestService_Verify_MarksTheTokenOwnerVerified(t *testing.T) {
-	repo, users := &fakeRepository{consumeUserID: "user-1"}, &fakeUsers{}
+func TestService_Verify_ConfirmsTheAddressTheTokenCarries(t *testing.T) {
+	repo, users := &fakeRepository{consumeUserID: "user-1", consumeEmail: "new@example.com"}, &fakeUsers{}
 	service := NewService(repo, users, &fakeMailer{}, time.Hour)
 
 	require.NoError(t, service.Verify(context.Background(), "plain"))
 
 	assert.Equal(t, token.Hash("plain"), repo.consumedHash)
-	assert.Equal(t, []string{"user-1"}, users.verified)
+	assert.Equal(t, []string{"user-1:new@example.com"}, users.confirmed)
 }
 
 func TestService_Verify_MapsNotFoundToErrInvalid(t *testing.T) {
@@ -108,7 +109,7 @@ func TestService_Verify_MapsNotFoundToErrInvalid(t *testing.T) {
 	err := service.Verify(context.Background(), "unknown")
 
 	assert.ErrorIs(t, err, ErrInvalid)
-	assert.Empty(t, users.verified)
+	assert.Empty(t, users.confirmed)
 }
 
 func TestService_Verify_PropagatesUserError(t *testing.T) {

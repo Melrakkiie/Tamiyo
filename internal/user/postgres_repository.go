@@ -126,8 +126,10 @@ func (r *PostgresRepository) UpdatePassword(ctx context.Context, id string, pass
 	return nil
 }
 
-func (r *PostgresRepository) UpdateEmail(ctx context.Context, id string, email string) error {
-	result, err := r.db.ExecContext(ctx, `UPDATE tamiyo.users SET email = $1, email_verified_at = NULL WHERE id = $2`, email, id)
+// ConfirmEmail makes an address proven by its owner the account's email, verified now, in one statement.
+// ErrEmailAlreadyTaken if another account holds it.
+func (r *PostgresRepository) ConfirmEmail(ctx context.Context, id string, email string) error {
+	result, err := r.db.ExecContext(ctx, `UPDATE tamiyo.users SET email = $1, email_verified_at = now() WHERE id = $2`, email, id)
 	if err != nil {
 		var pqErr *pq.Error
 		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
@@ -146,12 +148,6 @@ func (r *PostgresRepository) UpdateEmail(ctx context.Context, id string, email s
 	}
 
 	return nil
-}
-
-// MarkEmailVerified stamps the address as verified; an already verified account keeps its first date.
-func (r *PostgresRepository) MarkEmailVerified(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE tamiyo.users SET email_verified_at = COALESCE(email_verified_at, now()) WHERE id = $1`, id)
-	return err
 }
 
 func (r *PostgresRepository) UpdateDisplayName(ctx context.Context, id string, displayName *string) (User, error) {
