@@ -50,25 +50,6 @@ func seedUser(t *testing.T, db *sqlx.DB) string {
 	return userID
 }
 
-func TestPostgresRepository_CreateThenFindByHash_RoundTripsTheToken(t *testing.T) {
-	db := getTestDB(t)
-	userID := seedUser(t, db)
-	repo := NewPostgresRepository(db)
-	expires := time.Now().Add(time.Hour).Truncate(time.Microsecond)
-
-	created, err := repo.Create(context.Background(), ChangeToken{UserID: userID, NewEmail: "new@example.com", TokenHash: "hash-1", ExpiresAt: expires})
-	require.NoError(t, err)
-	assert.NotEmpty(t, created.ID)
-
-	found, err := repo.FindByHash(context.Background(), "hash-1")
-	require.NoError(t, err)
-	assert.Equal(t, created.ID, found.ID)
-	assert.Equal(t, userID, found.UserID)
-	assert.Equal(t, "new@example.com", found.NewEmail)
-	assert.True(t, found.ExpiresAt.Equal(expires))
-	assert.Nil(t, found.UsedAt)
-}
-
 func TestPostgresRepository_Consume_ReturnsUserAndNewEmailOnce(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db)
@@ -93,7 +74,8 @@ func TestPostgresRepository_Consume_RejectsExpiredUsedAndUnknownTokens(t *testin
 	require.NoError(t, err)
 	used, err := repo.Create(context.Background(), ChangeToken{UserID: userID, NewEmail: "b@example.com", TokenHash: "used", ExpiresAt: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
-	require.NoError(t, repo.MarkUsed(context.Background(), used.ID))
+	_, err = db.Exec(`UPDATE tamiyo.email_change_tokens SET used_at = now() WHERE id = $1`, used.ID)
+	require.NoError(t, err)
 	require.NotEmpty(t, expired.ID)
 
 	for _, hash := range []string{"expired", "used", "missing"} {
@@ -127,28 +109,4 @@ func TestPostgresRepository_Consume_ConcurrentCallsYieldExactlyOneSuccess(t *tes
 	wg.Wait()
 
 	assert.Equal(t, int32(1), successes.Load())
-}
-
-func TestPostgresRepository_FindByHash_ReturnsErrNotFound(t *testing.T) {
-	db := getTestDB(t)
-	repo := NewPostgresRepository(db)
-
-	_, err := repo.FindByHash(context.Background(), "missing")
-
-	assert.ErrorIs(t, err, ErrNotFound)
-}
-
-func TestPostgresRepository_MarkUsed_SetsUsedAt(t *testing.T) {
-	db := getTestDB(t)
-	userID := seedUser(t, db)
-	repo := NewPostgresRepository(db)
-
-	created, err := repo.Create(context.Background(), ChangeToken{UserID: userID, NewEmail: "new@example.com", TokenHash: "hash-1", ExpiresAt: time.Now().Add(time.Hour)})
-	require.NoError(t, err)
-
-	require.NoError(t, repo.MarkUsed(context.Background(), created.ID))
-
-	found, err := repo.FindByHash(context.Background(), "hash-1")
-	require.NoError(t, err)
-	assert.NotNil(t, found.UsedAt)
 }
