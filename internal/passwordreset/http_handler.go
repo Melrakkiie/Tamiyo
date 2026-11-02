@@ -85,17 +85,18 @@ func (h *Handler) resetPassword(ctx *gin.Context) {
 		return
 	}
 
+	// Void the account's other links first so a later failure cannot leave them valid.
+	if err := h.service.InvalidatePending(ctx.Request.Context(), userID); err != nil {
+		apierr.Respond(ctx, err)
+		return
+	}
+
 	if err := h.users.SetPassword(ctx.Request.Context(), userID, req.NewPassword); err != nil {
 		apierr.Respond(ctx, err)
 		return
 	}
 
 	if err := h.tokens.RevokeAllForUser(ctx.Request.Context(), userID); err != nil {
-		apierr.Respond(ctx, err)
-		return
-	}
-
-	if err := h.service.InvalidatePending(ctx.Request.Context(), userID); err != nil {
 		apierr.Respond(ctx, err)
 		return
 	}

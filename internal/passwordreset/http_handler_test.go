@@ -19,7 +19,8 @@ type fakeResetService struct {
 	consumeUserID string
 	consumeErr    error
 
-	invalidateErr error
+	invalidateErr    error
+	invalidateCalled bool
 }
 
 func (f *fakeResetService) Issue(ctx context.Context, userID string) (string, error) {
@@ -37,6 +38,7 @@ func (f *fakeResetService) Consume(ctx context.Context, plaintext string) (strin
 }
 
 func (f *fakeResetService) InvalidatePending(ctx context.Context, userID string) error {
+	f.invalidateCalled = true
 	return f.invalidateErr
 }
 
@@ -257,6 +259,33 @@ func TestHandler_ResetPassword_ReturnsInternalServerErrorWhenSetPasswordFails(t 
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestHandler_ResetPassword_VoidsPendingLinksEvenWhenSetPasswordFails(t *testing.T) {
+	service := &fakeResetService{consumeUserID: "user-1"}
+	users := &fakeUserLookup{setPasswordErr: assertAnError{}}
+	router := setupRouter(service, users, &fakeSessionRevoker{}, &fakeMailer{})
+
+	req := httptest.NewRequest(http.MethodPost, "/auth/reset-password", bytes.NewBufferString(`{"token":"some-token","new_password":"brandnewpassword"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.True(t, service.invalidateCalled)
+}
+
+func TestHandler_ResetPassword_ReturnsInternalServerErrorWhenRevokeAllFails(t *testing.T) {
+	service := &fakeResetService{consumeUserID: "user-1"}
+	router := setupRouter(service, &fakeUserLookup{}, &fakeSessionRevoker{revokeAllErr: assertAnError{}}, &fakeMailer{})
+
+	req := httptest.NewRequest(http.MethodPost, "/auth/reset-password", bytes.NewBufferString(`{"token":"some-token","new_password":"brandnewpassword"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.True(t, service.invalidateCalled)
 }
 
 func TestHandler_ResetPassword_ReturnsInternalServerErrorForGenericConsumeError(t *testing.T) {
