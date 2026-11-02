@@ -112,8 +112,8 @@ func Load() (*Config, error) {
 		EmailChangeURLTemplate:       viper.GetString("EMAIL_CHANGE_URL_TEMPLATE"),
 		EmailVerificationURLTemplate: viper.GetString("EMAIL_VERIFICATION_URL_TEMPLATE"),
 
-		CORSAllowedOrigins: parseOrigins(viper.GetString("CORS_ALLOWED_ORIGINS")),
-		TrustedProxies:     parseOrigins(viper.GetString("TRUSTED_PROXIES")),
+		CORSAllowedOrigins: parseList(viper.GetString("CORS_ALLOWED_ORIGINS")),
+		TrustedProxies:     parseList(viper.GetString("TRUSTED_PROXIES")),
 
 		DBMaxOpenConns:    viper.GetInt("DB_MAX_OPEN_CONNS"),
 		DBMaxIdleConns:    viper.GetInt("DB_MAX_IDLE_CONNS"),
@@ -184,19 +184,20 @@ func normalizeBasePath(raw string) string {
 	return "/" + trimmed
 }
 
-func parseOrigins(raw string) []string {
+// parseList splits a comma-separated setting, trimming entries and dropping empty ones.
+func parseList(raw string) []string {
 	if strings.TrimSpace(raw) == "" {
 		return nil
 	}
 
 	parts := strings.Split(raw, ",")
-	origins := make([]string, 0, len(parts))
+	items := make([]string, 0, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
 		if p != "" {
-			origins = append(origins, p)
+			items = append(items, p)
 		}
 	}
 
-	return origins
+	return items
 }
