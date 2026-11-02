@@ -244,6 +244,21 @@ func TestPostgresRepository_UpdateEmail_ChangesTheLoginEmail(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
+func TestPostgresRepository_UpdateEmail_ClearsTheVerification(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	created, err := repo.Create(context.Background(), User{Email: "alice@example.com", PasswordHash: "hash"})
+	require.NoError(t, err)
+	require.NoError(t, repo.MarkEmailVerified(context.Background(), created.ID))
+
+	require.NoError(t, repo.UpdateEmail(context.Background(), created.ID, "alice@new.example.com"))
+
+	result, err := repo.FindByID(context.Background(), created.ID)
+	require.NoError(t, err)
+	assert.Nil(t, result.EmailVerifiedAt)
+}
+
 func TestPostgresRepository_UpdateEmail_ReturnsErrEmailAlreadyTaken(t *testing.T) {
 	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
