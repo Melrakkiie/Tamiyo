@@ -10,13 +10,12 @@ import (
 )
 
 type changeTokenRow struct {
-	ID        string     `db:"id"`
-	UserID    string     `db:"user_id"`
-	NewEmail  string     `db:"new_email"`
-	TokenHash string     `db:"token_hash"`
-	Added     time.Time  `db:"added"`
-	ExpiresAt time.Time  `db:"expires_at"`
-	UsedAt    *time.Time `db:"used_at"`
+	ID        string    `db:"id"`
+	UserID    string    `db:"user_id"`
+	NewEmail  string    `db:"new_email"`
+	TokenHash string    `db:"token_hash"`
+	Added     time.Time `db:"added"`
+	ExpiresAt time.Time `db:"expires_at"`
 }
 
 func (r changeTokenRow) toDomain() ChangeToken {
@@ -35,7 +34,7 @@ func (r *PostgresRepository) Create(ctx context.Context, t ChangeToken) (ChangeT
 	query := `
 		INSERT INTO tamiyo.email_change_tokens (user_id, new_email, token_hash, expires_at)
 		VALUES ($1, $2, $3, $4)
-		RETURNING id, user_id, new_email, token_hash, added, expires_at, used_at
+		RETURNING id, user_id, new_email, token_hash, added, expires_at
 	`
 
 	var created changeTokenRow
@@ -46,25 +45,26 @@ func (r *PostgresRepository) Create(ctx context.Context, t ChangeToken) (ChangeT
 	return created.toDomain(), nil
 }
 
-func (r *PostgresRepository) FindByHash(ctx context.Context, tokenHash string) (ChangeToken, error) {
+// Consume marks the token used only if it is unused and unexpired, in one
+// statement, so concurrent callers cannot both succeed.
+func (r *PostgresRepository) Consume(ctx context.Context, tokenHash string) (userID, newEmail string, err error) {
 	query := `
-		SELECT id, user_id, new_email, token_hash, added, expires_at, used_at
-		FROM tamiyo.email_change_tokens
-		WHERE token_hash = $1
+		UPDATE tamiyo.email_change_tokens
+		SET used_at = now()
+		WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()
+		RETURNING user_id, new_email
 	`
 
-	var row changeTokenRow
+	var row struct {
+		UserID   string `db:"user_id"`
+		NewEmail string `db:"new_email"`
+	}
 	if err := r.db.GetContext(ctx, &row, query, tokenHash); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return ChangeToken{}, ErrNotFound
+			return "", "", ErrNotFound
 		}
-		return ChangeToken{}, err
+		return "", "", err
 	}
 
-	return row.toDomain(), nil
-}
-
-func (r *PostgresRepository) MarkUsed(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE tamiyo.email_change_tokens SET used_at = now() WHERE id = $1`, id)
-	return err
+	return row.UserID, row.NewEmail, nil
 }

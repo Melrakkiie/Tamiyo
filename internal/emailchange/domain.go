@@ -17,11 +17,11 @@ type ChangeToken struct {
 	TokenHash string
 	Added     time.Time
 	ExpiresAt time.Time
-	UsedAt    *time.Time
 }
 
 type Repository interface {
 	Create(ctx context.Context, t ChangeToken) (ChangeToken, error)
-	FindByHash(ctx context.Context, tokenHash string) (ChangeToken, error)
-	MarkUsed(ctx context.Context, id string) error
+	// Consume atomically marks an unused, unexpired token used and returns its
+	// user and new email; ErrNotFound when no such token exists.
+	Consume(ctx context.Context, tokenHash string) (userID, newEmail string, err error)
 }

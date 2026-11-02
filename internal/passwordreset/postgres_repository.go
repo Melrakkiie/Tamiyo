@@ -10,12 +10,11 @@ import (
 )
 
 type resetTokenRow struct {
-	ID        string     `db:"id"`
-	UserID    string     `db:"user_id"`
-	TokenHash string     `db:"token_hash"`
-	Added     time.Time  `db:"added"`
-	ExpiresAt time.Time  `db:"expires_at"`
-	UsedAt    *time.Time `db:"used_at"`
+	ID        string    `db:"id"`
+	UserID    string    `db:"user_id"`
+	TokenHash string    `db:"token_hash"`
+	Added     time.Time `db:"added"`
+	ExpiresAt time.Time `db:"expires_at"`
 }
 
 func (r resetTokenRow) toDomain() ResetToken {
@@ -34,7 +33,7 @@ func (r *PostgresRepository) Create(ctx context.Context, t ResetToken) (ResetTok
 	query := `
 		INSERT INTO tamiyo.password_reset_tokens (user_id, token_hash, expires_at)
 		VALUES ($1, $2, $3)
-		RETURNING id, user_id, token_hash, added, expires_at, used_at
+		RETURNING id, user_id, token_hash, added, expires_at
 	`
 
 	var created resetTokenRow
@@ -45,25 +44,23 @@ func (r *PostgresRepository) Create(ctx context.Context, t ResetToken) (ResetTok
 	return created.toDomain(), nil
 }
 
-func (r *PostgresRepository) FindByHash(ctx context.Context, tokenHash string) (ResetToken, error) {
-	query := `
-		SELECT id, user_id, token_hash, added, expires_at, used_at
-		FROM tamiyo.password_reset_tokens
-		WHERE token_hash = $1
-	`
-
-	var row resetTokenRow
-	if err := r.db.GetContext(ctx, &row, query, tokenHash); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return ResetToken{}, ErrNotFound
-		}
-		return ResetToken{}, err
+// Consume marks the token used and returns its user in one statement, so only one caller can win.
+func (r *PostgresRepository) Consume(ctx context.Context, tokenHash string) (string, error) {
+	var userID string
+	err := r.db.GetContext(ctx, &userID, `
+		UPDATE tamiyo.password_reset_tokens
+		SET used_at = now()
+		WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()
+		RETURNING user_id
+	`, tokenHash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
 	}
-
-	return row.toDomain(), nil
+	return userID, err
 }
 
-func (r *PostgresRepository) MarkUsed(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE tamiyo.password_reset_tokens SET used_at = now() WHERE id = $1`, id)
+// InvalidatePending marks every unused reset token of the user as used.
+func (r *PostgresRepository) InvalidatePending(ctx context.Context, userID string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE tamiyo.password_reset_tokens SET used_at = now() WHERE user_id = $1 AND used_at IS NULL`, userID)
 	return err
 }

@@ -312,7 +312,7 @@ Request a password reset email.
 
 ### `POST /auth/reset-password`
 
-Set a new password using the token from the forgot-password email.
+Set a new password using the token from the forgot-password email. A link works once, and a successful reset voids the account's other pending reset links.
 
 **Body**
 

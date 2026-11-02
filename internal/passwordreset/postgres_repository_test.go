@@ -5,6 +5,8 @@ package passwordreset
 import (
 	"context"
 	"os"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -62,52 +64,86 @@ func TestPostgresRepository_Create_InsertsAndReturnsTokenWithID(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, created.ID)
 	assert.Equal(t, userID, created.UserID)
-	assert.Nil(t, created.UsedAt)
 }
 
-func TestPostgresRepository_FindByHash_ReturnsToken(t *testing.T) {
+func TestPostgresRepository_Consume_ReturnsUserOnceThenErrNotFound(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db)
 	repo := NewPostgresRepository(db)
-
-	created, err := repo.Create(context.Background(), ResetToken{
-		UserID:    userID,
-		TokenHash: "fake-hash",
-		ExpiresAt: time.Now().Add(time.Hour),
-	})
+	_, err := repo.Create(context.Background(), ResetToken{UserID: userID, TokenHash: "h", ExpiresAt: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
 
-	result, err := repo.FindByHash(context.Background(), "fake-hash")
-
+	got, err := repo.Consume(context.Background(), "h")
 	require.NoError(t, err)
-	assert.Equal(t, created.ID, result.ID)
-}
+	assert.Equal(t, userID, got)
 
-func TestPostgresRepository_FindByHash_ReturnsErrNotFoundWhenMissing(t *testing.T) {
-	db := getTestDB(t)
-	repo := NewPostgresRepository(db)
-
-	_, err := repo.FindByHash(context.Background(), "unknown-hash")
-
+	_, err = repo.Consume(context.Background(), "h")
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
-func TestPostgresRepository_MarkUsed_SetsUsedAt(t *testing.T) {
+func TestPostgresRepository_Consume_RejectsExpiredAndUnknown(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db)
 	repo := NewPostgresRepository(db)
-
-	created, err := repo.Create(context.Background(), ResetToken{
-		UserID:    userID,
-		TokenHash: "fake-hash",
-		ExpiresAt: time.Now().Add(time.Hour),
-	})
+	_, err := repo.Create(context.Background(), ResetToken{UserID: userID, TokenHash: "old", ExpiresAt: time.Now().Add(-time.Minute)})
 	require.NoError(t, err)
 
-	err = repo.MarkUsed(context.Background(), created.ID)
+	_, err = repo.Consume(context.Background(), "old")
+	assert.ErrorIs(t, err, ErrNotFound)
+	_, err = repo.Consume(context.Background(), "unknown")
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestPostgresRepository_Consume_ConcurrentCallsYieldOneSuccess(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db)
+	repo := NewPostgresRepository(db)
+	_, err := repo.Create(context.Background(), ResetToken{UserID: userID, TokenHash: "h", ExpiresAt: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
 
-	result, err := repo.FindByHash(context.Background(), "fake-hash")
+	var wins atomic.Int32
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			if _, err := repo.Consume(context.Background(), "h"); err == nil {
+				wins.Add(1)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	assert.EqualValues(t, 1, wins.Load())
+}
+
+func TestPostgresRepository_InvalidatePending_VoidsOtherLinksOfTheUser(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db)
+	var otherID string
+	require.NoError(t, db.Get(&otherID, `INSERT INTO tamiyo.users (email, password_hash) VALUES ('bob@example.com', 'fake-hash') RETURNING id`))
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+	expires := time.Now().Add(time.Hour)
+	for _, tk := range []ResetToken{
+		{UserID: userID, TokenHash: "first", ExpiresAt: expires},
+		{UserID: userID, TokenHash: "second", ExpiresAt: expires},
+		{UserID: otherID, TokenHash: "other", ExpiresAt: expires},
+	} {
+		_, err := repo.Create(ctx, tk)
+		require.NoError(t, err)
+	}
+
+	_, err := repo.Consume(ctx, "second")
 	require.NoError(t, err)
-	assert.NotNil(t, result.UsedAt)
+	require.NoError(t, repo.InvalidatePending(ctx, userID))
+
+	_, err = repo.Consume(ctx, "first")
+	assert.ErrorIs(t, err, ErrNotFound)
+	got, err := repo.Consume(ctx, "other")
+	require.NoError(t, err)
+	assert.Equal(t, otherID, got)
 }

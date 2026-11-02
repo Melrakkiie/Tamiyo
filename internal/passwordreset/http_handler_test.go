@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -17,6 +18,9 @@ type fakeResetService struct {
 
 	consumeUserID string
 	consumeErr    error
+
+	invalidateErr    error
+	invalidateCalled bool
 }
 
 func (f *fakeResetService) Issue(ctx context.Context, userID string) (string, error) {
@@ -31,6 +35,69 @@ func (f *fakeResetService) Consume(ctx context.Context, plaintext string) (strin
 		return "", f.consumeErr
 	}
 	return f.consumeUserID, nil
+}
+
+func (f *fakeResetService) InvalidatePending(ctx context.Context, userID string) error {
+	f.invalidateCalled = true
+	return f.invalidateErr
+}
+
+// memRepository models single-use and per-user invalidation for the end-to-end handler test.
+type memRepository struct{ live map[string]string } // hash -> user
+
+func (m *memRepository) Create(ctx context.Context, t ResetToken) (ResetToken, error) {
+	m.live[t.TokenHash] = t.UserID
+	return t, nil
+}
+
+func (m *memRepository) Consume(ctx context.Context, hash string) (string, error) {
+	userID, ok := m.live[hash]
+	if !ok {
+		return "", ErrNotFound
+	}
+	delete(m.live, hash)
+	return userID, nil
+}
+
+func (m *memRepository) InvalidatePending(ctx context.Context, userID string) error {
+	for h, u := range m.live {
+		if u == userID {
+			delete(m.live, h)
+		}
+	}
+	return nil
+}
+
+func TestHandler_ResetPassword_VoidsOlderPendingLinks(t *testing.T) {
+	service := NewService(&memRepository{live: map[string]string{}}, time.Hour)
+	router := setupRouter(service, &fakeUserLookup{}, &fakeSessionRevoker{}, &fakeMailer{})
+	first, err := service.Issue(context.Background(), "user-1")
+	assert.NoError(t, err)
+	second, err := service.Issue(context.Background(), "user-1")
+	assert.NoError(t, err)
+
+	post := func(tok string) int {
+		req := httptest.NewRequest(http.MethodPost, "/auth/reset-password", bytes.NewBufferString(`{"token":"`+tok+`","new_password":"new-password-1"}`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		return w.Code
+	}
+
+	assert.Equal(t, http.StatusNoContent, post(second))
+	assert.Equal(t, http.StatusUnauthorized, post(first))
+}
+
+func TestHandler_ResetPassword_ReturnsErrorWhenInvalidatingPendingLinksFails(t *testing.T) {
+	service := &fakeResetService{consumeUserID: "user-1", invalidateErr: assertAnError{}}
+	router := setupRouter(service, &fakeUserLookup{}, &fakeSessionRevoker{}, &fakeMailer{})
+
+	req := httptest.NewRequest(http.MethodPost, "/auth/reset-password", bytes.NewBufferString(`{"token":"t","new_password":"new-password-1"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
 type fakeUserLookup struct {
@@ -192,6 +259,33 @@ func TestHandler_ResetPassword_ReturnsInternalServerErrorWhenSetPasswordFails(t 
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestHandler_ResetPassword_VoidsPendingLinksEvenWhenSetPasswordFails(t *testing.T) {
+	service := &fakeResetService{consumeUserID: "user-1"}
+	users := &fakeUserLookup{setPasswordErr: assertAnError{}}
+	router := setupRouter(service, users, &fakeSessionRevoker{}, &fakeMailer{})
+
+	req := httptest.NewRequest(http.MethodPost, "/auth/reset-password", bytes.NewBufferString(`{"token":"some-token","new_password":"brandnewpassword"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.True(t, service.invalidateCalled)
+}
+
+func TestHandler_ResetPassword_ReturnsInternalServerErrorWhenRevokeAllFails(t *testing.T) {
+	service := &fakeResetService{consumeUserID: "user-1"}
+	router := setupRouter(service, &fakeUserLookup{}, &fakeSessionRevoker{revokeAllErr: assertAnError{}}, &fakeMailer{})
+
+	req := httptest.NewRequest(http.MethodPost, "/auth/reset-password", bytes.NewBufferString(`{"token":"some-token","new_password":"brandnewpassword"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.True(t, service.invalidateCalled)
 }
 
 func TestHandler_ResetPassword_ReturnsInternalServerErrorForGenericConsumeError(t *testing.T) {

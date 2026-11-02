@@ -15,11 +15,11 @@ type ResetToken struct {
 	TokenHash string
 	Added     time.Time
 	ExpiresAt time.Time
-	UsedAt    *time.Time
 }
 
 type Repository interface {
 	Create(ctx context.Context, t ResetToken) (ResetToken, error)
-	FindByHash(ctx context.Context, tokenHash string) (ResetToken, error)
-	MarkUsed(ctx context.Context, id string) error
+	// Consume atomically marks a valid token used and returns its user; ErrNotFound if unknown, used or expired.
+	Consume(ctx context.Context, tokenHash string) (userID string, err error)
+	InvalidatePending(ctx context.Context, userID string) error
 }

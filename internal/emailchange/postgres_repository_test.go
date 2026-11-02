@@ -5,6 +5,8 @@ package emailchange
 import (
 	"context"
 	"os"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -48,45 +50,63 @@ func seedUser(t *testing.T, db *sqlx.DB) string {
 	return userID
 }
 
-func TestPostgresRepository_CreateThenFindByHash_RoundTripsTheToken(t *testing.T) {
+func TestPostgresRepository_Consume_ReturnsUserAndNewEmailOnce(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db)
 	repo := NewPostgresRepository(db)
-	expires := time.Now().Add(time.Hour).Truncate(time.Microsecond)
-
-	created, err := repo.Create(context.Background(), ChangeToken{UserID: userID, NewEmail: "new@example.com", TokenHash: "hash-1", ExpiresAt: expires})
+	_, err := repo.Create(context.Background(), ChangeToken{UserID: userID, NewEmail: "new@example.com", TokenHash: "hash-1", ExpiresAt: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
-	assert.NotEmpty(t, created.ID)
 
-	found, err := repo.FindByHash(context.Background(), "hash-1")
+	gotUser, gotEmail, err := repo.Consume(context.Background(), "hash-1")
 	require.NoError(t, err)
-	assert.Equal(t, created.ID, found.ID)
-	assert.Equal(t, userID, found.UserID)
-	assert.Equal(t, "new@example.com", found.NewEmail)
-	assert.True(t, found.ExpiresAt.Equal(expires))
-	assert.Nil(t, found.UsedAt)
-}
+	assert.Equal(t, userID, gotUser)
+	assert.Equal(t, "new@example.com", gotEmail)
 
-func TestPostgresRepository_FindByHash_ReturnsErrNotFound(t *testing.T) {
-	db := getTestDB(t)
-	repo := NewPostgresRepository(db)
-
-	_, err := repo.FindByHash(context.Background(), "missing")
-
+	_, _, err = repo.Consume(context.Background(), "hash-1")
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
-func TestPostgresRepository_MarkUsed_SetsUsedAt(t *testing.T) {
+func TestPostgresRepository_Consume_RejectsExpiredUsedAndUnknownTokens(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db)
 	repo := NewPostgresRepository(db)
+	expired, err := repo.Create(context.Background(), ChangeToken{UserID: userID, NewEmail: "a@example.com", TokenHash: "expired", ExpiresAt: time.Now().Add(-time.Minute)})
+	require.NoError(t, err)
+	used, err := repo.Create(context.Background(), ChangeToken{UserID: userID, NewEmail: "b@example.com", TokenHash: "used", ExpiresAt: time.Now().Add(time.Hour)})
+	require.NoError(t, err)
+	_, err = db.Exec(`UPDATE tamiyo.email_change_tokens SET used_at = now() WHERE id = $1`, used.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, expired.ID)
 
-	created, err := repo.Create(context.Background(), ChangeToken{UserID: userID, NewEmail: "new@example.com", TokenHash: "hash-1", ExpiresAt: time.Now().Add(time.Hour)})
+	for _, hash := range []string{"expired", "used", "missing"} {
+		_, _, err := repo.Consume(context.Background(), hash)
+		assert.ErrorIs(t, err, ErrNotFound, hash)
+	}
+}
+
+func TestPostgresRepository_Consume_ConcurrentCallsYieldExactlyOneSuccess(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db)
+	repo := NewPostgresRepository(db)
+	_, err := repo.Create(context.Background(), ChangeToken{UserID: userID, NewEmail: "new@example.com", TokenHash: "hash-1", ExpiresAt: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
 
-	require.NoError(t, repo.MarkUsed(context.Background(), created.ID))
+	const callers = 8
+	var successes atomic.Int32
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			if _, _, err := repo.Consume(context.Background(), "hash-1"); err == nil {
+				successes.Add(1)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
 
-	found, err := repo.FindByHash(context.Background(), "hash-1")
-	require.NoError(t, err)
-	assert.NotNil(t, found.UsedAt)
+	assert.Equal(t, int32(1), successes.Load())
 }

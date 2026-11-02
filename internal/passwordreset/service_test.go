@@ -15,11 +15,12 @@ type fakeRepository struct {
 	createdTokens []ResetToken
 	createErr     error
 
-	findByHashResult ResetToken
-	findByHashErr    error
+	consumeUserID string
+	consumeErr    error
+	consumedHash  string
 
-	markUsedIDs []string
-	markUsedErr error
+	invalidatedUsers []string
+	invalidateErr    error
 }
 
 func (f *fakeRepository) Create(ctx context.Context, t ResetToken) (ResetToken, error) {
@@ -31,19 +32,14 @@ func (f *fakeRepository) Create(ctx context.Context, t ResetToken) (ResetToken, 
 	return t, nil
 }
 
-func (f *fakeRepository) FindByHash(ctx context.Context, tokenHash string) (ResetToken, error) {
-	if f.findByHashErr != nil {
-		return ResetToken{}, f.findByHashErr
-	}
-	return f.findByHashResult, nil
+func (f *fakeRepository) Consume(ctx context.Context, tokenHash string) (string, error) {
+	f.consumedHash = tokenHash
+	return f.consumeUserID, f.consumeErr
 }
 
-func (f *fakeRepository) MarkUsed(ctx context.Context, id string) error {
-	if f.markUsedErr != nil {
-		return f.markUsedErr
-	}
-	f.markUsedIDs = append(f.markUsedIDs, id)
-	return nil
+func (f *fakeRepository) InvalidatePending(ctx context.Context, userID string) error {
+	f.invalidatedUsers = append(f.invalidatedUsers, userID)
+	return f.invalidateErr
 }
 
 func TestService_Issue_StoresHashNotPlaintext(t *testing.T) {
@@ -80,21 +76,19 @@ func TestService_Issue_PropagatesRepositoryError(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestService_Consume_SucceedsAndMarksTokenUsed(t *testing.T) {
-	repo := &fakeRepository{
-		findByHashResult: ResetToken{ID: "token-id", UserID: "user-1", ExpiresAt: time.Now().Add(time.Hour)},
-	}
+func TestService_Consume_ReturnsUserForHashOfPlaintext(t *testing.T) {
+	repo := &fakeRepository{consumeUserID: "user-1"}
 	service := NewService(repo, time.Hour)
 
 	userID, err := service.Consume(context.Background(), "some-plaintext")
 
 	require.NoError(t, err)
 	assert.Equal(t, "user-1", userID)
-	assert.Contains(t, repo.markUsedIDs, "token-id")
+	assert.Equal(t, token.Hash("some-plaintext"), repo.consumedHash)
 }
 
-func TestService_Consume_FailsWithUnknownToken(t *testing.T) {
-	repo := &fakeRepository{findByHashErr: ErrNotFound}
+func TestService_Consume_MapsNotFoundToErrInvalid(t *testing.T) {
+	repo := &fakeRepository{consumeErr: ErrNotFound}
 	service := NewService(repo, time.Hour)
 
 	_, err := service.Consume(context.Background(), "unknown")
@@ -102,47 +96,23 @@ func TestService_Consume_FailsWithUnknownToken(t *testing.T) {
 	assert.ErrorIs(t, err, ErrInvalid)
 }
 
-func TestService_Consume_FailsWithExpiredToken(t *testing.T) {
-	repo := &fakeRepository{
-		findByHashResult: ResetToken{ID: "token-id", UserID: "user-1", ExpiresAt: time.Now().Add(-time.Minute)},
-	}
-	service := NewService(repo, time.Hour)
-
-	_, err := service.Consume(context.Background(), "expired-plaintext")
-
-	assert.ErrorIs(t, err, ErrInvalid)
-	assert.Empty(t, repo.markUsedIDs)
-}
-
-func TestService_Consume_FailsWithAlreadyUsedToken(t *testing.T) {
-	usedAt := time.Now().Add(-time.Minute)
-	repo := &fakeRepository{
-		findByHashResult: ResetToken{
-			ID:        "token-id",
-			UserID:    "user-1",
-			ExpiresAt: time.Now().Add(time.Hour),
-			UsedAt:    &usedAt,
-		},
-	}
-	service := NewService(repo, time.Hour)
-
-	_, err := service.Consume(context.Background(), "already-used-plaintext")
-
-	assert.ErrorIs(t, err, ErrInvalid)
-	assert.Empty(t, repo.markUsedIDs)
-}
-
-func TestService_Consume_PropagatesMarkUsedError(t *testing.T) {
-	repo := &fakeRepository{
-		findByHashResult: ResetToken{ID: "token-id", UserID: "user-1", ExpiresAt: time.Now().Add(time.Hour)},
-		markUsedErr:      assertAnError{},
-	}
+func TestService_Consume_PropagatesRepositoryError(t *testing.T) {
+	repo := &fakeRepository{consumeErr: assertAnError{}}
 	service := NewService(repo, time.Hour)
 
 	_, err := service.Consume(context.Background(), "some-plaintext")
 
 	assert.Error(t, err)
 	assert.NotErrorIs(t, err, ErrInvalid)
+}
+
+func TestService_InvalidatePending_DelegatesToRepository(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo, time.Hour)
+
+	require.NoError(t, service.InvalidatePending(context.Background(), "user-1"))
+
+	assert.Equal(t, []string{"user-1"}, repo.invalidatedUsers)
 }
 
 type assertAnError struct{}

@@ -21,6 +21,7 @@ type resetPasswordRequest struct {
 type resetService interface {
 	Issue(ctx context.Context, userID string) (string, error)
 	Consume(ctx context.Context, plaintext string) (userID string, err error)
+	InvalidatePending(ctx context.Context, userID string) error
 }
 
 type userLookup interface {
@@ -81,6 +82,12 @@ func (h *Handler) resetPassword(ctx *gin.Context) {
 	userID, err := h.service.Consume(ctx.Request.Context(), req.Token)
 	if err != nil {
 		apierr.Respond(ctx, err, apierr.Mapping{Err: ErrInvalid, Status: http.StatusUnauthorized, Message: "invalid or expired reset token"})
+		return
+	}
+
+	// Void the account's other links first so a later failure cannot leave them valid.
+	if err := h.service.InvalidatePending(ctx.Request.Context(), userID); err != nil {
+		apierr.Respond(ctx, err)
 		return
 	}
 
