@@ -353,6 +353,28 @@ paths:
         "429":
           $ref: "#/components/responses/TooManyRequests"
 
+  /auth/verify-email/resend:
+    post:
+      tags: [auth]
+      summary: Email a new verification link to the authenticated account
+      description: >
+        Issues a new verification token and emails it to the account's
+        current address. Shares the same rate limiter as /auth/register
+        and /auth/login.
+      responses:
+        "204":
+          description: No Content
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: The email is already verified; nothing is sent.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
   /auth/me:
     get:
       tags: [auth]

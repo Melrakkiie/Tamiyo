@@ -310,6 +310,16 @@ Prove control of an account's address with the token emailed at registration (th
 
 ---
 
+### `POST /auth/verify-email/resend`
+
+Email a fresh verification link to the account's current address, for a lost email or an expired link. Requires a Bearer token; rate-limited like the other auth routes. No body. The link works like the one sent at registration (see [`POST /auth/verify-email`](#post-authverify-email)).
+
+**Response `204 No Content`**
+
+**Errors:** `401` missing or invalid token · `409` the email is already verified (nothing is sent) · `429` too many requests
+
+---
+
 ### `POST /auth/forgot-password`
 
 Request a password reset email.
@@ -349,7 +359,7 @@ Set a new password using the token from the forgot-password email. A link works 
 
 ### Rate limiting
 
-`POST /auth/register`, `POST /auth/login`, `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /auth/confirm-email`, and `POST /auth/verify-email` share a per-client-IP limit: 5 requests per 60-second window by default (`AUTH_RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns:
+`POST /auth/register`, `POST /auth/login`, `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /auth/confirm-email`, `POST /auth/verify-email`, and `POST /auth/verify-email/resend` share a per-client-IP limit: 5 requests per 60-second window by default (`AUTH_RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns:
 
 **Response `429 Too Many Requests`**
 ```json

@@ -102,8 +102,8 @@ func main() {
 
 	userRepo := user.NewPostgresRepository(db)
 	emailVerificationService := emailverification.NewService(emailverification.NewPostgresRepository(db), userRepo, mailer, cfg.EmailVerificationTokenTTL)
-	emailVerificationHandler := emailverification.NewHandler(emailVerificationService)
 	userService := user.NewService(userRepo, user.WithVerification(emailVerificationService, logger))
+	emailVerificationHandler := emailverification.NewHandler(emailVerificationService, userService)
 	userHandler := user.NewHandler(userService, cfg.JWTSecret, cfg.JWTAccessTokenTTL, tokenService, refreshCookie)
 
 	passwordResetRepo := passwordreset.NewPostgresRepository(db)
@@ -185,6 +185,7 @@ func main() {
 	shareHandler.RegisterProtectedRoutes(protected)
 	userHandler.RegisterProtectedRoutes(protected)
 	emailChangeHandler.RegisterProtectedRoutes(protected)
+	emailVerificationHandler.RegisterProtectedRoutes(protected, ratelimit.Middleware(authLimiter))
 	preferenceHandler.RegisterRoutes(protected)
 	followHandler.RegisterRoutes(protected)
 
