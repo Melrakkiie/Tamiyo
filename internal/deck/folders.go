@@ -36,7 +36,7 @@ type FolderChanges struct {
 
 type FolderRepository interface {
 	FindFolders(ctx context.Context, userID string) ([]Folder, error)
-	FindPublicFolders(ctx context.Context, ownerID string) ([]Folder, error)
+	FindPublicFolders(ctx context.Context, ownerID, viewerID string) ([]Folder, error)
 	CreateFolder(ctx context.Context, userID string, f Folder) (Folder, error)
 	UpdateFolder(ctx context.Context, userID string, f Folder) (Folder, error)
 	DeleteFolder(ctx context.Context, userID string, id int) error
@@ -56,8 +56,8 @@ func (s *Service) GetFolders(ctx context.Context, userID string) ([]Folder, erro
 	return s.repo.FindFolders(ctx, userID)
 }
 
-func (s *Service) GetPublicFolders(ctx context.Context, ownerID string) ([]Folder, error) {
-	return s.repo.FindPublicFolders(ctx, ownerID)
+func (s *Service) GetPublicFolders(ctx context.Context, ownerID, viewerID string) ([]Folder, error) {
+	return s.repo.FindPublicFolders(ctx, ownerID, viewerID)
 }
 
 func (s *Service) CreateFolder(ctx context.Context, userID string, name string, parentID *int) (Folder, error) {

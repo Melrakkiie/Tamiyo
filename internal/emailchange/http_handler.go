@@ -34,7 +34,6 @@ type userAccounts interface {
 
 type emailSender interface {
 	SendEmailChangeConfirmation(ctx context.Context, toEmail, newEmail, token string) error
-	SendEmailChangedNotice(ctx context.Context, toEmail string) error
 }
 
 type Handler struct {
@@ -129,8 +128,6 @@ func (h *Handler) confirmEmailChange(ctx *gin.Context) {
 		)
 		return
 	}
-
-	_ = h.mailer.SendEmailChangedNotice(ctx.Request.Context(), newEmail)
 
 	ctx.Status(http.StatusNoContent)
 }

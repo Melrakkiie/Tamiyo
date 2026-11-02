@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -23,10 +25,6 @@ type fakeRepository struct {
 	updatePasswordID   string
 	updatePasswordHash string
 	updatePasswordErr  error
-
-	updateEmailID    string
-	updateEmailValue string
-	updateEmailErr   error
 
 	updateDisplayNameID    string
 	updateDisplayNameValue *string
@@ -60,15 +58,6 @@ func (f *fakeRepository) UpdateDisplayName(ctx context.Context, id string, displ
 	f.updateDisplayNameID = id
 	f.updateDisplayNameValue = displayName
 	return User{ID: id, Email: "alice@example.com", DisplayName: displayName}, nil
-}
-
-func (f *fakeRepository) UpdateEmail(ctx context.Context, id string, email string) error {
-	if f.updateEmailErr != nil {
-		return f.updateEmailErr
-	}
-	f.updateEmailID = id
-	f.updateEmailValue = email
-	return nil
 }
 
 func (f *fakeRepository) Create(ctx context.Context, u User) (User, error) {
@@ -112,6 +101,49 @@ func TestService_Register_HashesPasswordBeforeStoring(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, "supersecret", repo.createdUser.PasswordHash)
 	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(repo.createdUser.PasswordHash), []byte("supersecret")))
+}
+
+type sentVerification struct{ userID, email string }
+
+type fakeVerificationSender struct {
+	sent []sentVerification
+	err  error
+}
+
+func (f *fakeVerificationSender) IssueAndSend(ctx context.Context, userID, email string) error {
+	f.sent = append(f.sent, sentVerification{userID, email})
+	return f.err
+}
+
+func TestService_Register_SendsExactlyOneVerificationEmail(t *testing.T) {
+	sender := &fakeVerificationSender{}
+	service := NewService(&fakeRepository{}, WithVerification(sender, zap.NewNop()))
+
+	created, err := service.Register(context.Background(), "alice@example.com", "supersecret", nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, []sentVerification{{created.ID, "alice@example.com"}}, sender.sent)
+}
+
+func TestService_Register_LogsAFailedVerificationEmailAndStillSucceeds(t *testing.T) {
+	core, logs := observer.New(zap.WarnLevel)
+	sender := &fakeVerificationSender{err: assert.AnError}
+	service := NewService(&fakeRepository{}, WithVerification(sender, zap.New(core)))
+
+	_, err := service.Register(context.Background(), "alice@example.com", "supersecret", nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, logs.Len())
+}
+
+func TestService_Register_SendsNothingWhenTheAccountIsNotCreated(t *testing.T) {
+	sender := &fakeVerificationSender{}
+	service := NewService(&fakeRepository{createErr: ErrEmailAlreadyTaken}, WithVerification(sender, zap.NewNop()))
+
+	_, err := service.Register(context.Background(), "alice@example.com", "supersecret", nil)
+
+	require.Error(t, err)
+	assert.Empty(t, sender.sent)
 }
 
 func TestService_Register_PropagatesEmailAlreadyTakenError(t *testing.T) {
@@ -356,25 +388,25 @@ func TestService_EmailTaken_PropagatesOtherErrors(t *testing.T) {
 	assert.ErrorIs(t, err, assert.AnError)
 }
 
-func TestService_ChangeEmail_UpdatesEmailAndReturnsTheOldOne(t *testing.T) {
+func TestService_ChangeEmail_SendsExactlyOneVerificationEmailToTheNewAddress(t *testing.T) {
+	sender := &fakeVerificationSender{}
 	repo := &fakeRepository{findByIDUser: User{ID: "user-1", Email: "alice@example.com"}}
-	service := NewService(repo)
-
-	old, err := service.ChangeEmail(context.Background(), "user-1", "new@example.com")
-
-	require.NoError(t, err)
-	assert.Equal(t, "alice@example.com", old)
-	assert.Equal(t, "user-1", repo.updateEmailID)
-	assert.Equal(t, "new@example.com", repo.updateEmailValue)
-}
-
-func TestService_ChangeEmail_PropagatesEmailAlreadyTaken(t *testing.T) {
-	repo := &fakeRepository{findByIDUser: User{ID: "user-1", Email: "alice@example.com"}, updateEmailErr: ErrEmailAlreadyTaken}
-	service := NewService(repo)
+	service := NewService(repo, WithVerification(sender, zap.NewNop()))
 
 	_, err := service.ChangeEmail(context.Background(), "user-1", "new@example.com")
 
-	assert.ErrorIs(t, err, ErrEmailAlreadyTaken)
+	require.NoError(t, err)
+	assert.Equal(t, []sentVerification{{"user-1", "new@example.com"}}, sender.sent)
+}
+
+func TestService_ChangeEmail_ReturnsTheErrorWhenTheVerificationEmailFails(t *testing.T) {
+	sender := &fakeVerificationSender{err: assert.AnError}
+	repo := &fakeRepository{findByIDUser: User{ID: "user-1", Email: "alice@example.com"}}
+	service := NewService(repo, WithVerification(sender, zap.NewNop()))
+
+	_, err := service.ChangeEmail(context.Background(), "user-1", "new@example.com")
+
+	assert.ErrorIs(t, err, assert.AnError)
 }
 
 func strPtr(s string) *string {

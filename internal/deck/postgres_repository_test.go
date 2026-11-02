@@ -39,8 +39,8 @@ func seedUser(t *testing.T, db *sqlx.DB, email string) string {
 
 	var userID string
 	err := db.Get(&userID, `
-		INSERT INTO tamiyo.users (email, password_hash)
-		VALUES ($1, 'fake-hash')
+		INSERT INTO tamiyo.users (email, password_hash, email_verified_at)
+		VALUES ($1, 'fake-hash', now())
 		RETURNING id
 	`, email)
 	require.NoError(t, err)

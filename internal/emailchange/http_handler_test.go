@@ -11,8 +11,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
 
 	"Melrakkiie/Tamiyo/internal/auth"
+	"Melrakkiie/Tamiyo/internal/emailverification"
 	"Melrakkiie/Tamiyo/internal/user"
 )
 
@@ -78,18 +81,11 @@ type sentConfirmation struct {
 type fakeMailer struct {
 	confirmations []sentConfirmation
 	confirmErr    error
-	notices       []string
-	noticeErr     error
 }
 
 func (f *fakeMailer) SendEmailChangeConfirmation(ctx context.Context, toEmail, newEmail, token string) error {
 	f.confirmations = append(f.confirmations, sentConfirmation{to: toEmail, newEmail: newEmail, token: token})
 	return f.confirmErr
-}
-
-func (f *fakeMailer) SendEmailChangedNotice(ctx context.Context, toEmail string) error {
-	f.notices = append(f.notices, toEmail)
-	return f.noticeErr
 }
 
 func setupRouter(service changeService, accounts userAccounts, mailer emailSender) *gin.Engine {
@@ -187,7 +183,7 @@ func TestHandler_RequestEmailChange_ReturnsInternalServerErrorWhenTheEmailCannot
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
-func TestHandler_ConfirmEmailChange_ChangesTheEmailAndNotifiesTheNewAddress(t *testing.T) {
+func TestHandler_ConfirmEmailChange_HandsTheNewAddressToTheAccount(t *testing.T) {
 	service := &fakeChangeService{consumeUserID: testUserID, consumeEmail: "new@example.com"}
 	accounts := &fakeAccounts{oldEmail: "alice@example.com"}
 	mailer := &fakeMailer{}
@@ -199,17 +195,131 @@ func TestHandler_ConfirmEmailChange_ChangesTheEmailAndNotifiesTheNewAddress(t *t
 	assert.Equal(t, []string{"change-token"}, service.consumedTokens)
 	assert.Equal(t, testUserID, accounts.changedUserID)
 	assert.Equal(t, "new@example.com", accounts.changedTo)
-	assert.Equal(t, []string{"new@example.com"}, mailer.notices)
+	// The verification link sent by ChangeEmail is the only mail: nothing claims the change is done yet.
+	assert.Empty(t, mailer.confirmations)
 }
 
-func TestHandler_ConfirmEmailChange_SucceedsEvenWhenTheNoticeCannotBeSent(t *testing.T) {
-	service := &fakeChangeService{consumeUserID: testUserID, consumeEmail: "new@example.com"}
-	router := setupRouter(service, &fakeAccounts{oldEmail: "alice@example.com"}, &fakeMailer{noticeErr: assert.AnError})
+// memUsers is a one-account store: ConfirmEmail switches the address like the Postgres one.
+type memUsers struct {
+	user.Repository
+	account user.User
+	taken   bool
+}
+
+func (m *memUsers) FindByID(context.Context, string) (user.User, error) { return m.account, nil }
+
+func (m *memUsers) FindByEmail(_ context.Context, email string) (user.User, error) {
+	if email != m.account.Email {
+		return user.User{}, user.ErrNotFound
+	}
+	return m.account, nil
+}
+
+func (m *memUsers) ConfirmEmail(_ context.Context, _, email string) error {
+	if m.taken {
+		return user.ErrEmailAlreadyTaken
+	}
+	now := time.Now()
+	m.account.Email, m.account.EmailVerifiedAt = email, &now
+	return nil
+}
+
+type memTokens struct {
+	byHash map[string]emailverification.VerificationToken
+}
+
+func (m *memTokens) Create(_ context.Context, t emailverification.VerificationToken) (emailverification.VerificationToken, error) {
+	m.byHash[t.TokenHash] = t
+	return t, nil
+}
+
+func (m *memTokens) Consume(_ context.Context, hash string) (string, string, error) {
+	t, ok := m.byHash[hash]
+	if !ok {
+		return "", "", emailverification.ErrNotFound
+	}
+	delete(m.byHash, hash)
+	return t.UserID, t.Email, nil
+}
+
+type linkMailer struct{ to, token string }
+
+func (l *linkMailer) SendEmailVerification(_ context.Context, toEmail, tok string) error {
+	l.to, l.token = toEmail, tok
+	return nil
+}
+
+// emailChangeFlow wires the real user and emailverification services around an in-memory store.
+func emailChangeFlow(t *testing.T, users *memUsers) (confirm func() int, verify func() int, links *linkMailer) {
+	t.Helper()
+	links = &linkMailer{}
+	verification := emailverification.NewService(&memTokens{byHash: map[string]emailverification.VerificationToken{}}, users, links, time.Hour)
+	accounts := user.NewService(users, user.WithVerification(verification, zap.NewNop()))
+	changeRouter := setupRouter(&fakeChangeService{consumeUserID: testUserID, consumeEmail: "new@example.com"}, accounts, &fakeMailer{})
+	verifyRouter := gin.New()
+	emailverification.NewHandler(verification, accounts).RegisterRoutes(verifyRouter)
+
+	confirm = func() int { return post(changeRouter, "/auth/confirm-email", `{"token": "change-token"}`, false).Code }
+	verify = func() int {
+		return post(verifyRouter, "/auth/verify-email", `{"token": "`+links.token+`"}`, false).Code
+	}
+	return confirm, verify, links
+}
+
+func TestHandler_ConfirmEmailChange_KeepsTheOldAddressUntilTheNewOneIsVerified(t *testing.T) {
+	verifiedAt := time.Now()
+	hash, err := bcrypt.GenerateFromPassword([]byte("secret-pass"), bcrypt.MinCost)
+	require.NoError(t, err)
+	users := &memUsers{account: user.User{ID: testUserID, Email: "alice@example.com", PasswordHash: string(hash), EmailVerifiedAt: &verifiedAt}}
+	confirm, verify, links := emailChangeFlow(t, users)
+	accounts := user.NewService(users)
+
+	require.Equal(t, http.StatusNoContent, confirm())
+
+	// Confirmed, but only the link to the new address was sent: login and recovery still use the old one.
+	assert.Equal(t, "new@example.com", links.to)
+	assert.Equal(t, "alice@example.com", users.account.Email)
+	assert.NotNil(t, users.account.EmailVerifiedAt)
+	_, err = accounts.Authenticate(context.Background(), "alice@example.com", "secret-pass")
+	assert.NoError(t, err)
+	_, err = accounts.Authenticate(context.Background(), "new@example.com", "secret-pass")
+	assert.ErrorIs(t, err, user.ErrInvalidCredentials)
+	_, err = accounts.FindIDByEmail(context.Background(), "new@example.com")
+	assert.ErrorIs(t, err, user.ErrNotFound)
+
+	// Following the link switches the email.
+	require.Equal(t, http.StatusNoContent, verify())
+	assert.Equal(t, "new@example.com", users.account.Email)
+	_, err = accounts.FindIDByEmail(context.Background(), "new@example.com")
+	assert.NoError(t, err)
+	_, err = accounts.FindIDByEmail(context.Background(), "alice@example.com")
+	assert.ErrorIs(t, err, user.ErrNotFound)
+}
+
+func TestHandler_ConfirmEmailChange_VerifyIs409WhenTheAddressWasTakenMeanwhile(t *testing.T) {
+	users := &memUsers{account: user.User{ID: testUserID, Email: "alice@example.com"}}
+	confirm, verify, _ := emailChangeFlow(t, users)
+	require.Equal(t, http.StatusNoContent, confirm())
+	users.taken = true
+
+	assert.Equal(t, http.StatusConflict, verify())
+	assert.Equal(t, "alice@example.com", users.account.Email)
+	assert.Equal(t, http.StatusBadRequest, verify(), "the token stays consumed")
+}
+
+func TestHandler_ConfirmEmailChange_ReturnsAnErrorWhenTheVerificationCannotBeSent(t *testing.T) {
+	verifier := failingVerifier{}
+	accounts := user.NewService(&memUsers{account: user.User{ID: testUserID, Email: "alice@example.com"}}, user.WithVerification(verifier, zap.NewNop()))
+	router := setupRouter(&fakeChangeService{consumeUserID: testUserID, consumeEmail: "new@example.com"}, accounts, &fakeMailer{})
 
 	w := post(router, "/auth/confirm-email", `{"token": "change-token"}`, false)
 
-	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+type failingVerifier struct{}
+
+func (failingVerifier) IssueAndSend(context.Context, string, string) error { return assert.AnError }
 
 func TestHandler_ConfirmEmailChange_RejectsAnInvalidToken(t *testing.T) {
 	accounts := &fakeAccounts{}
@@ -223,13 +333,11 @@ func TestHandler_ConfirmEmailChange_RejectsAnInvalidToken(t *testing.T) {
 
 func TestHandler_ConfirmEmailChange_ReturnsConflictWhenTheEmailWasTakenMeanwhile(t *testing.T) {
 	service := &fakeChangeService{consumeUserID: testUserID, consumeEmail: "new@example.com"}
-	mailer := &fakeMailer{}
-	router := setupRouter(service, &fakeAccounts{changeEmailErr: user.ErrEmailAlreadyTaken}, mailer)
+	router := setupRouter(service, &fakeAccounts{changeEmailErr: user.ErrEmailAlreadyTaken}, &fakeMailer{})
 
 	w := post(router, "/auth/confirm-email", `{"token": "change-token"}`, false)
 
 	assert.Equal(t, http.StatusConflict, w.Code)
-	assert.Empty(t, mailer.notices)
 }
 
 func TestHandler_ConfirmEmailChange_RequiresAToken(t *testing.T) {

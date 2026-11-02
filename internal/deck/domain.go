@@ -185,6 +185,8 @@ var ErrCommanderBoard = errors.New("the commander stays in the main deck")
 type Filter struct {
 	Format     string
 	Visibility string
+	// ViewerID is who reads the list; with Visibility set, an owner reading their own list is never hidden.
+	ViewerID string
 
 	SortField string
 	SortDesc  bool

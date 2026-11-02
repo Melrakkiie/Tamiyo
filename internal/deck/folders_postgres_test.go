@@ -132,7 +132,7 @@ func TestPostgresRepository_FindPublicFolders(t *testing.T) {
 	_, err = repo.Create(ctx, alice, Deck{Name: "Lien", Format: "commander", Visibility: VisibilityUnlisted, FolderID: &secret.ID})
 	require.NoError(t, err)
 
-	folders, err := repo.FindPublicFolders(ctx, alice)
+	folders, err := repo.FindPublicFolders(ctx, alice, "")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"Commander", "Tribal"}, folderNames(folders))
 	assert.Equal(t, &commander.ID, folders[1].ParentID)

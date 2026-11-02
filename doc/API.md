@@ -54,7 +54,7 @@ Tamiyo is multi-tenant. `/health`, `/auth/register`, `/auth/login`, `/auth/refre
      -d '{"refresh_token": "<refresh_token>"}'
 ```
 
-`/health`, `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/forgot-password`, `/auth/reset-password`, and `/auth/confirm-email` are the only public routes — everything else (`/cards`, `/storage`, `/deck`, `/auth/password`, `/auth/email`, `/auth/me`) requires a valid Bearer token and only ever returns or modifies that account's own data.
+`/health`, `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/confirm-email`, and `/auth/verify-email` are the only public routes — everything else (`/cards`, `/storage`, `/deck`, `/auth/password`, `/auth/email`, `/auth/me`) requires a valid Bearer token and only ever returns or modifies that account's own data.
 
 `/auth/register` and `/auth/login` are rate-limited per client IP (5 requests/minute by default) to blunt brute-force attempts.
 
@@ -180,8 +180,10 @@ The authenticated account. **Requires `Authorization: Bearer <token>`.**
 
 **Response `200 OK`**
 ```json
-{ "id": "4b8a0a9e-2f1c-4c8e-9d3a-1e2f3a4b5c6d", "email": "you@example.com", "display_name": "Tamiyo", "avatar_scryfall_id": "0000579f-7b35-4ed3-b44c-db2a538066fe" }
+{ "id": "4b8a0a9e-2f1c-4c8e-9d3a-1e2f3a4b5c6d", "email": "you@example.com", "display_name": "Tamiyo", "avatar_scryfall_id": "0000579f-7b35-4ed3-b44c-db2a538066fe", "email_verified": true }
 ```
+`email_verified` is `true` once the owner followed the link emailed at registration (see [`POST /auth/verify-email`](#post-authverify-email)); accounts that existed before email verification count as verified.
+
 `display_name` and `avatar_scryfall_id` are `null` until the user picks them. The avatar is the art crop of that Scryfall card: clients fetch the image from Scryfall and credit its artist, Tamiyo only stores the id.
 
 **Errors:** `401` missing/invalid token · `404` account no longer exists
@@ -276,7 +278,7 @@ Ask to change the authenticated account's email. **Requires `Authorization: Bear
 
 ### `POST /auth/confirm-email`
 
-Confirm an email change with the token emailed to the current address. Public, so the link works from any device; rate-limited like the other public auth routes.
+Confirm an email change with the token emailed to the current address. Public, so the link works from any device; rate-limited like the other public auth routes. This does not switch the email yet: the new address is not proven, so a verification email is sent to it and the account keeps its current email (still used to sign in and to recover the password) and its verified state until the link in that email is followed (`POST /auth/verify-email`). If the verification email cannot be sent, the call fails with `500` and nothing changes.
 
 **Body**
 
@@ -286,9 +288,35 @@ Confirm an email change with the token emailed to the current address. Public, s
 
 **Response `204 No Content`**
 
-**Errors:** `400` missing token · `401` invalid, expired, or already-used token · `409` the new email was registered by another account in the meantime · `429` too many requests
+**Errors:** `400` missing token · `401` invalid, expired, or already-used token · `409` the new email was registered by another account in the meantime · `429` too many requests · `500` the verification email could not be sent
 
-> On success the account signs in with the new email, and a notice is sent to the new address. Sessions stay open.
+> Sessions stay open. The account signs in with the new email only once it is verified.
+
+---
+
+### `POST /auth/verify-email`
+
+Prove control of an address with the token emailed to it, at registration, on resend or after an email change. Each token carries the address it proves: following it makes that address the account's email and marks it verified, in one step (after an email change, this is the moment the account switches to the new address). (At registration the account is still logged in right away; registering sends exactly one such email, and a failed send is logged without failing the registration). The token is single-use and valid for a day by default (`EMAIL_VERIFICATION_TOKEN_TTL_MINUTES`); the email carries a one-click link when `EMAIL_VERIFICATION_URL_TEMPLATE` is set, the raw token otherwise. Public; rate-limited like the other public auth routes.
+
+**Body**
+
+| Field | Type | Required |
+|---|---|---|
+| `token` | string | Yes |
+
+**Response `204 No Content`**
+
+**Errors:** `400` missing token, or unknown, expired or already-used token · `409` the address was registered by another account in the meantime (the token stays used) · `429` too many requests
+
+---
+
+### `POST /auth/verify-email/resend`
+
+Email a fresh verification link to the account's current address, for a lost email or an expired link. Requires a Bearer token; rate-limited like the other auth routes. No body. The link works like the one sent at registration (see [`POST /auth/verify-email`](#post-authverify-email)).
+
+**Response `204 No Content`**
+
+**Errors:** `401` missing or invalid token · `409` the email is already verified (nothing is sent) · `429` too many requests
 
 ---
 
@@ -331,7 +359,7 @@ Set a new password using the token from the forgot-password email. A link works 
 
 ### Rate limiting
 
-`POST /auth/register`, `POST /auth/login`, `POST /auth/forgot-password`, `POST /auth/reset-password`, and `POST /auth/confirm-email` share a per-client-IP limit: 5 requests per 60-second window by default (`AUTH_RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns:
+`POST /auth/register`, `POST /auth/login`, `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /auth/confirm-email`, `POST /auth/verify-email`, and `POST /auth/verify-email/resend` share a per-client-IP limit: 5 requests per 60-second window by default (`AUTH_RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns:
 
 **Response `429 Too Many Requests`**
 ```json
@@ -1395,7 +1423,7 @@ Identical lists of cards are answered from an in-memory cache for 24 hours per i
 
 ## Shared decks
 
-Read-only access to public decks, and to a deck by its id. **No authentication required** for the seven `/shared/decks` routes. Deck ids are random UUIDs, so an unlisted deck can only be found by someone who was given its id or link. Only `public` and `unlisted` decks resolve: a private deck, an unknown id or anything that isn't a UUID all answer `404`, so the response never tells whether a private deck exists.
+Read-only access to public decks, and to a deck by its id. **No authentication required** for the seven `/shared/decks` routes. Deck ids are random UUIDs, so an unlisted deck can only be found by someone who was given its id or link. Only `public` and `unlisted` decks resolve: a private deck, an unknown id or anything that isn't a UUID all answer `404`, so the response never tells whether a private deck exists. The same holds while the deck's owner has not verified their email address: all their decks are visible to them only (including through their own profile routes and the shared insights of their own non-private decks), whatever their `visibility`, and every read by someone else (share link, compare, ownership, like, insights, browse, profile decks and folders, liked decks) answers as for a private deck. They appear according to their `visibility` as soon as the owner verifies.
 
 The seven `/shared/decks` routes share a per-client-IP limit, separate from the auth one: 60 requests per 60-second window by default (`SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns `429` with a `Retry-After` header, as described in [Rate limiting](#rate-limiting).
 

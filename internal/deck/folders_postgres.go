@@ -48,13 +48,17 @@ func (r *PostgresRepository) FindFolders(ctx context.Context, userID string) ([]
 	return toFolders(rows), nil
 }
 
-func (r *PostgresRepository) FindPublicFolders(ctx context.Context, ownerID string) ([]Folder, error) {
+func (r *PostgresRepository) FindPublicFolders(ctx context.Context, ownerID, viewerID string) ([]Folder, error) {
+	verified := ownerVerifiedSQL
+	if viewerID == ownerID {
+		verified = "TRUE" // an unverified owner still sees their own profile
+	}
 	var rows []folderRow
 	if err := r.db.SelectContext(ctx, &rows, `
 		WITH RECURSIVE shown AS (
 			SELECT f.id, f.parent_id FROM tamiyo.deck_folders f
 			WHERE f.user_id = $1 AND EXISTS (
-				SELECT 1 FROM tamiyo.deck d WHERE d.folder_id = f.id AND d.visibility = 'public'
+				SELECT 1 FROM tamiyo.deck d WHERE d.folder_id = f.id AND d.visibility = 'public' AND `+verified+`
 			)
 			UNION
 			SELECT p.id, p.parent_id FROM tamiyo.deck_folders p JOIN shown ON p.id = shown.parent_id

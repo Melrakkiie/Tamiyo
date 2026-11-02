@@ -71,10 +71,14 @@ func (s *Service) ReadDeck(ctx context.Context, viewerID string, deckID string, 
 // findWithinReach never looks a deck up by an empty viewer: user ids are
 // uuids, so Postgres would reject the comparison instead of finding nothing.
 func (s *Service) findWithinReach(ctx context.Context, viewerID string, deckID string, reach Reach) (string, Deck, error) {
-	if reach != ReachShared && viewerID != "" {
+	if viewerID != "" {
 		d, err := s.repo.FindByID(ctx, viewerID, deckID)
-		if err == nil || !errors.Is(err, ErrNotFound) {
+		switch {
+		case err != nil && !errors.Is(err, ErrNotFound):
 			return viewerID, d, err
+		case err == nil && (reach != ReachShared || d.Visibility != VisibilityPrivate):
+			// ReachShared still hides a private deck, but not an unverified owner's own shared one.
+			return viewerID, d, nil
 		}
 	}
 	if reach == ReachOwn {

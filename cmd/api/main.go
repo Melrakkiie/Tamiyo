@@ -27,6 +27,7 @@ import (
 	"Melrakkiie/Tamiyo/internal/deckinsights"
 	"Melrakkiie/Tamiyo/internal/deckshare"
 	"Melrakkiie/Tamiyo/internal/emailchange"
+	"Melrakkiie/Tamiyo/internal/emailverification"
 	"Melrakkiie/Tamiyo/internal/exchangerate"
 	"Melrakkiie/Tamiyo/internal/follow"
 	"Melrakkiie/Tamiyo/internal/health"
@@ -91,16 +92,18 @@ func main() {
 
 	tokenHandler := token.NewHandler(tokenService, cfg.JWTSecret, cfg.JWTAccessTokenTTL, refreshCookie)
 
-	userRepo := user.NewPostgresRepository(db)
-	userService := user.NewService(userRepo)
-	userHandler := user.NewHandler(userService, cfg.JWTSecret, cfg.JWTAccessTokenTTL, tokenService, refreshCookie)
-
 	var mailer mail.Mailer
 	if cfg.SMTPHost != "" {
-		mailer = mail.NewSMTPMailer(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom, cfg.PasswordResetURLTemplate, cfg.EmailChangeURLTemplate)
+		mailer = mail.NewSMTPMailer(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom, cfg.PasswordResetURLTemplate, cfg.EmailChangeURLTemplate, cfg.EmailVerificationURLTemplate)
 	} else {
 		mailer = mail.NewLoggingMailer(logger)
 	}
+
+	userRepo := user.NewPostgresRepository(db)
+	emailVerificationService := emailverification.NewService(emailverification.NewPostgresRepository(db), userRepo, mailer, cfg.EmailVerificationTokenTTL)
+	userService := user.NewService(userRepo, user.WithVerification(emailVerificationService, logger))
+	emailVerificationHandler := emailverification.NewHandler(emailVerificationService, userService)
+	userHandler := user.NewHandler(userService, cfg.JWTSecret, cfg.JWTAccessTokenTTL, tokenService, refreshCookie)
 
 	passwordResetRepo := passwordreset.NewPostgresRepository(db)
 	passwordResetService := passwordreset.NewService(passwordResetRepo, cfg.PasswordResetTokenTTL)
@@ -165,6 +168,7 @@ func main() {
 	tokenHandler.RegisterRoutes(api)
 	passwordResetHandler.RegisterRoutes(api, ratelimit.Middleware(authLimiter))
 	emailChangeHandler.RegisterRoutes(api, ratelimit.Middleware(authLimiter))
+	emailVerificationHandler.RegisterRoutes(api, ratelimit.Middleware(authLimiter))
 	shareHandler.RegisterRoutes(api.Group("", ratelimit.Middleware(shareLimiter)))
 	insightsHandler.RegisterSharedRoutes(api.Group("", ratelimit.Middleware(shareLimiter)))
 	importHandler.RegisterPublicRoutes(api.Group("", ratelimit.Middleware(shareLimiter)))
@@ -180,6 +184,7 @@ func main() {
 	shareHandler.RegisterProtectedRoutes(protected)
 	userHandler.RegisterProtectedRoutes(protected)
 	emailChangeHandler.RegisterProtectedRoutes(protected)
+	emailVerificationHandler.RegisterProtectedRoutes(protected, ratelimit.Middleware(authLimiter))
 	preferenceHandler.RegisterRoutes(protected)
 	followHandler.RegisterRoutes(protected)
 

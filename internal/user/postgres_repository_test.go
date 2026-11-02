@@ -51,6 +51,15 @@ func TestPostgresRepository_Create_InsertsAndReturnsUserWithID(t *testing.T) {
 	assert.Equal(t, "fake-hash", created.PasswordHash)
 }
 
+func TestPostgresRepository_Create_StartsUnverified(t *testing.T) {
+	repo := NewPostgresRepository(getTestDB(t))
+
+	created, err := repo.Create(context.Background(), User{Email: "alice@example.com", PasswordHash: "fake-hash"})
+
+	require.NoError(t, err)
+	assert.Nil(t, created.EmailVerifiedAt)
+}
+
 func TestPostgresRepository_Create_GeneratesUUIDAsID(t *testing.T) {
 	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
@@ -210,14 +219,14 @@ func TestPostgresRepository_UpdatePassword_ReturnsErrNotFoundWhenMissing(t *test
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
-func TestPostgresRepository_UpdateEmail_ChangesTheLoginEmail(t *testing.T) {
+func TestPostgresRepository_ConfirmEmail_ChangesTheLoginEmail(t *testing.T) {
 	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
 
 	created, err := repo.Create(context.Background(), User{Email: "alice@example.com", PasswordHash: "hash"})
 	require.NoError(t, err)
 
-	require.NoError(t, repo.UpdateEmail(context.Background(), created.ID, "alice@new.example.com"))
+	require.NoError(t, repo.ConfirmEmail(context.Background(), created.ID, "alice@new.example.com"))
 
 	result, err := repo.FindByEmail(context.Background(), "alice@new.example.com")
 	require.NoError(t, err)
@@ -226,7 +235,22 @@ func TestPostgresRepository_UpdateEmail_ChangesTheLoginEmail(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
-func TestPostgresRepository_UpdateEmail_ReturnsErrEmailAlreadyTaken(t *testing.T) {
+func TestPostgresRepository_ConfirmEmail_MarksTheAccountVerified(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+
+	created, err := repo.Create(context.Background(), User{Email: "alice@example.com", PasswordHash: "hash"})
+	require.NoError(t, err)
+	require.Nil(t, created.EmailVerifiedAt)
+
+	require.NoError(t, repo.ConfirmEmail(context.Background(), created.ID, "alice@example.com"))
+
+	result, err := repo.FindByID(context.Background(), created.ID)
+	require.NoError(t, err)
+	assert.NotNil(t, result.EmailVerifiedAt)
+}
+
+func TestPostgresRepository_ConfirmEmail_ReturnsErrEmailAlreadyTaken(t *testing.T) {
 	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
 
@@ -235,16 +259,20 @@ func TestPostgresRepository_UpdateEmail_ReturnsErrEmailAlreadyTaken(t *testing.T
 	_, err = repo.Create(context.Background(), User{Email: "bob@example.com", PasswordHash: "hash"})
 	require.NoError(t, err)
 
-	err = repo.UpdateEmail(context.Background(), alice.ID, "bob@example.com")
+	err = repo.ConfirmEmail(context.Background(), alice.ID, "bob@example.com")
 
 	assert.ErrorIs(t, err, ErrEmailAlreadyTaken)
+	kept, err := repo.FindByID(context.Background(), alice.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "alice@example.com", kept.Email)
+	assert.Nil(t, kept.EmailVerifiedAt)
 }
 
-func TestPostgresRepository_UpdateEmail_ReturnsErrNotFoundWhenMissing(t *testing.T) {
+func TestPostgresRepository_ConfirmEmail_ReturnsErrNotFoundWhenMissing(t *testing.T) {
 	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
 
-	err := repo.UpdateEmail(context.Background(), "00000000-0000-0000-0000-000000000000", "alice@example.com")
+	err := repo.ConfirmEmail(context.Background(), "00000000-0000-0000-0000-000000000000", "alice@example.com")
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }

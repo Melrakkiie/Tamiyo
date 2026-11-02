@@ -7,15 +7,33 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
 
-type Service struct {
-	repo Repository
+type verificationSender interface {
+	IssueAndSend(ctx context.Context, userID, email string) error
 }
 
-func NewService(repo Repository) *Service {
-	return &Service{repo: repo}
+type Service struct {
+	repo     Repository
+	verifier verificationSender
+	logger   *zap.Logger
+}
+
+type Option func(*Service)
+
+// WithVerification makes Register mail a confirmation link; a failed send is logged, never returned.
+func WithVerification(verifier verificationSender, logger *zap.Logger) Option {
+	return func(s *Service) { s.verifier, s.logger = verifier, logger }
+}
+
+func NewService(repo Repository, opts ...Option) *Service {
+	s := &Service{repo: repo}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 func (s *Service) Register(ctx context.Context, email, password string, displayName *string) (User, error) {
@@ -29,11 +47,28 @@ func (s *Service) Register(ctx context.Context, email, password string, displayN
 		return User{}, err
 	}
 
-	return s.repo.Create(ctx, User{
+	created, err := s.repo.Create(ctx, User{
 		Email:        email,
 		PasswordHash: string(hash),
 		DisplayName:  normalizedName,
 	})
+	if err != nil {
+		return User{}, err
+	}
+
+	s.sendVerification(ctx, created.ID, created.Email)
+
+	return created, nil
+}
+
+// sendVerification proves an address; a failed send is logged, never returned.
+func (s *Service) sendVerification(ctx context.Context, userID, email string) {
+	if s.verifier == nil {
+		return
+	}
+	if err := s.verifier.IssueAndSend(ctx, userID, email); err != nil {
+		s.logger.Warn("could not send the verification email", zap.String("user_id", userID), zap.Error(err))
+	}
 }
 
 func (s *Service) Authenticate(ctx context.Context, email, password string) (User, error) {
@@ -133,7 +168,11 @@ func (s *Service) ChangeEmail(ctx context.Context, userID, newEmail string) (str
 		return "", err
 	}
 
-	if err := s.repo.UpdateEmail(ctx, userID, newEmail); err != nil {
+	// The account keeps its address and its verification until the new one is proven (emailverification.Verify).
+	if s.verifier == nil {
+		return "", errors.New("email verification is not configured")
+	}
+	if err := s.verifier.IssueAndSend(ctx, userID, newEmail); err != nil {
 		return "", err
 	}
 

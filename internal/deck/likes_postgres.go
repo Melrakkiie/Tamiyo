@@ -37,7 +37,7 @@ func (r *PostgresRepository) FindLikeStatus(ctx context.Context, userID string, 
 func (r *PostgresRepository) FindLiked(ctx context.Context, userID string, page int, limit int) ([]PublicDeck, int, error) {
 	query := publicDecksQuery(
 		"(SELECT l.added FROM tamiyo.deck_likes l WHERE l.deck_id = d.id AND l.user_id = $1)",
-		"d.visibility IN ('public', 'unlisted') AND d.user_id <> $1 AND EXISTS (SELECT 1 FROM tamiyo.deck_likes l WHERE l.deck_id = d.id AND l.user_id = $1)",
+		"d.visibility IN ('public', 'unlisted') AND "+ownerVerifiedSQL+" AND d.user_id <> $1 AND EXISTS (SELECT 1 FROM tamiyo.deck_likes l WHERE l.deck_id = d.id AND l.user_id = $1)",
 	)
 
 	var total int

@@ -31,8 +31,9 @@ type Config struct {
 	JWTAccessTokenTTL  time.Duration
 	JWTRefreshTokenTTL time.Duration
 
-	PasswordResetTokenTTL time.Duration
-	EmailChangeTokenTTL   time.Duration
+	PasswordResetTokenTTL     time.Duration
+	EmailChangeTokenTTL       time.Duration
+	EmailVerificationTokenTTL time.Duration
 
 	SMTPHost     string `mapstructure:"SMTP_HOST"`
 	SMTPPort     string `mapstructure:"SMTP_PORT"`
@@ -40,8 +41,9 @@ type Config struct {
 	SMTPPassword string `mapstructure:"SMTP_PASSWORD"`
 	SMTPFrom     string `mapstructure:"SMTP_FROM"`
 
-	PasswordResetURLTemplate string `mapstructure:"PASSWORD_RESET_URL_TEMPLATE"`
-	EmailChangeURLTemplate   string `mapstructure:"EMAIL_CHANGE_URL_TEMPLATE"`
+	PasswordResetURLTemplate     string `mapstructure:"PASSWORD_RESET_URL_TEMPLATE"`
+	EmailChangeURLTemplate       string `mapstructure:"EMAIL_CHANGE_URL_TEMPLATE"`
+	EmailVerificationURLTemplate string `mapstructure:"EMAIL_VERIFICATION_URL_TEMPLATE"`
 
 	CORSAllowedOrigins []string
 
@@ -64,6 +66,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("JWT_REFRESH_TOKEN_TTL_DAYS", 30)
 	viper.SetDefault("PASSWORD_RESET_TOKEN_TTL_MINUTES", 30)
 	viper.SetDefault("EMAIL_CHANGE_TOKEN_TTL_MINUTES", 1440)
+	viper.SetDefault("EMAIL_VERIFICATION_TOKEN_TTL_MINUTES", 1440)
 	viper.SetDefault("SMTP_PORT", "587")
 	viper.SetDefault("CORS_ALLOWED_ORIGINS", "")
 	viper.SetDefault("DB_MAX_OPEN_CONNS", 10)
@@ -91,8 +94,9 @@ func Load() (*Config, error) {
 		ShareRateLimitMax:    viper.GetInt("SHARE_RATE_LIMIT_MAX"),
 		ShareRateLimitWindow: time.Duration(viper.GetInt("SHARE_RATE_LIMIT_WINDOW_SECONDS")) * time.Second,
 
-		PasswordResetTokenTTL: time.Duration(viper.GetInt("PASSWORD_RESET_TOKEN_TTL_MINUTES")) * time.Minute,
-		EmailChangeTokenTTL:   time.Duration(viper.GetInt("EMAIL_CHANGE_TOKEN_TTL_MINUTES")) * time.Minute,
+		PasswordResetTokenTTL:     time.Duration(viper.GetInt("PASSWORD_RESET_TOKEN_TTL_MINUTES")) * time.Minute,
+		EmailChangeTokenTTL:       time.Duration(viper.GetInt("EMAIL_CHANGE_TOKEN_TTL_MINUTES")) * time.Minute,
+		EmailVerificationTokenTTL: time.Duration(viper.GetInt("EMAIL_VERIFICATION_TOKEN_TTL_MINUTES")) * time.Minute,
 
 		SMTPHost:     viper.GetString("SMTP_HOST"),
 		SMTPPort:     viper.GetString("SMTP_PORT"),
@@ -100,8 +104,9 @@ func Load() (*Config, error) {
 		SMTPPassword: viper.GetString("SMTP_PASSWORD"),
 		SMTPFrom:     viper.GetString("SMTP_FROM"),
 
-		PasswordResetURLTemplate: viper.GetString("PASSWORD_RESET_URL_TEMPLATE"),
-		EmailChangeURLTemplate:   viper.GetString("EMAIL_CHANGE_URL_TEMPLATE"),
+		PasswordResetURLTemplate:     viper.GetString("PASSWORD_RESET_URL_TEMPLATE"),
+		EmailChangeURLTemplate:       viper.GetString("EMAIL_CHANGE_URL_TEMPLATE"),
+		EmailVerificationURLTemplate: viper.GetString("EMAIL_VERIFICATION_URL_TEMPLATE"),
 
 		CORSAllowedOrigins: parseOrigins(viper.GetString("CORS_ALLOWED_ORIGINS")),
 

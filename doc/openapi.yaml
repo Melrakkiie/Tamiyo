@@ -325,6 +325,65 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /auth/verify-email:
+    post:
+      tags: [auth]
+      summary: Verify an account's email with the token mailed at registration
+      description: >
+        Consumes a single-use verification token and makes the address it
+        carries the account's email, verified (see email_verified on
+        /auth/me); after an email change this is when the account switches
+        to the new address. If another account took that address in the
+        meantime the call answers 409 and the token stays used. The token is
+        valid for EMAIL_VERIFICATION_TOKEN_TTL_MINUTES (a day by default).
+        Shares the same rate limiter as /auth/register and /auth/login.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyEmailRequest"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Missing token, or unknown, expired or already-used token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The address was registered by another account in the meantime; the token stays used.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /auth/verify-email/resend:
+    post:
+      tags: [auth]
+      summary: Email a new verification link to the authenticated account
+      description: >
+        Issues a new verification token and emails it to the account's
+        current address. Shares the same rate limiter as /auth/register
+        and /auth/login.
+      responses:
+        "204":
+          description: No Content
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: The email is already verified; nothing is sent.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
   /auth/me:
     get:
       tags: [auth]
@@ -469,8 +528,11 @@ paths:
       summary: Confirm an email change
       description: >
         Consumes the single-use token emailed to the current address by
-        /auth/email and switches the account to the new email. A notice is
-        then sent to the new address. Sessions stay open.
+        /auth/email, then sends a verification email to the new address. The
+        account keeps its current email (used to sign in and to recover the
+        password) and its verified state until that link is followed
+        (/auth/verify-email). If the verification email cannot be sent the
+        call answers 500 and nothing changes. Sessions stay open.
       security: []
       requestBody:
         required: true
@@ -3091,7 +3153,8 @@ paths:
       summary: A shared deck, its owner and its cards
       description: >
         Works without authentication. Resolves only public and unlisted
-        decks. Owned copies and pending cards are merged into one list,
+        decks, and only once their owner has verified their email address
+        (until then the deck answers 404, as a private one does). Owned copies and pending cards are merged into one list,
         with no storage, proxy or ownership details.
       security: []
       responses:
@@ -4873,7 +4936,10 @@ components:
           format: uuid
           nullable: true
           description: Scryfall card whose art crop is the avatar, null until set.
-      required: [id, email, display_name, avatar_scryfall_id]
+        email_verified:
+          type: boolean
+          description: True once the owner followed the verification link; accounts that predate email verification are verified.
+      required: [id, email, display_name, avatar_scryfall_id, email_verified]
 
     PublicDeck:
       type: object
@@ -5078,6 +5144,13 @@ components:
       required: [current_password, new_email]
 
     ConfirmEmailRequest:
+      type: object
+      properties:
+        token:
+          type: string
+      required: [token]
+
+    VerifyEmailRequest:
       type: object
       properties:
         token:

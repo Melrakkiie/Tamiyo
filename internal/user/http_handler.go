@@ -40,10 +40,11 @@ type meResponse struct {
 	Email            string  `json:"email"`
 	DisplayName      *string `json:"display_name"`
 	AvatarScryfallID *string `json:"avatar_scryfall_id"`
+	EmailVerified    bool    `json:"email_verified"`
 }
 
 func toMeResponse(u User) meResponse {
-	return meResponse{ID: u.ID, Email: u.Email, DisplayName: u.DisplayName, AvatarScryfallID: u.AvatarScryfallID}
+	return meResponse{ID: u.ID, Email: u.Email, DisplayName: u.DisplayName, AvatarScryfallID: u.AvatarScryfallID, EmailVerified: u.EmailVerifiedAt != nil}
 }
 
 type profileResponse struct {

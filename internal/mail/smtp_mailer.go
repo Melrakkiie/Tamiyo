@@ -16,17 +16,20 @@ type SMTPMailer struct {
 
 	resetURLTemplate       string
 	emailChangeURLTemplate string
+
+	verificationURLTemplate string
 }
 
-func NewSMTPMailer(host, port, username, password, from, resetURLTemplate, emailChangeURLTemplate string) *SMTPMailer {
+func NewSMTPMailer(host, port, username, password, from, resetURLTemplate, emailChangeURLTemplate, verificationURLTemplate string) *SMTPMailer {
 	return &SMTPMailer{
-		host:                   host,
-		port:                   port,
-		username:               username,
-		password:               password,
-		from:                   from,
-		resetURLTemplate:       resetURLTemplate,
-		emailChangeURLTemplate: emailChangeURLTemplate,
+		host:                    host,
+		port:                    port,
+		username:                username,
+		password:                password,
+		from:                    from,
+		resetURLTemplate:        resetURLTemplate,
+		emailChangeURLTemplate:  emailChangeURLTemplate,
+		verificationURLTemplate: verificationURLTemplate,
 	}
 }
 
@@ -66,10 +69,21 @@ func (m *SMTPMailer) SendEmailChangeConfirmation(_ context.Context, toEmail, new
 	return m.send(toEmail, "Confirm your Tamiyo email change", body)
 }
 
-func (m *SMTPMailer) SendEmailChangedNotice(_ context.Context, toEmail string) error {
-	body := "This address is now the email of your Tamiyo account: sign in with it from now on."
+func (m *SMTPMailer) SendEmailVerification(_ context.Context, toEmail, verificationToken string) error {
+	var body string
+	if m.verificationURLTemplate != "" {
+		body = fmt.Sprintf(
+			"Welcome to Tamiyo! Confirm your email address here: %s\r\n\r\nIf you didn't create a Tamiyo account, you can safely ignore this email.",
+			fmt.Sprintf(m.verificationURLTemplate, verificationToken),
+		)
+	} else {
+		body = fmt.Sprintf(
+			"Welcome to Tamiyo! Your verification token:\r\n%s\r\n\r\nSubmit it to POST /auth/verify-email. If you didn't create a Tamiyo account, you can safely ignore this email.",
+			verificationToken,
+		)
+	}
 
-	return m.send(toEmail, "Your Tamiyo email was changed", body)
+	return m.send(toEmail, "Confirm your Tamiyo email address", body)
 }
 
 func (m *SMTPMailer) send(toEmail, subject, body string) error {
