@@ -23,6 +23,7 @@ type User struct {
 	Updated          time.Time
 	DisplayName      *string
 	AvatarScryfallID *string
+	EmailVerifiedAt  *time.Time
 }
 
 type Repository interface {

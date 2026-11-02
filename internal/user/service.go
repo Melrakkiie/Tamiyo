@@ -7,15 +7,33 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
 
-type Service struct {
-	repo Repository
+type verificationSender interface {
+	IssueAndSend(ctx context.Context, userID, email string) error
 }
 
-func NewService(repo Repository) *Service {
-	return &Service{repo: repo}
+type Service struct {
+	repo     Repository
+	verifier verificationSender
+	logger   *zap.Logger
+}
+
+type Option func(*Service)
+
+// WithVerification makes Register mail a confirmation link; a failed send is logged, never returned.
+func WithVerification(verifier verificationSender, logger *zap.Logger) Option {
+	return func(s *Service) { s.verifier, s.logger = verifier, logger }
+}
+
+func NewService(repo Repository, opts ...Option) *Service {
+	s := &Service{repo: repo}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 func (s *Service) Register(ctx context.Context, email, password string, displayName *string) (User, error) {
@@ -29,11 +47,22 @@ func (s *Service) Register(ctx context.Context, email, password string, displayN
 		return User{}, err
 	}
 
-	return s.repo.Create(ctx, User{
+	created, err := s.repo.Create(ctx, User{
 		Email:        email,
 		PasswordHash: string(hash),
 		DisplayName:  normalizedName,
 	})
+	if err != nil {
+		return User{}, err
+	}
+
+	if s.verifier != nil {
+		if err := s.verifier.IssueAndSend(ctx, created.ID, created.Email); err != nil {
+			s.logger.Warn("could not send the verification email", zap.String("user_id", created.ID), zap.Error(err))
+		}
+	}
+
+	return created, nil
 }
 
 func (s *Service) Authenticate(ctx context.Context, email, password string) (User, error) {

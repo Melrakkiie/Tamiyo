@@ -11,13 +11,14 @@ import (
 )
 
 type userRow struct {
-	ID               string    `db:"id"`
-	Email            string    `db:"email"`
-	PasswordHash     string    `db:"password_hash"`
-	Added            time.Time `db:"added"`
-	Updated          time.Time `db:"updated"`
-	DisplayName      *string   `db:"display_name"`
-	AvatarScryfallID *string   `db:"avatar_scryfall_id"`
+	ID               string     `db:"id"`
+	Email            string     `db:"email"`
+	PasswordHash     string     `db:"password_hash"`
+	Added            time.Time  `db:"added"`
+	Updated          time.Time  `db:"updated"`
+	DisplayName      *string    `db:"display_name"`
+	AvatarScryfallID *string    `db:"avatar_scryfall_id"`
+	EmailVerifiedAt  *time.Time `db:"email_verified_at"`
 }
 
 func (r userRow) toDomain() User {
@@ -46,7 +47,7 @@ func (r *PostgresRepository) Create(ctx context.Context, u User) (User, error) {
 	query := `
 		INSERT INTO tamiyo.users (email, password_hash, display_name)
 		VALUES (:email, :password_hash, :display_name)
-		RETURNING id, email, password_hash, added, updated, display_name, avatar_scryfall_id
+		RETURNING id, email, password_hash, added, updated, display_name, avatar_scryfall_id, email_verified_at
 	`
 
 	stmt, err := r.db.PrepareNamedContext(ctx, query)
@@ -71,7 +72,7 @@ func (r *PostgresRepository) Create(ctx context.Context, u User) (User, error) {
 
 func (r *PostgresRepository) FindByEmail(ctx context.Context, email string) (User, error) {
 	query := `
-		SELECT id, email, password_hash, added, updated, display_name, avatar_scryfall_id
+		SELECT id, email, password_hash, added, updated, display_name, avatar_scryfall_id, email_verified_at
 		FROM tamiyo.users
 		WHERE email = $1
 	`
@@ -89,7 +90,7 @@ func (r *PostgresRepository) FindByEmail(ctx context.Context, email string) (Use
 
 func (r *PostgresRepository) FindByID(ctx context.Context, id string) (User, error) {
 	query := `
-		SELECT id, email, password_hash, added, updated, display_name, avatar_scryfall_id
+		SELECT id, email, password_hash, added, updated, display_name, avatar_scryfall_id, email_verified_at
 		FROM tamiyo.users
 		WHERE id = $1
 	`
@@ -147,10 +148,16 @@ func (r *PostgresRepository) UpdateEmail(ctx context.Context, id string, email s
 	return nil
 }
 
+// MarkEmailVerified stamps the address as verified; an already verified account keeps its first date.
+func (r *PostgresRepository) MarkEmailVerified(ctx context.Context, id string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE tamiyo.users SET email_verified_at = COALESCE(email_verified_at, now()) WHERE id = $1`, id)
+	return err
+}
+
 func (r *PostgresRepository) UpdateDisplayName(ctx context.Context, id string, displayName *string) (User, error) {
 	query := `
 		UPDATE tamiyo.users SET display_name = $1 WHERE id = $2
-		RETURNING id, email, password_hash, added, updated, display_name, avatar_scryfall_id
+		RETURNING id, email, password_hash, added, updated, display_name, avatar_scryfall_id, email_verified_at
 	`
 
 	var row userRow
@@ -167,7 +174,7 @@ func (r *PostgresRepository) UpdateDisplayName(ctx context.Context, id string, d
 func (r *PostgresRepository) UpdateAvatar(ctx context.Context, id string, avatarScryfallID *string) (User, error) {
 	query := `
 		UPDATE tamiyo.users SET avatar_scryfall_id = $1 WHERE id = $2
-		RETURNING id, email, password_hash, added, updated, display_name, avatar_scryfall_id
+		RETURNING id, email, password_hash, added, updated, display_name, avatar_scryfall_id, email_verified_at
 	`
 
 	var row userRow

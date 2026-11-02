@@ -589,7 +589,20 @@ func TestHandler_Me_ReturnsTheAccountEmail(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.JSONEq(t, `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "display_name": null, "avatar_scryfall_id": null}`, w.Body.String())
+	assert.JSONEq(t, `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "display_name": null, "avatar_scryfall_id": null, "email_verified": false}`, w.Body.String())
+}
+
+func TestHandler_Me_ReportsAVerifiedEmail(t *testing.T) {
+	verifiedAt := time.Now()
+	service := &fakeService{getUser: User{ID: "11111111-1111-1111-1111-111111111111", Email: "alice@example.com", EmailVerifiedAt: &verifiedAt}}
+	router := setupProtectedRouter(service, &fakeTokenService{})
+
+	req := authenticatedRequest(http.MethodGet, "/auth/me", "")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), `"email_verified":true`)
 }
 
 func TestHandler_Me_ReturnsNotFoundWhenTheUserIsGone(t *testing.T) {
@@ -623,7 +636,7 @@ func TestHandler_Me_ReturnsTheDisplayName(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.JSONEq(t, `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "display_name": "Tamiyo", "avatar_scryfall_id": null}`, w.Body.String())
+	assert.JSONEq(t, `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "display_name": "Tamiyo", "avatar_scryfall_id": null, "email_verified": false}`, w.Body.String())
 }
 
 func TestHandler_UpdateMe_SetsTheDisplayName(t *testing.T) {
@@ -637,7 +650,7 @@ func TestHandler_UpdateMe_SetsTheDisplayName(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	require.NotNil(t, service.setDisplayNameValue)
 	assert.Equal(t, "Tamiyo", *service.setDisplayNameValue)
-	assert.JSONEq(t, `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "display_name": "Tamiyo", "avatar_scryfall_id": null}`, w.Body.String())
+	assert.JSONEq(t, `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "display_name": "Tamiyo", "avatar_scryfall_id": null, "email_verified": false}`, w.Body.String())
 }
 
 func TestHandler_UpdateMe_ClearsTheDisplayNameWithNull(t *testing.T) {
@@ -746,7 +759,7 @@ func TestHandler_UpdateMe_SetsTheAvatarAlone(t *testing.T) {
 	assert.False(t, service.setDisplayNameCalled)
 	require.NotNil(t, service.setAvatarValue)
 	assert.Equal(t, avatarID, *service.setAvatarValue)
-	assert.JSONEq(t, `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "display_name": null, "avatar_scryfall_id": "`+avatarID+`"}`, w.Body.String())
+	assert.JSONEq(t, `{"id": "11111111-1111-1111-1111-111111111111", "email": "alice@example.com", "display_name": null, "avatar_scryfall_id": "`+avatarID+`", "email_verified": false}`, w.Body.String())
 }
 
 func TestHandler_UpdateMe_ClearsTheAvatarWithNull(t *testing.T) {

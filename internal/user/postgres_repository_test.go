@@ -51,6 +51,24 @@ func TestPostgresRepository_Create_InsertsAndReturnsUserWithID(t *testing.T) {
 	assert.Equal(t, "fake-hash", created.PasswordHash)
 }
 
+func TestPostgresRepository_MarkEmailVerified_StartsUnverifiedAndKeepsTheFirstDate(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	created, err := repo.Create(context.Background(), User{Email: "alice@example.com", PasswordHash: "fake-hash"})
+	require.NoError(t, err)
+	assert.Nil(t, created.EmailVerifiedAt)
+
+	require.NoError(t, repo.MarkEmailVerified(context.Background(), created.ID))
+	first, err := repo.FindByID(context.Background(), created.ID)
+	require.NoError(t, err)
+	require.NotNil(t, first.EmailVerifiedAt)
+
+	require.NoError(t, repo.MarkEmailVerified(context.Background(), created.ID))
+	second, err := repo.FindByID(context.Background(), created.ID)
+	require.NoError(t, err)
+	assert.True(t, first.EmailVerifiedAt.Equal(*second.EmailVerifiedAt))
+}
+
 func TestPostgresRepository_Create_GeneratesUUIDAsID(t *testing.T) {
 	db := getTestDB(t)
 	repo := NewPostgresRepository(db)

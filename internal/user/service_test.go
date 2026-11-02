@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -112,6 +114,49 @@ func TestService_Register_HashesPasswordBeforeStoring(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, "supersecret", repo.createdUser.PasswordHash)
 	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(repo.createdUser.PasswordHash), []byte("supersecret")))
+}
+
+type sentVerification struct{ userID, email string }
+
+type fakeVerificationSender struct {
+	sent []sentVerification
+	err  error
+}
+
+func (f *fakeVerificationSender) IssueAndSend(ctx context.Context, userID, email string) error {
+	f.sent = append(f.sent, sentVerification{userID, email})
+	return f.err
+}
+
+func TestService_Register_SendsExactlyOneVerificationEmail(t *testing.T) {
+	sender := &fakeVerificationSender{}
+	service := NewService(&fakeRepository{}, WithVerification(sender, zap.NewNop()))
+
+	created, err := service.Register(context.Background(), "alice@example.com", "supersecret", nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, []sentVerification{{created.ID, "alice@example.com"}}, sender.sent)
+}
+
+func TestService_Register_LogsAFailedVerificationEmailAndStillSucceeds(t *testing.T) {
+	core, logs := observer.New(zap.WarnLevel)
+	sender := &fakeVerificationSender{err: assert.AnError}
+	service := NewService(&fakeRepository{}, WithVerification(sender, zap.New(core)))
+
+	_, err := service.Register(context.Background(), "alice@example.com", "supersecret", nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, logs.Len())
+}
+
+func TestService_Register_SendsNothingWhenTheAccountIsNotCreated(t *testing.T) {
+	sender := &fakeVerificationSender{}
+	service := NewService(&fakeRepository{createErr: ErrEmailAlreadyTaken}, WithVerification(sender, zap.NewNop()))
+
+	_, err := service.Register(context.Background(), "alice@example.com", "supersecret", nil)
+
+	require.Error(t, err)
+	assert.Empty(t, sender.sent)
 }
 
 func TestService_Register_PropagatesEmailAlreadyTakenError(t *testing.T) {
