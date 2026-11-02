@@ -94,7 +94,7 @@ func main() {
 
 	var mailer mail.Mailer
 	if cfg.SMTPHost != "" {
-		mailer = mail.NewSMTPMailer(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom, cfg.PasswordResetURLTemplate, cfg.EmailChangeURLTemplate, cfg.EmailVerificationURLTemplate)
+		mailer = mail.NewSMTPMailer(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom, cfg.PasswordResetURLTemplate, cfg.EmailChangeURLTemplate, cfg.EmailVerificationURLTemplate, logger)
 	} else {
 		mailer = mail.NewLoggingMailer(logger)
 	}
