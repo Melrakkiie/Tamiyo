@@ -5,6 +5,8 @@ package emailchange
 import (
 	"context"
 	"os"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -65,6 +67,66 @@ func TestPostgresRepository_CreateThenFindByHash_RoundTripsTheToken(t *testing.T
 	assert.Equal(t, "new@example.com", found.NewEmail)
 	assert.True(t, found.ExpiresAt.Equal(expires))
 	assert.Nil(t, found.UsedAt)
+}
+
+func TestPostgresRepository_Consume_ReturnsUserAndNewEmailOnce(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db)
+	repo := NewPostgresRepository(db)
+	_, err := repo.Create(context.Background(), ChangeToken{UserID: userID, NewEmail: "new@example.com", TokenHash: "hash-1", ExpiresAt: time.Now().Add(time.Hour)})
+	require.NoError(t, err)
+
+	gotUser, gotEmail, err := repo.Consume(context.Background(), "hash-1")
+	require.NoError(t, err)
+	assert.Equal(t, userID, gotUser)
+	assert.Equal(t, "new@example.com", gotEmail)
+
+	_, _, err = repo.Consume(context.Background(), "hash-1")
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestPostgresRepository_Consume_RejectsExpiredUsedAndUnknownTokens(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db)
+	repo := NewPostgresRepository(db)
+	expired, err := repo.Create(context.Background(), ChangeToken{UserID: userID, NewEmail: "a@example.com", TokenHash: "expired", ExpiresAt: time.Now().Add(-time.Minute)})
+	require.NoError(t, err)
+	used, err := repo.Create(context.Background(), ChangeToken{UserID: userID, NewEmail: "b@example.com", TokenHash: "used", ExpiresAt: time.Now().Add(time.Hour)})
+	require.NoError(t, err)
+	require.NoError(t, repo.MarkUsed(context.Background(), used.ID))
+	require.NotEmpty(t, expired.ID)
+
+	for _, hash := range []string{"expired", "used", "missing"} {
+		_, _, err := repo.Consume(context.Background(), hash)
+		assert.ErrorIs(t, err, ErrNotFound, hash)
+	}
+}
+
+func TestPostgresRepository_Consume_ConcurrentCallsYieldExactlyOneSuccess(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db)
+	repo := NewPostgresRepository(db)
+	_, err := repo.Create(context.Background(), ChangeToken{UserID: userID, NewEmail: "new@example.com", TokenHash: "hash-1", ExpiresAt: time.Now().Add(time.Hour)})
+	require.NoError(t, err)
+
+	const callers = 8
+	var successes atomic.Int32
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			if _, _, err := repo.Consume(context.Background(), "hash-1"); err == nil {
+				successes.Add(1)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	assert.Equal(t, int32(1), successes.Load())
 }
 
 func TestPostgresRepository_FindByHash_ReturnsErrNotFound(t *testing.T) {
