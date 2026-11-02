@@ -107,7 +107,7 @@ Tamiyo is multi-tenant: every account has its own cards, storages, and decks, co
 
 `/health`, `/auth/register`, and `/auth/login` are the only public routes — everything else (`/cards`, `/storage`, `/deck`) requires a valid Bearer token and only ever returns or modifies that account's own data.
 
-Registering emails a confirmation link; following it (`POST /auth/verify-email`) marks the account's email as verified, which `GET /auth/me` reports as `email_verified`. Accounts created before this existed, and the seed account, count as verified.
+Registering emails a confirmation link; following it (`POST /auth/verify-email`) marks the account's email as verified, which `GET /auth/me` reports as `email_verified`. Accounts created before this existed, and the seed account, count as verified. Confirming an email change makes the account unverified again and emails a verification link to the new address.
 
 An account can change its password (`POST /auth/password`) and email (`POST /auth/email`), and delete itself with everything it owns (`DELETE /auth/me`, password required).
 
