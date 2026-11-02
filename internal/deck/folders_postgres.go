@@ -54,7 +54,7 @@ func (r *PostgresRepository) FindPublicFolders(ctx context.Context, ownerID stri
 		WITH RECURSIVE shown AS (
 			SELECT f.id, f.parent_id FROM tamiyo.deck_folders f
 			WHERE f.user_id = $1 AND EXISTS (
-				SELECT 1 FROM tamiyo.deck d WHERE d.folder_id = f.id AND d.visibility = 'public'
+				SELECT 1 FROM tamiyo.deck d WHERE d.folder_id = f.id AND d.visibility = 'public' AND `+ownerVerifiedSQL("d")+`
 			)
 			UNION
 			SELECT p.id, p.parent_id FROM tamiyo.deck_folders p JOIN shown ON p.id = shown.parent_id

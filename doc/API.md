@@ -1423,7 +1423,7 @@ Identical lists of cards are answered from an in-memory cache for 24 hours per i
 
 ## Shared decks
 
-Read-only access to public decks, and to a deck by its id. **No authentication required** for the seven `/shared/decks` routes. Deck ids are random UUIDs, so an unlisted deck can only be found by someone who was given its id or link. Only `public` and `unlisted` decks resolve: a private deck, an unknown id or anything that isn't a UUID all answer `404`, so the response never tells whether a private deck exists.
+Read-only access to public decks, and to a deck by its id. **No authentication required** for the seven `/shared/decks` routes. Deck ids are random UUIDs, so an unlisted deck can only be found by someone who was given its id or link. Only `public` and `unlisted` decks resolve: a private deck, an unknown id or anything that isn't a UUID all answer `404`, so the response never tells whether a private deck exists. The same holds while the deck's owner has not verified their email address: all their decks are visible to them only, whatever their `visibility`, and every read by someone else (share link, compare, ownership, like, insights, browse, profile decks and folders, liked decks) answers as for a private deck. They appear according to their `visibility` as soon as the owner verifies.
 
 The seven `/shared/decks` routes share a per-client-IP limit, separate from the auth one: 60 requests per 60-second window by default (`SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns `429` with a `Retry-After` header, as described in [Rate limiting](#rate-limiting).
 

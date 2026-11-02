@@ -3141,7 +3141,8 @@ paths:
       summary: A shared deck, its owner and its cards
       description: >
         Works without authentication. Resolves only public and unlisted
-        decks. Owned copies and pending cards are merged into one list,
+        decks, and only once their owner has verified their email address
+        (until then the deck answers 404, as a private one does). Owned copies and pending cards are merged into one list,
         with no storage, proxy or ownership details.
       security: []
       responses:
