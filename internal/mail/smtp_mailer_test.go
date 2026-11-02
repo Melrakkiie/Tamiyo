@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -244,18 +245,25 @@ func startSilentSMTPServer(t *testing.T) (string, string) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 
-	var conns []net.Conn
+	var (
+		mu    sync.Mutex
+		conns []net.Conn
+	)
 	go func() {
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
 				return
 			}
+			mu.Lock()
 			conns = append(conns, conn)
+			mu.Unlock()
 		}
 	}()
 	t.Cleanup(func() {
 		_ = ln.Close()
+		mu.Lock()
+		defer mu.Unlock()
 		for _, c := range conns {
 			_ = c.Close()
 		}
