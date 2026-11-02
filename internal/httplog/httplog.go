@@ -23,6 +23,8 @@ func Middleware(logger *zap.Logger) gin.HandlerFunc {
 			zap.Int("status", status),
 			zap.Duration("latency", time.Since(start)),
 			zap.String("client_ip", c.ClientIP()),
+			// The socket peer: the platform's proxy in production, which no header can fake.
+			zap.String("remote_addr", c.Request.RemoteAddr),
 		}
 		if len(c.Errors) > 0 {
 			fields = append(fields, zap.String("error", c.Errors.String()))
