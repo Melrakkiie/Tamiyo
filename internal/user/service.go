@@ -56,13 +56,19 @@ func (s *Service) Register(ctx context.Context, email, password string, displayN
 		return User{}, err
 	}
 
-	if s.verifier != nil {
-		if err := s.verifier.IssueAndSend(ctx, created.ID, created.Email); err != nil {
-			s.logger.Warn("could not send the verification email", zap.String("user_id", created.ID), zap.Error(err))
-		}
-	}
+	s.sendVerification(ctx, created.ID, created.Email)
 
 	return created, nil
+}
+
+// sendVerification proves an address; a failed send is logged, never returned.
+func (s *Service) sendVerification(ctx context.Context, userID, email string) {
+	if s.verifier == nil {
+		return
+	}
+	if err := s.verifier.IssueAndSend(ctx, userID, email); err != nil {
+		s.logger.Warn("could not send the verification email", zap.String("user_id", userID), zap.Error(err))
+	}
 }
 
 func (s *Service) Authenticate(ctx context.Context, email, password string) (User, error) {
@@ -166,12 +172,8 @@ func (s *Service) ChangeEmail(ctx context.Context, userID, newEmail string) (str
 		return "", err
 	}
 
-	// The update unverified the account: prove the new address; a failed send is logged, never returned.
-	if s.verifier != nil {
-		if err := s.verifier.IssueAndSend(ctx, userID, newEmail); err != nil {
-			s.logger.Warn("could not send the verification email", zap.String("user_id", userID), zap.Error(err))
-		}
-	}
+	// The update unverified the account: prove the new address.
+	s.sendVerification(ctx, userID, newEmail)
 
 	return u.Email, nil
 }

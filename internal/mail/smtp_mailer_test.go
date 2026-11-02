@@ -120,7 +120,7 @@ func TestSMTPMailer_SendPasswordResetEmail_UsesResetURLTemplateWhenSet(t *testin
 	_ = srv
 	host, port := splitHostPort(t, addr)
 
-	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "https://app.example.com/reset?token=%s", "")
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "https://app.example.com/reset?token=%s", "", "")
 
 	err := mailer.SendPasswordResetEmail(context.Background(), "alice@example.com", "reset-token-123")
 	require.NoError(t, err)
@@ -136,7 +136,7 @@ func TestSMTPMailer_SendPasswordResetEmail_UsesRawTokenWhenNoTemplate(t *testing
 	srv, addr := startFakeSMTPServer(t, false)
 	host, port := splitHostPort(t, addr)
 
-	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "")
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "", "")
 
 	err := mailer.SendPasswordResetEmail(context.Background(), "alice@example.com", "reset-token-123")
 	require.NoError(t, err)
@@ -150,7 +150,7 @@ func TestSMTPMailer_SendPasswordResetEmail_AuthenticatesWhenUsernameSet(t *testi
 	srv, addr := startFakeSMTPServer(t, true)
 	host, port := splitHostPort(t, addr)
 
-	mailer := NewSMTPMailer(host, port, "smtp-user", "smtp-pass", "tamiyo@example.com", "", "")
+	mailer := NewSMTPMailer(host, port, "smtp-user", "smtp-pass", "tamiyo@example.com", "", "", "")
 
 	err := mailer.SendPasswordResetEmail(context.Background(), "alice@example.com", "reset-token-123")
 	require.NoError(t, err)
@@ -167,7 +167,7 @@ func TestSMTPMailer_SendPasswordResetEmail_ConnectionFailureReturnsError(t *test
 	require.NoError(t, ln.Close()) // nothing is listening here anymore
 
 	host, port := splitHostPort(t, addr)
-	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "")
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "", "")
 
 	err = mailer.SendPasswordResetEmail(context.Background(), "alice@example.com", "reset-token-123")
 	require.Error(t, err)
@@ -177,7 +177,7 @@ func TestSMTPMailer_SendEmailChangeConfirmation_UsesEmailChangeURLTemplateWhenSe
 	srv, addr := startFakeSMTPServer(t, false)
 	host, port := splitHostPort(t, addr)
 
-	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "https://app.example.com/reset?token=%s", "https://app.example.com/confirm-email?token=%s")
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "https://app.example.com/reset?token=%s", "https://app.example.com/confirm-email?token=%s", "")
 
 	err := mailer.SendEmailChangeConfirmation(context.Background(), "alice@example.com", "new@example.com", "change-token-123")
 	require.NoError(t, err)
@@ -193,7 +193,7 @@ func TestSMTPMailer_SendEmailChangeConfirmation_UsesRawTokenWhenNoTemplate(t *te
 	srv, addr := startFakeSMTPServer(t, false)
 	host, port := splitHostPort(t, addr)
 
-	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "")
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "", "")
 
 	err := mailer.SendEmailChangeConfirmation(context.Background(), "alice@example.com", "new@example.com", "change-token-123")
 	require.NoError(t, err)
@@ -207,7 +207,7 @@ func TestSMTPMailer_SendEmailChangedNotice_IsSentToTheNewAddress(t *testing.T) {
 	srv, addr := startFakeSMTPServer(t, false)
 	host, port := splitHostPort(t, addr)
 
-	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "")
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "", "")
 
 	err := mailer.SendEmailChangedNotice(context.Background(), "new@example.com")
 	require.NoError(t, err)
@@ -221,7 +221,7 @@ func TestSMTPMailer_SendEmailVerification_UsesVerificationURLTemplateWhenSet(t *
 	srv, addr := startFakeSMTPServer(t, false)
 	host, port := splitHostPort(t, addr)
 
-	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "").WithVerificationURLTemplate("https://app.example.com/verify-email?token=%s")
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "", "https://app.example.com/verify-email?token=%s")
 
 	require.NoError(t, mailer.SendEmailVerification(context.Background(), "alice@example.com", "verify-token-123"))
 
@@ -236,7 +236,7 @@ func TestSMTPMailer_SendEmailVerification_UsesRawTokenWhenNoTemplate(t *testing.
 	srv, addr := startFakeSMTPServer(t, false)
 	host, port := splitHostPort(t, addr)
 
-	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "")
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "", "")
 
 	require.NoError(t, mailer.SendEmailVerification(context.Background(), "alice@example.com", "verify-token-123"))
 
