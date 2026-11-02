@@ -16,6 +16,8 @@ type SMTPMailer struct {
 
 	resetURLTemplate       string
 	emailChangeURLTemplate string
+
+	verificationURLTemplate string
 }
 
 func NewSMTPMailer(host, port, username, password, from, resetURLTemplate, emailChangeURLTemplate string) *SMTPMailer {
@@ -64,6 +66,29 @@ func (m *SMTPMailer) SendEmailChangeConfirmation(_ context.Context, toEmail, new
 	}
 
 	return m.send(toEmail, "Confirm your Tamiyo email change", body)
+}
+
+// WithVerificationURLTemplate sets the one-click verification link ("%s" is the token); empty mails the raw token.
+func (m *SMTPMailer) WithVerificationURLTemplate(template string) *SMTPMailer {
+	m.verificationURLTemplate = template
+	return m
+}
+
+func (m *SMTPMailer) SendEmailVerification(_ context.Context, toEmail, verificationToken string) error {
+	var body string
+	if m.verificationURLTemplate != "" {
+		body = fmt.Sprintf(
+			"Welcome to Tamiyo! Confirm your email address here: %s\r\n\r\nIf you didn't create a Tamiyo account, you can safely ignore this email.",
+			fmt.Sprintf(m.verificationURLTemplate, verificationToken),
+		)
+	} else {
+		body = fmt.Sprintf(
+			"Welcome to Tamiyo! Your verification token:\r\n%s\r\n\r\nSubmit it to POST /auth/verify-email. If you didn't create a Tamiyo account, you can safely ignore this email.",
+			verificationToken,
+		)
+	}
+
+	return m.send(toEmail, "Confirm your Tamiyo email address", body)
 }
 
 func (m *SMTPMailer) SendEmailChangedNotice(_ context.Context, toEmail string) error {

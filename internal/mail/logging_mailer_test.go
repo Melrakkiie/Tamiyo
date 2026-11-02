@@ -53,6 +53,19 @@ func TestLoggingMailer_SendEmailChangedNotice_LogsAndReturnsNil(t *testing.T) {
 	assert.Equal(t, "new@example.com", fields["to"])
 }
 
+func TestLoggingMailer_SendEmailVerification_LogsTokenAndReturnsNil(t *testing.T) {
+	core, logs := observer.New(zap.WarnLevel)
+	mailer := NewLoggingMailer(zap.New(core))
+
+	err := mailer.SendEmailVerification(context.Background(), "alice@example.com", "verify-token-123")
+
+	require.NoError(t, err)
+	require.Equal(t, 1, logs.Len())
+	fields := logs.All()[0].ContextMap()
+	assert.Equal(t, "alice@example.com", fields["to"])
+	assert.Equal(t, "verify-token-123", fields["email_verification_token"])
+}
+
 func TestLoggingMailer_ImplementsMailer(t *testing.T) {
 	var _ Mailer = (*LoggingMailer)(nil)
 }

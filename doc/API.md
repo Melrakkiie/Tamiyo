@@ -54,7 +54,7 @@ Tamiyo is multi-tenant. `/health`, `/auth/register`, `/auth/login`, `/auth/refre
      -d '{"refresh_token": "<refresh_token>"}'
 ```
 
-`/health`, `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/forgot-password`, `/auth/reset-password`, and `/auth/confirm-email` are the only public routes — everything else (`/cards`, `/storage`, `/deck`, `/auth/password`, `/auth/email`, `/auth/me`) requires a valid Bearer token and only ever returns or modifies that account's own data.
+`/health`, `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/confirm-email`, and `/auth/verify-email` are the only public routes — everything else (`/cards`, `/storage`, `/deck`, `/auth/password`, `/auth/email`, `/auth/me`) requires a valid Bearer token and only ever returns or modifies that account's own data.
 
 `/auth/register` and `/auth/login` are rate-limited per client IP (5 requests/minute by default) to blunt brute-force attempts.
 
@@ -180,8 +180,10 @@ The authenticated account. **Requires `Authorization: Bearer <token>`.**
 
 **Response `200 OK`**
 ```json
-{ "id": "4b8a0a9e-2f1c-4c8e-9d3a-1e2f3a4b5c6d", "email": "you@example.com", "display_name": "Tamiyo", "avatar_scryfall_id": "0000579f-7b35-4ed3-b44c-db2a538066fe" }
+{ "id": "4b8a0a9e-2f1c-4c8e-9d3a-1e2f3a4b5c6d", "email": "you@example.com", "display_name": "Tamiyo", "avatar_scryfall_id": "0000579f-7b35-4ed3-b44c-db2a538066fe", "email_verified": true }
 ```
+`email_verified` is `true` once the owner followed the link emailed at registration (see [`POST /auth/verify-email`](#post-authverify-email)); accounts that existed before email verification count as verified.
+
 `display_name` and `avatar_scryfall_id` are `null` until the user picks them. The avatar is the art crop of that Scryfall card: clients fetch the image from Scryfall and credit its artist, Tamiyo only stores the id.
 
 **Errors:** `401` missing/invalid token · `404` account no longer exists
@@ -292,6 +294,22 @@ Confirm an email change with the token emailed to the current address. Public, s
 
 ---
 
+### `POST /auth/verify-email`
+
+Prove control of an account's address with the token emailed at registration (the account is still logged in right away; registering sends exactly one such email, and a failed send is logged without failing the registration). The token is single-use and valid for a day by default (`EMAIL_VERIFICATION_TOKEN_TTL_MINUTES`); the email carries a one-click link when `EMAIL_VERIFICATION_URL_TEMPLATE` is set, the raw token otherwise. Public; rate-limited like the other public auth routes.
+
+**Body**
+
+| Field | Type | Required |
+|---|---|---|
+| `token` | string | Yes |
+
+**Response `204 No Content`**
+
+**Errors:** `400` missing token, or unknown, expired or already-used token · `429` too many requests
+
+---
+
 ### `POST /auth/forgot-password`
 
 Request a password reset email.
@@ -331,7 +349,7 @@ Set a new password using the token from the forgot-password email. A link works 
 
 ### Rate limiting
 
-`POST /auth/register`, `POST /auth/login`, `POST /auth/forgot-password`, `POST /auth/reset-password`, and `POST /auth/confirm-email` share a per-client-IP limit: 5 requests per 60-second window by default (`AUTH_RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns:
+`POST /auth/register`, `POST /auth/login`, `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /auth/confirm-email`, and `POST /auth/verify-email` share a per-client-IP limit: 5 requests per 60-second window by default (`AUTH_RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns:
 
 **Response `429 Too Many Requests`**
 ```json

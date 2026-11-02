@@ -325,6 +325,34 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /auth/verify-email:
+    post:
+      tags: [auth]
+      summary: Verify an account's email with the token mailed at registration
+      description: >
+        Consumes a single-use verification token and marks the account's
+        email as verified (see email_verified on /auth/me). The token is
+        valid for EMAIL_VERIFICATION_TOKEN_TTL_MINUTES (a day by default).
+        Shares the same rate limiter as /auth/register and /auth/login.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyEmailRequest"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Missing token, or unknown, expired or already-used token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
   /auth/me:
     get:
       tags: [auth]
@@ -4873,7 +4901,10 @@ components:
           format: uuid
           nullable: true
           description: Scryfall card whose art crop is the avatar, null until set.
-      required: [id, email, display_name, avatar_scryfall_id]
+        email_verified:
+          type: boolean
+          description: True once the owner followed the verification link; accounts that predate email verification are verified.
+      required: [id, email, display_name, avatar_scryfall_id, email_verified]
 
     PublicDeck:
       type: object
@@ -5078,6 +5109,13 @@ components:
       required: [current_password, new_email]
 
     ConfirmEmailRequest:
+      type: object
+      properties:
+        token:
+          type: string
+      required: [token]
+
+    VerifyEmailRequest:
       type: object
       properties:
         token:

@@ -217,6 +217,35 @@ func TestSMTPMailer_SendEmailChangedNotice_IsSentToTheNewAddress(t *testing.T) {
 	assert.Contains(t, msg, "Subject: Your Tamiyo email was changed")
 }
 
+func TestSMTPMailer_SendEmailVerification_UsesVerificationURLTemplateWhenSet(t *testing.T) {
+	srv, addr := startFakeSMTPServer(t, false)
+	host, port := splitHostPort(t, addr)
+
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "").WithVerificationURLTemplate("https://app.example.com/verify-email?token=%s")
+
+	require.NoError(t, mailer.SendEmailVerification(context.Background(), "alice@example.com", "verify-token-123"))
+
+	msg := <-srv.received
+	assert.Contains(t, msg, "To: alice@example.com")
+	assert.Contains(t, msg, "Subject: Confirm your Tamiyo email address")
+	assert.Contains(t, msg, "https://app.example.com/verify-email?token=verify-token-123")
+	assert.Contains(t, msg, "ignore this email")
+}
+
+func TestSMTPMailer_SendEmailVerification_UsesRawTokenWhenNoTemplate(t *testing.T) {
+	srv, addr := startFakeSMTPServer(t, false)
+	host, port := splitHostPort(t, addr)
+
+	mailer := NewSMTPMailer(host, port, "", "", "tamiyo@example.com", "", "")
+
+	require.NoError(t, mailer.SendEmailVerification(context.Background(), "alice@example.com", "verify-token-123"))
+
+	msg := <-srv.received
+	assert.Contains(t, msg, "verify-token-123")
+	assert.Contains(t, msg, "POST /auth/verify-email")
+	assert.Contains(t, msg, "ignore this email")
+}
+
 func TestNewSMTPMailer_ImplementsMailer(t *testing.T) {
 	var _ Mailer = (*SMTPMailer)(nil)
 }

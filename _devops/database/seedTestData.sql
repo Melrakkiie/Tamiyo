@@ -22,8 +22,8 @@ RESTART IDENTITY CASCADE;
 -- dans les INSERT ci-dessous (storage/cards/deck.user_id).
 -- gen_salt('bf', 10): coût 10, identique à bcrypt.DefaultCost côté Go,
 -- pour que le hash généré ici soit représentatif de ceux produits par l'API.
-INSERT INTO tamiyo.users (id, email, password_hash) VALUES
-    ('11111111-1111-1111-1111-111111111111', 'seed@tamiyo.local', crypt('password123', gen_salt('bf', 10)));
+INSERT INTO tamiyo.users (id, email, password_hash, email_verified_at) VALUES
+    ('11111111-1111-1111-1111-111111111111', 'seed@tamiyo.local', crypt('password123', gen_salt('bf', 10)), now());
 
 ------------------------
 ---- STORAGES (5)   ----
