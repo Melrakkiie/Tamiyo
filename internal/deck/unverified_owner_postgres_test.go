@@ -51,7 +51,7 @@ func TestUnverifiedOwner_DecksAreVisibleToTheirOwnerOnly(t *testing.T) {
 		return decks
 	}
 	folders := func() []Folder {
-		f, err := repo.FindPublicFolders(ctx, alice)
+		f, err := repo.FindPublicFolders(ctx, alice, bob)
 		require.NoError(t, err)
 		return f
 	}
@@ -83,4 +83,48 @@ func TestUnverifiedOwner_DecksAreVisibleToTheirOwnerOnly(t *testing.T) {
 	assert.Len(t, profile(), 1)
 	assert.Len(t, liked(), 1)
 	assert.Len(t, folders(), 1)
+}
+
+func TestUnverifiedOwner_ReadsTheirOwnProfileAndSharedPath(t *testing.T) {
+	ctx := context.Background()
+	db := getTestDB(t)
+	alice := seedUser(t, db, "alice@example.com")
+	bob := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+
+	folder, err := repo.CreateFolder(ctx, alice, Folder{Name: "Tribal"})
+	require.NoError(t, err)
+	public, err := repo.Create(ctx, alice, Deck{Name: "Public", Format: "commander", Visibility: VisibilityPublic, FolderID: &folder.ID})
+	require.NoError(t, err)
+	private, err := repo.Create(ctx, alice, Deck{Name: "Private", Format: "commander", Visibility: VisibilityPrivate})
+	require.NoError(t, err)
+	setVerified(t, alice, false)
+
+	profile := func(viewer string) []Deck {
+		decks, _, err := repo.FindAll(ctx, alice, Filter{Page: 1, Limit: 10, Visibility: VisibilityPublic, ViewerID: viewer})
+		require.NoError(t, err)
+		return decks
+	}
+	assert.Len(t, profile(alice), 1)
+	assert.Empty(t, profile(bob))
+	assert.Empty(t, profile(""))
+
+	folders := func(viewer string) []Folder {
+		f, err := repo.FindPublicFolders(ctx, alice, viewer)
+		require.NoError(t, err)
+		return f
+	}
+	assert.Len(t, folders(alice), 1)
+	assert.Empty(t, folders(bob))
+	assert.Empty(t, folders(""))
+
+	service := NewService(repo)
+	_, err = service.ReadDeck(ctx, alice, public.ID, ReachShared)
+	assert.NoError(t, err)
+	_, err = service.ReadDeck(ctx, alice, private.ID, ReachShared)
+	assert.ErrorIs(t, err, ErrNotFound)
+	_, err = service.ReadDeck(ctx, bob, public.ID, ReachShared)
+	assert.ErrorIs(t, err, ErrNotFound)
+	_, err = service.ReadDeck(ctx, "", public.ID, ReachShared)
+	assert.ErrorIs(t, err, ErrNotFound)
 }

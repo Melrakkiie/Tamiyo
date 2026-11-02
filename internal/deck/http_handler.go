@@ -308,6 +308,7 @@ func (h *Handler) getUserPublicDecks(ctx *gin.Context) {
 		return
 	}
 	filter.Visibility = VisibilityPublic
+	filter.ViewerID, _ = auth.UserIDFromContext(ctx)
 
 	h.respondWithDecks(ctx, ownerID, filter)
 }

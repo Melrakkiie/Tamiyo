@@ -185,7 +185,7 @@ func (r *PostgresRepository) FindPublic(ctx context.Context, filter PublicFilter
 		add(func(pos int) string { return fmt.Sprintf("cardinality(identity) = $%d", pos) }, *filter.ColorCount)
 	}
 
-	query := publicDecksQuery("NULL::timestamptz", "d.visibility = 'public' AND u.email_verified_at IS NOT NULL")
+	query := publicDecksQuery("NULL::timestamptz", "d.visibility = 'public' AND "+ownerVerifiedSQL)
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}

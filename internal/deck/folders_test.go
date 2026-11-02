@@ -24,7 +24,7 @@ func (f *folderStore) FindFolders(ctx context.Context, userID string) ([]Folder,
 	return f.folders, nil
 }
 
-func (f *folderStore) FindPublicFolders(ctx context.Context, ownerID string) ([]Folder, error) {
+func (f *folderStore) FindPublicFolders(ctx context.Context, ownerID, _ string) ([]Folder, error) {
 	return f.folders, nil
 }
 

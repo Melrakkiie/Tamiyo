@@ -157,8 +157,11 @@ func (r *PostgresRepository) FindAll(ctx context.Context, userID string, filter 
 	}
 
 	if filter.Visibility != "" {
-		// A visibility filter means a visitor's view (profile), so an unverified owner shows nothing.
-		conditions = append(conditions, ownerVerifiedSQL("d"), fmt.Sprintf("d.visibility = $%d", argPos))
+		// A visibility filter means a profile view: an unverified owner shows nothing, except to themselves.
+		if filter.ViewerID != userID {
+			conditions = append(conditions, ownerVerifiedSQL)
+		}
+		conditions = append(conditions, fmt.Sprintf("d.visibility = $%d", argPos))
 		args = append(args, filter.Visibility)
 		argPos++
 	}
@@ -308,9 +311,8 @@ func (r *compositionQueries) FindByID(ctx context.Context, userID string, id str
 }
 
 // ownerVerifiedSQL hides a deck from everyone but its owner until the owner's address is verified.
-func ownerVerifiedSQL(deckAlias string) string {
-	return "EXISTS (SELECT 1 FROM tamiyo.users vo WHERE vo.id = " + deckAlias + ".user_id AND vo.email_verified_at IS NOT NULL)"
-}
+// The deck table must be aliased "d".
+const ownerVerifiedSQL = "EXISTS (SELECT 1 FROM tamiyo.users vo WHERE vo.id = d.user_id AND vo.email_verified_at IS NOT NULL)"
 
 func (r *PostgresRepository) FindShared(ctx context.Context, id string) (string, Deck, error) {
 	query := `
@@ -338,7 +340,7 @@ func (r *PostgresRepository) FindShared(ctx context.Context, id string) (string,
 		    ` + CardCountSQL("d") + ` AS card_count
 		FROM tamiyo.deck d
 		WHERE d.id = $1 AND d.visibility IN ('public', 'unlisted')
-		  AND ` + ownerVerifiedSQL("d") + `
+		  AND ` + ownerVerifiedSQL + `
 	`
 
 	var row deckRow

@@ -14,7 +14,7 @@ import (
 
 type folderService interface {
 	GetFolders(ctx context.Context, userID string) ([]Folder, error)
-	GetPublicFolders(ctx context.Context, ownerID string) ([]Folder, error)
+	GetPublicFolders(ctx context.Context, ownerID, viewerID string) ([]Folder, error)
 	CreateFolder(ctx context.Context, userID string, name string, parentID *int) (Folder, error)
 	UpdateFolder(ctx context.Context, userID string, id int, changes FolderChanges) (Folder, error)
 	DeleteFolder(ctx context.Context, userID string, id int) error
@@ -128,7 +128,8 @@ func (h *Handler) getUserPublicFolders(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
 		return
 	}
-	folders, err := h.service.GetPublicFolders(ctx.Request.Context(), ownerID)
+	viewerID, _ := auth.UserIDFromContext(ctx)
+	folders, err := h.service.GetPublicFolders(ctx.Request.Context(), ownerID, viewerID)
 	if err != nil {
 		respondFolderError(ctx, err)
 		return
