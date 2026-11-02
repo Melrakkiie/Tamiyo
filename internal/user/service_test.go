@@ -18,6 +18,11 @@ type fakeRepository struct {
 
 	findByEmailUser User
 	findByEmailErr  error
+	findByEmailArg  string
+
+	confirmEmailID    string
+	confirmEmailValue string
+	confirmEmailErr   error
 
 	findByIDUser User
 	findByIDErr  error
@@ -69,7 +74,13 @@ func (f *fakeRepository) Create(ctx context.Context, u User) (User, error) {
 	return u, nil
 }
 
+func (f *fakeRepository) ConfirmEmail(ctx context.Context, id, email string) error {
+	f.confirmEmailID, f.confirmEmailValue = id, email
+	return f.confirmEmailErr
+}
+
 func (f *fakeRepository) FindByEmail(ctx context.Context, email string) (User, error) {
+	f.findByEmailArg = email
 	if f.findByEmailErr != nil {
 		return User{}, f.findByEmailErr
 	}
@@ -113,6 +124,60 @@ type fakeVerificationSender struct {
 func (f *fakeVerificationSender) IssueAndSend(ctx context.Context, userID, email string) error {
 	f.sent = append(f.sent, sentVerification{userID, email})
 	return f.err
+}
+
+func TestService_Register_StoresTheTrimmedLowercasedEmail(t *testing.T) {
+	repo := &fakeRepository{}
+	sender := &fakeVerificationSender{}
+	service := NewService(repo, WithVerification(sender, zap.NewNop()))
+
+	_, err := service.Register(context.Background(), "  Bob@Mail.FR ", "supersecret", nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "bob@mail.fr", repo.createdUser.Email)
+	assert.Equal(t, "bob@mail.fr", sender.sent[0].email)
+}
+
+func TestService_LookupsNormaliseTheEmail(t *testing.T) {
+	hash, err := bcrypt.GenerateFromPassword([]byte("supersecret"), bcrypt.MinCost)
+	require.NoError(t, err)
+	repo := &fakeRepository{findByEmailUser: User{ID: "u1", Email: "bob@mail.fr", PasswordHash: string(hash)}, findByIDUser: User{ID: "u1"}}
+	service := NewService(repo, WithVerification(&fakeVerificationSender{}, zap.NewNop()))
+	ctx := context.Background()
+
+	_, err = service.Authenticate(ctx, " Bob@Mail.fr", "supersecret")
+	require.NoError(t, err)
+	assert.Equal(t, "bob@mail.fr", repo.findByEmailArg)
+
+	repo.findByEmailArg = ""
+	_, err = service.FindIDByEmail(ctx, "BOB@mail.fr ")
+	require.NoError(t, err)
+	assert.Equal(t, "bob@mail.fr", repo.findByEmailArg)
+
+	repo.findByEmailArg = ""
+	_, err = service.EmailTaken(ctx, "Bob@Mail.fr")
+	require.NoError(t, err)
+	assert.Equal(t, "bob@mail.fr", repo.findByEmailArg)
+}
+
+func TestService_ChangeEmail_SendsTheNormalisedAddress(t *testing.T) {
+	sender := &fakeVerificationSender{}
+	service := NewService(&fakeRepository{findByIDUser: User{ID: "u1"}}, WithVerification(sender, zap.NewNop()))
+
+	_, err := service.ChangeEmail(context.Background(), "u1", " New@Mail.fr")
+
+	require.NoError(t, err)
+	assert.Equal(t, "new@mail.fr", sender.sent[0].email)
+}
+
+func TestService_ConfirmEmail_StoresTheNormalisedAddress(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	require.NoError(t, service.ConfirmEmail(context.Background(), "u1", "Old@Mail.fr"))
+
+	assert.Equal(t, "u1", repo.confirmEmailID)
+	assert.Equal(t, "old@mail.fr", repo.confirmEmailValue)
 }
 
 func TestService_Register_SendsExactlyOneVerificationEmail(t *testing.T) {

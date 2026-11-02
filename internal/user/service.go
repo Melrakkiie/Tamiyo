@@ -48,7 +48,7 @@ func (s *Service) Register(ctx context.Context, email, password string, displayN
 	}
 
 	created, err := s.repo.Create(ctx, User{
-		Email:        email,
+		Email:        NormalizeEmail(email),
 		PasswordHash: string(hash),
 		DisplayName:  normalizedName,
 	})
@@ -72,7 +72,7 @@ func (s *Service) sendVerification(ctx context.Context, userID, email string) {
 }
 
 func (s *Service) Authenticate(ctx context.Context, email, password string) (User, error) {
-	u, err := s.repo.FindByEmail(ctx, email)
+	u, err := s.repo.FindByEmail(ctx, NormalizeEmail(email))
 	if err != nil {
 		if err == ErrNotFound {
 			return User{}, ErrInvalidCredentials
@@ -119,7 +119,7 @@ func (s *Service) DeleteAccount(ctx context.Context, userID, password string) er
 }
 
 func (s *Service) FindIDByEmail(ctx context.Context, email string) (string, error) {
-	u, err := s.repo.FindByEmail(ctx, email)
+	u, err := s.repo.FindByEmail(ctx, NormalizeEmail(email))
 	if err != nil {
 		return "", err
 	}
@@ -152,7 +152,7 @@ func (s *Service) CheckPassword(ctx context.Context, userID, password string) (s
 }
 
 func (s *Service) EmailTaken(ctx context.Context, email string) (bool, error) {
-	_, err := s.repo.FindByEmail(ctx, email)
+	_, err := s.repo.FindByEmail(ctx, NormalizeEmail(email))
 	if errors.Is(err, ErrNotFound) {
 		return false, nil
 	}
@@ -172,11 +172,21 @@ func (s *Service) ChangeEmail(ctx context.Context, userID, newEmail string) (str
 	if s.verifier == nil {
 		return "", errors.New("email verification is not configured")
 	}
-	if err := s.verifier.IssueAndSend(ctx, userID, newEmail); err != nil {
+	if err := s.verifier.IssueAndSend(ctx, userID, NormalizeEmail(newEmail)); err != nil {
 		return "", err
 	}
 
 	return u.Email, nil
+}
+
+// NormalizeEmail is the one form an address is compared and stored in: trimmed and lowercased.
+func NormalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// ConfirmEmail stores an address proven by its owner, normalised so a token issued with capitals still writes lowercase.
+func (s *Service) ConfirmEmail(ctx context.Context, userID, email string) error {
+	return s.repo.ConfirmEmail(ctx, userID, NormalizeEmail(email))
 }
 
 func (s *Service) SetDisplayName(ctx context.Context, userID string, displayName *string) (User, error) {

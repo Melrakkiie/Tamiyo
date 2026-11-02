@@ -30,6 +30,8 @@ type Repository interface {
 	Create(ctx context.Context, u User) (User, error)
 	FindByEmail(ctx context.Context, email string) (User, error)
 	FindByID(ctx context.Context, id string) (User, error)
+	// ConfirmEmail makes email the account's address and marks it verified; ErrEmailAlreadyTaken if another account has it.
+	ConfirmEmail(ctx context.Context, id string, email string) error
 	UpdatePassword(ctx context.Context, id string, passwordHash string) error
 	UpdateDisplayName(ctx context.Context, id string, displayName *string) (User, error)
 	UpdateAvatar(ctx context.Context, id string, avatarScryfallID *string) (User, error)

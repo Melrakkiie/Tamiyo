@@ -69,7 +69,7 @@ func (h *Handler) requestEmailChange(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	newEmail := strings.TrimSpace(req.NewEmail)
+	newEmail := user.NormalizeEmail(req.NewEmail)
 
 	currentEmail, err := h.users.CheckPassword(ctx.Request.Context(), userID, req.CurrentPassword)
 	if err != nil {
