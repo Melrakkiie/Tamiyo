@@ -89,24 +89,16 @@ func (s *Service) ImportTamiyoCollection(ctx context.Context, userID string, tar
 		copies := copiesOf(base, c.Quantity)
 		if targetStorageID == nil && c.Storage != nil {
 			name := strings.TrimSpace(*c.Storage)
-			if id, ok := storageCache[name]; ok {
-				for j := range copies {
-					copies[j].Card.StorageID = &id
+			storageID, newStorage := existingOrPlanned(storageCache, planned, name, func() int {
+				storageType := storageTypes[*c.Storage]
+				if storageType == "" {
+					storageType = defaultTamiyoStorageType
 				}
-			} else {
-				idx, ok := planned[name]
-				if !ok {
-					storageType := storageTypes[*c.Storage]
-					if storageType == "" {
-						storageType = defaultTamiyoStorageType
-					}
-					idx = len(plan.Storages)
-					planned[name] = idx
-					plan.Storages = append(plan.Storages, card.NewStorage{Name: name, Type: storageType})
-				}
-				for j := range copies {
-					copies[j].NewStorage = &idx
-				}
+				plan.Storages = append(plan.Storages, card.NewStorage{Name: name, Type: storageType})
+				return len(plan.Storages) - 1
+			})
+			for j := range copies {
+				copies[j].Card.StorageID, copies[j].NewStorage = storageID, newStorage
 			}
 		}
 		plan.Copies = append(plan.Copies, copies...)

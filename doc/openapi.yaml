@@ -3720,7 +3720,8 @@ paths:
         "400":
           description: >
             No file field, the file couldn't be parsed (a row with a Quantity
-            above 1000 is refused), or storage_id is invalid or does not reference an existing storage.
+            above 1000 is refused), storage_id is invalid or does not reference an existing storage,
+            or a storage or deck of the import was deleted while it ran.
           content:
             application/json:
               schema:
@@ -3780,7 +3781,8 @@ paths:
         "400":
           description: >
             No file field, the file couldn't be parsed (a row with a Count
-            above 1000 is refused), or storage_id does not reference an existing storage.
+            above 1000 is refused), storage_id does not reference an existing storage,
+            or the storage was deleted while the import ran.
           content:
             application/json:
               schema:
@@ -3840,7 +3842,8 @@ paths:
         "400":
           description: >
             No file field, the list couldn't be parsed (a line with a quantity
-            above 1000 is refused), or storage_id is invalid or does not reference an existing storage.
+            above 1000 is refused), storage_id is invalid or does not reference an existing storage,
+            or the storage was deleted while the import ran.
           content:
             application/json:
               schema:
@@ -3919,8 +3922,8 @@ paths:
         with storage_id, they all go in that storage. The whole import is
         one transaction, storages included: every storage and card is
         created, or none, and on a failure (a database error, the request
-        cancelled) the route returns the error alone, with no summary.
-        Printings Scryfall doesn't know are skipped and reported in
+        cancelled) the route returns the error alone, with no summary, so
+        retrying never creates duplicates. Printings Scryfall doesn't know are skipped and reported in
         ImportSummary.warnings.
       requestBody:
         required: true
@@ -3951,8 +3954,9 @@ paths:
           description: >
             No file field, the file isn't a valid Tamiyo collection or
             storage file (a deck file or a card quantity above 1000 is
-            refused), or storage_id is invalid
-            or does not reference an existing storage.
+            refused), storage_id is invalid
+            or does not reference an existing storage, or a storage of the
+            import was deleted while it ran.
           content:
             application/json:
               schema:

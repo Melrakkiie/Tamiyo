@@ -35,7 +35,6 @@ func manaBoxBinderType(storageType string) string {
 }
 
 type cardService interface {
-	CreateCard(ctx context.Context, userID string, c card.Card) (card.Card, error)
 	ImportCollection(ctx context.Context, userID string, plan card.ImportPlan) (card.ImportResult, error)
 	GetAllCards(ctx context.Context, userID string, filter card.CardFilter) ([]card.Card, int, error)
 	GetCardsMissingDetails(ctx context.Context, userID string, afterID int, limit int) ([]card.Card, error)
@@ -48,16 +47,13 @@ type cardService interface {
 type storageService interface {
 	GetAllStorages(ctx context.Context, userID string, filter storage.Filter) ([]storage.Storage, int, error)
 	GetStorage(ctx context.Context, userID string, id int) (storage.Storage, error)
-	CreateStorage(ctx context.Context, userID string, s storage.Storage) (storage.Storage, error)
 }
 
 type deckService interface {
 	GetAllDecks(ctx context.Context, userID string, filter deck.Filter) ([]deck.Deck, int, error)
 	GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error)
 	ReadDeck(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (deck.ReadDeck, error)
-	CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error)
 	DuplicateDeck(ctx context.Context, userID string, sourceID string, req deck.DuplicateRequest) (deck.DuplicateResult, error)
-	PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error
 	GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error)
 	PlaceCards(ctx context.Context, userID string, deckID string, plan deck.PlacementPlan) (deck.PlacementSummary, error)
 	CollectOwnDeck(ctx context.Context, userID string, deckID string, req deck.OwnDeckCollect) (deck.CollectSummary, error)
@@ -141,37 +137,21 @@ func (s *Service) ImportManaBox(ctx context.Context, userID string, targetStorag
 		}, row.Quantity)
 
 		if targetStorageID == nil {
-			if id, ok := storageCache[row.BinderName]; ok {
-				for i := range copies {
-					copies[i].Card.StorageID = &id
-				}
-			} else {
-				idx, ok := plannedStorages[row.BinderName]
-				if !ok {
-					idx = len(plan.Storages)
-					plannedStorages[row.BinderName] = idx
-					plan.Storages = append(plan.Storages, card.NewStorage{Name: row.BinderName, Type: storageTypeFromManaBox(row.BinderType)})
-				}
-				for i := range copies {
-					copies[i].NewStorage = &idx
-				}
+			storageID, newStorage := existingOrPlanned(storageCache, plannedStorages, row.BinderName, func() int {
+				plan.Storages = append(plan.Storages, card.NewStorage{Name: row.BinderName, Type: storageTypeFromManaBox(row.BinderType)})
+				return len(plan.Storages) - 1
+			})
+			for i := range copies {
+				copies[i].Card.StorageID, copies[i].NewStorage = storageID, newStorage
 			}
 
 			if row.BinderType == manaBoxDeckBinderType {
-				if id, ok := deckCache[row.BinderName]; ok {
-					for i := range copies {
-						copies[i].DeckID = &id
-					}
-				} else {
-					idx, ok := plannedDecks[row.BinderName]
-					if !ok {
-						idx = len(plan.Decks)
-						plannedDecks[row.BinderName] = idx
-						plan.Decks = append(plan.Decks, card.NewDeck{Name: row.BinderName, Format: defaultManaBoxDeckFormat})
-					}
-					for i := range copies {
-						copies[i].NewDeck = &idx
-					}
+				deckID, newDeck := existingOrPlanned(deckCache, plannedDecks, row.BinderName, func() int {
+					plan.Decks = append(plan.Decks, card.NewDeck{Name: row.BinderName, Format: defaultManaBoxDeckFormat})
+					return len(plan.Decks) - 1
+				})
+				for i := range copies {
+					copies[i].DeckID, copies[i].NewDeck = deckID, newDeck
 				}
 			}
 		}

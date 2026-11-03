@@ -14,6 +14,7 @@ import (
 
 	"Melrakkiie/Tamiyo/internal/apierr"
 	"Melrakkiie/Tamiyo/internal/auth"
+	"Melrakkiie/Tamiyo/internal/card"
 	"Melrakkiie/Tamiyo/internal/deck"
 )
 
@@ -433,6 +434,8 @@ func (h *Handler) respondImport(ctx *gin.Context, summary Summary, err error) {
 			apierr.Mapping{Err: ErrInvalidFile, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrTamiyoDeckFile, Status: http.StatusBadRequest},
 			apierr.Mapping{Err: ErrTargetStorageNotFound, Status: http.StatusBadRequest, Message: "storage_id does not reference an existing storage"},
+			apierr.Mapping{Err: card.ErrStorageNotFound, Status: http.StatusBadRequest, Message: "a storage of the import no longer exists"},
+			apierr.Mapping{Err: card.ErrDeckNotFound, Status: http.StatusBadRequest, Message: "a deck of the import no longer exists"},
 			apierr.Mapping{Err: ErrScryfallUnavailable, Status: http.StatusBadGateway, Message: ErrScryfallUnavailable.Error()},
 		)
 		return
