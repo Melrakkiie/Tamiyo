@@ -82,6 +82,12 @@ _Avoid_: Entry (a deck entry is a pile), in
 A card name whose number of copies on a board shrank over a day, by that many copies. The line remembers the printing and finish of one of its removed copies. Shown as "Retrait" in the interface.
 _Avoid_: Exit, out, cut
 
+### Accounts
+
+**Session**:
+One device's sign-in to a user's account, from signing in until signing out or expiry, lasting across renewals. Signing out ends the current session only; changing or resetting the password ends them all.
+_Avoid_: Connection, token family, device
+
 ### Languages
 
 **Interface language**:

@@ -27,6 +27,8 @@ type fakeRepository struct {
 	// beforeReplace runs at the start of Replace, to move the chain under the caller.
 	beforeReplace func(id string)
 
+	revokedSessionIDs []string
+
 	revokeAllForUserCalledWith string
 	revokeAllErr               error
 }
@@ -80,6 +82,11 @@ func (f *fakeRepository) Revoke(ctx context.Context, id string) error {
 		return f.revokeErr
 	}
 	f.revokedIDs = append(f.revokedIDs, id)
+	return nil
+}
+
+func (f *fakeRepository) RevokeSession(ctx context.Context, userID string, id string) error {
+	f.revokedSessionIDs = append(f.revokedSessionIDs, id)
 	return nil
 }
 
@@ -292,7 +299,8 @@ func TestService_Rotate_TreatsReuseAfterTheGracePeriodAsTheft(t *testing.T) {
 	_, _, err := service.Rotate(context.Background(), "old-plaintext")
 
 	assert.ErrorIs(t, err, ErrInvalid)
-	assert.Equal(t, "user-1", repo.revokeAllForUserCalledWith)
+	assert.Equal(t, []string{"old-id"}, repo.revokedSessionIDs)
+	assert.Empty(t, repo.revokeAllForUserCalledWith)
 	assert.Empty(t, repo.replaced)
 }
 
@@ -317,7 +325,8 @@ func TestService_Rotate_TreatsReuseAsTheftWhenTheSuccessorWasRevoked(t *testing.
 	_, _, err := service.Rotate(context.Background(), "old-plaintext")
 
 	assert.ErrorIs(t, err, ErrInvalid)
-	assert.Equal(t, "user-1", repo.revokeAllForUserCalledWith)
+	assert.Equal(t, []string{"old-id"}, repo.revokedSessionIDs)
+	assert.Empty(t, repo.revokeAllForUserCalledWith)
 }
 
 func TestService_Rotate_TreatsReuseOfAJustLoggedOutTokenAsTheft(t *testing.T) {
@@ -335,7 +344,8 @@ func TestService_Rotate_TreatsReuseOfAJustLoggedOutTokenAsTheft(t *testing.T) {
 	_, _, err := service.Rotate(context.Background(), "logged-out-plaintext")
 
 	assert.ErrorIs(t, err, ErrInvalid)
-	assert.Equal(t, "user-1", repo.revokeAllForUserCalledWith)
+	assert.Equal(t, []string{"old-id"}, repo.revokedSessionIDs)
+	assert.Empty(t, repo.revokeAllForUserCalledWith)
 }
 
 func TestService_Rotate_FailsWithUnknownToken(t *testing.T) {
@@ -358,7 +368,7 @@ func TestService_Rotate_FailsWithExpiredToken(t *testing.T) {
 	assert.ErrorIs(t, err, ErrInvalid)
 }
 
-func TestService_Rotate_DetectsReuseAndRevokesEverySessionForTheUser(t *testing.T) {
+func TestService_Rotate_DetectsReuseAndRevokesOnlyTheReusedTokensSession(t *testing.T) {
 	revokedAt := time.Now().Add(-time.Minute)
 	repo := &fakeRepository{
 		findByHashResult: RefreshToken{
@@ -373,7 +383,8 @@ func TestService_Rotate_DetectsReuseAndRevokesEverySessionForTheUser(t *testing.
 	_, _, err := service.Rotate(context.Background(), "already-used-plaintext")
 
 	assert.ErrorIs(t, err, ErrInvalid)
-	assert.Equal(t, "user-1", repo.revokeAllForUserCalledWith)
+	assert.Equal(t, []string{"old-id"}, repo.revokedSessionIDs)
+	assert.Empty(t, repo.revokeAllForUserCalledWith)
 }
 
 func TestService_Revoke_RevokesTheMatchingToken(t *testing.T) {

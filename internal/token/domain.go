@@ -27,5 +27,8 @@ type Repository interface {
 	// Replace revokes id and links it to successorID only if it is still active
 	// and has no successor; it reports whether it did.
 	Replace(ctx context.Context, id string, successorID string) (bool, error)
+	// RevokeSession revokes id and every token that replaced it, following
+	// replaced_by; tokens already revoked keep their revocation date.
+	RevokeSession(ctx context.Context, userID string, id string) error
 	RevokeAllForUser(ctx context.Context, userID string) error
 }

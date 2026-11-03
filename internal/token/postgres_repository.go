@@ -104,6 +104,23 @@ func (r *PostgresRepository) Replace(ctx context.Context, id string, successorID
 	return n > 0, err
 }
 
+func (r *PostgresRepository) RevokeSession(ctx context.Context, userID string, id string) error {
+	// UNION (not UNION ALL) drops duplicates, so the walk ends even on a cycle.
+	_, err := r.db.ExecContext(ctx, `
+		WITH RECURSIVE session AS (
+			SELECT id, replaced_by FROM tamiyo.refresh_tokens WHERE id = $2 AND user_id = $1
+			UNION
+			SELECT t.id, t.replaced_by
+			FROM tamiyo.refresh_tokens t JOIN session s ON t.id = s.replaced_by
+			WHERE t.user_id = $1
+		)
+		UPDATE tamiyo.refresh_tokens
+		SET revoked_at = now()
+		WHERE user_id = $1 AND revoked_at IS NULL AND id IN (SELECT id FROM session)
+	`, userID, id)
+	return err
+}
+
 func (r *PostgresRepository) RevokeAllForUser(ctx context.Context, userID string) error {
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE tamiyo.refresh_tokens
