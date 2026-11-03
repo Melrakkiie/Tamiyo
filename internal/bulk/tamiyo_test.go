@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -216,17 +217,20 @@ func TestImportTamiyoCollection_RejectsInvalidFiles(t *testing.T) {
 }
 
 func TestParseTamiyoFile_TotalCopiesLimit(t *testing.T) {
-	card := `{"name": "Plains", "scryfall_id": "` + solRingSLD + `", "quantity": %d}`
-	file := func(kind string, last int) []byte {
-		cards := strings.Repeat(strings.Replace(card, "%d", "1000", 1)+",", maxImportCopies/1000-1) + strings.Replace(card, "%d", strconv.Itoa(last), 1)
-		return []byte(`{"tamiyo": 1, "kind": "` + kind + `", "cards": [` + cards + `]}`)
+	file := func(kind string, quantities ...int) []byte {
+		cards := make([]string, len(quantities))
+		for i, quantity := range quantities {
+			cards[i] = `{"name": "Plains", "scryfall_id": "` + solRingSLD + `", "quantity": ` + strconv.Itoa(quantity) + `}`
+		}
+		return []byte(`{"tamiyo": 1, "kind": "` + kind + `", "cards": [` + strings.Join(cards, ",") + `]}`)
 	}
+	atLimit := slices.Repeat([]int{1000}, maxImportCopies/1000)
 	for _, kind := range []string{TamiyoKindCollection, TamiyoKindDeck} {
 		t.Run(kind, func(t *testing.T) {
-			_, err := parseTamiyoFile(file(kind, 1000))
+			_, err := parseTamiyoFile(file(kind, atLimit...))
 			require.NoError(t, err)
 
-			_, err = parseTamiyoFile(append(file(kind, 1000)[:len(file(kind, 1000))-2], []byte(`,{"name": "Plains", "scryfall_id": "`+solRingSLD+`", "quantity": 1}]}`)...))
+			_, err = parseTamiyoFile(file(kind, append(atLimit, 1)...))
 			assert.ErrorIs(t, err, ErrInvalidFile)
 		})
 	}
