@@ -329,11 +329,25 @@ func (r *PostgresRepository) Create(ctx context.Context, userID string, c Card) 
 	return created.toDomain(), nil
 }
 
-func (r *PostgresRepository) Update(ctx context.Context, userID string, c Card) (Card, error) {
-	row := toCardRow(userID, c)
+// updatableColumns is the only source of column names in Update's SET clause.
+var updatableColumns = []string{"name", "scryfall_id", "set_code", "collector_number", "foil", "proxy", "storage_id", "mana_value", "colors", "card_type", "color_identity"}
+
+// Update writes only the columns present in changes, in one statement.
+func (r *PostgresRepository) Update(ctx context.Context, userID string, id int, changes Changes) (Card, error) {
+	args := map[string]any{"id": id, "user_id": userID}
+	var sets []string
+	for _, col := range updatableColumns {
+		if v, ok := changes[col]; ok {
+			sets = append(sets, col+" = :"+col)
+			args[col] = v
+		}
+	}
+	if len(sets) == 0 {
+		return r.FindByID(ctx, userID, id)
+	}
 	query := `
 		UPDATE tamiyo.cards
-		SET name = :name, scryfall_id = :scryfall_id, set_code = :set_code, collector_number = :collector_number, foil = :foil, proxy = :proxy, storage_id = :storage_id, mana_value = :mana_value, colors = :colors, card_type = :card_type, color_identity = :color_identity
+		SET ` + strings.Join(sets, ", ") + `
 		WHERE id = :id AND user_id = :user_id
 		RETURNING id, name, scryfall_id, set_code, collector_number, foil, proxy, storage_id, mana_value, colors, card_type, color_identity, added, updated
 	`
@@ -347,7 +361,7 @@ func (r *PostgresRepository) Update(ctx context.Context, userID string, c Card) 
 	}()
 
 	var updated cardRow
-	if err := stmt.GetContext(ctx, &updated, row); err != nil {
+	if err := stmt.GetContext(ctx, &updated, args); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Card{}, ErrNotFound
 		}
