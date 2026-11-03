@@ -1,0 +1,7 @@
+# Collection imports are written by the card module in one transaction
+
+A collection import (Moxfield, card list, Tamiyo, ManaBox) is written by the card module through one grouped operation: it receives an import plan, creates the copies in batched multi-row inserts inside one transaction, and returns them with their ids in input order. The bulk module keeps parsing, Scryfall resolution (before the transaction, see ADR-0003) and the summary, and calls the operation once per import through its own narrow interface (ADR-0008). Later tickets let the same plan also carry the storages and decks a file asks for, created with minimal inserts in the same transaction. Ownership stays enforced by the database triggers, so a copy pointing at another user's storage fails the whole import.
+
+The operation lives in the card module because every import creates cards and three of the four touch no deck. Two other placements were weighed. The deck module already has a transaction and a composer, but would host an operation that mostly has nothing to do with decks. A unit of work carried in the context would let each repository join a transaction opened by `bulk`, but every repository would have to honour an implicit transaction, for the sake of one feature.
+
+The cost: the card repository now knows how to insert storages and decks (minimal rows, duplicated from their own repositories), and an import is all or nothing, so a database failure no longer yields a partial summary with per-copy warnings. The single-copy create path stays for the single-copy routes.
