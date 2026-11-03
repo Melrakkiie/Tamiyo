@@ -426,6 +426,38 @@ func TestHandler_RegisterRoutes_AppliesGivenMiddlewareToBothAuthRoutes(t *testin
 	}
 }
 
+func TestHandler_RegisterProtectedRoutes_LimitsOnlyThePasswordCheckingRoutes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	protected := router.Group("/")
+	protected.Use(auth.RequireAuth(testJWTSecret))
+
+	blockAll := func(c *gin.Context) {
+		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests, please try again later"})
+	}
+	NewHandler(&fakeService{}, testJWTSecret, testAccessTokenTTL, &fakeTokenService{}, testCookie).RegisterProtectedRoutes(protected, blockAll)
+
+	tests := []struct {
+		method, path string
+		limited      bool
+	}{
+		{http.MethodPost, "/auth/password", true},
+		{http.MethodDelete, "/auth/me", true},
+		{http.MethodGet, "/auth/me", false},
+		{http.MethodPatch, "/auth/me", false},
+	}
+	for _, tt := range tests {
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, authenticatedRequest(tt.method, tt.path, `{}`))
+
+		if tt.limited {
+			assert.Equal(t, http.StatusTooManyRequests, w.Code, "%s %s should be limited", tt.method, tt.path)
+		} else {
+			assert.NotEqual(t, http.StatusTooManyRequests, w.Code, "%s %s should not be limited", tt.method, tt.path)
+		}
+	}
+}
+
 func TestHandler_ChangePassword_ReturnsNoContentOnSuccess(t *testing.T) {
 	service := &fakeService{}
 	router := setupProtectedRouter(service, &fakeTokenService{})
