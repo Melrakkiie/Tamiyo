@@ -414,7 +414,7 @@ The exchange rate used to convert dollars to euros: the European Central Bank's 
 ```
 
 ### Request size
-Every request body is capped at 10 MB. A request declaring a larger body is refused with `413` and `{"error": "request body too large"}` before any handler runs; a body that does not declare its size is cut off at 10 MB. The upload routes keep their own `413` message.
+Every request body is capped at 10 MB. A request declaring a larger body is refused with `413` and `{"error": "request body too large"}` before any handler runs; a body that does not declare its size is cut off at 10 MB. Multipart uploads are the exception: they are never refused on their declared size alone, and an upload over 10 MB gets the upload routes' own `413` message. See the [error reference](#error-reference).
 
 ### Partial updates
 All `PATCH` endpoints accept a partial body — only the fields you include are modified. Omitted fields are left untouched.
@@ -1924,6 +1924,7 @@ All error responses share the same shape:
 | `401 Unauthorized` | Missing/malformed `Authorization` header, invalid or expired access token, invalid/expired/reused refresh token, invalid/expired/used password-reset token, incorrect `current_password`, or (on `/auth/login`) wrong email/password. |
 | `404 Not Found` | The resource identified by the URL doesn't exist for the authenticated account. A resource that exists but belongs to another account also returns `404`, not `403` — this avoids confirming that an ID exists at all. |
 | `409 Conflict` | Email already registered (`/auth/register`). |
+| `413 Request Entity Too Large` | The request body is over 10 MB, on any route (see [request size](#request-size)). Body: `{"error": "request body too large"}`; the import routes answer `{"error": "the uploaded file is too large (10 MB maximum)"}`. |
 | `429 Too Many Requests` | Rate limit exceeded on an auth route (sign-in or email-link budget, see [rate limiting](#rate-limiting)). |
 | `500 Internal Server Error` | Unexpected failure (database unreachable, etc). |
 | `502 Bad Gateway` | A bulk import (see [Bulk Import](#bulk-import)) couldn't reach or parse a response from the Scryfall API. Body: `{"error": "could not resolve cards against scryfall"}`. |

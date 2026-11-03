@@ -46,6 +46,8 @@ import (
 	"Melrakkiie/Tamiyo/internal/user"
 )
 
+const maxRequestBodyBytes = 10 << 20
+
 func main() {
 	logger, err := zap.NewProduction()
 	if err != nil {
@@ -162,8 +164,8 @@ func main() {
 	router.Use(httplog.Recovery(logger))
 	router.Use(httplog.Middleware(logger))
 	router.Use(security.Headers())
-	router.Use(bodylimit.Middleware(10 << 20))
 	router.Use(cors.Middleware(cfg.CORSAllowedOrigins))
+	router.Use(bodylimit.Middleware(maxRequestBodyBytes))
 
 	api := router.Group(cfg.APIBasePath)
 
