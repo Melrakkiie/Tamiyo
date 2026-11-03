@@ -945,3 +945,20 @@ func TestHandler_GetValue_ReturnsServerErrorOnFailure(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+func TestUpdateCardRequest_Changes_KeysMatchUpdatableColumns(t *testing.T) {
+	s, b, f := "x", true, 1.0
+	id := 1
+	req := updateCardRequest{
+		Name: &s, ScryfallID: &s, SetCode: &s, CollectorNumber: &s,
+		Foil: &b, Proxy: &b, StorageID: optionalStorageID{Set: true, Value: &id},
+		ManaValue: &f, Colors: &s, CardType: &s, ColorIdentity: &s,
+	}
+
+	keys := make([]string, 0, len(updatableColumns))
+	for k := range req.changes() {
+		keys = append(keys, k)
+	}
+
+	assert.ElementsMatch(t, updatableColumns, keys)
+}

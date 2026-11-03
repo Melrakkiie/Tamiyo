@@ -482,7 +482,7 @@ func TestPostgresRepository_Update_NullStorageClearsStorageAndAbsentFieldsKeepVa
 		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: true, StorageID: &storageID},
 	})
 
-	updated, err := repo.Update(context.Background(), userID, 1, Changes{"storage_id": nil})
+	updated, err := repo.Update(context.Background(), userID, 1, Changes{"storage_id": (*int)(nil)})
 
 	require.NoError(t, err)
 	assert.Nil(t, updated.StorageID)
@@ -1295,4 +1295,47 @@ func cardNames(cards []Card) []string {
 		out[i] = c.Name
 	}
 	return out
+}
+
+func TestPostgresRepository_Update_FoilOnlyKeepsDetailColumns(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+
+	seedCards(t, db, userID, []Card{
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232"},
+	})
+	_, err := db.Exec(`UPDATE tamiyo.cards SET colors = 'U', card_type = 'Artifact', color_identity = 'UB' WHERE user_id = $1`, userID)
+	require.NoError(t, err)
+
+	updated, err := repo.Update(context.Background(), userID, 1, Changes{"foil": true})
+
+	require.NoError(t, err)
+	assert.True(t, updated.Foil)
+	require.NotNil(t, updated.Colors)
+	assert.Equal(t, "U", *updated.Colors)
+	require.NotNil(t, updated.CardType)
+	assert.Equal(t, "Artifact", *updated.CardType)
+	require.NotNil(t, updated.ColorIdentity)
+	assert.Equal(t, "UB", *updated.ColorIdentity)
+}
+
+func TestPostgresRepository_Update_EmptyChangesReturnsStoredCardOrNotFound(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+
+	seedCards(t, db, userA, []Card{
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232"},
+	})
+	stored, err := repo.FindByID(context.Background(), userA, 1)
+	require.NoError(t, err)
+
+	got, err := repo.Update(context.Background(), userA, 1, Changes{})
+	require.NoError(t, err)
+	assert.Equal(t, stored, got)
+
+	_, err = repo.Update(context.Background(), userB, 1, Changes{})
+	assert.ErrorIs(t, err, ErrNotFound)
 }
