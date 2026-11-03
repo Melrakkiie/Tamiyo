@@ -243,21 +243,3 @@ A signed-in user can follow other users. `PUT` / `DELETE /users/:id/follow` foll
 ### Shared decks
 
 Deck ids are random UUIDs, so they can't be guessed from one another. `GET /shared/decks` browses every public deck, with filters on the name, format, commander, a card, the owner, the color identity and the Commander bracket (a deck's optional `bracket`, 1 to 5). `GET /shared/decks/:id` (plus `/legality`, `/stats`, `/combos`, `/export` and `/compare/:other_id`) serves a public or unlisted deck read-only, without authentication: its name, format, owner profile and card list, with no storage, proxy or ownership details. A private deck answers `404`, like an unknown link, and so does every deck of an owner who has not verified their email address yet (only the owner sees them until then). These routes are rate-limited per client IP (60 requests per minute by default, `SHARE_RATE_LIMIT_MAX` / `SHARE_RATE_LIMIT_WINDOW_SECONDS`). Signed in, `GET /deck/:id/content` returns the card list of a deck you can see (yours, whatever its visibility, or anyone's public or unlisted one) in the same shape, which the front uses to playtest a deck; `GET /deck/:id/ownership` tells how many copies of each card of a deck (yours, or anyone's public or unlisted one) your collection holds, by name whatever the printing, and `GET /deck/:id/compare/:other_id` compares two decks (yours, or anyone's public or unlisted ones) by card name, ignoring printings: cards in common with each deck's quantity, and cards only in one of them. Signed in, you can also like someone else's public or unlisted deck (`PUT` / `DELETE /deck/:id/like`) and find the decks you liked with `GET /auth/me/liked-decks`; public decks list their `likes_count` and can be sorted by it. See [`doc/API.md`](./doc/API.md#shared-decks).
-
-### Importing a ManaBox Collection via script (alternative)
-
-[`_devops/utils/import_manabox.py`](./_devops/utils/import_manabox.py) does the same ManaBox import as `POST /import/manabox` above, but as an external script driving the HTTP API instead of a native route — useful if you'd rather not upload the CSV directly, or want to see a dry run of what would be created before calling the API at all.
-
-Since the API is multi-tenant, the script needs an account to import into: pass `--email` (and optionally `--password`, otherwise you're prompted for it). It registers that account on first use, or logs in if it already exists, then sends the resulting token on every request — everything it creates belongs to that one account.
-
-```bash
-pip install requests
-
-# Dry run first — parses the CSV and prints what would happen, without calling the API
-python3 _devops/utils/import_manabox.py _devops/utils/ManaBox_Collection.csv --dry-run --email you@example.com
-
-# Then run it for real (the API must be running) — you'll be prompted for the password
-python3 _devops/utils/import_manabox.py _devops/utils/ManaBox_Collection.csv --email you@example.com
-```
-
-Targets `http://localhost:8080` by default; override with `--api-url` or the `TAMIYO_API_URL` environment variable.
