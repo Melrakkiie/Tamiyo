@@ -1,8 +1,11 @@
 package card
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -162,6 +165,64 @@ func TestSearchCondition_BindsEveryValue(t *testing.T) {
 	assert.Contains(t, sql, "replace($1, '~', cards.name)")
 	assert.Contains(t, sql, "NOT COALESCE(")
 	assert.Equal(t, []any{"%~ deals%", "G", "{2}", 3, "{W}", 6, "usd", 1.0, "modern"}, args)
+}
+
+// neutralTree converts parser output to the neutral form of doc/search_cases.json.
+func neutralTree(node *SearchNode) map[string]any {
+	switch node.Kind {
+	case SearchAnd, SearchOr:
+		children := make([]any, len(node.Children))
+		for i, child := range node.Children {
+			children[i] = neutralTree(child)
+		}
+		if node.Kind == SearchOr {
+			return map[string]any{"or": children}
+		}
+		return map[string]any{"and": children}
+	case SearchNot:
+		return map[string]any{"not": neutralTree(node.Children[0])}
+	}
+	c := node.Term
+	var value any = c.Number
+	// Colors are always text: an empty code means colorless.
+	if c.Text != "" || c.Field == fieldColor || c.Field == fieldIdentity {
+		value = c.Text
+	}
+	return map[string]any{"field": c.Field, "op": c.Op, "value": value}
+}
+
+func TestParseSearchQuery_SharedCases(t *testing.T) {
+	raw, err := os.ReadFile("../../doc/search_cases.json")
+	require.NoError(t, err)
+	var cases []struct {
+		Query   string          `json:"query"`
+		Tree    json.RawMessage `json:"tree"`
+		Invalid bool            `json:"invalid"`
+		Sides   []string        `json:"sides"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &cases))
+	require.NotEmpty(t, cases)
+
+	for _, tc := range cases {
+		if len(tc.Sides) > 0 && !slices.Contains(tc.Sides, "api") {
+			continue
+		}
+		t.Run(tc.Query, func(t *testing.T) {
+			node, err := parseSearchQuery(tc.Query)
+			if tc.Invalid {
+				assert.ErrorIs(t, err, errInvalidQuery)
+				return
+			}
+			require.NoError(t, err)
+			var want any
+			require.NoError(t, json.Unmarshal(tc.Tree, &want))
+			got, err := json.Marshal(neutralTree(node))
+			require.NoError(t, err)
+			var gotAny any
+			require.NoError(t, json.Unmarshal(got, &gotAny))
+			assert.Equal(t, want, gotAny)
+		})
+	}
 }
 
 func TestParseSearchQuery_HasNoKeywordForInternalCriteria(t *testing.T) {
