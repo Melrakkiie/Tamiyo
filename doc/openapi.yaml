@@ -3908,8 +3908,12 @@ paths:
         storage, keeping each printing, finish and proxy status. Without
         storage_id, cards go in the storage named in the file (an existing
         storage with that exact name, or a new one of the file's type);
-        with storage_id, they all go in that storage. Printings Scryfall
-        doesn't know are skipped and reported in ImportSummary.warnings.
+        with storage_id, they all go in that storage. The whole import is
+        one transaction, storages included: every storage and card is
+        created, or none, and on a failure (a database error, the request
+        cancelled) the route returns the error alone, with no summary.
+        Printings Scryfall doesn't know are skipped and reported in
+        ImportSummary.warnings.
       requestBody:
         required: true
         content:
