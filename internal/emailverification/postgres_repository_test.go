@@ -35,8 +35,14 @@ func getTestDB(t *testing.T) *sqlx.DB {
 func seedUser(t *testing.T, db *sqlx.DB) string {
 	t.Helper()
 
+	return seedUserWithEmail(t, db, "alice@example.com")
+}
+
+func seedUserWithEmail(t *testing.T, db *sqlx.DB, email string) string {
+	t.Helper()
+
 	var userID string
-	require.NoError(t, db.Get(&userID, `INSERT INTO tamiyo.users (email, password_hash) VALUES ('alice@example.com', 'fake-hash') RETURNING id`))
+	require.NoError(t, db.Get(&userID, `INSERT INTO tamiyo.users (email, password_hash) VALUES ($1, 'fake-hash') RETURNING id`, email))
 
 	return userID
 }
@@ -89,24 +95,19 @@ func TestPostgresRepository_Consume_RejectsExpiredAndUnknown(t *testing.T) {
 func TestPostgresRepository_Create_DeletesOnlyTheUsersExpiredTokens(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db)
-	var otherID string
-	require.NoError(t, db.Get(&otherID, `INSERT INTO tamiyo.users (email, password_hash) VALUES ('bob@example.com', 'fake-hash') RETURNING id`))
+	otherID := seedUserWithEmail(t, db, "bob@example.com")
+	_, err := db.Exec(`
+		INSERT INTO tamiyo.email_verification_tokens (user_id, email, token_hash, expires_at, used_at) VALUES
+		($1, 'a@example.com', 'expired', now() - interval '1 minute', NULL),
+		($1, 'b@example.com', 'fresh', now() + interval '1 hour', NULL),
+		($1, 'c@example.com', 'used', now() + interval '1 hour', now()),
+		($2, 'd@example.com', 'other-expired', now() - interval '1 minute', NULL)
+	`, userID, otherID)
+	require.NoError(t, err)
 	repo := NewPostgresRepository(db)
 	ctx := context.Background()
-	past, future := time.Now().Add(-time.Minute), time.Now().Add(time.Hour)
-	for _, tk := range []VerificationToken{
-		{UserID: userID, Email: "a@example.com", TokenHash: "expired", ExpiresAt: past},
-		{UserID: userID, Email: "b@example.com", TokenHash: "fresh", ExpiresAt: future},
-		{UserID: userID, Email: "c@example.com", TokenHash: "used", ExpiresAt: future},
-		{UserID: otherID, Email: "d@example.com", TokenHash: "other-expired", ExpiresAt: past},
-	} {
-		_, err := repo.Create(ctx, tk)
-		require.NoError(t, err)
-	}
-	_, err := db.Exec(`UPDATE tamiyo.email_verification_tokens SET used_at = now() WHERE token_hash = 'used'`)
-	require.NoError(t, err)
 
-	_, err = repo.Create(ctx, VerificationToken{UserID: userID, Email: "e@example.com", TokenHash: "new", ExpiresAt: future})
+	_, err = repo.Create(ctx, VerificationToken{UserID: userID, Email: "e@example.com", TokenHash: "new", ExpiresAt: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
 
 	var hashes []string
