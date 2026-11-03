@@ -8,7 +8,6 @@ require (
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/lib/pq v1.12.3
 	github.com/pressly/goose/v3 v3.27.0
-	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
 	go.uber.org/zap v1.28.0
@@ -35,7 +34,6 @@ require (
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/ebitengine/purego v0.10.1 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
-	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
 	github.com/gin-contrib/sse v1.1.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
@@ -44,7 +42,6 @@ require (
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.30.1 // indirect
-	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -73,15 +70,9 @@ require (
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
-	github.com/sagikazarmark/locafero v0.11.0 // indirect
 	github.com/sethvargo/go-retry v0.3.0 // indirect
 	github.com/shirou/gopsutil/v4 v4.26.6 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
-	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect
-	github.com/spf13/afero v1.15.0 // indirect
-	github.com/spf13/cast v1.10.0 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
-	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/testcontainers/testcontainers-go v0.44.0 // indirect
 	github.com/tklauser/go-sysconf v0.4.0 // indirect
 	github.com/tklauser/numcpus v0.12.0 // indirect
