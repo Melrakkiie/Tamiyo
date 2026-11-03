@@ -51,8 +51,10 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes, authMiddleware ...gin.Handl
 	router.POST("/auth/confirm-email", confirmHandlers...)
 }
 
-func (h *Handler) RegisterProtectedRoutes(router gin.IRoutes) {
-	router.POST("/auth/email", h.requestEmailChange)
+// RegisterProtectedRoutes mounts the authenticated routes; passwordMiddleware runs before the password check.
+func (h *Handler) RegisterProtectedRoutes(router gin.IRoutes, passwordMiddleware ...gin.HandlerFunc) {
+	requestHandlers := append(append([]gin.HandlerFunc{}, passwordMiddleware...), h.requestEmailChange)
+	router.POST("/auth/email", requestHandlers...)
 }
 
 var emailTaken = apierr.Mapping{Err: user.ErrEmailAlreadyTaken, Status: http.StatusConflict, Message: "email already registered"}

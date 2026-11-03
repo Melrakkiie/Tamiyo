@@ -60,7 +60,7 @@ Email addresses are case-insensitive: every email the API receives (register, lo
 
 A new password (`/auth/register`, `/auth/password`, `/auth/reset-password`) is 8 to 72 bytes long, counted as UTF-8 bytes, so an accented character counts for 2. A longer one gets `400`. Login and `current_password` are not limited.
 
-`/auth/register` and `/auth/login` are rate-limited per client IP (5 requests/minute by default, one sign-in budget for the two) to blunt brute-force attempts.
+`/auth/register` and `/auth/login` are rate-limited per client IP (5 requests/minute by default, one sign-in budget shared with the password-checking routes `POST /auth/password`, `DELETE /auth/me` and `POST /auth/email`, see [rate limiting](#rate-limiting)) to blunt brute-force attempts.
 
 ### Forgotten password
 
@@ -174,7 +174,7 @@ Change the authenticated account's password. **Requires `Authorization: Bearer <
 
 **Response `204 No Content`**
 
-**Errors:** `400` missing field / `new_password` too short or over 72 bytes · `401` missing/invalid token, or `current_password` is incorrect · `404` account no longer exists
+**Errors:** `400` missing field / `new_password` too short or over 72 bytes · `401` missing/invalid token, or `current_password` is incorrect · `404` account no longer exists · `429` too many requests (see [rate limiting](#rate-limiting))
 
 > On success, **every** refresh token belonging to the account is revoked — all other sessions (and this one, once its current access token expires) must log in again.
 
@@ -223,7 +223,7 @@ Delete the authenticated account and everything it owns. **Requires `Authorizati
 
 **Response `204 No Content`** — the refresh cookie is cleared.
 
-**Errors:** `400` missing body or `password` · `401` missing/invalid token, or `password` is incorrect · `404` account no longer exists
+**Errors:** `400` missing body or `password` · `401` missing/invalid token, or `password` is incorrect · `404` account no longer exists · `429` too many requests (see [rate limiting](#rate-limiting))
 
 > This can't be undone. The collection, storages, decks (with their pending cards, tags, folders and share links), likes given and received on those decks, follows in both directions, preferences and every session are deleted. Export what you want to keep first (see [Bulk Export](#bulk-export)). An access token issued before the deletion keeps passing authentication until it expires, but finds no data: `GET /auth/me` returns `404`.
 
@@ -274,7 +274,7 @@ Ask to change the authenticated account's email. **Requires `Authorization: Bear
 
 **Response `202 Accepted`**
 
-**Errors:** `400` missing field, invalid email, or `new_email` is the current email · `401` missing/invalid token, or `current_password` is incorrect · `404` account no longer exists · `409` `new_email` already belongs to an account · `500` the confirmation email could not be sent
+**Errors:** `400` missing field, invalid email, or `new_email` is the current email · `401` missing/invalid token, or `current_password` is incorrect · `404` account no longer exists · `409` `new_email` already belongs to an account · `429` too many requests (see [rate limiting](#rate-limiting)) · `500` the confirmation email could not be sent
 
 > Asking again sends a new token; earlier ones stay valid until they expire or one of them is used.
 
@@ -365,7 +365,7 @@ Set a new password using the token from the forgot-password email. A link works 
 
 The auth routes are counted in two separate per-client-IP budgets, so failed sign-ins never block email-link actions and the reverse:
 
-- **sign-in budget:** `POST /auth/register` and `POST /auth/login`;
+- **sign-in budget:** `POST /auth/register`, `POST /auth/login`, and the routes that check the account's current password, `POST /auth/password`, `DELETE /auth/me` and `POST /auth/email` (counted after authentication: a request without a valid token gets its `401` and does not count; `GET` and `PATCH /auth/me` are not limited);
 - **email-link budget:** `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /auth/confirm-email`, `POST /auth/verify-email`, and `POST /auth/verify-email/resend`.
 
 Each budget allows 5 requests per 60-second window by default (`AUTH_RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_WINDOW_SECONDS`). Exceeding one returns:

@@ -405,13 +405,13 @@ func TestHandler_Login_ReturnsInternalServerErrorWhenRefreshTokenIssueFails(t *t
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
+func blockAll(c *gin.Context) {
+	c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests, please try again later"})
+}
+
 func TestHandler_RegisterRoutes_AppliesGivenMiddlewareToBothAuthRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-
-	blockAll := func(c *gin.Context) {
-		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests, please try again later"})
-	}
 
 	NewHandler(&fakeService{}, testJWTSecret, testAccessTokenTTL, &fakeTokenService{}, testCookie).RegisterRoutes(router, blockAll)
 
@@ -423,6 +423,35 @@ func TestHandler_RegisterRoutes_AppliesGivenMiddlewareToBothAuthRoutes(t *testin
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusTooManyRequests, w.Code, "path %s should go through the middleware", path)
+	}
+}
+
+func TestHandler_RegisterProtectedRoutes_LimitsOnlyThePasswordCheckingRoutes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	protected := router.Group("/")
+	protected.Use(auth.RequireAuth(testJWTSecret))
+
+	NewHandler(&fakeService{}, testJWTSecret, testAccessTokenTTL, &fakeTokenService{}, testCookie).RegisterProtectedRoutes(protected, blockAll)
+
+	tests := []struct {
+		method, path string
+		limited      bool
+	}{
+		{http.MethodPost, "/auth/password", true},
+		{http.MethodDelete, "/auth/me", true},
+		{http.MethodGet, "/auth/me", false},
+		{http.MethodPatch, "/auth/me", false},
+	}
+	for _, tt := range tests {
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, authenticatedRequest(tt.method, tt.path, `{}`))
+
+		if tt.limited {
+			assert.Equal(t, http.StatusTooManyRequests, w.Code, "%s %s should be limited", tt.method, tt.path)
+		} else {
+			assert.NotEqual(t, http.StatusTooManyRequests, w.Code, "%s %s should not be limited", tt.method, tt.path)
+		}
 	}
 }
 

@@ -263,6 +263,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /auth/forgot-password:
     post:
@@ -479,6 +481,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /auth/email:
     post:
@@ -523,6 +527,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -4318,7 +4324,8 @@ components:
       description: >
         Too many requests from this client IP within one of two budgets,
         each AUTH_RATE_LIMIT_MAX per AUTH_RATE_LIMIT_WINDOW_SECONDS (5 per
-        60s by default): sign-in (/auth/register and /auth/login) or
+        60s by default): sign-in (/auth/register, /auth/login,
+        /auth/password, DELETE /auth/me and /auth/email) or
         email-link (/auth/forgot-password, /auth/reset-password,
         /auth/confirm-email, /auth/verify-email and
         /auth/verify-email/resend). A Retry-After header (seconds)
