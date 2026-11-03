@@ -1,6 +1,7 @@
 package bulk
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -78,4 +79,19 @@ func TestParseManaBoxCSV_EmptyFileReturnsNoRows(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Empty(t, rows)
+}
+
+func TestParseManaBoxCSV_TotalCopiesLimit(t *testing.T) {
+	const header = "Binder Name,Binder Type,Name,Set code,Scryfall ID,Collector number,Foil,Quantity\n"
+	const line = "Main,binder,Plains,TST,aaaaaaaa-0000-0000-0000-000000000000,1,,%d\n"
+	file := func(last int) string {
+		return header + strings.Repeat(fmt.Sprintf(line, 1000), maxImportCopies/1000-1) + fmt.Sprintf(line, last)
+	}
+
+	rows, err := parseManaBoxCSV(strings.NewReader(file(1000)))
+	require.NoError(t, err)
+	assert.Len(t, rows, maxImportCopies/1000)
+
+	_, err = parseManaBoxCSV(strings.NewReader(header + strings.Repeat(fmt.Sprintf(line, 1000), maxImportCopies/1000) + fmt.Sprintf(line, 1)))
+	assert.ErrorIs(t, err, ErrInvalidFile)
 }
