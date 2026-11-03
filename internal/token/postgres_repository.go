@@ -32,7 +32,7 @@ func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
 }
 
 func (r *PostgresRepository) Create(ctx context.Context, t RefreshToken) (RefreshToken, error) {
-	// The purge CTE runs in the same statement as the insert; only expiry decides, so revoked/used tokens stay.
+	// Only expiry decides: revoked and used tokens stay, reuse detection needs them.
 	query := `
 		WITH purge AS (
 			DELETE FROM tamiyo.refresh_tokens WHERE user_id = $1 AND expires_at < now()
