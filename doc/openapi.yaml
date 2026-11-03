@@ -611,7 +611,8 @@ paths:
             even/odd), pow/power, tou/toughness, m/mana, r/rarity, s/set/e/edition,
             cn/number, f/format/legal, kw/keyword, is/not (foil, nonfoil, proxy),
             usd, eur; operators `:` `=` `!=` `<` `<=` `>` `>=` where they make
-            sense. At most 500 characters and 50 terms. An unknown key, a bad value
+            sense; numeric values are between -1000000 and 1000000. At most 500
+            characters and 50 terms. An unknown key, a bad value
             or unbalanced parentheses is a 400 explaining the problem, e.g.
             `q: unknown keyword "foo"`. Oracle text, mana cost, rarity and keywords
             come from Scryfall in the background, like type lines: a new printing
