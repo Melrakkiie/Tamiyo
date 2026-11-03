@@ -58,6 +58,8 @@ Tamiyo is multi-tenant. `/health`, `/auth/register`, `/auth/login`, `/auth/refre
 
 Email addresses are case-insensitive: every email the API receives (register, login, forgot password, email change, email verification) is trimmed and lowercased, stored lowercased, and returned lowercased by `/auth/me`. `Bob@Mail.fr` and `bob@mail.fr` are the same account, so registering or changing to a case variant of a taken address gives `409`.
 
+A new password (`/auth/register`, `/auth/password`, `/auth/reset-password`) is 8 to 72 bytes long, counted as UTF-8 bytes, so an accented character counts for 2. A longer one gets `400`. Login and `current_password` are not limited.
+
 `/auth/register` and `/auth/login` are rate-limited per client IP (5 requests/minute by default) to blunt brute-force attempts.
 
 ### Forgotten password
@@ -168,11 +170,11 @@ Change the authenticated account's password. **Requires `Authorization: Bearer <
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `current_password` | string | Yes | Must match the account's current password. |
-| `new_password` | string | Yes | Minimum 8 characters. |
+| `new_password` | string | Yes | Minimum 8 characters, maximum 72 bytes (UTF-8: accented characters count for 2). |
 
 **Response `204 No Content`**
 
-**Errors:** `400` missing field / `new_password` too short · `401` missing/invalid token, or `current_password` is incorrect · `404` account no longer exists
+**Errors:** `400` missing field / `new_password` too short or over 72 bytes · `401` missing/invalid token, or `current_password` is incorrect · `404` account no longer exists
 
 > On success, **every** refresh token belonging to the account is revoked — all other sessions (and this one, once its current access token expires) must log in again.
 
@@ -349,11 +351,11 @@ Set a new password using the token from the forgot-password email. A link works 
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `token` | string | Yes | From the forgot-password email. |
-| `new_password` | string | Yes | Minimum 8 characters. |
+| `new_password` | string | Yes | Minimum 8 characters, maximum 72 bytes (UTF-8: accented characters count for 2). |
 
 **Response `204 No Content`**
 
-**Errors:** `400` missing field / `new_password` too short · `401` invalid, expired, or already-used token
+**Errors:** `400` missing field / `new_password` too short or over 72 bytes · `401` invalid, expired, or already-used token
 
 > On success, **every** refresh token belonging to the account is revoked, same as `/auth/password`.
 
@@ -1921,5 +1923,5 @@ All error responses share the same shape:
 | `collector_number` | Must be an integer > 0 |
 | `storage_id` (on cards) | Must reference an existing storage row, if provided |
 | `commander_id` (on decks) | Must reference an existing card row, if provided |
-| `password` / `new_password` | Minimum 8 characters |
+| `password` (register) / `new_password` | Minimum 8 characters, maximum 72 bytes (UTF-8, accented characters count for 2) |
 | `refresh_token` | Single-use; reuse after rotation revokes all of the account's refresh tokens |

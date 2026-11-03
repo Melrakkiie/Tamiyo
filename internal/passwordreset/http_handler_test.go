@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -246,6 +247,35 @@ func TestHandler_ResetPassword_ReturnsBadRequestWhenNewPasswordTooShort(t *testi
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_ResetPassword_EnforcesThe72BytePasswordLimit(t *testing.T) {
+	cases := []struct {
+		name     string
+		password string
+		status   int
+	}{
+		{"72 bytes", strings.Repeat("a", 72), http.StatusNoContent},
+		{"73 bytes", strings.Repeat("a", 73), http.StatusBadRequest},
+		{"40 accented characters", strings.Repeat("é", 40), http.StatusBadRequest},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			service := &fakeResetService{consumeUserID: "user-1"}
+			router := setupRouter(service, &fakeUserLookup{}, &fakeSessionRevoker{}, &fakeMailer{})
+
+			body := `{"token":"some-token","new_password":"` + tc.password + `"}`
+			req := httptest.NewRequest(http.MethodPost, "/auth/reset-password", bytes.NewBufferString(body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, tc.status, w.Code)
+			if tc.status == http.StatusBadRequest {
+				assert.Contains(t, w.Body.String(), "72 bytes")
+			}
+		})
+	}
 }
 
 func TestHandler_ResetPassword_ReturnsInternalServerErrorWhenSetPasswordFails(t *testing.T) {

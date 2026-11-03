@@ -14,6 +14,7 @@ import (
 	"Melrakkiie/Tamiyo/internal/auth"
 	"Melrakkiie/Tamiyo/internal/authcookie"
 	"Melrakkiie/Tamiyo/internal/emailaddr"
+	"Melrakkiie/Tamiyo/internal/password"
 )
 
 type registerRequest struct {
@@ -245,6 +246,11 @@ func (h *Handler) register(ctx *gin.Context) {
 		return
 	}
 
+	if err := password.CheckLength(req.Password); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	created, err := h.service.Register(ctx.Request.Context(), string(req.Email), req.Password, req.DisplayName)
 	if err != nil {
 		apierr.Respond(ctx, err,
@@ -303,6 +309,11 @@ func (h *Handler) changePassword(ctx *gin.Context) {
 
 	var req changePasswordRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := password.CheckLength(req.NewPassword); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
