@@ -189,39 +189,41 @@ func (r updateCardRequest) validate() error {
 	return validateColorIdentity(r.ColorIdentity)
 }
 
-func (r updateCardRequest) applyTo(c Card) Card {
+// changes returns the columns the request sends; nil pointers mean "not sent".
+func (r updateCardRequest) changes() Changes {
+	c := Changes{}
 	if r.Name != nil {
-		c.Name = *r.Name
+		c["name"] = *r.Name
 	}
 	if r.ScryfallID != nil {
-		c.ScryfallID = *r.ScryfallID
+		c["scryfall_id"] = *r.ScryfallID
 	}
 	if r.SetCode != nil {
-		c.SetCode = *r.SetCode
+		c["set_code"] = *r.SetCode
 	}
 	if r.CollectorNumber != nil {
-		c.CollectorNumber = *r.CollectorNumber
+		c["collector_number"] = *r.CollectorNumber
 	}
 	if r.Foil != nil {
-		c.Foil = *r.Foil
+		c["foil"] = *r.Foil
 	}
 	if r.Proxy != nil {
-		c.Proxy = *r.Proxy
+		c["proxy"] = *r.Proxy
 	}
 	if r.ManaValue != nil {
-		c.ManaValue = *r.ManaValue
+		c["mana_value"] = *r.ManaValue
 	}
 	if r.StorageID.Set {
-		c.StorageID = r.StorageID.Value
+		c["storage_id"] = r.StorageID.Value
 	}
 	if r.Colors != nil {
-		c.Colors = normalizeColors(r.Colors)
+		c["colors"] = normalizeColors(r.Colors)
 	}
 	if r.CardType != nil {
-		c.CardType = r.CardType
+		c["card_type"] = r.CardType
 	}
 	if r.ColorIdentity != nil {
-		c.ColorIdentity = normalizeColors(r.ColorIdentity)
+		c["color_identity"] = normalizeColors(r.ColorIdentity)
 	}
 	return c
 }

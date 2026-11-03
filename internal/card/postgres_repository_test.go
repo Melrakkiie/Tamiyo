@@ -439,11 +439,7 @@ func TestPostgresRepository_Update_UpdatesAndReturnsCard(t *testing.T) {
 		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false},
 	})
 
-	existing, err := repo.FindByID(context.Background(), userID, 1)
-	require.NoError(t, err)
-
-	existing.Name = "Renamed Card"
-	updated, err := repo.Update(context.Background(), userID, existing)
+	updated, err := repo.Update(context.Background(), userID, 1, Changes{"name": "Renamed Card"})
 
 	require.NoError(t, err)
 	assert.Equal(t, "Renamed Card", updated.Name)
@@ -453,14 +449,53 @@ func TestPostgresRepository_Update_UpdatesAndReturnsCard(t *testing.T) {
 	assert.Equal(t, "Renamed Card", refetched.Name)
 }
 
+func TestPostgresRepository_Update_OverlappingUpdatesOfDifferentFieldsBothPersist(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userID)
+
+	seedCards(t, db, userID, []Card{
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false},
+	})
+
+	_, err := repo.Update(context.Background(), userID, 1, Changes{"foil": true})
+	require.NoError(t, err)
+	_, err = repo.Update(context.Background(), userID, 1, Changes{"storage_id": 2})
+	require.NoError(t, err)
+
+	stored, err := repo.FindByID(context.Background(), userID, 1)
+	require.NoError(t, err)
+	assert.True(t, stored.Foil)
+	require.NotNil(t, stored.StorageID)
+	assert.Equal(t, 2, *stored.StorageID)
+}
+
+func TestPostgresRepository_Update_NullStorageClearsStorageAndAbsentFieldsKeepValues(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	seedStorages(t, db, userID)
+
+	storageID := 1
+	seedCards(t, db, userID, []Card{
+		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: true, StorageID: &storageID},
+	})
+
+	updated, err := repo.Update(context.Background(), userID, 1, Changes{"storage_id": nil})
+
+	require.NoError(t, err)
+	assert.Nil(t, updated.StorageID)
+	assert.True(t, updated.Foil)
+	assert.Equal(t, "Black Lotus", updated.Name)
+}
+
 func TestPostgresRepository_Update_ReturnsErrNotFoundWhenCardDoesNotExist(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db, "alice@example.com")
 	repo := NewPostgresRepository(db)
 
-	nonExistent := Card{ID: 999, Name: "Non existent", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false}
-
-	_, err := repo.Update(context.Background(), userID, nonExistent)
+	_, err := repo.Update(context.Background(), userID, 999, Changes{"name": "Non existent"})
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
@@ -475,8 +510,7 @@ func TestPostgresRepository_Update_ReturnsErrNotFoundWhenCardBelongsToAnotherUse
 		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false},
 	})
 
-	cardFromA := Card{ID: 1, Name: "Hijacked", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false}
-	_, err := repo.Update(context.Background(), userB, cardFromA)
+	_, err := repo.Update(context.Background(), userB, 1, Changes{"name": "Hijacked"})
 
 	assert.ErrorIs(t, err, ErrNotFound)
 
@@ -494,12 +528,7 @@ func TestPostgresRepository_Update_ReturnsErrStorageNotFoundOnInvalidStorageID(t
 		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false},
 	})
 
-	existing, err := repo.FindByID(context.Background(), userID, 1)
-	require.NoError(t, err)
-
-	invalidStorageID := 9999
-	existing.StorageID = &invalidStorageID
-	_, errUpdate := repo.Update(context.Background(), userID, existing)
+	_, errUpdate := repo.Update(context.Background(), userID, 1, Changes{"storage_id": 9999})
 
 	assert.ErrorIs(t, errUpdate, ErrStorageNotFound)
 }
@@ -518,8 +547,7 @@ func TestPostgresRepository_Update_RefreshesUpdatedTimestamp(t *testing.T) {
 
 	time.Sleep(10 * time.Millisecond)
 
-	existing.Name = "Renamed"
-	updated, err := repo.Update(context.Background(), userID, existing)
+	updated, err := repo.Update(context.Background(), userID, 1, Changes{"name": "Renamed"})
 
 	require.NoError(t, err)
 	assert.True(t, updated.Updated.After(existing.Updated))
@@ -536,12 +564,7 @@ func TestPostgresRepository_Update_ReturnsErrStorageNotFoundWhenStorageBelongsTo
 		{Name: "Black Lotus", ScryfallID: "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd", SetCode: "lea", CollectorNumber: "232", Foil: false},
 	})
 
-	existing, err := repo.FindByID(context.Background(), userB, 1)
-	require.NoError(t, err)
-
-	storageID := 1
-	existing.StorageID = &storageID
-	_, err = repo.Update(context.Background(), userB, existing)
+	_, err := repo.Update(context.Background(), userB, 1, Changes{"storage_id": 1})
 
 	assert.ErrorIs(t, err, ErrStorageNotFound)
 }
@@ -863,8 +886,7 @@ func TestPostgresRepository_CreateAndUpdate_PersistProxy(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, created.Proxy)
 
-	created.Proxy = false
-	updated, err := repo.Update(context.Background(), userID, created)
+	updated, err := repo.Update(context.Background(), userID, created.ID, Changes{"proxy": false})
 	require.NoError(t, err)
 	assert.False(t, updated.Proxy)
 
