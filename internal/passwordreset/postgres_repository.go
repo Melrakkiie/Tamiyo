@@ -30,7 +30,11 @@ func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
 }
 
 func (r *PostgresRepository) Create(ctx context.Context, t ResetToken) (ResetToken, error) {
+	// The CTE deletes the user's expired tokens in the same statement as the insert.
 	query := `
+		WITH purge AS (
+			DELETE FROM tamiyo.password_reset_tokens WHERE user_id = $1 AND expires_at <= now()
+		)
 		INSERT INTO tamiyo.password_reset_tokens (user_id, token_hash, expires_at)
 		VALUES ($1, $2, $3)
 		RETURNING id, user_id, token_hash, added, expires_at
