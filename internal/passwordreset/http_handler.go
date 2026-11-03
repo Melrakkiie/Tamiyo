@@ -8,6 +8,7 @@ import (
 
 	"Melrakkiie/Tamiyo/internal/apierr"
 	"Melrakkiie/Tamiyo/internal/emailaddr"
+	"Melrakkiie/Tamiyo/internal/password"
 )
 
 type forgotPasswordRequest struct {
@@ -76,6 +77,12 @@ func (h *Handler) forgotPassword(ctx *gin.Context) {
 func (h *Handler) resetPassword(ctx *gin.Context) {
 	var req resetPasswordRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Checked before Consume so a refused password does not burn the link.
+	if err := password.CheckLength(req.NewPassword); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
