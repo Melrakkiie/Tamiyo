@@ -3739,7 +3739,12 @@ paths:
         so each row is resolved by (set, collector number) against the
         Scryfall API (https://scryfall.com/docs/api/cards/collection).
         Cards are stored under their English Scryfall name, whatever the
-        export's language.
+        export's language. The whole import is one transaction: every card
+        is created, or none, and on a failure (a database error, the
+        request cancelled) the route returns the error alone, with no
+        summary, so retrying never creates duplicates. Rows Scryfall can't
+        resolve don't count as a failure: they are skipped and noted in
+        warnings.
       requestBody:
         required: true
         content:
@@ -6165,9 +6170,10 @@ components:
     ImportSummary:
       type: object
       description: >
-        Result of a bulk import. A malformed or unresolvable row never
-        aborts the whole import — it's recorded as a skipped card with a
-        warning instead.
+        Result of a bulk import. An unresolvable row never aborts the
+        whole import — it's recorded as a skipped card with a warning
+        instead. An import that is one transaction returns no summary
+        when it fails.
       properties:
         cards_created:
           type: integer

@@ -34,6 +34,36 @@ func (c *cancelAfterFirstCard) CreateCard(ctx context.Context, userID string, in
 	return created, err
 }
 
+// Imports written with the grouped operation are rolled back when the request is cancelled:
+// an error, nothing created, no summary.
+func TestGroupedImports_RollBackWhenTheRequestIsCancelled(t *testing.T) {
+	boxes := func() *fakeStorageService {
+		return &fakeStorageService{storages: []storage.Storage{{ID: 4, Name: "Box", Type: "box"}}}
+	}
+	imports := map[string]func(ctx context.Context, cards *fakeCardService) (Summary, error){
+		"moxfield collection": func(ctx context.Context, cards *fakeCardService) (Summary, error) {
+			csv := "Count,Name,Edition,Foil,Collector Number\n5,Sol Ring,sld,,1011\n"
+			resolver := &fakeResolver{resolved: map[string]ResolvedCard{resolveKey("sld", "1011"): {ScryfallID: solRingID, Name: "Sol Ring"}}}
+			return NewService(cards, boxes(), &fakeDeckService{}, resolver).
+				ImportMoxfieldCollection(ctx, testUserID, 4, strings.NewReader(csv))
+		},
+	}
+
+	for name, run := range imports {
+		t.Run(name, func(t *testing.T) {
+			cards := &fakeCardService{}
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+
+			summary, err := run(ctx, cards)
+
+			require.ErrorIs(t, err, context.Canceled)
+			assert.Empty(t, cards.created)
+			assert.Equal(t, Summary{}, summary)
+		})
+	}
+}
+
 func TestImports_StopWhenTheRequestIsCancelled(t *testing.T) {
 	boxes := func() *fakeStorageService {
 		return &fakeStorageService{storages: []storage.Storage{{ID: 4, Name: "Box", Type: "box"}}}
@@ -44,12 +74,6 @@ func TestImports_StopWhenTheRequestIsCancelled(t *testing.T) {
 				"Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,5\n"
 			return NewService(cards, boxes(), &fakeDeckService{}, &fakeResolver{}).
 				ImportManaBox(cards.ctx, testUserID, ptr(4), strings.NewReader(csv))
-		},
-		"moxfield collection": func(cards *cancelAfterFirstCard) (Summary, error) {
-			csv := "Count,Name,Edition,Foil,Collector Number\n5,Sol Ring,sld,,1011\n"
-			resolver := &fakeResolver{resolved: map[string]ResolvedCard{resolveKey("sld", "1011"): {ScryfallID: solRingID, Name: "Sol Ring"}}}
-			return NewService(cards, boxes(), &fakeDeckService{}, resolver).
-				ImportMoxfieldCollection(cards.ctx, testUserID, 4, strings.NewReader(csv))
 		},
 		"card list": func(cards *cancelAfterFirstCard) (Summary, error) {
 			return NewService(cards, boxes(), &fakeDeckService{}, cardListResolver()).
