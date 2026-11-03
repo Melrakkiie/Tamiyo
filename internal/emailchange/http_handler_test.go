@@ -340,6 +340,22 @@ func TestHandler_ConfirmEmailChange_ReturnsConflictWhenTheEmailWasTakenMeanwhile
 	assert.Equal(t, http.StatusConflict, w.Code)
 }
 
+func TestHandler_RegisterProtectedRoutes_AppliesGivenMiddlewareToEmailChangeRequest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	protected := router.Group("/")
+	protected.Use(auth.RequireAuth(testJWTSecret))
+
+	blockAll := func(c *gin.Context) {
+		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests, please try again later"})
+	}
+	NewHandler(&fakeChangeService{}, &fakeAccounts{}, &fakeMailer{}).RegisterProtectedRoutes(protected, blockAll)
+
+	w := post(router, "/auth/email", `{"new_email": "new@example.com", "current_password": "supersecret"}`, true)
+
+	assert.Equal(t, http.StatusTooManyRequests, w.Code)
+}
+
 func TestHandler_ConfirmEmailChange_RequiresAToken(t *testing.T) {
 	router := setupRouter(&fakeChangeService{}, &fakeAccounts{}, &fakeMailer{})
 
