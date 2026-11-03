@@ -24,6 +24,10 @@ type fakeCardService struct {
 	created   []card.Card
 	createErr error
 
+	// plans records each ImportCollection call; copies of a successful call also land in created.
+	plans     []card.ImportPlan
+	importErr error
+
 	allCards  []card.Card
 	getAllErr error
 
@@ -85,6 +89,25 @@ func (f *fakeCardService) CreateCard(ctx context.Context, userID string, c card.
 	c.ID = f.nextID
 	f.created = append(f.created, c)
 	return c, nil
+}
+
+// ImportCollection is all or nothing like the real one: a cancelled context or importErr creates nothing.
+func (f *fakeCardService) ImportCollection(ctx context.Context, userID string, plan card.ImportPlan) (card.ImportResult, error) {
+	f.plans = append(f.plans, plan)
+	if err := ctx.Err(); err != nil {
+		return card.ImportResult{}, err
+	}
+	if f.importErr != nil {
+		return card.ImportResult{}, f.importErr
+	}
+	var result card.ImportResult
+	for _, c := range plan.Copies {
+		f.nextID++
+		c.Card.ID = f.nextID
+		f.created = append(f.created, c.Card)
+		result.Cards = append(result.Cards, c.Card)
+	}
+	return result, nil
 }
 
 func (f *fakeCardService) GetAllCards(ctx context.Context, userID string, filter card.CardFilter) ([]card.Card, int, error) {
@@ -578,6 +601,47 @@ func TestImportMoxfieldCollection_ResolvesAndCreatesCards(t *testing.T) {
 	assert.Equal(t, "cccccccc-0000-0000-0000-000000000000", cards.created[0].ScryfallID)
 	assert.Equal(t, 7, *cards.created[0].StorageID)
 	assert.Equal(t, 1.0, cards.created[0].ManaValue)
+}
+
+func TestImportMoxfieldCollection_WritesOnePlanInOneCall(t *testing.T) {
+	csv := `Count,Name,Edition,Foil,Collector Number
+2,Sol Ring,sld,foil,1011
+1,Mystery Card,xxx,,999
+3,Sol Ring,sld,,1011
+`
+	cards := &fakeCardService{}
+	storages := &fakeStorageService{storages: []storage.Storage{{ID: 7, Name: "Binder", Type: "binder"}}}
+	resolver := &fakeResolver{resolved: map[string]ResolvedCard{resolveKey("sld", "1011"): {ScryfallID: solRingID, Name: "Sol Ring"}}}
+	svc := NewService(cards, storages, &fakeDeckService{}, resolver)
+
+	summary, err := svc.ImportMoxfieldCollection(context.Background(), testUserID, 7, strings.NewReader(csv))
+
+	require.NoError(t, err)
+	require.Len(t, cards.plans, 1)
+	require.Len(t, cards.plans[0].Copies, 5)
+	assert.True(t, cards.plans[0].Copies[0].Card.Foil)
+	assert.False(t, cards.plans[0].Copies[2].Card.Foil)
+	assert.Equal(t, 5, summary.CardsCreated)
+	assert.Equal(t, 1, summary.CardsSkipped)
+	assert.Len(t, summary.Warnings, 1)
+}
+
+func TestImportMoxfieldCollection_AFailedWriteReturnsTheErrorAndNoSummary(t *testing.T) {
+	csv := `Count,Name,Edition,Foil,Collector Number
+2,Mystery Card,xxx,,999
+1,Sol Ring,sld,,1011
+`
+	boom := errors.New("connection reset")
+	cards := &fakeCardService{importErr: boom}
+	storages := &fakeStorageService{storages: []storage.Storage{{ID: 7}}}
+	resolver := &fakeResolver{resolved: map[string]ResolvedCard{resolveKey("sld", "1011"): {ScryfallID: solRingID, Name: "Sol Ring"}}}
+	svc := NewService(cards, storages, &fakeDeckService{}, resolver)
+
+	summary, err := svc.ImportMoxfieldCollection(context.Background(), testUserID, 7, strings.NewReader(csv))
+
+	assert.ErrorIs(t, err, boom)
+	assert.Equal(t, Summary{}, summary)
+	assert.Empty(t, cards.created)
 }
 
 func TestImportMoxfieldCollection_StoresTheEnglishScryfallName(t *testing.T) {

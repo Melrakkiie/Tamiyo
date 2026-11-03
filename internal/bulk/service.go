@@ -36,6 +36,7 @@ func manaBoxBinderType(storageType string) string {
 
 type cardService interface {
 	CreateCard(ctx context.Context, userID string, c card.Card) (card.Card, error)
+	ImportCollection(ctx context.Context, userID string, plan card.ImportPlan) (card.ImportResult, error)
 	GetAllCards(ctx context.Context, userID string, filter card.CardFilter) ([]card.Card, int, error)
 	GetCardsMissingDetails(ctx context.Context, userID string, afterID int, limit int) ([]card.Card, error)
 	CountCardsMissingDetails(ctx context.Context, userID string, afterID int) (int, error)
@@ -204,6 +205,7 @@ func (s *Service) ImportMoxfieldCollection(ctx context.Context, userID string, s
 	}
 
 	var summary Summary
+	var plan card.ImportPlan
 	for _, row := range rows {
 		resolvedCard, ok := resolved[resolveKey(row.SetCode, row.CollectorNumber)]
 		if !ok {
@@ -215,29 +217,25 @@ func (s *Service) ImportMoxfieldCollection(ctx context.Context, userID string, s
 		}
 
 		colors, cardType, identity := resolvedCard.details()
-		for i := 0; i < row.Quantity; i++ {
-			if err := ctx.Err(); err != nil {
-				return summary, err
-			}
-			if _, err := s.cards.CreateCard(ctx, userID, card.Card{
-				Name:            resolvedCard.Name,
-				ScryfallID:      resolvedCard.ScryfallID,
-				SetCode:         row.SetCode,
-				CollectorNumber: row.CollectorNumber,
-				Foil:            row.Foil,
-				StorageID:       &storageID,
-				ManaValue:       resolvedCard.ManaValue,
-				Colors:          colors,
-				CardType:        cardType,
-				ColorIdentity:   identity,
-			}); err != nil {
-				summary.CardsSkipped++
-				summary.Warnings = append(summary.Warnings, fmt.Sprintf("line %d: could not create %q: %v", row.LineNo, row.CardName, err))
-				continue
-			}
-			summary.CardsCreated++
-		}
+		plan.Copies = append(plan.Copies, copiesOf(card.Card{
+			Name:            resolvedCard.Name,
+			ScryfallID:      resolvedCard.ScryfallID,
+			SetCode:         row.SetCode,
+			CollectorNumber: row.CollectorNumber,
+			Foil:            row.Foil,
+			StorageID:       &storageID,
+			ManaValue:       resolvedCard.ManaValue,
+			Colors:          colors,
+			CardType:        cardType,
+			ColorIdentity:   identity,
+		}, row.Quantity)...)
 	}
+
+	created, err := s.cards.ImportCollection(ctx, userID, plan)
+	if err != nil {
+		return Summary{}, err
+	}
+	summary.CardsCreated = len(created.Cards)
 
 	return summary, nil
 }
