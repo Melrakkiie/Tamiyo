@@ -33,6 +33,66 @@ func TestLoad_ReadsValuesFromEnvironment(t *testing.T) {
 	assert.Equal(t, "9090", cfg.AppPort)
 }
 
+func TestLoad_RefusesNonIntegerTTLNamingVariableAndValue(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("JWT_ACCESS_TOKEN_TTL_MINUTES", "15m")
+
+	cfg, err := Load()
+
+	require.Error(t, err)
+	assert.Nil(t, cfg)
+	assert.Contains(t, err.Error(), "JWT_ACCESS_TOKEN_TTL_MINUTES")
+	assert.Contains(t, err.Error(), `"15m"`)
+}
+
+func TestLoad_RefusesZeroTTL(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("JWT_REFRESH_TOKEN_TTL_DAYS", "0")
+
+	_, err := Load()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "JWT_REFRESH_TOKEN_TTL_DAYS")
+	assert.Contains(t, err.Error(), `"0"`)
+}
+
+func TestLoad_RefusesBadRefreshCookieSecure(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("REFRESH_COOKIE_SECURE", "maybe")
+
+	_, err := Load()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "REFRESH_COOKIE_SECURE")
+	assert.Contains(t, err.Error(), `"maybe"`)
+}
+
+func TestLoad_AcceptsStandardBooleanAndZeroIdleConns(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("REFRESH_COOKIE_SECURE", "false")
+	t.Setenv("DB_MAX_IDLE_CONNS", "0")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.False(t, cfg.RefreshCookieSecure)
+	assert.Equal(t, 0, cfg.DBMaxIdleConns)
+}
+
+func TestLoad_ReportsEveryBadVariableAtOnce(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("AUTH_RATE_LIMIT_MAX", "5x")
+	t.Setenv("SHUTDOWN_TIMEOUT_SECONDS", "-3")
+	t.Setenv("REFRESH_COOKIE_SECURE", "nope")
+
+	_, err := Load()
+
+	require.Error(t, err)
+	for _, want := range []string{"AUTH_RATE_LIMIT_MAX", `"5x"`, "SHUTDOWN_TIMEOUT_SECONDS", `"-3"`, "REFRESH_COOKIE_SECURE", `"nope"`} {
+		assert.Contains(t, err.Error(), want)
+	}
+}
+
 func TestLoad_DefaultsAppPortWhenNotSet(t *testing.T) {
 	setRequiredEnv(t)
 	// APP_PORT is missing

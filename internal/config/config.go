@@ -3,21 +3,68 @@ package config
 import (
 	"fmt"
 	"net"
+	"os"
+	"strconv"
 	"strings"
 	"time"
-
-	"github.com/spf13/viper"
 )
 
+// envReader reads environment variables and collects every unparseable or
+// out-of-range value so Load can report them all at once.
+type envReader struct{ bad []string }
+
+// str returns the variable, or def when it is unset or empty.
+func (r *envReader) str(key, def string) string {
+	if v, ok := os.LookupEnv(key); ok && v != "" {
+		return v
+	}
+	return def
+}
+
+// integer parses the variable strictly; unset or empty gives def. Values below min are refused.
+func (r *envReader) integer(key string, def, min int) int {
+	v := r.str(key, "")
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		r.bad = append(r.bad, fmt.Sprintf("%s=%q (not an integer)", key, v))
+		return def
+	}
+	if n < min {
+		r.bad = append(r.bad, fmt.Sprintf("%s=%q (must be at least %d)", key, v, min))
+		return def
+	}
+	return n
+}
+
+func (r *envReader) boolean(key string, def bool) bool {
+	v := r.str(key, "")
+	if v == "" {
+		return def
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		r.bad = append(r.bad, fmt.Sprintf("%s=%q (not a boolean)", key, v))
+		return def
+	}
+	return b
+}
+
+func (r *envReader) duration(key string, def int, unit time.Duration) time.Duration {
+	return time.Duration(r.integer(key, def, 1)) * unit
+}
+
 type Config struct {
-	PGHost     string `mapstructure:"PGHOST"`
-	PGPort     string `mapstructure:"PGPORT"`
-	PGUser     string `mapstructure:"PGUSER"`
-	PGPassword string `mapstructure:"PGPASSWORD"`
-	PGDatabase string `mapstructure:"PGDATABASE"`
-	PGSSLMode  string `mapstructure:"PGSSLMODE"`
-	AppPort    string `mapstructure:"APP_PORT"`
-	JWTSecret  string `mapstructure:"JWT_SECRET"`
+	PGHost     string
+	PGPort     string
+	PGUser     string
+	PGPassword string
+	PGDatabase string
+	PGSSLMode  string
+	AppPort    string
+	JWTSecret  string
 
 	APIBasePath string
 
@@ -36,15 +83,15 @@ type Config struct {
 	EmailChangeTokenTTL       time.Duration
 	EmailVerificationTokenTTL time.Duration
 
-	SMTPHost     string `mapstructure:"SMTP_HOST"`
-	SMTPPort     string `mapstructure:"SMTP_PORT"`
-	SMTPUsername string `mapstructure:"SMTP_USERNAME"`
-	SMTPPassword string `mapstructure:"SMTP_PASSWORD"`
-	SMTPFrom     string `mapstructure:"SMTP_FROM"`
+	SMTPHost     string
+	SMTPPort     string
+	SMTPUsername string
+	SMTPPassword string
+	SMTPFrom     string
 
-	PasswordResetURLTemplate     string `mapstructure:"PASSWORD_RESET_URL_TEMPLATE"`
-	EmailChangeURLTemplate       string `mapstructure:"EMAIL_CHANGE_URL_TEMPLATE"`
-	EmailVerificationURLTemplate string `mapstructure:"EMAIL_VERIFICATION_URL_TEMPLATE"`
+	PasswordResetURLTemplate     string
+	EmailChangeURLTemplate       string
+	EmailVerificationURLTemplate string
 
 	CORSAllowedOrigins []string
 
@@ -59,67 +106,53 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
-	viper.AutomaticEnv()
-	viper.SetDefault("APP_PORT", "8080")
-	viper.SetDefault("PGSSLMODE", "disable")
-	viper.SetDefault("AUTH_RATE_LIMIT_MAX", 5)
-	viper.SetDefault("AUTH_RATE_LIMIT_WINDOW_SECONDS", 60)
-	viper.SetDefault("SHARE_RATE_LIMIT_MAX", 60)
-	viper.SetDefault("SHARE_RATE_LIMIT_WINDOW_SECONDS", 60)
-	viper.SetDefault("JWT_ACCESS_TOKEN_TTL_MINUTES", 15)
-	viper.SetDefault("JWT_REFRESH_TOKEN_TTL_DAYS", 30)
-	viper.SetDefault("PASSWORD_RESET_TOKEN_TTL_MINUTES", 30)
-	viper.SetDefault("EMAIL_CHANGE_TOKEN_TTL_MINUTES", 1440)
-	viper.SetDefault("EMAIL_VERIFICATION_TOKEN_TTL_MINUTES", 1440)
-	viper.SetDefault("SMTP_PORT", "587")
-	viper.SetDefault("CORS_ALLOWED_ORIGINS", "")
-	viper.SetDefault("DB_MAX_OPEN_CONNS", 10)
-	viper.SetDefault("DB_MAX_IDLE_CONNS", 5)
-	viper.SetDefault("DB_CONN_MAX_LIFETIME_MINUTES", 5)
-	viper.SetDefault("SHUTDOWN_TIMEOUT_SECONDS", 10)
-	viper.SetDefault("REFRESH_COOKIE_SECURE", true)
+	r := &envReader{}
 
 	cfg := &Config{
-		PGHost:              firstNonEmpty(viper.GetString("PGHOST"), viper.GetString("POSTGRESQL_ADDON_HOST")),
-		PGPort:              firstNonEmpty(viper.GetString("PGPORT"), viper.GetString("POSTGRESQL_ADDON_PORT"), "5432"),
-		PGUser:              firstNonEmpty(viper.GetString("PGUSER"), viper.GetString("POSTGRESQL_ADDON_USER")),
-		PGPassword:          firstNonEmpty(viper.GetString("PGPASSWORD"), viper.GetString("POSTGRESQL_ADDON_PASSWORD")),
-		PGDatabase:          firstNonEmpty(viper.GetString("PGDATABASE"), viper.GetString("POSTGRESQL_ADDON_DB")),
-		PGSSLMode:           viper.GetString("PGSSLMODE"),
-		AppPort:             viper.GetString("APP_PORT"),
-		JWTSecret:           viper.GetString("JWT_SECRET"),
-		APIBasePath:         normalizeBasePath(viper.GetString("API_BASE_PATH")),
-		RefreshCookieSecure: viper.GetBool("REFRESH_COOKIE_SECURE"),
-		AuthRateLimitMax:    viper.GetInt("AUTH_RATE_LIMIT_MAX"),
-		AuthRateLimitWindow: time.Duration(viper.GetInt("AUTH_RATE_LIMIT_WINDOW_SECONDS")) * time.Second,
-		JWTAccessTokenTTL:   time.Duration(viper.GetInt("JWT_ACCESS_TOKEN_TTL_MINUTES")) * time.Minute,
-		JWTRefreshTokenTTL:  time.Duration(viper.GetInt("JWT_REFRESH_TOKEN_TTL_DAYS")) * 24 * time.Hour,
+		PGHost:              firstNonEmpty(r.str("PGHOST", ""), r.str("POSTGRESQL_ADDON_HOST", "")),
+		PGPort:              firstNonEmpty(r.str("PGPORT", ""), r.str("POSTGRESQL_ADDON_PORT", ""), "5432"),
+		PGUser:              firstNonEmpty(r.str("PGUSER", ""), r.str("POSTGRESQL_ADDON_USER", "")),
+		PGPassword:          firstNonEmpty(r.str("PGPASSWORD", ""), r.str("POSTGRESQL_ADDON_PASSWORD", "")),
+		PGDatabase:          firstNonEmpty(r.str("PGDATABASE", ""), r.str("POSTGRESQL_ADDON_DB", "")),
+		PGSSLMode:           r.str("PGSSLMODE", "disable"),
+		AppPort:             r.str("APP_PORT", "8080"),
+		JWTSecret:           r.str("JWT_SECRET", ""),
+		APIBasePath:         normalizeBasePath(r.str("API_BASE_PATH", "")),
+		RefreshCookieSecure: r.boolean("REFRESH_COOKIE_SECURE", true),
+		AuthRateLimitMax:    r.integer("AUTH_RATE_LIMIT_MAX", 5, 1),
+		AuthRateLimitWindow: r.duration("AUTH_RATE_LIMIT_WINDOW_SECONDS", 60, time.Second),
+		JWTAccessTokenTTL:   r.duration("JWT_ACCESS_TOKEN_TTL_MINUTES", 15, time.Minute),
+		JWTRefreshTokenTTL:  r.duration("JWT_REFRESH_TOKEN_TTL_DAYS", 30, 24*time.Hour),
 
-		ShareRateLimitMax:    viper.GetInt("SHARE_RATE_LIMIT_MAX"),
-		ShareRateLimitWindow: time.Duration(viper.GetInt("SHARE_RATE_LIMIT_WINDOW_SECONDS")) * time.Second,
+		ShareRateLimitMax:    r.integer("SHARE_RATE_LIMIT_MAX", 60, 1),
+		ShareRateLimitWindow: r.duration("SHARE_RATE_LIMIT_WINDOW_SECONDS", 60, time.Second),
 
-		PasswordResetTokenTTL:     time.Duration(viper.GetInt("PASSWORD_RESET_TOKEN_TTL_MINUTES")) * time.Minute,
-		EmailChangeTokenTTL:       time.Duration(viper.GetInt("EMAIL_CHANGE_TOKEN_TTL_MINUTES")) * time.Minute,
-		EmailVerificationTokenTTL: time.Duration(viper.GetInt("EMAIL_VERIFICATION_TOKEN_TTL_MINUTES")) * time.Minute,
+		PasswordResetTokenTTL:     r.duration("PASSWORD_RESET_TOKEN_TTL_MINUTES", 30, time.Minute),
+		EmailChangeTokenTTL:       r.duration("EMAIL_CHANGE_TOKEN_TTL_MINUTES", 1440, time.Minute),
+		EmailVerificationTokenTTL: r.duration("EMAIL_VERIFICATION_TOKEN_TTL_MINUTES", 1440, time.Minute),
 
-		SMTPHost:     viper.GetString("SMTP_HOST"),
-		SMTPPort:     viper.GetString("SMTP_PORT"),
-		SMTPUsername: viper.GetString("SMTP_USERNAME"),
-		SMTPPassword: viper.GetString("SMTP_PASSWORD"),
-		SMTPFrom:     viper.GetString("SMTP_FROM"),
+		SMTPHost:     r.str("SMTP_HOST", ""),
+		SMTPPort:     r.str("SMTP_PORT", "587"),
+		SMTPUsername: r.str("SMTP_USERNAME", ""),
+		SMTPPassword: r.str("SMTP_PASSWORD", ""),
+		SMTPFrom:     r.str("SMTP_FROM", ""),
 
-		PasswordResetURLTemplate:     viper.GetString("PASSWORD_RESET_URL_TEMPLATE"),
-		EmailChangeURLTemplate:       viper.GetString("EMAIL_CHANGE_URL_TEMPLATE"),
-		EmailVerificationURLTemplate: viper.GetString("EMAIL_VERIFICATION_URL_TEMPLATE"),
+		PasswordResetURLTemplate:     r.str("PASSWORD_RESET_URL_TEMPLATE", ""),
+		EmailChangeURLTemplate:       r.str("EMAIL_CHANGE_URL_TEMPLATE", ""),
+		EmailVerificationURLTemplate: r.str("EMAIL_VERIFICATION_URL_TEMPLATE", ""),
 
-		CORSAllowedOrigins: parseList(viper.GetString("CORS_ALLOWED_ORIGINS")),
-		TrustedProxies:     parseList(viper.GetString("TRUSTED_PROXIES")),
+		CORSAllowedOrigins: parseList(r.str("CORS_ALLOWED_ORIGINS", "")),
+		TrustedProxies:     parseList(r.str("TRUSTED_PROXIES", "")),
 
-		DBMaxOpenConns:    viper.GetInt("DB_MAX_OPEN_CONNS"),
-		DBMaxIdleConns:    viper.GetInt("DB_MAX_IDLE_CONNS"),
-		DBConnMaxLifetime: time.Duration(viper.GetInt("DB_CONN_MAX_LIFETIME_MINUTES")) * time.Minute,
+		DBMaxOpenConns:    r.integer("DB_MAX_OPEN_CONNS", 10, 1),
+		DBMaxIdleConns:    r.integer("DB_MAX_IDLE_CONNS", 5, 0),
+		DBConnMaxLifetime: r.duration("DB_CONN_MAX_LIFETIME_MINUTES", 5, time.Minute),
 
-		ShutdownTimeout: time.Duration(viper.GetInt("SHUTDOWN_TIMEOUT_SECONDS")) * time.Second,
+		ShutdownTimeout: r.duration("SHUTDOWN_TIMEOUT_SECONDS", 10, time.Second),
+	}
+
+	if len(r.bad) > 0 {
+		return nil, fmt.Errorf("invalid environment variable(s): %s", strings.Join(r.bad, ", "))
 	}
 
 	if err := validate(cfg); err != nil {
