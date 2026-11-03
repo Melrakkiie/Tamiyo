@@ -73,10 +73,41 @@ func (f *fakeRepository) ImportCollection(ctx context.Context, userID string, pl
 	return ImportResult{}, f.createErr
 }
 
-func (f *fakeRepository) Update(ctx context.Context, userID string, c Card) (Card, error) {
+// Update mimics the real one: the stored copy (findByIDCard) with only the given columns replaced.
+func (f *fakeRepository) Update(ctx context.Context, userID string, id int, changes Changes) (Card, error) {
 	f.lastUserID = userID
+	if f.findByIDErr != nil {
+		return Card{}, f.findByIDErr
+	}
 	if f.updateErr != nil {
 		return Card{}, f.updateErr
+	}
+	c := f.findByIDCard
+	for col, v := range changes {
+		switch col {
+		case "name":
+			c.Name = v.(string)
+		case "scryfall_id":
+			c.ScryfallID = v.(string)
+		case "set_code":
+			c.SetCode = v.(string)
+		case "collector_number":
+			c.CollectorNumber = v.(string)
+		case "foil":
+			c.Foil = v.(bool)
+		case "proxy":
+			c.Proxy = v.(bool)
+		case "mana_value":
+			c.ManaValue = v.(float64)
+		case "storage_id":
+			c.StorageID = v.(*int)
+		case "colors":
+			c.Colors = v.(*string)
+		case "card_type":
+			c.CardType = v.(*string)
+		case "color_identity":
+			c.ColorIdentity = v.(*string)
+		}
 	}
 	f.updatedCard = c
 	return c, nil

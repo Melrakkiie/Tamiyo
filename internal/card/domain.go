@@ -10,6 +10,9 @@ var ErrStorageNotFound = errors.New("referenced storage does not exist")
 var ErrNotFound = errors.New("card not found")
 var ErrDeckNotFound = errors.New("referenced deck does not exist")
 
+// Changes holds the columns an update writes, keyed by column name; a nil value sets NULL.
+type Changes map[string]any
+
 type Card struct {
 	ID              int
 	Name            string
@@ -90,7 +93,7 @@ type Repository interface {
 	FindByID(ctx context.Context, userID string, id int) (Card, error)
 	Create(ctx context.Context, userID string, c Card) (Card, error)
 	ImportCollection(ctx context.Context, userID string, plan ImportPlan) (ImportResult, error)
-	Update(ctx context.Context, userID string, c Card) (Card, error)
+	Update(ctx context.Context, userID string, id int, changes Changes) (Card, error)
 	Delete(ctx context.Context, userID string, id int) error
 	DeleteAll(ctx context.Context, userID string) (int, error)
 	FindMissingDetails(ctx context.Context, userID string, afterID int, limit int) ([]Card, error)

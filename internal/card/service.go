@@ -28,14 +28,7 @@ func (s *Service) ImportCollection(ctx context.Context, userID string, plan Impo
 }
 
 func (s *Service) UpdateCard(ctx context.Context, userID string, id int, req updateCardRequest) (Card, error) {
-	existing, err := s.repo.FindByID(ctx, userID, id)
-	if err != nil {
-		return Card{}, err
-	}
-
-	updated := req.applyTo(existing)
-
-	return s.repo.Update(ctx, userID, updated)
+	return s.repo.Update(ctx, userID, id, req.changes())
 }
 
 func (s *Service) GetValue(ctx context.Context, userID string) (Value, error) {
