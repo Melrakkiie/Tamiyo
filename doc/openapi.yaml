@@ -3803,7 +3803,11 @@ paths:
         for that name; section headers are skipped. Lines that can't be
         resolved are skipped and reported in ImportSummary.warnings. Cards
         are stored under their English Scryfall name, whatever the list's
-        language.
+        language. The whole import is one transaction: every card is
+        created, or none, and on a failure (a database error, the request
+        cancelled) the route returns the error alone, with no summary, so
+        retrying never creates duplicates. Lines Scryfall can't resolve
+        don't count as a failure: they are skipped and noted in warnings.
       requestBody:
         required: true
         content:
