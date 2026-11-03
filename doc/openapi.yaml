@@ -3681,7 +3681,11 @@ paths:
         this route never returns 502. Cards are stored under their English
         Scryfall name, whatever the export's language; while Scryfall is
         unreachable the file's name is kept until the background printing
-        refresher renames them.
+        refresher renames them. The whole import is one transaction, storages,
+        decks and deck links included: every storage, deck, card and link is
+        created, or none, and on a failure (a database error, the request
+        cancelled) the route returns the error alone, with no summary, so
+        retrying never creates duplicates.
       requestBody:
         required: true
         content:
