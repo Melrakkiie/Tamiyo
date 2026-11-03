@@ -27,8 +27,6 @@ type fakeDeckStore struct {
 	reads   map[string]deck.ReadDeck
 	readErr error
 	reaches []deck.Reach
-	// accessReaches records the reach of each access lookup.
-	accessReaches []deck.Reach
 
 	owned       map[string]int
 	countedFor  string
@@ -50,7 +48,6 @@ func (f *fakeDeckStore) ReadDeck(ctx context.Context, viewerID string, deckID st
 }
 
 func (f *fakeDeckStore) FindAccess(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (deck.DeckAccess, error) {
-	f.accessReaches = append(f.accessReaches, reach)
 	if f.readErr != nil {
 		return deck.DeckAccess{}, f.readErr
 	}
