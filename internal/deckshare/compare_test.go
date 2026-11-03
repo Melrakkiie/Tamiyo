@@ -27,6 +27,8 @@ type fakeDeckStore struct {
 	reads   map[string]deck.ReadDeck
 	readErr error
 	reaches []deck.Reach
+	// accessReaches records the reach of each access lookup.
+	accessReaches []deck.Reach
 
 	owned       map[string]int
 	countedFor  string
@@ -45,6 +47,18 @@ func (f *fakeDeckStore) ReadDeck(ctx context.Context, viewerID string, deckID st
 		return deck.ReadDeck{}, deck.ErrNotFound
 	}
 	return read, nil
+}
+
+func (f *fakeDeckStore) FindAccess(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (deck.DeckAccess, error) {
+	f.accessReaches = append(f.accessReaches, reach)
+	if f.readErr != nil {
+		return deck.DeckAccess{}, f.readErr
+	}
+	read, ok := f.reads[deckID]
+	if !ok {
+		return deck.DeckAccess{}, deck.ErrNotFound
+	}
+	return deck.DeckAccess{OwnerID: read.OwnerID, Mine: read.Mine, Visibility: read.Deck.Visibility}, nil
 }
 
 func (f *fakeDeckStore) CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error) {

@@ -11,6 +11,7 @@ import (
 
 type deckService interface {
 	ReadDeck(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (deck.ReadDeck, error)
+	FindAccess(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (deck.DeckAccess, error)
 	BrowsePublicDecks(ctx context.Context, filter deck.PublicFilter) ([]deck.PublicDeck, int, error)
 	CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error)
 	LikeDeck(ctx context.Context, userID string, deckID string) error
