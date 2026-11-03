@@ -69,6 +69,10 @@ func (f *fakeRepository) Create(ctx context.Context, userID string, c Card) (Car
 	return c, nil
 }
 
+func (f *fakeRepository) ImportCollection(ctx context.Context, userID string, plan ImportPlan) (ImportResult, error) {
+	return ImportResult{}, f.createErr
+}
+
 func (f *fakeRepository) Update(ctx context.Context, userID string, c Card) (Card, error) {
 	f.lastUserID = userID
 	if f.updateErr != nil {

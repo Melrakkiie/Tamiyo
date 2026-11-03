@@ -22,6 +22,11 @@ func (s *Service) CreateCard(ctx context.Context, userID string, c Card) (Card, 
 	return s.repo.Create(ctx, userID, c)
 }
 
+// ImportCollection writes the whole plan in one transaction: every copy is created, or none.
+func (s *Service) ImportCollection(ctx context.Context, userID string, plan ImportPlan) (ImportResult, error) {
+	return s.repo.ImportCollection(ctx, userID, plan)
+}
+
 func (s *Service) UpdateCard(ctx context.Context, userID string, id int, req updateCardRequest) (Card, error) {
 	existing, err := s.repo.FindByID(ctx, userID, id)
 	if err != nil {

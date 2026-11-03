@@ -20,9 +20,13 @@ const testUserID = "11111111-1111-1111-1111-111111111111"
 // --- fakes -------------------------------------------------------------
 
 type fakeCardService struct {
-	nextID    int
-	created   []card.Card
-	createErr error
+	nextID  int
+	created []card.Card
+
+	// plans records each ImportCollection call; copies of a successful call also land in created.
+	plans     []card.ImportPlan
+	importErr error
+	deckLinks map[int]string // card id -> deck id, from the plans that succeeded
 
 	allCards  []card.Card
 	getAllErr error
@@ -77,14 +81,42 @@ func (f *fakeCardService) SetCardDetails(ctx context.Context, userID string, id 
 	return nil
 }
 
-func (f *fakeCardService) CreateCard(ctx context.Context, userID string, c card.Card) (card.Card, error) {
-	if f.createErr != nil {
-		return card.Card{}, f.createErr
+// ImportCollection is all or nothing like the real one: a cancelled context or importErr creates nothing.
+func (f *fakeCardService) ImportCollection(ctx context.Context, userID string, plan card.ImportPlan) (card.ImportResult, error) {
+	f.plans = append(f.plans, plan)
+	if err := ctx.Err(); err != nil {
+		return card.ImportResult{}, err
 	}
-	f.nextID++
-	c.ID = f.nextID
-	f.created = append(f.created, c)
-	return c, nil
+	if f.importErr != nil {
+		return card.ImportResult{}, f.importErr
+	}
+	var result card.ImportResult
+	for i := range plan.Storages {
+		result.StorageIDs = append(result.StorageIDs, 100+i)
+	}
+	for i := range plan.Decks {
+		result.DeckIDs = append(result.DeckIDs, fmt.Sprintf("deck-%d", 100+i))
+	}
+	for _, c := range plan.Copies {
+		f.nextID++
+		c.Card.ID = f.nextID
+		if c.NewStorage != nil {
+			c.Card.StorageID = ptr(result.StorageIDs[*c.NewStorage])
+		}
+		if c.NewDeck != nil {
+			id := result.DeckIDs[*c.NewDeck]
+			c.DeckID = &id
+		}
+		if c.DeckID != nil {
+			if f.deckLinks == nil {
+				f.deckLinks = map[int]string{}
+			}
+			f.deckLinks[c.Card.ID] = *c.DeckID
+		}
+		f.created = append(f.created, c.Card)
+		result.Cards = append(result.Cards, c.Card)
+	}
+	return result, nil
 }
 
 func (f *fakeCardService) GetAllCards(ctx context.Context, userID string, filter card.CardFilter) ([]card.Card, int, error) {
@@ -118,8 +150,6 @@ func (f *fakeCardService) GetAllCards(ctx context.Context, userID string, filter
 
 type fakeStorageService struct {
 	storages   []storage.Storage
-	nextID     int
-	created    []storage.Storage
 	getByIDErr error
 	getAllErr  error
 }
@@ -143,14 +173,6 @@ func (f *fakeStorageService) GetStorage(ctx context.Context, userID string, id i
 	return storage.Storage{}, storage.ErrNotFound
 }
 
-func (f *fakeStorageService) CreateStorage(ctx context.Context, userID string, s storage.Storage) (storage.Storage, error) {
-	f.nextID++
-	s.ID = f.nextID
-	f.storages = append(f.storages, s)
-	f.created = append(f.created, s)
-	return s, nil
-}
-
 type duplication struct {
 	sourceID string
 	req      deck.DuplicateRequest
@@ -159,13 +181,9 @@ type duplication struct {
 type fakeDeckService struct {
 	tags map[string][]string
 
-	decks       []deck.Deck
-	nextID      int
-	created     []deck.Deck
-	linkedCards map[string][]int
+	decks []deck.Deck
 
-	cardsByDeck   map[string][]deck.DeckCard
-	createDeckErr error
+	cardsByDeck map[string][]deck.DeckCard
 
 	duplicated      []duplication
 	duplicateResult deck.DuplicateResult
@@ -177,8 +195,6 @@ type fakeDeckService struct {
 	sharedCollects []deck.SharedDeckCollect
 	collectResult  deck.CollectSummary
 	collectErr     error
-
-	linkedBoards map[int]string
 
 	owners map[string]string
 
@@ -294,29 +310,6 @@ func (f *fakeDeckService) GetDeckCards(ctx context.Context, userID string, id st
 	return f.cardsByDeck[id], nil
 }
 
-func (f *fakeDeckService) CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error) {
-	if f.createDeckErr != nil {
-		return deck.Deck{}, f.createDeckErr
-	}
-	f.nextID++
-	d.ID = fmt.Sprintf("00000000-0000-0000-0000-%012d", f.nextID)
-	f.decks = append(f.decks, d)
-	f.created = append(f.created, d)
-	return d, nil
-}
-
-func (f *fakeDeckService) PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error {
-	if f.linkedCards == nil {
-		f.linkedCards = make(map[string][]int)
-	}
-	if f.linkedBoards == nil {
-		f.linkedBoards = make(map[int]string)
-	}
-	f.linkedBoards[cardID] = board
-	f.linkedCards[deckID] = append(f.linkedCards[deckID], cardID)
-	return nil
-}
-
 type fakeResolver struct {
 	resolved map[string]ResolvedCard
 	err      error
@@ -361,10 +354,12 @@ Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,2
 	assert.Equal(t, 2, summary.CardsCreated)
 	assert.Equal(t, 1, summary.StoragesCreated)
 	assert.Equal(t, 0, summary.DecksCreated)
+	require.Len(t, cards.plans, 1, "one plan, one call")
+	assert.Equal(t, []card.NewStorage{{Name: "Main Binder", Type: "binder"}}, cards.plans[0].Storages)
 	require.Len(t, cards.created, 2)
 	assert.Equal(t, "Sol Ring", cards.created[0].Name)
 	require.NotNil(t, cards.created[0].StorageID)
-	assert.Equal(t, storages.created[0].ID, *cards.created[0].StorageID)
+	assert.Equal(t, 100, *cards.created[0].StorageID)
 }
 
 func TestImportManaBox_IntoAStoragePutsEveryCardThereAndCreatesNothingElse(t *testing.T) {
@@ -383,9 +378,6 @@ Atraxa Deck,deck,Counterspell,CLB,bbbbbbbb-0000-0000-0000-000000000000,1,,1
 	assert.Equal(t, 3, summary.CardsCreated)
 	assert.Equal(t, 0, summary.StoragesCreated)
 	assert.Equal(t, 0, summary.DecksCreated)
-	assert.Empty(t, storages.created)
-	assert.Empty(t, decks.created)
-	assert.Empty(t, decks.linkedCards)
 	require.Len(t, cards.created, 3)
 	for _, c := range cards.created {
 		require.NotNil(t, c.StorageID)
@@ -492,11 +484,31 @@ Atraxa Deck,deck,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, summary.DecksCreated)
-	require.Len(t, decks.created, 1)
-	assert.Equal(t, "commander", decks.created[0].Format)
-	assert.Equal(t, []int{cards.created[0].ID}, decks.linkedCards[decks.created[0].ID])
-	require.Len(t, storages.created, 1)
-	assert.Equal(t, "deckbox", storages.created[0].Type)
+	require.Len(t, cards.plans, 1)
+	assert.Equal(t, []card.NewDeck{{Name: "Atraxa Deck", Format: "commander"}}, cards.plans[0].Decks)
+	assert.Equal(t, map[int]string{cards.created[0].ID: "deck-100"}, cards.deckLinks)
+	assert.Equal(t, []card.NewStorage{{Name: "Atraxa Deck", Type: "deckbox"}}, cards.plans[0].Storages)
+}
+
+func TestImportManaBox_LinksToAnExistingDeckByNameWithoutCreatingOne(t *testing.T) {
+	csv := `Binder Name,Binder Type,Name,Set code,Scryfall ID,Collector number,Foil,Quantity
+Atraxa Deck,deck,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
+`
+	cards := &fakeCardService{}
+	storages := &fakeStorageService{storages: []storage.Storage{{ID: 42, Name: "Atraxa Deck", Type: "deckbox"}}}
+	decks := &fakeDeckService{decks: []deck.Deck{{ID: "existing-deck", Name: "Atraxa Deck"}}}
+	svc := NewService(cards, storages, decks, &fakeResolver{})
+
+	summary, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, summary.DecksCreated)
+	assert.Equal(t, 0, summary.StoragesCreated)
+	require.Len(t, cards.plans, 1)
+	assert.Empty(t, cards.plans[0].Decks)
+	assert.Empty(t, cards.plans[0].Storages)
+	assert.Equal(t, map[int]string{cards.created[0].ID: "existing-deck"}, cards.deckLinks)
+	assert.Equal(t, 42, *cards.created[0].StorageID)
 }
 
 func TestImportManaBox_ReusesSameDeckAcrossMultipleRows(t *testing.T) {
@@ -513,40 +525,24 @@ Atraxa Deck,deck,Lightning Bolt,CMM,bbbbbbbb-0000-0000-0000-000000000000,456,,1
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, summary.DecksCreated)
-	require.Len(t, decks.created, 1)
-	assert.ElementsMatch(t, []int{cards.created[0].ID, cards.created[1].ID}, decks.linkedCards[decks.created[0].ID])
+	require.Len(t, cards.plans, 1)
+	assert.Len(t, cards.plans[0].Decks, 1)
+	assert.Len(t, cards.plans[0].Storages, 1)
+	assert.Equal(t, map[int]string{cards.created[0].ID: "deck-100", cards.created[1].ID: "deck-100"}, cards.deckLinks)
 }
 
-func TestImportManaBox_ReturnsErrorWhenDeckCreationFails(t *testing.T) {
+func TestImportManaBox_ReturnsTheErrorAndNoSummaryWhenTheImportFails(t *testing.T) {
 	csv := `Binder Name,Binder Type,Name,Set code,Scryfall ID,Collector number,Foil,Quantity
 Atraxa Deck,deck,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
 `
-	cards := &fakeCardService{}
-	storages := &fakeStorageService{}
-	decks := &fakeDeckService{createDeckErr: errors.New("db is down")}
-	svc := NewService(cards, storages, decks, &fakeResolver{})
-
-	_, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
-
-	require.Error(t, err)
-}
-
-func TestImportManaBox_SkipsCardOnCreateErrorButContinues(t *testing.T) {
-	csv := `Binder Name,Binder Type,Name,Set code,Scryfall ID,Collector number,Foil,Quantity
-Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
-Main Binder,binder,Lightning Bolt,CMM,bbbbbbbb-0000-0000-0000-000000000000,456,,1
-`
-	cards := &fakeCardService{createErr: errors.New("boom")}
-	storages := &fakeStorageService{}
-	decks := &fakeDeckService{}
-	svc := NewService(cards, storages, decks, &fakeResolver{})
+	cards := &fakeCardService{importErr: errors.New("boom")}
+	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, &fakeResolver{})
 
 	summary, err := svc.ImportManaBox(context.Background(), testUserID, nil, strings.NewReader(csv))
 
-	require.NoError(t, err)
-	assert.Equal(t, 0, summary.CardsCreated)
-	assert.Equal(t, 2, summary.CardsSkipped)
-	assert.Len(t, summary.Warnings, 2)
+	require.Error(t, err)
+	assert.Equal(t, Summary{}, summary)
+	assert.Empty(t, cards.created)
 }
 
 func TestImportManaBox_InvalidFileReturnsErrInvalidFile(t *testing.T) {
@@ -578,6 +574,47 @@ func TestImportMoxfieldCollection_ResolvesAndCreatesCards(t *testing.T) {
 	assert.Equal(t, "cccccccc-0000-0000-0000-000000000000", cards.created[0].ScryfallID)
 	assert.Equal(t, 7, *cards.created[0].StorageID)
 	assert.Equal(t, 1.0, cards.created[0].ManaValue)
+}
+
+func TestImportMoxfieldCollection_WritesOnePlanInOneCall(t *testing.T) {
+	csv := `Count,Name,Edition,Foil,Collector Number
+2,Sol Ring,sld,foil,1011
+1,Mystery Card,xxx,,999
+3,Sol Ring,sld,,1011
+`
+	cards := &fakeCardService{}
+	storages := &fakeStorageService{storages: []storage.Storage{{ID: 7, Name: "Binder", Type: "binder"}}}
+	resolver := &fakeResolver{resolved: map[string]ResolvedCard{resolveKey("sld", "1011"): {ScryfallID: solRingID, Name: "Sol Ring"}}}
+	svc := NewService(cards, storages, &fakeDeckService{}, resolver)
+
+	summary, err := svc.ImportMoxfieldCollection(context.Background(), testUserID, 7, strings.NewReader(csv))
+
+	require.NoError(t, err)
+	require.Len(t, cards.plans, 1)
+	require.Len(t, cards.plans[0].Copies, 5)
+	assert.True(t, cards.plans[0].Copies[0].Card.Foil)
+	assert.False(t, cards.plans[0].Copies[2].Card.Foil)
+	assert.Equal(t, 5, summary.CardsCreated)
+	assert.Equal(t, 1, summary.CardsSkipped)
+	assert.Len(t, summary.Warnings, 1)
+}
+
+func TestImportMoxfieldCollection_AFailedWriteReturnsTheErrorAndNoSummary(t *testing.T) {
+	csv := `Count,Name,Edition,Foil,Collector Number
+2,Mystery Card,xxx,,999
+1,Sol Ring,sld,,1011
+`
+	boom := errors.New("connection reset")
+	cards := &fakeCardService{importErr: boom}
+	storages := &fakeStorageService{storages: []storage.Storage{{ID: 7}}}
+	resolver := &fakeResolver{resolved: map[string]ResolvedCard{resolveKey("sld", "1011"): {ScryfallID: solRingID, Name: "Sol Ring"}}}
+	svc := NewService(cards, storages, &fakeDeckService{}, resolver)
+
+	summary, err := svc.ImportMoxfieldCollection(context.Background(), testUserID, 7, strings.NewReader(csv))
+
+	assert.ErrorIs(t, err, boom)
+	assert.Equal(t, Summary{}, summary)
+	assert.Empty(t, cards.created)
 }
 
 func TestImportMoxfieldCollection_StoresTheEnglishScryfallName(t *testing.T) {
@@ -698,7 +735,6 @@ func TestImportIntoDeck_NeverCreatesCardsOrDecks(t *testing.T) {
 	summary := importDeck(t, cards, decks, "1 Atraxa, Praetors' Voice (CMR) 1\n2 Sol Ring (SLD) 1011\n", true)
 
 	assert.Empty(t, cards.created)
-	assert.Empty(t, decks.created)
 	assert.Equal(t, 0, summary.CardsCreated)
 	assert.Equal(t, 0, summary.DecksCreated)
 }

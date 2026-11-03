@@ -8,6 +8,7 @@ import (
 
 var ErrStorageNotFound = errors.New("referenced storage does not exist")
 var ErrNotFound = errors.New("card not found")
+var ErrDeckNotFound = errors.New("referenced deck does not exist")
 
 type Card struct {
 	ID              int
@@ -26,6 +27,44 @@ type Card struct {
 	Added           time.Time
 	Updated         time.Time
 	CopyIDs         []int
+}
+
+// ImportPlan is everything a collection import writes, in one transaction.
+type ImportPlan struct {
+	Storages []NewStorage
+	Decks    []NewDeck
+	Copies   []ImportCopy
+}
+
+// NewStorage is a storage the import creates; copies point at it by its index in ImportPlan.Storages.
+type NewStorage struct {
+	Name string
+	Type string
+}
+
+// NewDeck is a deck the import creates; copies point at it by its index in ImportPlan.Decks.
+type NewDeck struct {
+	Name   string
+	Format string
+}
+
+// ImportCopy is one physical copy to create. Card.StorageID is an existing storage;
+// NewStorage, when set, is the index of a storage of the plan and wins over Card.StorageID.
+// The copy goes on the main board of the deck NewDeck (index in ImportPlan.Decks, wins) or
+// DeckID (an existing deck of the user) names, if either is set.
+type ImportCopy struct {
+	Card       Card
+	NewStorage *int
+	NewDeck    *int
+	DeckID     *string
+}
+
+// ImportResult holds what the plan created; Cards follow the order of ImportPlan.Copies,
+// StorageIDs the order of ImportPlan.Storages and DeckIDs the order of ImportPlan.Decks.
+type ImportResult struct {
+	Cards      []Card
+	StorageIDs []int
+	DeckIDs    []string
 }
 
 type CardFilter struct {
@@ -50,6 +89,7 @@ type Repository interface {
 	FindAll(ctx context.Context, userID string, filter CardFilter) ([]Card, int, error)
 	FindByID(ctx context.Context, userID string, id int) (Card, error)
 	Create(ctx context.Context, userID string, c Card) (Card, error)
+	ImportCollection(ctx context.Context, userID string, plan ImportPlan) (ImportResult, error)
 	Update(ctx context.Context, userID string, c Card) (Card, error)
 	Delete(ctx context.Context, userID string, id int) error
 	DeleteAll(ctx context.Context, userID string) (int, error)

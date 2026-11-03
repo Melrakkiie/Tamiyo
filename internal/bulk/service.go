@@ -35,7 +35,7 @@ func manaBoxBinderType(storageType string) string {
 }
 
 type cardService interface {
-	CreateCard(ctx context.Context, userID string, c card.Card) (card.Card, error)
+	ImportCollection(ctx context.Context, userID string, plan card.ImportPlan) (card.ImportResult, error)
 	GetAllCards(ctx context.Context, userID string, filter card.CardFilter) ([]card.Card, int, error)
 	GetCardsMissingDetails(ctx context.Context, userID string, afterID int, limit int) ([]card.Card, error)
 	CountCardsMissingDetails(ctx context.Context, userID string, afterID int) (int, error)
@@ -47,16 +47,13 @@ type cardService interface {
 type storageService interface {
 	GetAllStorages(ctx context.Context, userID string, filter storage.Filter) ([]storage.Storage, int, error)
 	GetStorage(ctx context.Context, userID string, id int) (storage.Storage, error)
-	CreateStorage(ctx context.Context, userID string, s storage.Storage) (storage.Storage, error)
 }
 
 type deckService interface {
 	GetAllDecks(ctx context.Context, userID string, filter deck.Filter) ([]deck.Deck, int, error)
 	GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error)
 	ReadDeck(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (deck.ReadDeck, error)
-	CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error)
 	DuplicateDeck(ctx context.Context, userID string, sourceID string, req deck.DuplicateRequest) (deck.DuplicateResult, error)
-	PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error
 	GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error)
 	PlaceCards(ctx context.Context, userID string, deckID string, plan deck.PlacementPlan) (deck.PlacementSummary, error)
 	CollectOwnDeck(ctx context.Context, userID string, deckID string, req deck.OwnDeckCollect) (deck.CollectSummary, error)
@@ -115,33 +112,10 @@ func (s *Service) ImportManaBox(ctx context.Context, userID string, targetStorag
 		summary.Warnings = append(summary.Warnings, fmt.Sprintf("could not resolve mana values against scryfall, imported cards default to mana_value 0: %v", resolveErr))
 	}
 
+	var plan card.ImportPlan
+	plannedStorages := map[string]int{} // storage name -> index in plan.Storages
+	plannedDecks := map[string]int{}    // deck name -> index in plan.Decks
 	for _, row := range rows {
-		var storageID int
-		var deckID *string
-		if targetStorageID != nil {
-			storageID = *targetStorageID
-		} else {
-			id, created, err := s.getOrCreateStorage(ctx, userID, storageCache, row.BinderName, storageTypeFromManaBox(row.BinderType))
-			if err != nil {
-				return summary, fmt.Errorf("line %d: creating storage %q: %w", row.LineNo, row.BinderName, err)
-			}
-			if created {
-				summary.StoragesCreated++
-			}
-			storageID = id
-
-			if row.BinderType == manaBoxDeckBinderType {
-				id, created, err := s.getOrCreateDeck(ctx, userID, deckCache, row.BinderName, defaultManaBoxDeckFormat)
-				if err != nil {
-					return summary, fmt.Errorf("line %d: creating deck %q: %w", row.LineNo, row.BinderName, err)
-				}
-				if created {
-					summary.DecksCreated++
-				}
-				deckID = &id
-			}
-		}
-
 		rc, resolvedOK := resolvedByScryfallID[row.ScryfallID]
 		name := row.CardName
 		var colors, cardType, identity *string
@@ -149,38 +123,48 @@ func (s *Service) ImportManaBox(ctx context.Context, userID string, targetStorag
 			name = rc.Name
 			colors, cardType, identity = rc.details()
 		}
+		copies := copiesOf(card.Card{
+			Name:            name,
+			ScryfallID:      row.ScryfallID,
+			SetCode:         row.SetCode,
+			CollectorNumber: row.CollectorNumber,
+			Foil:            row.Foil,
+			StorageID:       targetStorageID,
+			ManaValue:       rc.ManaValue,
+			Colors:          colors,
+			CardType:        cardType,
+			ColorIdentity:   identity,
+		}, row.Quantity)
 
-		for i := 0; i < row.Quantity; i++ {
-			if err := ctx.Err(); err != nil {
-				return summary, err
-			}
-			created, err := s.cards.CreateCard(ctx, userID, card.Card{
-				Name:            name,
-				ScryfallID:      row.ScryfallID,
-				SetCode:         row.SetCode,
-				CollectorNumber: row.CollectorNumber,
-				Foil:            row.Foil,
-				StorageID:       &storageID,
-				ManaValue:       rc.ManaValue,
-				Colors:          colors,
-				CardType:        cardType,
-				ColorIdentity:   identity,
+		if targetStorageID == nil {
+			storageID, newStorage := existingOrPlanned(storageCache, plannedStorages, row.BinderName, func() int {
+				plan.Storages = append(plan.Storages, card.NewStorage{Name: row.BinderName, Type: storageTypeFromManaBox(row.BinderType)})
+				return len(plan.Storages) - 1
 			})
-			if err != nil {
-				summary.CardsSkipped++
-				summary.Warnings = append(summary.Warnings, fmt.Sprintf("line %d: could not create %q: %v", row.LineNo, row.CardName, err))
-				continue
+			for i := range copies {
+				copies[i].Card.StorageID, copies[i].NewStorage = storageID, newStorage
 			}
-			summary.CardsCreated++
 
-			if deckID != nil {
-				if err := s.decks.PutCardInDeck(ctx, userID, *deckID, created.ID, deck.BoardMain); err != nil {
-					summary.Warnings = append(summary.Warnings, fmt.Sprintf("line %d: could not link %q to deck: %v", row.LineNo, row.CardName, err))
+			if row.BinderType == manaBoxDeckBinderType {
+				deckID, newDeck := existingOrPlanned(deckCache, plannedDecks, row.BinderName, func() int {
+					plan.Decks = append(plan.Decks, card.NewDeck{Name: row.BinderName, Format: defaultManaBoxDeckFormat})
+					return len(plan.Decks) - 1
+				})
+				for i := range copies {
+					copies[i].DeckID, copies[i].NewDeck = deckID, newDeck
 				}
 			}
 		}
+		plan.Copies = append(plan.Copies, copies...)
 	}
 
+	result, err := s.cards.ImportCollection(ctx, userID, plan)
+	if err != nil {
+		return Summary{}, err
+	}
+	summary.CardsCreated = len(result.Cards)
+	summary.StoragesCreated = len(result.StorageIDs)
+	summary.DecksCreated = len(result.DeckIDs)
 	return summary, nil
 }
 
@@ -204,6 +188,7 @@ func (s *Service) ImportMoxfieldCollection(ctx context.Context, userID string, s
 	}
 
 	var summary Summary
+	var plan card.ImportPlan
 	for _, row := range rows {
 		resolvedCard, ok := resolved[resolveKey(row.SetCode, row.CollectorNumber)]
 		if !ok {
@@ -215,29 +200,25 @@ func (s *Service) ImportMoxfieldCollection(ctx context.Context, userID string, s
 		}
 
 		colors, cardType, identity := resolvedCard.details()
-		for i := 0; i < row.Quantity; i++ {
-			if err := ctx.Err(); err != nil {
-				return summary, err
-			}
-			if _, err := s.cards.CreateCard(ctx, userID, card.Card{
-				Name:            resolvedCard.Name,
-				ScryfallID:      resolvedCard.ScryfallID,
-				SetCode:         row.SetCode,
-				CollectorNumber: row.CollectorNumber,
-				Foil:            row.Foil,
-				StorageID:       &storageID,
-				ManaValue:       resolvedCard.ManaValue,
-				Colors:          colors,
-				CardType:        cardType,
-				ColorIdentity:   identity,
-			}); err != nil {
-				summary.CardsSkipped++
-				summary.Warnings = append(summary.Warnings, fmt.Sprintf("line %d: could not create %q: %v", row.LineNo, row.CardName, err))
-				continue
-			}
-			summary.CardsCreated++
-		}
+		plan.Copies = append(plan.Copies, copiesOf(card.Card{
+			Name:            resolvedCard.Name,
+			ScryfallID:      resolvedCard.ScryfallID,
+			SetCode:         row.SetCode,
+			CollectorNumber: row.CollectorNumber,
+			Foil:            row.Foil,
+			StorageID:       &storageID,
+			ManaValue:       resolvedCard.ManaValue,
+			Colors:          colors,
+			CardType:        cardType,
+			ColorIdentity:   identity,
+		}, row.Quantity)...)
 	}
+
+	created, err := s.cards.ImportCollection(ctx, userID, plan)
+	if err != nil {
+		return Summary{}, err
+	}
+	summary.CardsCreated = len(created.Cards)
 
 	return summary, nil
 }
@@ -329,30 +310,6 @@ func (s *Service) loadDeckCache(ctx context.Context, userID string) (map[string]
 			return cache, nil
 		}
 	}
-}
-
-func (s *Service) getOrCreateStorage(ctx context.Context, userID string, cache map[string]int, name, storageType string) (id int, created bool, err error) {
-	if id, ok := cache[name]; ok {
-		return id, false, nil
-	}
-	st, err := s.storages.CreateStorage(ctx, userID, storage.Storage{Name: name, Type: storageType})
-	if err != nil {
-		return 0, false, err
-	}
-	cache[name] = st.ID
-	return st.ID, true, nil
-}
-
-func (s *Service) getOrCreateDeck(ctx context.Context, userID string, cache map[string]string, name, format string) (id string, created bool, err error) {
-	if id, ok := cache[name]; ok {
-		return id, false, nil
-	}
-	d, err := s.decks.CreateDeck(ctx, userID, deck.Deck{Name: name, Format: format})
-	if err != nil {
-		return "", false, err
-	}
-	cache[name] = d.ID
-	return d.ID, true, nil
 }
 
 func identifierKey(id CardIdentifier) string {

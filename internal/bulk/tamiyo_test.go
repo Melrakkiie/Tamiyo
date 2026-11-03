@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -104,14 +105,15 @@ func TestTamiyoCollection_RoundTrip(t *testing.T) {
 	require.NoError(t, NewService(cards, storages, &fakeDeckService{}, &fakeResolver{}).ExportTamiyoCollection(context.Background(), testUserID, nil, &buf))
 
 	imported := &fakeCardService{}
-	targetStorages := &fakeStorageService{storages: []storage.Storage{{ID: 1, Name: "Classeur bleu", Type: "binder"}}, nextID: 1}
+	targetStorages := &fakeStorageService{storages: []storage.Storage{{ID: 1, Name: "Classeur bleu", Type: "binder"}}}
 	summary, err := NewService(imported, targetStorages, &fakeDeckService{}, tamiyoResolver()).ImportTamiyoCollection(context.Background(), testUserID, nil, &buf)
 
 	require.NoError(t, err)
 	assert.Equal(t, 5, summary.CardsCreated)
 	assert.Equal(t, 1, summary.StoragesCreated)
-	require.Len(t, targetStorages.storages, 2)
-	assert.Equal(t, storage.Storage{ID: 2, Name: "Boîte Kess", Type: "deckbox"}, targetStorages.storages[1])
+	assert.Len(t, targetStorages.storages, 1, "storages are created by the grouped operation, not the storage service")
+	require.Len(t, imported.plans, 1)
+	assert.Equal(t, []card.NewStorage{{Name: "Boîte Kess", Type: "deckbox"}}, imported.plans[0].Storages)
 
 	byName := map[string][]card.Card{}
 	for _, c := range imported.created {
@@ -123,10 +125,40 @@ func TestTamiyoCollection_RoundTrip(t *testing.T) {
 	assert.Equal(t, 1.0, byName["Sol Ring"][0].ManaValue)
 	require.Len(t, byName["Island"], 1)
 	assert.True(t, byName["Island"][0].Proxy)
-	assert.Equal(t, 2, *byName["Island"][0].StorageID)
+	assert.Equal(t, 100, *byName["Island"][0].StorageID)
 	assert.Equal(t, "U", *byName["Island"][0].ColorIdentity)
 	require.Len(t, byName["Duress"], 1)
 	assert.Nil(t, byName["Duress"][0].StorageID)
+}
+
+func TestImportTamiyoCollection_DeclaresEachMissingStorageOnce(t *testing.T) {
+	file := `{"tamiyo": 1, "kind": "collection", "storages": [{"name": "Vrac", "type": "box"}], "cards": [
+		{"name": "Sol Ring", "scryfall_id": "` + solRingSLD + `", "set_code": "sld", "collector_number": "1011", "quantity": 2, "storage": "Vrac"},
+		{"name": "Island", "scryfall_id": "` + islandNEO + `", "set_code": "neo", "collector_number": "294", "quantity": 1, "storage": " Vrac "},
+		{"name": "Duress", "scryfall_id": "` + duressM19 + `", "set_code": "m19", "collector_number": "94", "quantity": 1, "storage": "Neuf"}
+	]}`
+	imported := &fakeCardService{}
+
+	summary, err := NewService(imported, &fakeStorageService{}, &fakeDeckService{}, tamiyoResolver()).ImportTamiyoCollection(context.Background(), testUserID, nil, strings.NewReader(file))
+
+	require.NoError(t, err)
+	require.Len(t, imported.plans, 1)
+	assert.Equal(t, []card.NewStorage{{Name: "Vrac", Type: "box"}, {Name: "Neuf", Type: "binder"}}, imported.plans[0].Storages)
+	assert.Equal(t, 2, summary.StoragesCreated)
+	assert.Equal(t, 4, summary.CardsCreated)
+}
+
+func TestImportTamiyoCollection_RollsBackWhenTheDatabaseFails(t *testing.T) {
+	file := `{"tamiyo": 1, "kind": "collection", "cards": [
+		{"name": "Sol Ring", "scryfall_id": "` + solRingSLD + `", "set_code": "sld", "collector_number": "1011", "quantity": 2, "storage": "Neuf"}
+	]}`
+	imported := &fakeCardService{importErr: errors.New("boom")}
+
+	summary, err := NewService(imported, &fakeStorageService{}, &fakeDeckService{}, tamiyoResolver()).ImportTamiyoCollection(context.Background(), testUserID, nil, strings.NewReader(file))
+
+	require.EqualError(t, err, "boom")
+	assert.Equal(t, Summary{}, summary)
+	assert.Empty(t, imported.created)
 }
 
 func TestImportTamiyoCollection_IntoOneStorage(t *testing.T) {

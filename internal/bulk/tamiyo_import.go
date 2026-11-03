@@ -62,6 +62,8 @@ func (s *Service) ImportTamiyoCollection(ctx context.Context, userID string, tar
 	}
 
 	var summary Summary
+	plan := card.ImportPlan{}
+	planned := map[string]int{} // storage name -> index in plan.Storages
 	for i, c := range file.collection {
 		rc, ok := resolved[resolveKeyByID(c.ScryfallID)]
 		if !ok {
@@ -70,48 +72,44 @@ func (s *Service) ImportTamiyoCollection(ctx context.Context, userID string, tar
 			continue
 		}
 
-		storageID := targetStorageID
+		colors, cardType, identity := rc.details()
+		base := card.Card{
+			Name:            rc.Name,
+			ScryfallID:      rc.ScryfallID,
+			SetCode:         rc.SetCode,
+			CollectorNumber: rc.CollectorNumber,
+			Foil:            c.Foil,
+			Proxy:           c.Proxy,
+			StorageID:       targetStorageID,
+			ManaValue:       rc.ManaValue,
+			Colors:          colors,
+			CardType:        cardType,
+			ColorIdentity:   identity,
+		}
+		copies := copiesOf(base, c.Quantity)
 		if targetStorageID == nil && c.Storage != nil {
 			name := strings.TrimSpace(*c.Storage)
-			storageType := storageTypes[*c.Storage]
-			if storageType == "" {
-				storageType = defaultTamiyoStorageType
+			storageID, newStorage := existingOrPlanned(storageCache, planned, name, func() int {
+				storageType := storageTypes[*c.Storage]
+				if storageType == "" {
+					storageType = defaultTamiyoStorageType
+				}
+				plan.Storages = append(plan.Storages, card.NewStorage{Name: name, Type: storageType})
+				return len(plan.Storages) - 1
+			})
+			for j := range copies {
+				copies[j].Card.StorageID, copies[j].NewStorage = storageID, newStorage
 			}
-			id, created, err := s.getOrCreateStorage(ctx, userID, storageCache, name, storageType)
-			if err != nil {
-				return summary, fmt.Errorf("card %d: creating storage %q: %w", i+1, name, err)
-			}
-			if created {
-				summary.StoragesCreated++
-			}
-			storageID = &id
 		}
-
-		colors, cardType, identity := rc.details()
-		for copy := 0; copy < c.Quantity; copy++ {
-			if err := ctx.Err(); err != nil {
-				return summary, err
-			}
-			if _, err := s.cards.CreateCard(ctx, userID, card.Card{
-				Name:            rc.Name,
-				ScryfallID:      rc.ScryfallID,
-				SetCode:         rc.SetCode,
-				CollectorNumber: rc.CollectorNumber,
-				Foil:            c.Foil,
-				Proxy:           c.Proxy,
-				StorageID:       storageID,
-				ManaValue:       rc.ManaValue,
-				Colors:          colors,
-				CardType:        cardType,
-				ColorIdentity:   identity,
-			}); err != nil {
-				summary.CardsSkipped++
-				summary.Warnings = append(summary.Warnings, fmt.Sprintf("card %d: could not create %q: %v", i+1, c.Name, err))
-				continue
-			}
-			summary.CardsCreated++
-		}
+		plan.Copies = append(plan.Copies, copies...)
 	}
+
+	result, err := s.cards.ImportCollection(ctx, userID, plan)
+	if err != nil {
+		return Summary{}, err
+	}
+	summary.CardsCreated = len(result.Cards)
+	summary.StoragesCreated = len(result.StorageIDs)
 	return summary, nil
 }
 

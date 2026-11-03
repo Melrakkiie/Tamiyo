@@ -1642,7 +1642,7 @@ A signed-in user can like someone else's `public` or `unlisted` deck. **Requires
 
 Five routes import cards in bulk, instead of one `POST /cards` call per card: a collection export from a third-party tool, a plain card list, a [Tamiyo file](#tamiyo-format), or a decklist. The collection, list and Tamiyo imports create cards (and, for ManaBox and Tamiyo, storages; for ManaBox, decks); the deck import fills an existing deck with cards already in the collection and never creates any. All five are `multipart/form-data` requests (not JSON) with the file itself in a field named `file`.
 
-A bulk import never fails outright just because some rows couldn't be resolved: a request that parses successfully always returns `200 OK` with a summary of what happened, including a `warnings` list for any row that was skipped (card not found on Scryfall, a duplicate, a transient error). The import only fails as a whole (non-`200`) when the file itself can't be parsed, a referenced `storage_id` doesn't exist, or Scryfall couldn't be reached at all.
+A bulk import never fails outright just because some rows couldn't be resolved: a request that parses successfully returns `200 OK` with a summary of what happened, including a `warnings` list for any row that was skipped (card not found on Scryfall). The import fails as a whole (non-`200`) when the file itself can't be parsed, a referenced `storage_id` doesn't exist, or Scryfall couldn't be reached at all. The four collection imports (Moxfield collection, card list, Tamiyo and ManaBox; see their sections) are each one transaction and also fail as a whole on a database error.
 
 Cards and pending cards are stored under their English Scryfall name, whatever the language of the file: a ManaBox row named `Anneau solaire` creates a `Sol Ring`, and Moxfield tags on that line go to `Sol Ring` too. Only a ManaBox import made while Scryfall is unreachable keeps the file's name; the background printing refresher, which renames every card and pending card to its printing's English name (moving the deck tags along), fixes it within minutes. That refresh also replaces a name changed by hand with `PATCH /cards/:id`, and sets each card's and pending card's `mana_value` to its printing's.
 
@@ -1665,7 +1665,7 @@ Cards and pending cards are stored under their English Scryfall name, whatever t
 **Errors common to all five**
 - `413` — the request body is larger than 10 MB (also for [`POST /deck/:id/bulk-edit`](#post-deckidbulk-edit)); the body is `{"error": "the uploaded file is too large (10 MB maximum)"}` and nothing is imported
 - `400` — no `file` field, or the file couldn't be parsed (wrong columns, malformed line, a quantity above 1000 copies on one line) — message explains what's wrong; nothing is imported
-- `400` — a `storage_id` field doesn't reference an existing storage for this account
+- `400` — a `storage_id` field doesn't reference an existing storage for this account, or a storage or deck the import was creating into was deleted while it ran (nothing is imported)
 - `502` — Scryfall (used to resolve Moxfield rows — see below) couldn't be reached or returned an unexpected response after retrying; a rate-limited (`429`) response from Scryfall is retried automatically (honoring its `Retry-After` header when present) before this is returned. The body is always `{"error": "could not resolve cards against scryfall"}`
 - `401` — unauthenticated, like every other route under this section
 
@@ -1673,7 +1673,7 @@ Cards and pending cards are stored under their English Scryfall name, whatever t
 
 ### `POST /import/manabox`
 
-Import a [ManaBox](https://manabox.app/) collection export (`ManaBox_Collection.csv`). For each row: gets or creates the storage matching `Binder Name` (type = `Binder Type`, except that a `deck` binder becomes a `deckbox` storage, so it isn't mistaken for a deck); if `Binder Type` is `deck`, also gets or creates a deck with the same name (format defaults to `commander` — the export has no format column, so correct it afterwards with `PATCH /deck/:id` if needed); creates one card per physical copy (`Quantity`); links each card to the deck if applicable. ManaBox's export already carries the Scryfall ID directly, so cards are created even when Scryfall is unreachable: the route only looks them up to store their English name, colors and primary type, and keeps the file's name and leaves the rest unknown (to fill in later with `POST /cards/refresh-details`) rather than failing — it never returns `502`. Scryfall allows one lookup of 75 cards every 500 ms, so a collection of several thousand cards takes about a minute.
+Import a [ManaBox](https://manabox.app/) collection export (`ManaBox_Collection.csv`). For each row: gets or creates the storage matching `Binder Name` (type = `Binder Type`, except that a `deck` binder becomes a `deckbox` storage, so it isn't mistaken for a deck); if `Binder Type` is `deck`, also gets or creates a deck with the same name (format defaults to `commander` — the export has no format column, so correct it afterwards with `PATCH /deck/:id` if needed); creates one card per physical copy (`Quantity`); links each card to the deck if applicable. The whole import is one transaction, storages, decks and deck links included: every storage, deck, card and link is created, or none, and on a failure (a database error, the request cancelled) the route returns the error alone, with no summary, so retrying never creates duplicates. ManaBox's export already carries the Scryfall ID directly, so cards are created even when Scryfall is unreachable: the route only looks them up to store their English name, colors and primary type, and keeps the file's name and leaves the rest unknown (to fill in later with `POST /cards/refresh-details`) rather than failing — it never returns `502`. Scryfall allows one lookup of 75 cards every 500 ms, so a collection of several thousand cards takes about a minute.
 
 **Form fields**
 
@@ -1690,6 +1690,8 @@ Import a [ManaBox](https://manabox.app/) collection export (`ManaBox_Collection.
 
 Import a Moxfield "Export Collection" CSV. Moxfield's own export has no storage/binder concept, so every created card is assigned to an existing storage you choose — and no Scryfall ID either, so each row is resolved by (set, collector number) against the [Scryfall API](https://scryfall.com/docs/api/cards/collection).
 
+The whole import is one transaction: every card is created, or none, and on a failure (a database error, the request cancelled) the route returns the error alone, with no summary, so retrying never creates duplicates. Rows Scryfall can't resolve don't count as a failure: they are skipped and noted in `warnings`.
+
 **Form fields**
 
 | Field | Required | Notes |
@@ -1705,6 +1707,8 @@ Import a Moxfield "Export Collection" CSV. Moxfield's own export has no storage/
 
 Add a card list to the collection: one card is created per copy, in the storage given by `storage_id`, or in no storage without it. The list uses the same line format as [`POST /deck/:id/import`](#post-deckidimport) (see *Expected line format* there): `1 Sol Ring (SLD) 1011 *F*` creates that exact printing, foil; `4 Lightning Bolt` creates the printing Scryfall returns by default for that name. Section headers are skipped. A line that can't be resolved on Scryfall is skipped (counted in `cards_skipped`, noted in `warnings`); the rest is still imported.
 
+The whole import is one transaction: every card is created, or none, and on a failure (a database error, the request cancelled) the route returns the error alone, with no summary, so retrying never creates duplicates. Lines Scryfall can't resolve don't count as a failure: they are skipped and noted in `warnings`.
+
 **Form fields**
 
 | Field | Required | Notes |
@@ -1716,7 +1720,7 @@ Add a card list to the collection: one card is created per copy, in the storage 
 
 ### `POST /import/tamiyo`
 
-Import a [Tamiyo file](#tamiyo-format) of kind `collection` or `storage` into the collection. One card is created per copy, with its printing, finish and proxy status. Without `storage_id`, each card goes in the storage named in the file: an existing storage with exactly that name, or a new one of the file's type (`binder` when the file doesn't say). With `storage_id`, every card goes in that storage and the file's storages are ignored. Each printing is looked up on Scryfall by its id, to store its details; one Scryfall doesn't know is skipped (counted in `cards_skipped`, noted in `warnings`).
+Import a [Tamiyo file](#tamiyo-format) of kind `collection` or `storage` into the collection. One card is created per copy, with its printing, finish and proxy status. Without `storage_id`, each card goes in the storage named in the file: an existing storage with exactly that name, or a new one of the file's type (`binder` when the file doesn't say). With `storage_id`, every card goes in that storage and the file's storages are ignored. The whole import is one transaction, storages included: every storage and card is created, or none, and on a failure (a database error, the request cancelled) the route returns the error alone, with no summary, so retrying never creates duplicates. Each printing is looked up on Scryfall by its id, to store its details; one Scryfall doesn't know is skipped (counted in `cards_skipped`, noted in `warnings`).
 
 **Form fields**
 

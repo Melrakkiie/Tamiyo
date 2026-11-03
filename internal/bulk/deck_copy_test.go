@@ -23,7 +23,6 @@ const (
 
 func sharedDeckFixture() *fakeDeckService {
 	decks := tamiyoDeckFixture()
-	decks.nextID = 50
 	decks.owners = map[string]string{fixtureDeckID: otherUserID}
 	return decks
 }
