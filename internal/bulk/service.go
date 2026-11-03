@@ -35,7 +35,6 @@ func manaBoxBinderType(storageType string) string {
 }
 
 type cardService interface {
-	CreateCard(ctx context.Context, userID string, c card.Card) (card.Card, error)
 	ImportCollection(ctx context.Context, userID string, plan card.ImportPlan) (card.ImportResult, error)
 	GetAllCards(ctx context.Context, userID string, filter card.CardFilter) ([]card.Card, int, error)
 	GetCardsMissingDetails(ctx context.Context, userID string, afterID int, limit int) ([]card.Card, error)
@@ -48,16 +47,13 @@ type cardService interface {
 type storageService interface {
 	GetAllStorages(ctx context.Context, userID string, filter storage.Filter) ([]storage.Storage, int, error)
 	GetStorage(ctx context.Context, userID string, id int) (storage.Storage, error)
-	CreateStorage(ctx context.Context, userID string, s storage.Storage) (storage.Storage, error)
 }
 
 type deckService interface {
 	GetAllDecks(ctx context.Context, userID string, filter deck.Filter) ([]deck.Deck, int, error)
 	GetDeck(ctx context.Context, userID string, id string) (deck.Deck, error)
 	ReadDeck(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (deck.ReadDeck, error)
-	CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error)
 	DuplicateDeck(ctx context.Context, userID string, sourceID string, req deck.DuplicateRequest) (deck.DuplicateResult, error)
-	PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error
 	GetDeckCards(ctx context.Context, userID string, id string, sortField string, sortDesc bool) ([]deck.DeckCard, error)
 	PlaceCards(ctx context.Context, userID string, deckID string, plan deck.PlacementPlan) (deck.PlacementSummary, error)
 	CollectOwnDeck(ctx context.Context, userID string, deckID string, req deck.OwnDeckCollect) (deck.CollectSummary, error)

@@ -20,9 +20,8 @@ const testUserID = "11111111-1111-1111-1111-111111111111"
 // --- fakes -------------------------------------------------------------
 
 type fakeCardService struct {
-	nextID    int
-	created   []card.Card
-	createErr error
+	nextID  int
+	created []card.Card
 
 	// plans records each ImportCollection call; copies of a successful call also land in created.
 	plans     []card.ImportPlan
@@ -80,16 +79,6 @@ func (f *fakeCardService) SetCardDetails(ctx context.Context, userID string, id 
 	}
 	f.setDetails[id] = details
 	return nil
-}
-
-func (f *fakeCardService) CreateCard(ctx context.Context, userID string, c card.Card) (card.Card, error) {
-	if f.createErr != nil {
-		return card.Card{}, f.createErr
-	}
-	f.nextID++
-	c.ID = f.nextID
-	f.created = append(f.created, c)
-	return c, nil
 }
 
 // ImportCollection is all or nothing like the real one: a cancelled context or importErr creates nothing.
@@ -161,8 +150,6 @@ func (f *fakeCardService) GetAllCards(ctx context.Context, userID string, filter
 
 type fakeStorageService struct {
 	storages   []storage.Storage
-	nextID     int
-	created    []storage.Storage
 	getByIDErr error
 	getAllErr  error
 }
@@ -186,14 +173,6 @@ func (f *fakeStorageService) GetStorage(ctx context.Context, userID string, id i
 	return storage.Storage{}, storage.ErrNotFound
 }
 
-func (f *fakeStorageService) CreateStorage(ctx context.Context, userID string, s storage.Storage) (storage.Storage, error) {
-	f.nextID++
-	s.ID = f.nextID
-	f.storages = append(f.storages, s)
-	f.created = append(f.created, s)
-	return s, nil
-}
-
 type duplication struct {
 	sourceID string
 	req      deck.DuplicateRequest
@@ -202,13 +181,9 @@ type duplication struct {
 type fakeDeckService struct {
 	tags map[string][]string
 
-	decks       []deck.Deck
-	nextID      int
-	created     []deck.Deck
-	linkedCards map[string][]int
+	decks []deck.Deck
 
-	cardsByDeck   map[string][]deck.DeckCard
-	createDeckErr error
+	cardsByDeck map[string][]deck.DeckCard
 
 	duplicated      []duplication
 	duplicateResult deck.DuplicateResult
@@ -220,8 +195,6 @@ type fakeDeckService struct {
 	sharedCollects []deck.SharedDeckCollect
 	collectResult  deck.CollectSummary
 	collectErr     error
-
-	linkedBoards map[int]string
 
 	owners map[string]string
 
@@ -337,29 +310,6 @@ func (f *fakeDeckService) GetDeckCards(ctx context.Context, userID string, id st
 	return f.cardsByDeck[id], nil
 }
 
-func (f *fakeDeckService) CreateDeck(ctx context.Context, userID string, d deck.Deck) (deck.Deck, error) {
-	if f.createDeckErr != nil {
-		return deck.Deck{}, f.createDeckErr
-	}
-	f.nextID++
-	d.ID = fmt.Sprintf("00000000-0000-0000-0000-%012d", f.nextID)
-	f.decks = append(f.decks, d)
-	f.created = append(f.created, d)
-	return d, nil
-}
-
-func (f *fakeDeckService) PutCardInDeck(ctx context.Context, userID string, deckID string, cardID int, board string) error {
-	if f.linkedCards == nil {
-		f.linkedCards = make(map[string][]int)
-	}
-	if f.linkedBoards == nil {
-		f.linkedBoards = make(map[int]string)
-	}
-	f.linkedBoards[cardID] = board
-	f.linkedCards[deckID] = append(f.linkedCards[deckID], cardID)
-	return nil
-}
-
 type fakeResolver struct {
 	resolved map[string]ResolvedCard
 	err      error
@@ -406,7 +356,6 @@ Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,2
 	assert.Equal(t, 0, summary.DecksCreated)
 	require.Len(t, cards.plans, 1, "one plan, one call")
 	assert.Equal(t, []card.NewStorage{{Name: "Main Binder", Type: "binder"}}, cards.plans[0].Storages)
-	assert.Empty(t, storages.created)
 	require.Len(t, cards.created, 2)
 	assert.Equal(t, "Sol Ring", cards.created[0].Name)
 	require.NotNil(t, cards.created[0].StorageID)
@@ -429,9 +378,6 @@ Atraxa Deck,deck,Counterspell,CLB,bbbbbbbb-0000-0000-0000-000000000000,1,,1
 	assert.Equal(t, 3, summary.CardsCreated)
 	assert.Equal(t, 0, summary.StoragesCreated)
 	assert.Equal(t, 0, summary.DecksCreated)
-	assert.Empty(t, storages.created)
-	assert.Empty(t, decks.created)
-	assert.Empty(t, decks.linkedCards)
 	require.Len(t, cards.created, 3)
 	for _, c := range cards.created {
 		require.NotNil(t, c.StorageID)
@@ -542,8 +488,6 @@ Atraxa Deck,deck,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,1
 	assert.Equal(t, []card.NewDeck{{Name: "Atraxa Deck", Format: "commander"}}, cards.plans[0].Decks)
 	assert.Equal(t, map[int]string{cards.created[0].ID: "deck-100"}, cards.deckLinks)
 	assert.Equal(t, []card.NewStorage{{Name: "Atraxa Deck", Type: "deckbox"}}, cards.plans[0].Storages)
-	assert.Empty(t, decks.created)
-	assert.Empty(t, storages.created)
 }
 
 func TestImportManaBox_LinksToAnExistingDeckByNameWithoutCreatingOne(t *testing.T) {
@@ -791,7 +735,6 @@ func TestImportIntoDeck_NeverCreatesCardsOrDecks(t *testing.T) {
 	summary := importDeck(t, cards, decks, "1 Atraxa, Praetors' Voice (CMR) 1\n2 Sol Ring (SLD) 1011\n", true)
 
 	assert.Empty(t, cards.created)
-	assert.Empty(t, decks.created)
 	assert.Equal(t, 0, summary.CardsCreated)
 	assert.Equal(t, 0, summary.DecksCreated)
 }
