@@ -39,6 +39,20 @@
 {"query": "f:Commander", "tree": {"field": "format", "op": "=", "value": "commander"}},
 {"query": "legal:modern", "tree": {"field": "format", "op": "=", "value": "modern"}},
 {"query": "kw:\"first strike\"", "tree": {"field": "keyword", "op": "=", "value": "first strike"}},
+{"query": "power:3", "tree": {"field": "power", "op": "=", "value": 3}},
+
+{"query": "toughness>=2", "tree": {"field": "toughness", "op": ">=", "value": 2}},
+
+{"query": "keyword:Flying", "tree": {"field": "keyword", "op": "=", "value": "Flying"}},
+
+{"query": "format:Modern", "tree": {"field": "format", "op": "=", "value": "modern"}},
+
+{"query": "set:Mh2", "tree": {"field": "set", "op": "=", "value": "mh2"}},
+
+{"query": "edition:NEO", "tree": {"field": "set", "op": "=", "value": "neo"}},
+
+{"query": "ci:esper", "tree": {"field": "identity", "op": "<=", "value": "WUB"}},
+
 {"query": "usd>=1.5", "tree": {"field": "usd", "op": ">=", "value": 1.5}},
 {"query": "eur<2", "tree": {"field": "eur", "op": "<", "value": 2}},
 {"query": "-t:land", "tree": {"not": {"field": "type", "op": "=", "value": "land"}}},
@@ -81,7 +95,7 @@
 {"query": "s<neo", "invalid": true},
 {"query": "cn>12a", "invalid": true},
 {"query": "!\"\"", "invalid": true},
-{"query": "is:shiny", "invalid": true, "sides": ["api"]},
-{"query": "is=foil", "invalid": true, "sides": ["api"]},
-{"query": "not!=foil", "invalid": true, "sides": ["api"]}
+{"query": "is:shiny", "invalid": true},
+{"query": "is=foil", "invalid": true},
+{"query": "not!=foil", "invalid": true}
 ]
