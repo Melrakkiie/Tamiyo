@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -151,11 +152,13 @@ func Load() (*Config, error) {
 		ShutdownTimeout: r.duration("SHUTDOWN_TIMEOUT_SECONDS", 10, time.Second),
 	}
 
+	var invalidErr error
 	if len(r.bad) > 0 {
-		return nil, fmt.Errorf("invalid environment variable(s): %s", strings.Join(r.bad, ", "))
+		invalidErr = fmt.Errorf("invalid environment variable(s): %s", strings.Join(r.bad, ", "))
 	}
 
-	if err := validate(cfg); err != nil {
+	// Joined so one restart shows every mistake, not only the first kind.
+	if err := errors.Join(invalidErr, validate(cfg)); err != nil {
 		return nil, err
 	}
 

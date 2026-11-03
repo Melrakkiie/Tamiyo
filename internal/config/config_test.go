@@ -93,6 +93,18 @@ func TestLoad_ReportsEveryBadVariableAtOnce(t *testing.T) {
 	}
 }
 
+func TestLoad_ReportsBadVariableAndMissingRequiredTogether(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("JWT_SECRET", "")
+	t.Setenv("AUTH_RATE_LIMIT_MAX", "5x")
+
+	_, err := Load()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "AUTH_RATE_LIMIT_MAX")
+	assert.Contains(t, err.Error(), "JWT_SECRET")
+}
+
 func TestLoad_DefaultsAppPortWhenNotSet(t *testing.T) {
 	setRequiredEnv(t)
 	// APP_PORT is missing
