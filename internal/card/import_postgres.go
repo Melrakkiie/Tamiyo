@@ -12,9 +12,9 @@ import (
 // importBatchSize keeps a statement far under Postgres' 65535 bind parameters.
 const importBatchSize = 1000
 
-// ImportCollection creates every copy of the plan in one transaction, in grouped inserts.
+// ImportCollection creates the plan's storages and every copy in one transaction, in grouped inserts.
 func (r *PostgresRepository) ImportCollection(ctx context.Context, userID string, plan ImportPlan) (ImportResult, error) {
-	if len(plan.Copies) == 0 {
+	if len(plan.Copies) == 0 && len(plan.Storages) == 0 {
 		return ImportResult{}, nil
 	}
 
@@ -24,25 +24,48 @@ func (r *PostgresRepository) ImportCollection(ctx context.Context, userID string
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	result, err := importPlan(ctx, tx, userID, plan)
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ImportResult{}, ctxErr
+		}
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23503" {
+			return ImportResult{}, ErrStorageNotFound
+		}
+		return ImportResult{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return ImportResult{}, err
+	}
+	return result, nil
+}
+
+func importPlan(ctx context.Context, tx *sqlx.Tx, userID string, plan ImportPlan) (ImportResult, error) {
 	result := ImportResult{Cards: make([]Card, 0, len(plan.Copies))}
-	for start := 0; start < len(plan.Copies); start += importBatchSize {
-		end := min(start+importBatchSize, len(plan.Copies))
-		created, err := insertCopies(ctx, tx, userID, plan.Copies[start:end])
+	for _, st := range plan.Storages {
+		var id int
+		if err := tx.GetContext(ctx, &id, `INSERT INTO tamiyo.storage (user_id, name, type) VALUES ($1, $2, $3) RETURNING id`, userID, st.Name, st.Type); err != nil {
+			return ImportResult{}, err
+		}
+		result.StorageIDs = append(result.StorageIDs, id)
+	}
+
+	copies := make([]ImportCopy, len(plan.Copies))
+	copy(copies, plan.Copies)
+	for i, c := range copies {
+		if c.NewStorage != nil {
+			id := result.StorageIDs[*c.NewStorage]
+			copies[i].Card.StorageID = &id
+		}
+	}
+	for start := 0; start < len(copies); start += importBatchSize {
+		end := min(start+importBatchSize, len(copies))
+		created, err := insertCopies(ctx, tx, userID, copies[start:end])
 		if err != nil {
-			if ctxErr := ctx.Err(); ctxErr != nil {
-				return ImportResult{}, ctxErr
-			}
-			var pqErr *pq.Error
-			if errors.As(err, &pqErr) && pqErr.Code == "23503" {
-				return ImportResult{}, ErrStorageNotFound
-			}
 			return ImportResult{}, err
 		}
 		result.Cards = append(result.Cards, created...)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return ImportResult{}, err
 	}
 	return result, nil
 }
