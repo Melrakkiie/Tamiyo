@@ -4,4 +4,4 @@
 
 ## Consequences
 
-Reusing a rotated refresh token closes every session of the account (theft detection). A double reload can resend the old cookie, so a token replaced less than 10 s ago (`reuseGrace` in `internal/token/service.go`) is accepted once more by following `refresh_tokens.replaced_by` to the live token. A token revoked by logout or a password change is never in that grace.
+Reusing a rotated refresh token ends that token's session (theft detection; see the ADR on reuse detection ending one session). A double reload can resend the old cookie, so a token replaced less than 10 s ago (`reuseGrace` in `internal/token/service.go`) is accepted once more by following `refresh_tokens.replaced_by` to the live token. A token revoked by logout or a password change is never in that grace.

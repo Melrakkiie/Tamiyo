@@ -137,7 +137,7 @@ The new refresh token is also set in the cookie (see [the refresh cookie](#brows
 
 **Errors:** `400` refresh token in neither the body nor the cookie, or malformed body · `401` invalid, expired, or already-used refresh token (the cookie is cleared)
 
-> Refresh tokens are **single-use**: a successful call revokes the one you sent and returns a new one (token rotation). Submitting an already-used refresh token is treated as a possible theft — it revokes *every* refresh token belonging to that account, logging out all of its sessions. One exception: a token rotated out less than 10 seconds ago is accepted once more (the client most likely never received the response, e.g. a page reloaded mid-refresh), as long as the token that replaced it is still valid.
+> Refresh tokens are **single-use**: a successful call revokes the one you sent and returns a new one (token rotation). Submitting an already-used refresh token is treated as a possible theft — it revokes that token and every token that replaced it, ending only that session (the account's other sessions, on other devices, keep working). Replaying a token revoked by a logout is simply refused. One exception: a token rotated out less than 10 seconds ago is accepted once more (the client most likely never received the response, e.g. a page reloaded mid-refresh), as long as the token that replaced it is still valid.
 
 Refresh tokens are valid for 30 days by default (`JWT_REFRESH_TOKEN_TTL_DAYS`) unless revoked sooner by a refresh, a logout, a password change, or reuse detection.
 
@@ -1934,4 +1934,4 @@ All error responses share the same shape:
 | `storage_id` (on cards) | Must reference an existing storage row, if provided |
 | `commander_id` (on decks) | Must reference an existing card row, if provided |
 | `password` (register) / `new_password` | Minimum 8 characters, maximum 72 bytes (UTF-8, accented characters count for 2) |
-| `refresh_token` | Single-use; reuse after rotation revokes all of the account's refresh tokens |
+| `refresh_token` | Single-use; reuse after rotation ends only that token's session |
