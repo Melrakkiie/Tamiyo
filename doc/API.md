@@ -468,6 +468,7 @@ List cards, with optional filtering, sorting, and pagination.
 - Terms separated by spaces must all match. `or` (or `OR`) matches either side, `-` negates a term or a group, parentheses group terms: `(t:elf or t:goblin) -c:r`.
 - A bare word matches the card name, each word on its own: `llanowar elves` finds names containing both words. Quotes keep spaces in a value (`o:"draw a card"`), and `!"Sol Ring"` matches that exact name (case-insensitive).
 - Operators are `:`, `=`, `!=`, `<`, `<=`, `>`, `>=`, where they make sense for the key. `!=` is the negation of `=`.
+- Numeric values (`mv`, `pow`, `tou`, `usd`, `eur`) are between `-1000000` and `1000000`.
 
 | Key (aliases) | Matches | Operators |
 |---|---|---|
