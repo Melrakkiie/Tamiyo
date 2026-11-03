@@ -173,6 +173,46 @@ func TestService_Rotate_AcceptsJustRotatedTokenAndRotatesItsSuccessor(t *testing
 	assert.Empty(t, repo.revokeAllForUserCalledWith)
 }
 
+func TestService_Rotate_AfterALostRaceRevokesTheExtraTokenAndRotatesTheWinnersSuccessor(t *testing.T) {
+	rotatedAt := time.Now()
+	winnerID := "winner-id"
+	repo := &fakeRepository{
+		// stale read: the token still looked active when this caller read it
+		findByHashResult: RefreshToken{ID: "old-id", UserID: "user-1", ExpiresAt: time.Now().Add(time.Hour)},
+		byID: map[string]RefreshToken{
+			"old-id":    {ID: "old-id", UserID: "user-1", ExpiresAt: time.Now().Add(time.Hour), RevokedAt: &rotatedAt, ReplacedBy: &winnerID},
+			"winner-id": {ID: "winner-id", UserID: "user-1", ExpiresAt: time.Now().Add(time.Hour)},
+		},
+	}
+	service := NewService(repo, time.Hour)
+
+	userID, newPlaintext, err := service.Rotate(context.Background(), "old-plaintext")
+
+	require.NoError(t, err)
+	assert.Equal(t, "user-1", userID)
+	assert.NotEmpty(t, newPlaintext)
+	assert.Equal(t, []string{"fake-id"}, repo.revokedIDs, "the token issued before losing is revoked")
+	assert.Equal(t, "fake-id", repo.replaced["winner-id"])
+	assert.Empty(t, repo.revokeAllForUserCalledWith, "a lost race is not theft")
+}
+
+func TestService_Rotate_AfterALostRaceFailsWhenTheWinnerIsGone(t *testing.T) {
+	rotatedAt := time.Now()
+	repo := &fakeRepository{
+		findByHashResult: RefreshToken{ID: "old-id", UserID: "user-1", ExpiresAt: time.Now().Add(time.Hour)},
+		byID: map[string]RefreshToken{
+			"old-id": {ID: "old-id", UserID: "user-1", ExpiresAt: time.Now().Add(time.Hour), RevokedAt: &rotatedAt},
+		},
+	}
+	service := NewService(repo, time.Hour)
+
+	_, _, err := service.Rotate(context.Background(), "old-plaintext")
+
+	assert.ErrorIs(t, err, ErrInvalid)
+	assert.Equal(t, []string{"fake-id"}, repo.revokedIDs)
+	assert.Empty(t, repo.revokeAllForUserCalledWith)
+}
+
 func TestService_Rotate_FollowsAChainOfJustRotatedTokens(t *testing.T) {
 	firstRotation := time.Now().Add(-3 * time.Second)
 	secondRotation := time.Now().Add(-1 * time.Second)

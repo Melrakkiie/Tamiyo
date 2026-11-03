@@ -68,16 +68,60 @@ func (s *Service) Rotate(ctx context.Context, plaintext string) (userID string, 
 		return "", "", ErrInvalid
 	}
 
-	newPlaintext, successorID, err := s.issue(ctx, rt.UserID)
+	newPlaintext, replaced, err := s.replaceWithNew(ctx, rt)
 	if err != nil {
 		return "", "", err
 	}
-
-	if _, err := s.repo.Replace(ctx, rt.ID, successorID); err != nil {
-		return "", "", err
+	if replaced {
+		return rt.UserID, newPlaintext, nil
 	}
 
-	return rt.UserID, newPlaintext, nil
+	// Another refresh won the race: continue from its successor, once.
+	current, err := s.repo.FindByID(ctx, rt.ID)
+	if errors.Is(err, ErrNotFound) {
+		return "", "", ErrInvalid
+	}
+	if err != nil {
+		return "", "", err
+	}
+	successor, err := s.activeSuccessor(ctx, current)
+	if err != nil {
+		return "", "", err
+	}
+	if successor == nil || time.Now().After(successor.ExpiresAt) {
+		return "", "", ErrInvalid
+	}
+
+	newPlaintext, replaced, err = s.replaceWithNew(ctx, *successor)
+	if err != nil {
+		return "", "", err
+	}
+	if !replaced {
+		return "", "", ErrInvalid
+	}
+
+	return successor.UserID, newPlaintext, nil
+}
+
+// replaceWithNew issues a token and links it to rt; if rt was already
+// replaced or revoked, the token just issued is revoked and replaced is false.
+func (s *Service) replaceWithNew(ctx context.Context, rt RefreshToken) (newPlaintext string, replaced bool, err error) {
+	newPlaintext, newID, err := s.issue(ctx, rt.UserID)
+	if err != nil {
+		return "", false, err
+	}
+
+	replaced, err = s.repo.Replace(ctx, rt.ID, newID)
+	if err != nil {
+		return "", false, err
+	}
+	if !replaced {
+		if err := s.repo.Revoke(ctx, newID); err != nil {
+			return "", false, err
+		}
+	}
+
+	return newPlaintext, replaced, nil
 }
 
 func (s *Service) activeSuccessor(ctx context.Context, rt RefreshToken) (*RefreshToken, error) {
