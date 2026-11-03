@@ -26,6 +26,7 @@ func (s *Service) ImportCardList(ctx context.Context, userID string, storageID *
 	}
 
 	var summary Summary
+	var plan card.ImportPlan
 	for _, line := range lines {
 		resolvedCard, ok := resolved[deckLineKey(line)]
 		if !ok {
@@ -36,29 +37,25 @@ func (s *Service) ImportCardList(ctx context.Context, userID string, storageID *
 
 		name, setCode, collectorNumber := line.printing(resolvedCard)
 		colors, cardType, identity := resolvedCard.details()
-		for i := 0; i < line.Quantity; i++ {
-			if err := ctx.Err(); err != nil {
-				return summary, err
-			}
-			if _, err := s.cards.CreateCard(ctx, userID, card.Card{
-				Name:            name,
-				ScryfallID:      resolvedCard.ScryfallID,
-				SetCode:         setCode,
-				CollectorNumber: collectorNumber,
-				Foil:            line.Foil,
-				StorageID:       storageID,
-				ManaValue:       resolvedCard.ManaValue,
-				Colors:          colors,
-				CardType:        cardType,
-				ColorIdentity:   identity,
-			}); err != nil {
-				summary.CardsSkipped++
-				summary.Warnings = append(summary.Warnings, fmt.Sprintf("line %d: could not create %q: %v", line.LineNo, name, err))
-				continue
-			}
-			summary.CardsCreated++
-		}
+		plan.Copies = append(plan.Copies, copiesOf(card.Card{
+			Name:            name,
+			ScryfallID:      resolvedCard.ScryfallID,
+			SetCode:         setCode,
+			CollectorNumber: collectorNumber,
+			Foil:            line.Foil,
+			StorageID:       storageID,
+			ManaValue:       resolvedCard.ManaValue,
+			Colors:          colors,
+			CardType:        cardType,
+			ColorIdentity:   identity,
+		}, line.Quantity)...)
 	}
+
+	created, err := s.cards.ImportCollection(ctx, userID, plan)
+	if err != nil {
+		return Summary{}, err
+	}
+	summary.CardsCreated = len(created.Cards)
 
 	return summary, nil
 }

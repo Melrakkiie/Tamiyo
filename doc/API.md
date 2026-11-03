@@ -1642,7 +1642,7 @@ A signed-in user can like someone else's `public` or `unlisted` deck. **Requires
 
 Five routes import cards in bulk, instead of one `POST /cards` call per card: a collection export from a third-party tool, a plain card list, a [Tamiyo file](#tamiyo-format), or a decklist. The collection, list and Tamiyo imports create cards (and, for ManaBox and Tamiyo, storages; for ManaBox, decks); the deck import fills an existing deck with cards already in the collection and never creates any. All five are `multipart/form-data` requests (not JSON) with the file itself in a field named `file`.
 
-A bulk import never fails outright just because some rows couldn't be resolved: a request that parses successfully returns `200 OK` with a summary of what happened, including a `warnings` list for any row that was skipped (card not found on Scryfall; for the ManaBox and card list imports, also a copy the database refused to create). The import fails as a whole (non-`200`) when the file itself can't be parsed, a referenced `storage_id` doesn't exist, or Scryfall couldn't be reached at all. An import that is one transaction (the Moxfield collection and Tamiyo imports; see their sections) also fails as a whole on a database error.
+A bulk import never fails outright just because some rows couldn't be resolved: a request that parses successfully returns `200 OK` with a summary of what happened, including a `warnings` list for any row that was skipped (card not found on Scryfall; for the ManaBox import, also a copy the database refused to create). The import fails as a whole (non-`200`) when the file itself can't be parsed, a referenced `storage_id` doesn't exist, or Scryfall couldn't be reached at all. An import that is one transaction (the Moxfield collection, card list and Tamiyo imports; see their sections) also fails as a whole on a database error.
 
 Cards and pending cards are stored under their English Scryfall name, whatever the language of the file: a ManaBox row named `Anneau solaire` creates a `Sol Ring`, and Moxfield tags on that line go to `Sol Ring` too. Only a ManaBox import made while Scryfall is unreachable keeps the file's name; the background printing refresher, which renames every card and pending card to its printing's English name (moving the deck tags along), fixes it within minutes. That refresh also replaces a name changed by hand with `PATCH /cards/:id`, and sets each card's and pending card's `mana_value` to its printing's.
 
@@ -1706,6 +1706,8 @@ The whole import is one transaction: every card is created, or none, and on a fa
 ### `POST /import/list`
 
 Add a card list to the collection: one card is created per copy, in the storage given by `storage_id`, or in no storage without it. The list uses the same line format as [`POST /deck/:id/import`](#post-deckidimport) (see *Expected line format* there): `1 Sol Ring (SLD) 1011 *F*` creates that exact printing, foil; `4 Lightning Bolt` creates the printing Scryfall returns by default for that name. Section headers are skipped. A line that can't be resolved on Scryfall is skipped (counted in `cards_skipped`, noted in `warnings`); the rest is still imported.
+
+The whole import is one transaction: every card is created, or none, and on a failure (a database error, the request cancelled) the route returns the error alone, with no summary, so retrying never creates duplicates. Lines Scryfall can't resolve don't count as a failure: they are skipped and noted in `warnings`.
 
 **Form fields**
 
