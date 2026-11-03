@@ -405,13 +405,13 @@ func TestHandler_Login_ReturnsInternalServerErrorWhenRefreshTokenIssueFails(t *t
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
+func blockAll(c *gin.Context) {
+	c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests, please try again later"})
+}
+
 func TestHandler_RegisterRoutes_AppliesGivenMiddlewareToBothAuthRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-
-	blockAll := func(c *gin.Context) {
-		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests, please try again later"})
-	}
 
 	NewHandler(&fakeService{}, testJWTSecret, testAccessTokenTTL, &fakeTokenService{}, testCookie).RegisterRoutes(router, blockAll)
 
@@ -432,9 +432,6 @@ func TestHandler_RegisterProtectedRoutes_LimitsOnlyThePasswordCheckingRoutes(t *
 	protected := router.Group("/")
 	protected.Use(auth.RequireAuth(testJWTSecret))
 
-	blockAll := func(c *gin.Context) {
-		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests, please try again later"})
-	}
 	NewHandler(&fakeService{}, testJWTSecret, testAccessTokenTTL, &fakeTokenService{}, testCookie).RegisterProtectedRoutes(protected, blockAll)
 
 	tests := []struct {

@@ -124,7 +124,7 @@ func (h *Handler) RegisterRoutes(router gin.IRoutes, authMiddleware ...gin.Handl
 	router.POST("/auth/login", loginHandlers...)
 }
 
-// RegisterProtectedRoutes mounts the authenticated routes; passwordMiddleware (the rate limiter) runs before the two routes that check the current password.
+// RegisterProtectedRoutes mounts the authenticated routes; passwordMiddleware runs before the password check.
 func (h *Handler) RegisterProtectedRoutes(router gin.IRoutes, passwordMiddleware ...gin.HandlerFunc) {
 	changePasswordHandlers := append(append([]gin.HandlerFunc{}, passwordMiddleware...), h.changePassword)
 	deleteMeHandlers := append(append([]gin.HandlerFunc{}, passwordMiddleware...), h.deleteMe)
