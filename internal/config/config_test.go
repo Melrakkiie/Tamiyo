@@ -33,6 +33,18 @@ func TestLoad_ReadsValuesFromEnvironment(t *testing.T) {
 	assert.Equal(t, "9090", cfg.AppPort)
 }
 
+func TestLoad_RefusesNonIntegerTTLNamingVariableAndValue(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("JWT_ACCESS_TOKEN_TTL_MINUTES", "15m")
+
+	cfg, err := Load()
+
+	require.Error(t, err)
+	assert.Nil(t, cfg)
+	assert.Contains(t, err.Error(), "JWT_ACCESS_TOKEN_TTL_MINUTES")
+	assert.Contains(t, err.Error(), `"15m"`)
+}
+
 func TestLoad_DefaultsAppPortWhenNotSet(t *testing.T) {
 	setRequiredEnv(t)
 	// APP_PORT is missing
