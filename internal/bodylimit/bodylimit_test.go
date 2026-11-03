@@ -18,11 +18,11 @@ type result struct {
 	err  error
 }
 
-func serve(limit int64, req *http.Request) (*httptest.ResponseRecorder, *result) {
+func serve(req *http.Request) (*httptest.ResponseRecorder, *result) {
 	gin.SetMode(gin.TestMode)
 	res := &result{}
 	r := gin.New()
-	r.Use(Middleware(limit))
+	r.Use(Middleware(10))
 	r.POST("/", func(c *gin.Context) {
 		res.ran = true
 		b, err := io.ReadAll(c.Request.Body)
@@ -37,7 +37,7 @@ func serve(limit int64, req *http.Request) (*httptest.ResponseRecorder, *result)
 func TestMiddleware_RejectsDeclaredBodyOverLimit(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(strings.Repeat("a", 11)))
 
-	w, res := serve(10, req)
+	w, res := serve(req)
 
 	assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
 	assert.JSONEq(t, `{"error": "request body too large"}`, w.Body.String())
@@ -47,18 +47,30 @@ func TestMiddleware_RejectsDeclaredBodyOverLimit(t *testing.T) {
 func TestMiddleware_PassesBodyAtLimitIntact(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(strings.Repeat("a", 10)))
 
-	w, res := serve(10, req)
+	w, res := serve(req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, strings.Repeat("a", 10), res.body)
 	require.NoError(t, res.err)
 }
 
+func TestMiddleware_LetsMultipartOverLimitReachHandlerButCapsItsBody(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(strings.Repeat("a", 50)))
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=x")
+
+	w, res := serve(req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, res.ran)
+	require.Error(t, res.err)
+	assert.LessOrEqual(t, len(res.body), 10)
+}
+
 func TestMiddleware_CutsOffChunkedBodyAtLimit(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(strings.Repeat("a", 50)))
 	req.ContentLength = -1
 
-	_, res := serve(10, req)
+	_, res := serve(req)
 
 	assert.True(t, res.ran)
 	require.Error(t, res.err)
