@@ -1,0 +1,3 @@
+# A reused refresh token ends its own session, not the account's
+
+Submitting an already-used refresh token used to revoke every refresh token of the account. On a flaky network (a refresh whose response is lost) or after an interrupted logout (the cookie never cleared), the replay logged every device out, though no theft had happened. Reuse detection now revokes only the replayed token's session: the token and its successors, followed through `replaced_by`, so no session id column is needed. A thief replaying a token still loses that session, and so does its legitimate device; other sessions are untouched. Changing or resetting the password still ends every session.
