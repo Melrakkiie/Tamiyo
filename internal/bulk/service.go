@@ -137,37 +137,21 @@ func (s *Service) ImportManaBox(ctx context.Context, userID string, targetStorag
 		}, row.Quantity)
 
 		if targetStorageID == nil {
-			if id, ok := storageCache[row.BinderName]; ok {
-				for i := range copies {
-					copies[i].Card.StorageID = &id
-				}
-			} else {
-				idx, ok := plannedStorages[row.BinderName]
-				if !ok {
-					idx = len(plan.Storages)
-					plannedStorages[row.BinderName] = idx
-					plan.Storages = append(plan.Storages, card.NewStorage{Name: row.BinderName, Type: storageTypeFromManaBox(row.BinderType)})
-				}
-				for i := range copies {
-					copies[i].NewStorage = &idx
-				}
+			storageID, newStorage := existingOrPlanned(storageCache, plannedStorages, row.BinderName, func() int {
+				plan.Storages = append(plan.Storages, card.NewStorage{Name: row.BinderName, Type: storageTypeFromManaBox(row.BinderType)})
+				return len(plan.Storages) - 1
+			})
+			for i := range copies {
+				copies[i].Card.StorageID, copies[i].NewStorage = storageID, newStorage
 			}
 
 			if row.BinderType == manaBoxDeckBinderType {
-				if id, ok := deckCache[row.BinderName]; ok {
-					for i := range copies {
-						copies[i].DeckID = &id
-					}
-				} else {
-					idx, ok := plannedDecks[row.BinderName]
-					if !ok {
-						idx = len(plan.Decks)
-						plannedDecks[row.BinderName] = idx
-						plan.Decks = append(plan.Decks, card.NewDeck{Name: row.BinderName, Format: defaultManaBoxDeckFormat})
-					}
-					for i := range copies {
-						copies[i].NewDeck = &idx
-					}
+				deckID, newDeck := existingOrPlanned(deckCache, plannedDecks, row.BinderName, func() int {
+					plan.Decks = append(plan.Decks, card.NewDeck{Name: row.BinderName, Format: defaultManaBoxDeckFormat})
+					return len(plan.Decks) - 1
+				})
+				for i := range copies {
+					copies[i].DeckID, copies[i].NewDeck = deckID, newDeck
 				}
 			}
 		}
