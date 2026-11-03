@@ -47,6 +47,10 @@ func TestGroupedImports_RollBackWhenTheRequestIsCancelled(t *testing.T) {
 			return NewService(cards, boxes(), &fakeDeckService{}, resolver).
 				ImportMoxfieldCollection(ctx, testUserID, 4, strings.NewReader(csv))
 		},
+		"card list": func(ctx context.Context, cards *fakeCardService) (Summary, error) {
+			return NewService(cards, boxes(), &fakeDeckService{}, cardListResolver()).
+				ImportCardList(ctx, testUserID, ptr(4), strings.NewReader("5 Sol Ring (SLD) 1011\n"))
+		},
 	}
 
 	for name, run := range imports {
@@ -74,10 +78,6 @@ func TestImports_StopWhenTheRequestIsCancelled(t *testing.T) {
 				"Main Binder,binder,Sol Ring,CMM,aaaaaaaa-0000-0000-0000-000000000000,123,,5\n"
 			return NewService(cards, boxes(), &fakeDeckService{}, &fakeResolver{}).
 				ImportManaBox(cards.ctx, testUserID, ptr(4), strings.NewReader(csv))
-		},
-		"card list": func(cards *cancelAfterFirstCard) (Summary, error) {
-			return NewService(cards, boxes(), &fakeDeckService{}, cardListResolver()).
-				ImportCardList(cards.ctx, testUserID, ptr(4), strings.NewReader("5 Sol Ring (SLD) 1011\n"))
 		},
 		"tamiyo": func(cards *cancelAfterFirstCard) (Summary, error) {
 			file := `{"tamiyo": 1, "kind": "collection", "cards": [

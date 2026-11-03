@@ -87,16 +87,29 @@ func TestImportCardList_SkipsUnknownCards(t *testing.T) {
 	assert.Contains(t, summary.Warnings[0], "Not A Real Card")
 }
 
-func TestImportCardList_WarnsWhenACardCannotBeCreated(t *testing.T) {
-	cards := &fakeCardService{createErr: errors.New("insert failed")}
+func TestImportCardList_WritesOnePlanInOneCall(t *testing.T) {
+	cards := &fakeCardService{}
+	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, cardListResolver())
+
+	summary, err := svc.ImportCardList(context.Background(), testUserID, nil, strings.NewReader("2 Sol Ring\n1 Not A Real Card\n"))
+
+	require.NoError(t, err)
+	require.Len(t, cards.plans, 1)
+	assert.Len(t, cards.plans[0].Copies, 2)
+	assert.Equal(t, 2, summary.CardsCreated)
+	assert.Equal(t, 1, summary.CardsSkipped)
+}
+
+func TestImportCardList_AFailedWriteReturnsTheErrorAndNoSummary(t *testing.T) {
+	boom := errors.New("insert failed")
+	cards := &fakeCardService{importErr: boom}
 	svc := NewService(cards, &fakeStorageService{}, &fakeDeckService{}, cardListResolver())
 
 	summary, err := svc.ImportCardList(context.Background(), testUserID, nil, strings.NewReader("2 Sol Ring\n"))
 
-	require.NoError(t, err)
-	assert.Equal(t, 0, summary.CardsCreated)
-	assert.Equal(t, 2, summary.CardsSkipped)
-	assert.Len(t, summary.Warnings, 2)
+	assert.ErrorIs(t, err, boom)
+	assert.Equal(t, Summary{}, summary)
+	assert.Empty(t, cards.created)
 }
 
 func TestImportCardList_RefusesAQuantityOverTheMaximum(t *testing.T) {
