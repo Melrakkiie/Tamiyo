@@ -101,9 +101,15 @@ func (f *fakeCardService) ImportCollection(ctx context.Context, userID string, p
 		return card.ImportResult{}, f.importErr
 	}
 	var result card.ImportResult
+	for i := range plan.Storages {
+		result.StorageIDs = append(result.StorageIDs, 100+i)
+	}
 	for _, c := range plan.Copies {
 		f.nextID++
 		c.Card.ID = f.nextID
+		if c.NewStorage != nil {
+			c.Card.StorageID = ptr(result.StorageIDs[*c.NewStorage])
+		}
 		f.created = append(f.created, c.Card)
 		result.Cards = append(result.Cards, c.Card)
 	}

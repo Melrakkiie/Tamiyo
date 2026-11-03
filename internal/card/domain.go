@@ -29,19 +29,30 @@ type Card struct {
 }
 
 // ImportPlan is everything a collection import writes, in one transaction.
-// Later tickets add the storages and decks to create, and the references from copies to them.
+// Later tickets add the decks to create and the references from copies to them.
 type ImportPlan struct {
-	Copies []ImportCopy
+	Storages []NewStorage
+	Copies   []ImportCopy
 }
 
-// ImportCopy is one physical copy to create. Card.StorageID is an existing storage.
+// NewStorage is a storage the import creates; copies point at it by its index in ImportPlan.Storages.
+type NewStorage struct {
+	Name string
+	Type string
+}
+
+// ImportCopy is one physical copy to create. Card.StorageID is an existing storage;
+// NewStorage, when set, is the index of a storage of the plan and wins over Card.StorageID.
 type ImportCopy struct {
-	Card Card
+	Card       Card
+	NewStorage *int
 }
 
-// ImportResult holds what the plan created; Cards follow the order of ImportPlan.Copies.
+// ImportResult holds what the plan created; Cards follow the order of ImportPlan.Copies
+// and StorageIDs the order of ImportPlan.Storages.
 type ImportResult struct {
-	Cards []Card
+	Cards      []Card
+	StorageIDs []int
 }
 
 type CardFilter struct {
