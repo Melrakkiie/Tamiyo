@@ -147,3 +147,31 @@ func TestPostgresRepository_InvalidatePending_VoidsOtherLinksOfTheUser(t *testin
 	require.NoError(t, err)
 	assert.Equal(t, otherID, got)
 }
+
+func TestPostgresRepository_Create_DeletesOnlyTheUsersExpiredTokens(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db)
+	var otherID string
+	require.NoError(t, db.Get(&otherID, `INSERT INTO tamiyo.users (email, password_hash) VALUES ('bob@example.com', 'fake-hash') RETURNING id`))
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+	past, future := time.Now().Add(-time.Minute), time.Now().Add(time.Hour)
+	for _, tk := range []ResetToken{
+		{UserID: userID, TokenHash: "expired", ExpiresAt: past},
+		{UserID: userID, TokenHash: "fresh", ExpiresAt: future},
+		{UserID: userID, TokenHash: "used", ExpiresAt: future},
+		{UserID: otherID, TokenHash: "other-expired", ExpiresAt: past},
+	} {
+		_, err := repo.Create(ctx, tk)
+		require.NoError(t, err)
+	}
+	_, err := db.Exec(`UPDATE tamiyo.password_reset_tokens SET used_at = now() WHERE token_hash = 'used'`)
+	require.NoError(t, err)
+
+	_, err = repo.Create(ctx, ResetToken{UserID: userID, TokenHash: "new", ExpiresAt: future})
+	require.NoError(t, err)
+
+	var hashes []string
+	require.NoError(t, db.Select(&hashes, `SELECT token_hash FROM tamiyo.password_reset_tokens ORDER BY token_hash`))
+	assert.Equal(t, []string{"fresh", "new", "other-expired", "used"}, hashes)
+}
