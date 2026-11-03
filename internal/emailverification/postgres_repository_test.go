@@ -35,8 +35,14 @@ func getTestDB(t *testing.T) *sqlx.DB {
 func seedUser(t *testing.T, db *sqlx.DB) string {
 	t.Helper()
 
+	return seedUserWithEmail(t, db, "alice@example.com")
+}
+
+func seedUserWithEmail(t *testing.T, db *sqlx.DB, email string) string {
+	t.Helper()
+
 	var userID string
-	require.NoError(t, db.Get(&userID, `INSERT INTO tamiyo.users (email, password_hash) VALUES ('alice@example.com', 'fake-hash') RETURNING id`))
+	require.NoError(t, db.Get(&userID, `INSERT INTO tamiyo.users (email, password_hash) VALUES ($1, 'fake-hash') RETURNING id`, email))
 
 	return userID
 }
@@ -84,4 +90,27 @@ func TestPostgresRepository_Consume_RejectsExpiredAndUnknown(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNotFound)
 	_, _, err = repo.Consume(context.Background(), "unknown")
 	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestPostgresRepository_Create_DeletesOnlyTheUsersExpiredTokens(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db)
+	otherID := seedUserWithEmail(t, db, "bob@example.com")
+	_, err := db.Exec(`
+		INSERT INTO tamiyo.email_verification_tokens (user_id, email, token_hash, expires_at, used_at) VALUES
+		($1, 'a@example.com', 'expired', now() - interval '1 minute', NULL),
+		($1, 'b@example.com', 'fresh', now() + interval '1 hour', NULL),
+		($1, 'c@example.com', 'used', now() + interval '1 hour', now()),
+		($2, 'd@example.com', 'other-expired', now() - interval '1 minute', NULL)
+	`, userID, otherID)
+	require.NoError(t, err)
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+
+	_, err = repo.Create(ctx, VerificationToken{UserID: userID, Email: "e@example.com", TokenHash: "new", ExpiresAt: time.Now().Add(time.Hour)})
+	require.NoError(t, err)
+
+	var hashes []string
+	require.NoError(t, db.Select(&hashes, `SELECT token_hash FROM tamiyo.email_verification_tokens ORDER BY token_hash`))
+	assert.Equal(t, []string{"fresh", "new", "other-expired", "used"}, hashes)
 }

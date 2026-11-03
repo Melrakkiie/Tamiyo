@@ -38,12 +38,18 @@ func getTestDB(t *testing.T) *sqlx.DB {
 func seedUser(t *testing.T, db *sqlx.DB) string {
 	t.Helper()
 
+	return seedUserWithEmail(t, db, "alice@example.com")
+}
+
+func seedUserWithEmail(t *testing.T, db *sqlx.DB, email string) string {
+	t.Helper()
+
 	var userID string
 	err := db.Get(&userID, `
 		INSERT INTO tamiyo.users (email, password_hash)
-		VALUES ('alice@example.com', 'fake-hash')
+		VALUES ($1, 'fake-hash')
 		RETURNING id
-	`)
+	`, email)
 	require.NoError(t, err)
 
 	return userID
@@ -224,18 +230,10 @@ func TestService_Rotate_ConcurrentRotationsLeaveOneUnrevokedToken(t *testing.T) 
 func TestPostgresRepository_RevokeAllForUser_RevokesOnlyThatUsersActiveTokens(t *testing.T) {
 	db := getTestDB(t)
 	userA := seedUser(t, db)
-
-	var userB string
-	err := db.Get(&userB, `
-		INSERT INTO tamiyo.users (email, password_hash)
-		VALUES ('bob@example.com', 'fake-hash')
-		RETURNING id
-	`)
-	require.NoError(t, err)
-
+	userB := seedUserWithEmail(t, db, "bob@example.com")
 	repo := NewPostgresRepository(db)
 
-	_, err = repo.Create(context.Background(), RefreshToken{UserID: userA, TokenHash: "hash-a1", ExpiresAt: time.Now().Add(time.Hour)})
+	_, err := repo.Create(context.Background(), RefreshToken{UserID: userA, TokenHash: "hash-a1", ExpiresAt: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
 	_, err = repo.Create(context.Background(), RefreshToken{UserID: userA, TokenHash: "hash-a2", ExpiresAt: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
@@ -256,4 +254,34 @@ func TestPostgresRepository_RevokeAllForUser_RevokesOnlyThatUsersActiveTokens(t 
 	b1, err := repo.FindByHash(context.Background(), "hash-b1")
 	require.NoError(t, err)
 	assert.Nil(t, b1.RevokedAt)
+}
+
+func TestPostgresRepository_Create_DeletesOnlyThisUsersExpiredTokens(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db)
+	userB := seedUserWithEmail(t, db, "bob@example.com")
+	_, err := db.Exec(`
+		INSERT INTO tamiyo.refresh_tokens (user_id, token_hash, expires_at, revoked_at) VALUES
+		($1, 'a-expired', now() - interval '1 hour', NULL),
+		($1, 'a-fresh', now() + interval '1 hour', NULL),
+		($1, 'a-revoked', now() + interval '1 hour', now()),
+		($2, 'b-expired', now() - interval '1 hour', NULL)
+	`, userA, userB)
+	require.NoError(t, err)
+	_, err = db.Exec(`
+		INSERT INTO tamiyo.refresh_tokens (user_id, token_hash, expires_at, revoked_at, replaced_by)
+		SELECT $1, 'a-used', now() + interval '1 hour', now(), id FROM tamiyo.refresh_tokens WHERE token_hash = 'a-fresh'
+	`, userA)
+	require.NoError(t, err)
+	repo := NewPostgresRepository(db)
+
+	_, err = repo.Create(context.Background(), RefreshToken{UserID: userA, TokenHash: "a-new", ExpiresAt: time.Now().Add(time.Hour)})
+	require.NoError(t, err)
+
+	_, err = repo.FindByHash(context.Background(), "a-expired")
+	assert.ErrorIs(t, err, ErrNotFound)
+	for _, h := range []string{"a-fresh", "a-revoked", "a-used", "a-new", "b-expired"} {
+		_, err = repo.FindByHash(context.Background(), h)
+		assert.NoError(t, err, h)
+	}
 }

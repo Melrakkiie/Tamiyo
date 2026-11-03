@@ -39,12 +39,18 @@ func getTestDB(t *testing.T) *sqlx.DB {
 func seedUser(t *testing.T, db *sqlx.DB) string {
 	t.Helper()
 
+	return seedUserWithEmail(t, db, "alice@example.com")
+}
+
+func seedUserWithEmail(t *testing.T, db *sqlx.DB, email string) string {
+	t.Helper()
+
 	var userID string
 	err := db.Get(&userID, `
 		INSERT INTO tamiyo.users (email, password_hash)
-		VALUES ('alice@example.com', 'fake-hash')
+		VALUES ($1, 'fake-hash')
 		RETURNING id
-	`)
+	`, email)
 	require.NoError(t, err)
 
 	return userID
@@ -123,8 +129,7 @@ func TestPostgresRepository_Consume_ConcurrentCallsYieldOneSuccess(t *testing.T)
 func TestPostgresRepository_InvalidatePending_VoidsOtherLinksOfTheUser(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db)
-	var otherID string
-	require.NoError(t, db.Get(&otherID, `INSERT INTO tamiyo.users (email, password_hash) VALUES ('bob@example.com', 'fake-hash') RETURNING id`))
+	otherID := seedUserWithEmail(t, db, "bob@example.com")
 	repo := NewPostgresRepository(db)
 	ctx := context.Background()
 	expires := time.Now().Add(time.Hour)
@@ -146,4 +151,27 @@ func TestPostgresRepository_InvalidatePending_VoidsOtherLinksOfTheUser(t *testin
 	got, err := repo.Consume(ctx, "other")
 	require.NoError(t, err)
 	assert.Equal(t, otherID, got)
+}
+
+func TestPostgresRepository_Create_DeletesOnlyTheUsersExpiredTokens(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db)
+	otherID := seedUserWithEmail(t, db, "bob@example.com")
+	_, err := db.Exec(`
+		INSERT INTO tamiyo.password_reset_tokens (user_id, token_hash, expires_at, used_at) VALUES
+		($1, 'expired', now() - interval '1 minute', NULL),
+		($1, 'fresh', now() + interval '1 hour', NULL),
+		($1, 'used', now() + interval '1 hour', now()),
+		($2, 'other-expired', now() - interval '1 minute', NULL)
+	`, userID, otherID)
+	require.NoError(t, err)
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+
+	_, err = repo.Create(ctx, ResetToken{UserID: userID, TokenHash: "new", ExpiresAt: time.Now().Add(time.Hour)})
+	require.NoError(t, err)
+
+	var hashes []string
+	require.NoError(t, db.Select(&hashes, `SELECT token_hash FROM tamiyo.password_reset_tokens ORDER BY token_hash`))
+	assert.Equal(t, []string{"fresh", "new", "other-expired", "used"}, hashes)
 }
