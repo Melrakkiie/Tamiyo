@@ -24,6 +24,8 @@ type Repository interface {
 	FindByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	FindByID(ctx context.Context, id string) (RefreshToken, error)
 	Revoke(ctx context.Context, id string) error
-	Replace(ctx context.Context, id string, successorID string) error
+	// Replace revokes id and links it to successorID only if it is still active
+	// and has no successor; it reports whether it did.
+	Replace(ctx context.Context, id string, successorID string) (bool, error)
 	RevokeAllForUser(ctx context.Context, userID string) error
 }

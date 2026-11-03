@@ -64,20 +64,59 @@ func (s *Service) Rotate(ctx context.Context, plaintext string) (userID string, 
 		rt = *successor
 	}
 
-	if time.Now().After(rt.ExpiresAt) {
-		return "", "", ErrInvalid
+	// A lost Replace means another refresh won the race: retry from its successor.
+	for range maxSuccessorHops {
+		if time.Now().After(rt.ExpiresAt) {
+			return "", "", ErrInvalid
+		}
+
+		newPlaintext, replaced, err := s.replaceOrDiscard(ctx, rt)
+		if err != nil {
+			return "", "", err
+		}
+		if replaced {
+			return rt.UserID, newPlaintext, nil
+		}
+
+		current, err := s.repo.FindByID(ctx, rt.ID)
+		if errors.Is(err, ErrNotFound) {
+			return "", "", ErrInvalid
+		}
+		if err != nil {
+			return "", "", err
+		}
+		successor, err := s.activeSuccessor(ctx, current)
+		if err != nil {
+			return "", "", err
+		}
+		if successor == nil {
+			return "", "", ErrInvalid
+		}
+		rt = *successor
 	}
 
-	newPlaintext, successorID, err := s.issue(ctx, rt.UserID)
+	return "", "", ErrInvalid
+}
+
+// replaceOrDiscard issues a token and links it to rt; if rt was already
+// replaced or revoked, the token just issued is revoked and replaced is false.
+func (s *Service) replaceOrDiscard(ctx context.Context, rt RefreshToken) (newPlaintext string, replaced bool, err error) {
+	newPlaintext, newID, err := s.issue(ctx, rt.UserID)
 	if err != nil {
-		return "", "", err
+		return "", false, err
 	}
 
-	if err := s.repo.Replace(ctx, rt.ID, successorID); err != nil {
-		return "", "", err
+	replaced, err = s.repo.Replace(ctx, rt.ID, newID)
+	if err != nil {
+		return "", false, err
+	}
+	if !replaced {
+		if err := s.repo.Revoke(ctx, newID); err != nil {
+			return "", false, err
+		}
 	}
 
-	return rt.UserID, newPlaintext, nil
+	return newPlaintext, replaced, nil
 }
 
 func (s *Service) activeSuccessor(ctx context.Context, rt RefreshToken) (*RefreshToken, error) {
