@@ -1,8 +1,11 @@
 package card
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -34,70 +37,10 @@ func describe(node *SearchNode) string {
 }
 
 func TestParseSearchQuery(t *testing.T) {
-	for _, tc := range []struct{ query, want string }{
-		{"elves", `name="elves"`},
-		{"llanowar elves", `(name="llanowar" and name="elves")`},
-		{`"llanowar elves"`, `name="llanowar elves"`},
-		{`!"Sol Ring"`, `exact="Sol Ring"`},
-		{"!Opt", `exact="Opt"`},
-		{"name:ring", `name="ring"`},
-		{"t:creature", `type="creature"`},
-		{"TYPE=Elf", `type="Elf"`},
-		{`o:"draw a card"`, `oracle="draw a card"`},
-		{"oracle:~", `oracle="~"`},
-		{"c:g", `color>="G"`},
-		{"color=gw", `color="WG"`},
-		{"c<=rakdos", `color<="BR"`},
-		{"c:c", `color=""`},
-		{"c:colorless", `color=""`},
-		{"c:m", `color_count>=2`},
-		{"c:2", `color_count=2`},
-		{"c>1", `color_count>1`},
-		{"id:esper", `identity<="WUB"`},
-		{"ci>=g", `identity>="G"`},
-		{"identity:multicolor", `identity_count>=2`},
-		{"mv<=3", `mana_value<=3`},
-		{"cmc:2.5", `mana_value=2.5`},
-		{"manavalue:even", `mana_parity="even"`},
-		{"mv=ODD", `mana_parity="odd"`},
-		{"pow>=4", `power>=4`},
-		{"tou<-1", `toughness<-1`},
-		{"m:2WW", `mana_cost>="{2}{W}{W}"`},
-		{"mana={w/u}{G}", `mana_cost="{W/U}{G}"`},
-		{"m>{10}x", `mana_cost>"{10}{X}"`},
-		{"r:rare", `rarity=3`},
-		{"rarity>=u", `rarity>=2`},
-		{"s:NEO", `set="neo"`},
-		{"e:mh2", `set="mh2"`},
-		{"cn:12a", `number="12a"`},
-		{"number>100", `number>100`},
-		{"f:Commander", `format="commander"`},
-		{"legal:modern", `format="modern"`},
-		{`kw:"first strike"`, `keyword="first strike"`},
-		{"is:foil", `is="foil"`},
-		{"not:proxy", `not is="proxy"`},
-		{"usd>=1.5", `usd>=1.5`},
-		{"eur<2", `eur<2`},
-		{"-t:land", `not type="land"`},
-		{"t!=land", `not type="land"`},
-		{"c!=g", `not color="G"`},
-		{"t:elf or t:goblin", `(type="elf" or type="goblin")`},
-		{"t:elf OR t:goblin c:g", `(type="elf" or (type="goblin" and color>="G"))`},
-		{"(t:elf or t:goblin) c:g", `((type="elf" or type="goblin") and color>="G")`},
-		{"-(r:common or r:uncommon)", `not (rarity=1 or rarity=2)`},
-		{"Ach! Hans, Run!", `(name="Ach!" and name="Hans," and name="Run!")`},
-		{"  ", ""},
-	} {
-		t.Run(tc.query, func(t *testing.T) {
-			node, err := parseSearchQuery(tc.query)
-			require.NoError(t, err)
-			if tc.want == "" {
-				assert.Nil(t, node)
-				return
-			}
-			assert.Equal(t, tc.want, describe(node))
-		})
-	}
+	// The other valid queries live in doc/search_cases.json.
+	node, err := parseSearchQuery("  ")
+	require.NoError(t, err)
+	assert.Nil(t, node)
 }
 
 func TestParseSearchQuery_RejectsInvalidQueries(t *testing.T) {
@@ -162,6 +105,68 @@ func TestSearchCondition_BindsEveryValue(t *testing.T) {
 	assert.Contains(t, sql, "replace($1, '~', cards.name)")
 	assert.Contains(t, sql, "NOT COALESCE(")
 	assert.Equal(t, []any{"%~ deals%", "G", "{2}", 3, "{W}", 6, "usd", 1.0, "modern"}, args)
+}
+
+// neutralTree converts parser output to the neutral form of doc/search_cases.json.
+func neutralTree(node *SearchNode) map[string]any {
+	switch node.Kind {
+	case SearchAnd, SearchOr:
+		children := make([]any, len(node.Children))
+		for i, child := range node.Children {
+			children[i] = neutralTree(child)
+		}
+		if node.Kind == SearchOr {
+			return map[string]any{"or": children}
+		}
+		return map[string]any{"and": children}
+	case SearchNot:
+		return map[string]any{"not": neutralTree(node.Children[0])}
+	}
+	c := node.Term
+	var value any = c.Number
+	// Colors are always text: an empty code means colorless.
+	if c.Text != "" || c.Field == fieldColor || c.Field == fieldIdentity {
+		value = c.Text
+	}
+	return map[string]any{"field": c.Field, "op": c.Op, "value": value}
+}
+
+func TestParseSearchQuery_SharedCases(t *testing.T) {
+	raw, err := os.ReadFile("../../doc/search_cases.json")
+	require.NoError(t, err)
+	var cases []struct {
+		Query   string          `json:"query"`
+		Tree    json.RawMessage `json:"tree"`
+		Invalid bool            `json:"invalid"`
+		Sides   []string        `json:"sides"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &cases))
+	require.NotEmpty(t, cases)
+
+	for _, tc := range cases {
+		for _, side := range tc.Sides {
+			require.Contains(t, []string{"api", "front"}, side, "case %q: unknown side", tc.Query)
+		}
+		require.NotEqual(t, tc.Invalid, len(tc.Tree) > 0, "case %q: needs exactly one of tree and invalid", tc.Query)
+		if len(tc.Sides) > 0 && !slices.Contains(tc.Sides, "api") {
+			continue
+		}
+		t.Run(tc.Query, func(t *testing.T) {
+			node, err := parseSearchQuery(tc.Query)
+			if tc.Invalid {
+				assert.ErrorIs(t, err, errInvalidQuery)
+				return
+			}
+			require.NoError(t, err)
+			var want any
+			require.NoError(t, json.Unmarshal(tc.Tree, &want))
+			got, err := json.Marshal(neutralTree(node))
+			require.NoError(t, err)
+			var gotAny any
+			require.NoError(t, json.Unmarshal(got, &gotAny))
+			assert.Equal(t, want, gotAny)
+		})
+	}
 }
 
 func TestParseSearchQuery_HasNoKeywordForInternalCriteria(t *testing.T) {
