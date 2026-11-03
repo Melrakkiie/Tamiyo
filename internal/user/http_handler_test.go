@@ -492,6 +492,33 @@ func TestHandler_ChangePassword_ReturnsNotFoundWhenUserNoLongerExists(t *testing
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
+func TestHandler_ChangePassword_EnforcesThe72ByteNewPasswordLimit(t *testing.T) {
+	cases := []struct {
+		name     string
+		password string
+		status   int
+	}{
+		{"72 bytes", strings.Repeat("a", 72), http.StatusNoContent},
+		{"73 bytes", strings.Repeat("a", 73), http.StatusBadRequest},
+		{"40 accented characters", strings.Repeat("é", 40), http.StatusBadRequest},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			router := setupProtectedRouter(&fakeService{}, &fakeTokenService{})
+
+			body := `{"current_password": "oldpassword", "new_password": "` + tc.password + `"}`
+			req := authenticatedRequest(http.MethodPost, "/auth/password", body)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, tc.status, w.Code)
+			if tc.status == http.StatusBadRequest {
+				assert.Contains(t, w.Body.String(), "72 bytes")
+			}
+		})
+	}
+}
+
 func TestHandler_ChangePassword_ReturnsBadRequestOnShortNewPassword(t *testing.T) {
 	service := &fakeService{}
 	router := setupProtectedRouter(service, &fakeTokenService{})

@@ -313,6 +313,11 @@ func (h *Handler) changePassword(ctx *gin.Context) {
 		return
 	}
 
+	if err := password.CheckLength(req.NewPassword); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	if err := h.service.ChangePassword(ctx.Request.Context(), userID, req.CurrentPassword, req.NewPassword); err != nil {
 		apierr.Respond(ctx, err,
 			apierr.Mapping{Err: ErrIncorrectPassword, Status: http.StatusUnauthorized, Message: "incorrect current password"},
