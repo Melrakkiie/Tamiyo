@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"Melrakkiie/Tamiyo/internal/card"
 	"Melrakkiie/Tamiyo/internal/deck"
 )
 
@@ -475,6 +476,20 @@ func TestRespondImport_UnknownErrorReturnsInternalServerError(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// A storage or deck deleted while the import runs is the client's reference going stale, not a server fault.
+func TestRespondImport_VanishedStorageOrDeckReturnsBadRequest(t *testing.T) {
+	for name, err := range map[string]error{"storage": card.ErrStorageNotFound, "deck": card.ErrDeckNotFound} {
+		t.Run(name, func(t *testing.T) {
+			router := setupRouter(&fakeImportService{err: fmt.Errorf("import: %w", err)})
+
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, multipartRequest(t, "/import/manabox", "content", nil))
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+		})
+	}
 }
 
 type assertAnError struct{}
