@@ -89,6 +89,7 @@ func parseTamiyoFile(data []byte) (tamiyoFile, error) {
 		return file, invalidTamiyo("made by a newer version of Tamiyo (format %d)", file.Tamiyo)
 	}
 
+	var total copyTotal
 	switch file.Kind {
 	case TamiyoKindCollection, TamiyoKindStorage:
 		if err := json.Unmarshal(file.Cards, &file.collection); err != nil {
@@ -96,6 +97,9 @@ func parseTamiyoFile(data []byte) (tamiyoFile, error) {
 		}
 		for i, c := range file.collection {
 			if err := checkTamiyoCard(i, c.Name, c.ScryfallID, c.Quantity); err != nil {
+				return file, err
+			}
+			if err := total.add(c.Quantity); err != nil {
 				return file, err
 			}
 			if c.Storage != nil && strings.TrimSpace(*c.Storage) == "" {
@@ -108,6 +112,9 @@ func parseTamiyoFile(data []byte) (tamiyoFile, error) {
 		}
 		for i, c := range file.deckCards {
 			if err := checkTamiyoCard(i, c.Name, c.ScryfallID, c.Quantity); err != nil {
+				return file, err
+			}
+			if err := total.add(c.Quantity); err != nil {
 				return file, err
 			}
 			if c.Board == "" {

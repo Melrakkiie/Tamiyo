@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -210,6 +211,23 @@ func TestImportTamiyoCollection_RejectsInvalidFiles(t *testing.T) {
 			_, err := NewService(imported, &fakeStorageService{}, &fakeDeckService{}, tamiyoResolver()).ImportTamiyoCollection(context.Background(), testUserID, nil, strings.NewReader(content))
 			assert.ErrorIs(t, err, ErrInvalidFile)
 			assert.Empty(t, imported.created)
+		})
+	}
+}
+
+func TestParseTamiyoFile_TotalCopiesLimit(t *testing.T) {
+	card := `{"name": "Plains", "scryfall_id": "` + solRingSLD + `", "quantity": %d}`
+	file := func(kind string, last int) []byte {
+		cards := strings.Repeat(strings.Replace(card, "%d", "1000", 1)+",", maxImportCopies/1000-1) + strings.Replace(card, "%d", strconv.Itoa(last), 1)
+		return []byte(`{"tamiyo": 1, "kind": "` + kind + `", "cards": [` + cards + `]}`)
+	}
+	for _, kind := range []string{TamiyoKindCollection, TamiyoKindDeck} {
+		t.Run(kind, func(t *testing.T) {
+			_, err := parseTamiyoFile(file(kind, 1000))
+			require.NoError(t, err)
+
+			_, err = parseTamiyoFile(append(file(kind, 1000)[:len(file(kind, 1000))-2], []byte(`,{"name": "Plains", "scryfall_id": "`+solRingSLD+`", "quantity": 1}]}`)...))
+			assert.ErrorIs(t, err, ErrInvalidFile)
 		})
 	}
 }
