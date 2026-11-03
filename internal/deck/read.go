@@ -68,6 +68,25 @@ func (s *Service) ReadDeck(ctx context.Context, viewerID string, deckID string, 
 	}, nil
 }
 
+// DeckAccess is what an access check needs of a deck, without its content.
+type DeckAccess struct {
+	OwnerID string
+	// Mine is true when the viewer owns the deck, whatever the reach.
+	Mine       bool
+	Visibility string
+}
+
+// FindAccess resolves the deck within the reach as ReadDeck does, but reads
+// neither entries nor tags. It answers ErrNotFound when the deck does not
+// exist or is outside the reach.
+func (s *Service) FindAccess(ctx context.Context, viewerID string, deckID string, reach Reach) (DeckAccess, error) {
+	ownerID, d, err := s.findWithinReach(ctx, viewerID, deckID, reach)
+	if err != nil {
+		return DeckAccess{}, err
+	}
+	return DeckAccess{OwnerID: ownerID, Mine: viewerID != "" && ownerID == viewerID, Visibility: d.Visibility}, nil
+}
+
 // findWithinReach never looks a deck up by an empty viewer: user ids are
 // uuids, so Postgres would reject the comparison instead of finding nothing.
 func (s *Service) findWithinReach(ctx context.Context, viewerID string, deckID string, reach Reach) (string, Deck, error) {
