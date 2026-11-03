@@ -60,7 +60,8 @@ func TestPostgresRepository_Consume_ReturnsUserOnceThenErrNotFound(t *testing.T)
 
 func TestMigration_ExistingUsersAreVerifiedAfterwards(t *testing.T) {
 	db := getTestDB(t)
-	require.NoError(t, goose.Down(db.DB, "."))
+	// Roll back to just before 00057 so later migrations don't shift which one is undone.
+	require.NoError(t, goose.DownTo(db.DB, ".", 56))
 	t.Cleanup(func() { require.NoError(t, goose.Up(db.DB, ".")) })
 	var userID string
 	require.NoError(t, db.Get(&userID, `INSERT INTO tamiyo.users (email, password_hash) VALUES ('old@example.com', 'fake-hash') RETURNING id`))
