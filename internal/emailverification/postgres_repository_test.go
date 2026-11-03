@@ -85,3 +85,31 @@ func TestPostgresRepository_Consume_RejectsExpiredAndUnknown(t *testing.T) {
 	_, _, err = repo.Consume(context.Background(), "unknown")
 	assert.ErrorIs(t, err, ErrNotFound)
 }
+
+func TestPostgresRepository_Create_DeletesOnlyTheUsersExpiredTokens(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db)
+	var otherID string
+	require.NoError(t, db.Get(&otherID, `INSERT INTO tamiyo.users (email, password_hash) VALUES ('bob@example.com', 'fake-hash') RETURNING id`))
+	repo := NewPostgresRepository(db)
+	ctx := context.Background()
+	past, future := time.Now().Add(-time.Minute), time.Now().Add(time.Hour)
+	for _, tk := range []VerificationToken{
+		{UserID: userID, Email: "a@example.com", TokenHash: "expired", ExpiresAt: past},
+		{UserID: userID, Email: "b@example.com", TokenHash: "fresh", ExpiresAt: future},
+		{UserID: userID, Email: "c@example.com", TokenHash: "used", ExpiresAt: future},
+		{UserID: otherID, Email: "d@example.com", TokenHash: "other-expired", ExpiresAt: past},
+	} {
+		_, err := repo.Create(ctx, tk)
+		require.NoError(t, err)
+	}
+	_, err := db.Exec(`UPDATE tamiyo.email_verification_tokens SET used_at = now() WHERE token_hash = 'used'`)
+	require.NoError(t, err)
+
+	_, err = repo.Create(ctx, VerificationToken{UserID: userID, Email: "e@example.com", TokenHash: "new", ExpiresAt: future})
+	require.NoError(t, err)
+
+	var hashes []string
+	require.NoError(t, db.Select(&hashes, `SELECT token_hash FROM tamiyo.email_verification_tokens ORDER BY token_hash`))
+	assert.Equal(t, []string{"fresh", "new", "other-expired", "used"}, hashes)
+}

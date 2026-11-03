@@ -31,7 +31,11 @@ func NewPostgresRepository(db *sqlx.DB) *PostgresRepository {
 }
 
 func (r *PostgresRepository) Create(ctx context.Context, t ChangeToken) (ChangeToken, error) {
+	// The CTE deletes the user's expired tokens in the same statement as the insert.
 	query := `
+		WITH purge AS (
+			DELETE FROM tamiyo.email_change_tokens WHERE user_id = $1 AND expires_at <= now()
+		)
 		INSERT INTO tamiyo.email_change_tokens (user_id, new_email, token_hash, expires_at)
 		VALUES ($1, $2, $3, $4)
 		RETURNING id, user_id, new_email, token_hash, added, expires_at
