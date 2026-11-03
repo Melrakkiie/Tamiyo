@@ -39,6 +39,7 @@ func parseMoxfieldCollectionCSV(r io.Reader) ([]moxfieldCollectionRow, error) {
 	}
 
 	var rows []moxfieldCollectionRow
+	var total copyTotal
 	line := 1
 	for {
 		record, err := reader.Read()
@@ -53,6 +54,9 @@ func parseMoxfieldCollectionCSV(r io.Reader) ([]moxfieldCollectionRow, error) {
 		quantity, err := strconv.Atoi(record[col["Count"]])
 		if err != nil || quantity < 1 || quantity > maxImportQuantity {
 			return nil, fmt.Errorf("%w: line %d: invalid Count %q", ErrInvalidFile, line, record[col["Count"]])
+		}
+		if err := total.add(quantity); err != nil {
+			return nil, err
 		}
 
 		rows = append(rows, moxfieldCollectionRow{
@@ -123,6 +127,7 @@ func parseMoxfieldDeckList(r io.Reader) ([]moxfieldDeckLine, error) {
 	scanner := bufio.NewScanner(r)
 
 	var lines []moxfieldDeckLine
+	var total copyTotal
 	lineNo := 0
 	board := deck.BoardMain
 	commanderSection := false
@@ -153,6 +158,9 @@ func parseMoxfieldDeckList(r io.Reader) ([]moxfieldDeckLine, error) {
 		quantity, err := strconv.Atoi(matches[1])
 		if err != nil || quantity < 1 || quantity > maxImportQuantity {
 			return nil, fmt.Errorf("%w: line %d: invalid quantity %q", ErrInvalidFile, lineNo, matches[1])
+		}
+		if err := total.add(quantity); err != nil {
+			return nil, err
 		}
 
 		commander := commanderSection && commanders < maxCommanders
