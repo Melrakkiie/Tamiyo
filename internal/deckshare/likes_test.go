@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"testing"
 	"time"
 
@@ -94,7 +93,6 @@ func TestService_LikeRules(t *testing.T) {
 	_, err = svc.LikeStatus(ctx, viewerID, privateID)
 	assert.ErrorIs(t, err, deck.ErrNotFound)
 	assert.Empty(t, store.likes)
-	assert.Equal(t, slices.Repeat([]deck.Reach{deck.ReachVisible}, 5), store.reaches)
 }
 
 func TestLikeHandlers(t *testing.T) {

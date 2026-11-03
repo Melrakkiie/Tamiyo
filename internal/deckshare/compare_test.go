@@ -47,6 +47,17 @@ func (f *fakeDeckStore) ReadDeck(ctx context.Context, viewerID string, deckID st
 	return read, nil
 }
 
+func (f *fakeDeckStore) FindAccess(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (deck.DeckAccess, error) {
+	if f.readErr != nil {
+		return deck.DeckAccess{}, f.readErr
+	}
+	read, ok := f.reads[deckID]
+	if !ok {
+		return deck.DeckAccess{}, deck.ErrNotFound
+	}
+	return deck.DeckAccess{OwnerID: read.OwnerID, Mine: read.Mine, Visibility: read.Deck.Visibility}, nil
+}
+
 func (f *fakeDeckStore) CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error) {
 	f.countedFor = userID
 	f.countedKeys = nameKeys

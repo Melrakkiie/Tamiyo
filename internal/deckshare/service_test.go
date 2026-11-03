@@ -35,6 +35,10 @@ func (f *fakeDecks) ReadDeck(ctx context.Context, viewerID string, deckID string
 	return f.read, nil
 }
 
+func (f *fakeDecks) FindAccess(ctx context.Context, viewerID string, deckID string, reach deck.Reach) (deck.DeckAccess, error) {
+	return deck.DeckAccess{}, errors.New("FindAccess is not faked")
+}
+
 func (f *fakeDecks) CountCopiesByName(ctx context.Context, userID string, nameKeys []string) (map[string]int, error) {
 	return map[string]int{}, nil
 }

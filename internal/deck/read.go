@@ -47,10 +47,11 @@ func (r ReadDeck) MainBoard() []DeckEntry {
 // reads it within the reach. It answers ErrNotFound when the deck does not
 // exist or is outside the reach.
 func (s *Service) ReadDeck(ctx context.Context, viewerID string, deckID string, reach Reach) (ReadDeck, error) {
-	ownerID, d, err := s.findWithinReach(ctx, viewerID, deckID, reach)
+	access, d, err := s.findAccess(ctx, viewerID, deckID, reach)
 	if err != nil {
 		return ReadDeck{}, err
 	}
+	ownerID := access.OwnerID
 	entries, err := loadEntries(ctx, s.repo, ownerID, d)
 	if err != nil {
 		return ReadDeck{}, err
@@ -61,11 +62,33 @@ func (s *Service) ReadDeck(ctx context.Context, viewerID string, deckID string, 
 	}
 	return ReadDeck{
 		OwnerID: ownerID,
-		Mine:    viewerID != "" && ownerID == viewerID,
+		Mine:    access.Mine,
 		Deck:    d,
 		Entries: entries,
 		Tags:    tagsByName(cardNames(entries), tagRows),
 	}, nil
+}
+
+type DeckAccess struct {
+	OwnerID    string
+	Mine       bool
+	Visibility string
+}
+
+// FindAccess resolves the deck within the reach as ReadDeck does, but reads
+// neither entries nor tags. It answers ErrNotFound when the deck does not
+// exist or is outside the reach.
+func (s *Service) FindAccess(ctx context.Context, viewerID string, deckID string, reach Reach) (DeckAccess, error) {
+	access, _, err := s.findAccess(ctx, viewerID, deckID, reach)
+	return access, err
+}
+
+func (s *Service) findAccess(ctx context.Context, viewerID string, deckID string, reach Reach) (DeckAccess, Deck, error) {
+	ownerID, d, err := s.findWithinReach(ctx, viewerID, deckID, reach)
+	if err != nil {
+		return DeckAccess{}, Deck{}, err
+	}
+	return DeckAccess{OwnerID: ownerID, Mine: viewerID != "" && ownerID == viewerID, Visibility: d.Visibility}, d, nil
 }
 
 // findWithinReach never looks a deck up by an empty viewer: user ids are

@@ -163,3 +163,23 @@ func TestReadDeck_AnUnknownDeckIsNotFoundWhateverTheReachAndViewer(t *testing.T)
 		}
 	}
 }
+
+func TestFindAccess_AnswersOwnerOwnershipAndVisibilityWithinTheReach(t *testing.T) {
+	f := newContentFixture(t)
+	bob := f.sharedWithBob(t)
+	ctx := context.Background()
+
+	asBob, err := f.service.FindAccess(ctx, bob, contentDeckID, ReachVisible)
+	require.NoError(t, err)
+	assert.Equal(t, DeckAccess{OwnerID: f.userID, Mine: false, Visibility: VisibilityPublic}, asBob)
+
+	asOwner, err := f.service.FindAccess(ctx, f.userID, contentDeckID, ReachVisible)
+	require.NoError(t, err)
+	assert.Equal(t, DeckAccess{OwnerID: f.userID, Mine: true, Visibility: VisibilityPublic}, asOwner)
+
+	f.setVisibility(t, VisibilityPrivate)
+	_, err = f.service.FindAccess(ctx, bob, contentDeckID, ReachVisible)
+	assert.ErrorIs(t, err, ErrNotFound)
+	_, err = f.service.FindAccess(ctx, f.userID, unknownDeckID, ReachVisible)
+	assert.ErrorIs(t, err, ErrNotFound)
+}
