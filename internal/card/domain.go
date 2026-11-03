@@ -28,6 +28,22 @@ type Card struct {
 	CopyIDs         []int
 }
 
+// ImportPlan is everything a collection import writes, in one transaction.
+// Later tickets add the storages and decks to create, and the references from copies to them.
+type ImportPlan struct {
+	Copies []ImportCopy
+}
+
+// ImportCopy is one physical copy to create. Card.StorageID is an existing storage.
+type ImportCopy struct {
+	Card Card
+}
+
+// ImportResult holds what the plan created; Cards follow the order of ImportPlan.Copies.
+type ImportResult struct {
+	Cards []Card
+}
+
 type CardFilter struct {
 	StorageID     *int
 	ScryfallID    string
@@ -50,6 +66,7 @@ type Repository interface {
 	FindAll(ctx context.Context, userID string, filter CardFilter) ([]Card, int, error)
 	FindByID(ctx context.Context, userID string, id int) (Card, error)
 	Create(ctx context.Context, userID string, c Card) (Card, error)
+	ImportCollection(ctx context.Context, userID string, plan ImportPlan) (ImportResult, error)
 	Update(ctx context.Context, userID string, c Card) (Card, error)
 	Delete(ctx context.Context, userID string, id int) error
 	DeleteAll(ctx context.Context, userID string) (int, error)
