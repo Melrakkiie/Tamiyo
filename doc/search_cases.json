@@ -92,6 +92,7 @@
 {"query": "tou>1000001", "invalid": true},
 {"query": "usd<1000001", "invalid": true},
 {"query": "eur>=1e9", "invalid": true},
+{"query": "cn>1000001", "invalid": true},
 {"query": "m:2Q", "invalid": true},
 {"query": "m:{", "invalid": true},
 {"query": "m<=2W", "invalid": true},
