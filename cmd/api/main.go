@@ -149,7 +149,9 @@ func main() {
 	go printing.NewRefresher(printing.NewPostgresRepository(db), scryfall.NewClient(), logger).Run(refresherCtx)
 	go exchangerate.NewRefresher(exchangeRateRepo, exchangerate.FallbackSource{exchangerate.NewECBClient(), exchangerate.NewFrankfurterClient()}, logger).Run(refresherCtx)
 
-	authLimiter := ratelimit.NewLimiter(cfg.AuthRateLimitMax, cfg.AuthRateLimitWindow)
+	// Separate per-IP budgets, same settings: failed sign-ins must not block email-link actions, and the reverse.
+	signInLimiter := ratelimit.NewLimiter(cfg.AuthRateLimitMax, cfg.AuthRateLimitWindow)
+	emailLinkLimiter := ratelimit.NewLimiter(cfg.AuthRateLimitMax, cfg.AuthRateLimitWindow)
 	shareLimiter := ratelimit.NewLimiter(cfg.ShareRateLimitMax, cfg.ShareRateLimitWindow)
 
 	router := gin.New()
@@ -168,11 +170,11 @@ func main() {
 		healthHandler.RegisterRoutes(api)
 	}
 
-	userHandler.RegisterRoutes(api, ratelimit.Middleware(authLimiter))
+	userHandler.RegisterRoutes(api, ratelimit.Middleware(signInLimiter))
 	tokenHandler.RegisterRoutes(api)
-	passwordResetHandler.RegisterRoutes(api, ratelimit.Middleware(authLimiter))
-	emailChangeHandler.RegisterRoutes(api, ratelimit.Middleware(authLimiter))
-	emailVerificationHandler.RegisterRoutes(api, ratelimit.Middleware(authLimiter))
+	passwordResetHandler.RegisterRoutes(api, ratelimit.Middleware(emailLinkLimiter))
+	emailChangeHandler.RegisterRoutes(api, ratelimit.Middleware(emailLinkLimiter))
+	emailVerificationHandler.RegisterRoutes(api, ratelimit.Middleware(emailLinkLimiter))
 	shareHandler.RegisterRoutes(api.Group("", ratelimit.Middleware(shareLimiter)))
 	insightsHandler.RegisterSharedRoutes(api.Group("", ratelimit.Middleware(shareLimiter)))
 	importHandler.RegisterPublicRoutes(api.Group("", ratelimit.Middleware(shareLimiter)))
@@ -188,7 +190,7 @@ func main() {
 	shareHandler.RegisterProtectedRoutes(protected)
 	userHandler.RegisterProtectedRoutes(protected)
 	emailChangeHandler.RegisterProtectedRoutes(protected)
-	emailVerificationHandler.RegisterProtectedRoutes(protected, ratelimit.Middleware(authLimiter))
+	emailVerificationHandler.RegisterProtectedRoutes(protected, ratelimit.Middleware(emailLinkLimiter))
 	preferenceHandler.RegisterRoutes(protected)
 	followHandler.RegisterRoutes(protected)
 
