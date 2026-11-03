@@ -58,7 +58,7 @@ func (s *Service) Rotate(ctx context.Context, plaintext string) (userID string, 
 			return "", "", err
 		}
 		if successor == nil {
-			_ = s.repo.RevokeAllForUser(ctx, rt.UserID)
+			_ = s.repo.RevokeSession(ctx, rt.UserID, rt.ID)
 			return "", "", ErrInvalid
 		}
 		rt = *successor

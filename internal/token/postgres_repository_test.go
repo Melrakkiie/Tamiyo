@@ -285,3 +285,105 @@ func TestPostgresRepository_Create_DeletesOnlyThisUsersExpiredTokens(t *testing.
 		assert.NoError(t, err, h)
 	}
 }
+
+// ageRevocation moves a token's revocation out of the reuse grace period.
+func ageRevocation(t *testing.T, db *sqlx.DB, plaintext string) {
+	t.Helper()
+
+	_, err := db.Exec(`UPDATE tamiyo.refresh_tokens SET revoked_at = now() - interval '1 minute' WHERE token_hash = $1`, Hash(plaintext))
+	require.NoError(t, err)
+}
+
+func TestService_Rotate_ReuseEndsOnlyTheReusedTokensSession(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db)
+	service := NewService(NewPostgresRepository(db), time.Hour)
+	ctx := context.Background()
+
+	first, err := service.IssueRefreshToken(ctx, userID)
+	require.NoError(t, err)
+	other, err := service.IssueRefreshToken(ctx, userID)
+	require.NoError(t, err)
+	_, second, err := service.Rotate(ctx, first)
+	require.NoError(t, err)
+	ageRevocation(t, db, first)
+
+	_, _, err = service.Rotate(ctx, first)
+	assert.ErrorIs(t, err, ErrInvalid)
+
+	_, _, err = service.Rotate(ctx, second)
+	assert.ErrorIs(t, err, ErrInvalid, "the session's active token is revoked")
+	_, _, err = service.Rotate(ctx, other)
+	assert.NoError(t, err, "another session of the same user still refreshes")
+}
+
+func TestService_Rotate_ReplayingASignedOutTokenIsRefusedWithoutOtherEffect(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db)
+	service := NewService(NewPostgresRepository(db), time.Hour)
+	ctx := context.Background()
+
+	signedOut, err := service.IssueRefreshToken(ctx, userID)
+	require.NoError(t, err)
+	other, err := service.IssueRefreshToken(ctx, userID)
+	require.NoError(t, err)
+	require.NoError(t, service.Revoke(ctx, signedOut))
+
+	_, _, err = service.Rotate(ctx, signedOut)
+	assert.ErrorIs(t, err, ErrInvalid)
+
+	_, _, err = service.Rotate(ctx, other)
+	assert.NoError(t, err)
+}
+
+func TestService_Rotate_ReuseWalkEndsOnAChainWithADiscardedToken(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db)
+	repo := NewPostgresRepository(db)
+	service := NewService(repo, time.Hour)
+	ctx := context.Background()
+
+	first, err := service.IssueRefreshToken(ctx, userID)
+	require.NoError(t, err)
+	other, err := service.IssueRefreshToken(ctx, userID)
+	require.NoError(t, err)
+	_, second, err := service.Rotate(ctx, first)
+	require.NoError(t, err)
+	// A token discarded after a lost refresh race: revoked, linked to nothing.
+	discarded, err := repo.Create(ctx, RefreshToken{UserID: userID, TokenHash: "hash-discarded", ExpiresAt: time.Now().Add(time.Hour)})
+	require.NoError(t, err)
+	require.NoError(t, repo.Revoke(ctx, discarded.ID))
+	_, third, err := service.Rotate(ctx, second)
+	require.NoError(t, err)
+	ageRevocation(t, db, first)
+
+	_, _, err = service.Rotate(ctx, first)
+	assert.ErrorIs(t, err, ErrInvalid)
+
+	_, _, err = service.Rotate(ctx, third)
+	assert.ErrorIs(t, err, ErrInvalid)
+	_, _, err = service.Rotate(ctx, other)
+	assert.NoError(t, err)
+}
+
+func TestService_Rotate_ReuseNeverTouchesAnotherUsersSessions(t *testing.T) {
+	db := getTestDB(t)
+	alice := seedUser(t, db)
+	bob := seedUserWithEmail(t, db, "bob@example.com")
+	service := NewService(NewPostgresRepository(db), time.Hour)
+	ctx := context.Background()
+
+	first, err := service.IssueRefreshToken(ctx, alice)
+	require.NoError(t, err)
+	bobToken, err := service.IssueRefreshToken(ctx, bob)
+	require.NoError(t, err)
+	_, _, err = service.Rotate(ctx, first)
+	require.NoError(t, err)
+	ageRevocation(t, db, first)
+
+	_, _, err = service.Rotate(ctx, first)
+	assert.ErrorIs(t, err, ErrInvalid)
+
+	_, _, err = service.Rotate(ctx, bobToken)
+	assert.NoError(t, err)
+}
