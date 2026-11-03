@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"Melrakkiie/Tamiyo/internal/bodylimit"
 	"Melrakkiie/Tamiyo/internal/card"
 	"Melrakkiie/Tamiyo/internal/deck"
 )
@@ -915,6 +916,24 @@ func TestHandler_ExportSharedDeck_NeedsNoAccount(t *testing.T) {
 	w = httptest.NewRecorder()
 	missing.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/shared/decks/00000000-0000-0000-0000-000000000001/export", nil))
 	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestUploadRoutes_KeepTheirOwnMessageBehindBodyLimit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(bodylimit.Middleware(10 << 20))
+	router.Use(func(c *gin.Context) {
+		c.Set("user_id", testUserID)
+		c.Next()
+	})
+	NewHandler(&fakeImportService{}).RegisterRoutes(router)
+
+	req := multipartRequest(t, "/import/manabox", strings.Repeat("a", 10<<20+1), nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+	assert.JSONEq(t, `{"error": "the uploaded file is too large (10 MB maximum)"}`, w.Body.String())
 }
 
 func TestUploadRoutes_RefuseBodiesOverTenMegabytes(t *testing.T) {
