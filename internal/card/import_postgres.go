@@ -12,9 +12,9 @@ import (
 // importBatchSize keeps a statement far under Postgres' 65535 bind parameters.
 const importBatchSize = 1000
 
-// ImportCollection creates the plan's storages and every copy in one transaction, in grouped inserts.
+// ImportCollection creates the plan's storages, decks, every copy and its deck link in one transaction, in grouped inserts.
 func (r *PostgresRepository) ImportCollection(ctx context.Context, userID string, plan ImportPlan) (ImportResult, error) {
-	if len(plan.Copies) == 0 && len(plan.Storages) == 0 {
+	if len(plan.Copies) == 0 && len(plan.Storages) == 0 && len(plan.Decks) == 0 {
 		return ImportResult{}, nil
 	}
 
@@ -51,12 +51,25 @@ func importPlan(ctx context.Context, tx *sqlx.Tx, userID string, plan ImportPlan
 		result.StorageIDs = append(result.StorageIDs, id)
 	}
 
+	for _, d := range plan.Decks {
+		var id string
+		// Same columns as the deck module's insert; the other columns have database defaults.
+		if err := tx.GetContext(ctx, &id, `INSERT INTO tamiyo.deck (user_id, name, format) VALUES ($1, $2, $3) RETURNING id`, userID, d.Name, d.Format); err != nil {
+			return ImportResult{}, err
+		}
+		result.DeckIDs = append(result.DeckIDs, id)
+	}
+
 	copies := make([]ImportCopy, len(plan.Copies))
 	copy(copies, plan.Copies)
 	for i, c := range copies {
 		if c.NewStorage != nil {
 			id := result.StorageIDs[*c.NewStorage]
 			copies[i].Card.StorageID = &id
+		}
+		if c.NewDeck != nil {
+			id := result.DeckIDs[*c.NewDeck]
+			copies[i].DeckID = &id
 		}
 	}
 	for start := 0; start < len(copies); start += importBatchSize {
@@ -67,7 +80,42 @@ func importPlan(ctx context.Context, tx *sqlx.Tx, userID string, plan ImportPlan
 		}
 		result.Cards = append(result.Cards, created...)
 	}
+	if err := linkCopiesToDecks(ctx, tx, userID, copies, result.Cards); err != nil {
+		return ImportResult{}, err
+	}
 	return result, nil
+}
+
+// linkCopiesToDecks puts each copy that names a deck on its main board. card_deck has no
+// ownership trigger, so the join on deck.user_id is the check: a missing or foreign deck
+// links fewer rows than expected and the whole import rolls back.
+func linkCopiesToDecks(ctx context.Context, tx *sqlx.Tx, userID string, copies []ImportCopy, created []Card) error {
+	var cardIDs []int
+	var deckIDs []string
+	for i, c := range copies {
+		if c.DeckID != nil {
+			cardIDs = append(cardIDs, created[i].ID)
+			deckIDs = append(deckIDs, *c.DeckID)
+		}
+	}
+	if len(cardIDs) == 0 {
+		return nil
+	}
+	res, err := tx.ExecContext(ctx, `
+		INSERT INTO tamiyo.card_deck (card_id, deck_id, board)
+		SELECT t.card_id, t.deck_id, 'main'
+		FROM unnest($2::int[], $3::uuid[]) AS t(card_id, deck_id)
+		JOIN tamiyo.deck d ON d.id = t.deck_id AND d.user_id = $1`,
+		userID, pq.Array(cardIDs), pq.Array(deckIDs))
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if int(n) != len(cardIDs) {
+		return ErrDeckNotFound
+	}
+	return nil
 }
 
 // insertCopies inserts one batch and returns its cards in input order. Ids are drawn

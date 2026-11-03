@@ -164,3 +164,90 @@ func TestPostgresRepository_ImportCollection_RollsBackTheCreatedStoragesWhenACop
 	assert.Zero(t, n)
 	assert.Zero(t, countCards(t, db))
 }
+
+func TestPostgresRepository_ImportCollection_CreatesTheDecksOfThePlanAndLinksTheCopiesOnTheMainBoard(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db, "alice@example.com")
+	repo := NewPostgresRepository(db)
+	var existing string
+	require.NoError(t, db.Get(&existing, `INSERT INTO tamiyo.deck (user_id, name, format) VALUES ($1, 'Old', 'modern') RETURNING id`, userID))
+	idx := 0
+	plan := ImportPlan{
+		Storages: []NewStorage{{Name: "Atraxa", Type: "deck"}},
+		Decks:    []NewDeck{{Name: "Atraxa", Format: "commander"}},
+		Copies:   []ImportCopy{importCopy("A", nil), importCopy("A", nil), importCopy("B", nil), importCopy("C", nil)},
+	}
+	plan.Copies[0].NewDeck, plan.Copies[1].NewDeck = &idx, &idx
+	plan.Copies[2].DeckID = &existing
+
+	result, err := repo.ImportCollection(context.Background(), userID, plan)
+
+	require.NoError(t, err)
+	require.Len(t, result.DeckIDs, 1)
+	var links []struct {
+		DeckID string `db:"deck_id"`
+		Board  string `db:"board"`
+		Count  int    `db:"count"`
+	}
+	require.NoError(t, db.Select(&links, `SELECT deck_id, board, count(*) FROM tamiyo.card_deck GROUP BY deck_id, board ORDER BY count(*) DESC`))
+	require.Len(t, links, 2)
+	assert.Equal(t, result.DeckIDs[0], links[0].DeckID)
+	assert.Equal(t, "main", links[0].Board)
+	assert.Equal(t, 2, links[0].Count)
+	assert.Equal(t, existing, links[1].DeckID)
+	var history int
+	require.NoError(t, db.Get(&history, `SELECT coalesce(sum(count), 0) FROM tamiyo.deck_history WHERE deck_id = $1 AND board = 'main'`, result.DeckIDs[0]))
+	assert.Equal(t, 2, history)
+	var format string
+	require.NoError(t, db.Get(&format, `SELECT format FROM tamiyo.deck WHERE id = $1`, result.DeckIDs[0]))
+	assert.Equal(t, "commander", format)
+}
+
+func TestPostgresRepository_ImportCollection_RollsBackTheCreatedStoragesAndDecksWhenACopyFails(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	seedStorages(t, db, userA)
+	repo := NewPostgresRepository(db)
+	idx, foreign := 0, 1
+	plan := ImportPlan{
+		Storages: []NewStorage{{Name: "Atraxa", Type: "deck"}},
+		Decks:    []NewDeck{{Name: "Atraxa", Format: "commander"}},
+		Copies:   []ImportCopy{importCopy("A", nil), importCopy("B", &foreign)},
+	}
+	plan.Copies[0].NewDeck = &idx
+
+	_, err := repo.ImportCollection(context.Background(), userB, plan)
+
+	assert.ErrorIs(t, err, ErrStorageNotFound)
+	var n int
+	require.NoError(t, db.Get(&n, `SELECT count(*) FROM tamiyo.deck WHERE user_id = $1`, userB))
+	assert.Zero(t, n)
+	assert.Zero(t, countCards(t, db))
+}
+
+func TestPostgresRepository_ImportCollection_RejectsADeckOfAnotherUserAndWritesNothing(t *testing.T) {
+	db := getTestDB(t)
+	userA := seedUser(t, db, "alice@example.com")
+	userB := seedUser(t, db, "bob@example.com")
+	repo := NewPostgresRepository(db)
+	var foreign string
+	require.NoError(t, db.Get(&foreign, `INSERT INTO tamiyo.deck (user_id, name, format) VALUES ($1, 'Theirs', 'modern') RETURNING id`, userA))
+	idx := 0
+	plan := ImportPlan{
+		Storages: []NewStorage{{Name: "Vrac", Type: "box"}},
+		Copies:   []ImportCopy{importCopy("A", nil), importCopy("B", nil)},
+	}
+	plan.Copies[0].NewStorage = &idx
+	plan.Copies[1].DeckID = &foreign
+
+	_, err := repo.ImportCollection(context.Background(), userB, plan)
+
+	assert.ErrorIs(t, err, ErrDeckNotFound)
+	var n int
+	require.NoError(t, db.Get(&n, `SELECT count(*) FROM tamiyo.card_deck`))
+	assert.Zero(t, n)
+	require.NoError(t, db.Get(&n, `SELECT count(*) FROM tamiyo.storage WHERE user_id = $1`, userB))
+	assert.Zero(t, n)
+	assert.Zero(t, countCards(t, db))
+}
