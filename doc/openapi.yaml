@@ -4876,6 +4876,8 @@ components:
         password:
           type: string
           minLength: 8
+          maxLength: 72
+          description: Maximum counts UTF-8 bytes, not characters (an accented character is 2).
         display_name:
           type: string
           nullable: true
@@ -4931,6 +4933,8 @@ components:
         new_password:
           type: string
           minLength: 8
+          maxLength: 72
+          description: Maximum counts UTF-8 bytes, not characters (an accented character is 2).
       required: [current_password, new_password]
 
     DeleteAccountRequest:
@@ -5198,6 +5202,8 @@ components:
         new_password:
           type: string
           minLength: 8
+          maxLength: 72
+          description: Maximum counts UTF-8 bytes, not characters (an accented character is 2).
       required: [token, new_password]
 
     Card:
