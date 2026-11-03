@@ -53,15 +53,21 @@ func (f *fakeRepository) FindByID(ctx context.Context, id string) (RefreshToken,
 	return t, nil
 }
 
-func (f *fakeRepository) Replace(ctx context.Context, id string, successorID string) error {
+func (f *fakeRepository) Replace(ctx context.Context, id string, successorID string) (bool, error) {
 	if f.replaceErr != nil {
-		return f.replaceErr
+		return false, f.replaceErr
+	}
+	if _, done := f.replaced[id]; done {
+		return false, nil
+	}
+	if t, ok := f.byID[id]; ok && (t.ReplacedBy != nil || t.RevokedAt != nil) {
+		return false, nil
 	}
 	if f.replaced == nil {
 		f.replaced = map[string]string{}
 	}
 	f.replaced[id] = successorID
-	return nil
+	return true, nil
 }
 
 func (f *fakeRepository) Revoke(ctx context.Context, id string) error {
@@ -164,6 +170,46 @@ func TestService_Rotate_AcceptsJustRotatedTokenAndRotatesItsSuccessor(t *testing
 	assert.Equal(t, "user-1", userID)
 	assert.NotEmpty(t, newPlaintext)
 	assert.Equal(t, "fake-id", repo.replaced["successor-id"])
+	assert.Empty(t, repo.revokeAllForUserCalledWith)
+}
+
+func TestService_Rotate_AfterALostRaceRevokesTheExtraTokenAndRotatesTheWinnersSuccessor(t *testing.T) {
+	rotatedAt := time.Now()
+	winnerID := "winner-id"
+	repo := &fakeRepository{
+		// stale read: the token still looked active when this caller read it
+		findByHashResult: RefreshToken{ID: "old-id", UserID: "user-1", ExpiresAt: time.Now().Add(time.Hour)},
+		byID: map[string]RefreshToken{
+			"old-id":    {ID: "old-id", UserID: "user-1", ExpiresAt: time.Now().Add(time.Hour), RevokedAt: &rotatedAt, ReplacedBy: &winnerID},
+			"winner-id": {ID: "winner-id", UserID: "user-1", ExpiresAt: time.Now().Add(time.Hour)},
+		},
+	}
+	service := NewService(repo, time.Hour)
+
+	userID, newPlaintext, err := service.Rotate(context.Background(), "old-plaintext")
+
+	require.NoError(t, err)
+	assert.Equal(t, "user-1", userID)
+	assert.NotEmpty(t, newPlaintext)
+	assert.Equal(t, []string{"fake-id"}, repo.revokedIDs, "the token issued before losing is revoked")
+	assert.Equal(t, "fake-id", repo.replaced["winner-id"])
+	assert.Empty(t, repo.revokeAllForUserCalledWith, "a lost race is not theft")
+}
+
+func TestService_Rotate_AfterALostRaceFailsWhenTheWinnerIsGone(t *testing.T) {
+	rotatedAt := time.Now()
+	repo := &fakeRepository{
+		findByHashResult: RefreshToken{ID: "old-id", UserID: "user-1", ExpiresAt: time.Now().Add(time.Hour)},
+		byID: map[string]RefreshToken{
+			"old-id": {ID: "old-id", UserID: "user-1", ExpiresAt: time.Now().Add(time.Hour), RevokedAt: &rotatedAt},
+		},
+	}
+	service := NewService(repo, time.Hour)
+
+	_, _, err := service.Rotate(context.Background(), "old-plaintext")
+
+	assert.ErrorIs(t, err, ErrInvalid)
+	assert.Equal(t, []string{"fake-id"}, repo.revokedIDs)
 	assert.Empty(t, repo.revokeAllForUserCalledWith)
 }
 

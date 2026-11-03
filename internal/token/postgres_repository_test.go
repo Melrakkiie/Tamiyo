@@ -5,6 +5,7 @@ package token
 import (
 	"context"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -150,8 +151,9 @@ func TestPostgresRepository_Replace_RevokesAndLinksToSuccessor(t *testing.T) {
 	successor, err := repo.Create(context.Background(), RefreshToken{UserID: userID, TokenHash: "hash-new", ExpiresAt: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
 
-	err = repo.Replace(context.Background(), old.ID, successor.ID)
+	replaced, err := repo.Replace(context.Background(), old.ID, successor.ID)
 	require.NoError(t, err)
+	assert.True(t, replaced)
 
 	result, err := repo.FindByID(context.Background(), old.ID)
 	require.NoError(t, err)
@@ -160,7 +162,7 @@ func TestPostgresRepository_Replace_RevokesAndLinksToSuccessor(t *testing.T) {
 	assert.Equal(t, successor.ID, *result.ReplacedBy)
 }
 
-func TestPostgresRepository_Replace_KeepsTheFirstSuccessor(t *testing.T) {
+func TestPostgresRepository_Replace_AppliesOnceAndReportsFalseTheSecondTime(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db)
 	repo := NewPostgresRepository(db)
@@ -172,13 +174,52 @@ func TestPostgresRepository_Replace_KeepsTheFirstSuccessor(t *testing.T) {
 	second, err := repo.Create(context.Background(), RefreshToken{UserID: userID, TokenHash: "hash-second", ExpiresAt: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
 
-	require.NoError(t, repo.Replace(context.Background(), old.ID, first.ID))
-	require.NoError(t, repo.Replace(context.Background(), old.ID, second.ID))
+	replaced, err := repo.Replace(context.Background(), old.ID, first.ID)
+	require.NoError(t, err)
+	assert.True(t, replaced)
+	replaced, err = repo.Replace(context.Background(), old.ID, second.ID)
+	require.NoError(t, err)
+	assert.False(t, replaced)
 
 	result, err := repo.FindByID(context.Background(), old.ID)
 	require.NoError(t, err)
 	require.NotNil(t, result.ReplacedBy)
 	assert.Equal(t, first.ID, *result.ReplacedBy)
+}
+
+func TestService_Rotate_ConcurrentRotationsLeaveOneUnrevokedToken(t *testing.T) {
+	db := getTestDB(t)
+	userID := seedUser(t, db)
+	service := NewService(NewPostgresRepository(db), time.Hour)
+
+	plaintext, err := service.IssueRefreshToken(context.Background(), userID)
+	require.NoError(t, err)
+
+	const callers = 8
+	errs := make([]error, callers)
+	var wg sync.WaitGroup
+	for i := range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _, errs[i] = service.Rotate(context.Background(), plaintext)
+		}()
+	}
+	wg.Wait()
+
+	succeeded := 0
+	for _, e := range errs {
+		if e == nil {
+			succeeded++
+		} else {
+			assert.ErrorIs(t, e, ErrInvalid)
+		}
+	}
+	assert.GreaterOrEqual(t, succeeded, 1)
+
+	var unrevoked int
+	require.NoError(t, db.Get(&unrevoked, `SELECT count(*) FROM tamiyo.refresh_tokens WHERE user_id = $1 AND revoked_at IS NULL`, userID))
+	assert.Equal(t, 1, unrevoked)
 }
 
 func TestPostgresRepository_RevokeAllForUser_RevokesOnlyThatUsersActiveTokens(t *testing.T) {
