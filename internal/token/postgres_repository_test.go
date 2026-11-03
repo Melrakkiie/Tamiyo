@@ -150,8 +150,9 @@ func TestPostgresRepository_Replace_RevokesAndLinksToSuccessor(t *testing.T) {
 	successor, err := repo.Create(context.Background(), RefreshToken{UserID: userID, TokenHash: "hash-new", ExpiresAt: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
 
-	err = repo.Replace(context.Background(), old.ID, successor.ID)
+	replaced, err := repo.Replace(context.Background(), old.ID, successor.ID)
 	require.NoError(t, err)
+	assert.True(t, replaced)
 
 	result, err := repo.FindByID(context.Background(), old.ID)
 	require.NoError(t, err)
@@ -160,7 +161,7 @@ func TestPostgresRepository_Replace_RevokesAndLinksToSuccessor(t *testing.T) {
 	assert.Equal(t, successor.ID, *result.ReplacedBy)
 }
 
-func TestPostgresRepository_Replace_KeepsTheFirstSuccessor(t *testing.T) {
+func TestPostgresRepository_Replace_AppliesOnceAndReportsFalseTheSecondTime(t *testing.T) {
 	db := getTestDB(t)
 	userID := seedUser(t, db)
 	repo := NewPostgresRepository(db)
@@ -172,8 +173,12 @@ func TestPostgresRepository_Replace_KeepsTheFirstSuccessor(t *testing.T) {
 	second, err := repo.Create(context.Background(), RefreshToken{UserID: userID, TokenHash: "hash-second", ExpiresAt: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
 
-	require.NoError(t, repo.Replace(context.Background(), old.ID, first.ID))
-	require.NoError(t, repo.Replace(context.Background(), old.ID, second.ID))
+	replaced, err := repo.Replace(context.Background(), old.ID, first.ID)
+	require.NoError(t, err)
+	assert.True(t, replaced)
+	replaced, err = repo.Replace(context.Background(), old.ID, second.ID)
+	require.NoError(t, err)
+	assert.False(t, replaced)
 
 	result, err := repo.FindByID(context.Background(), old.ID)
 	require.NoError(t, err)

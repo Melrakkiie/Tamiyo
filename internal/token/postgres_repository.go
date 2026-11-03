@@ -87,14 +87,17 @@ func (r *PostgresRepository) Revoke(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *PostgresRepository) Replace(ctx context.Context, id string, successorID string) error {
-	_, err := r.db.ExecContext(ctx, `
+func (r *PostgresRepository) Replace(ctx context.Context, id string, successorID string) (bool, error) {
+	res, err := r.db.ExecContext(ctx, `
 		UPDATE tamiyo.refresh_tokens
-		SET revoked_at = COALESCE(revoked_at, now()),
-		    replaced_by = COALESCE(replaced_by, $2)
-		WHERE id = $1
+		SET revoked_at = now(), replaced_by = $2
+		WHERE id = $1 AND replaced_by IS NULL AND revoked_at IS NULL
 	`, id, successorID)
-	return err
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
 }
 
 func (r *PostgresRepository) RevokeAllForUser(ctx context.Context, userID string) error {

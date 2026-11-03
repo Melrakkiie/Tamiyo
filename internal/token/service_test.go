@@ -53,15 +53,21 @@ func (f *fakeRepository) FindByID(ctx context.Context, id string) (RefreshToken,
 	return t, nil
 }
 
-func (f *fakeRepository) Replace(ctx context.Context, id string, successorID string) error {
+func (f *fakeRepository) Replace(ctx context.Context, id string, successorID string) (bool, error) {
 	if f.replaceErr != nil {
-		return f.replaceErr
+		return false, f.replaceErr
+	}
+	if _, done := f.replaced[id]; done {
+		return false, nil
+	}
+	if t, ok := f.byID[id]; ok && (t.ReplacedBy != nil || t.RevokedAt != nil) {
+		return false, nil
 	}
 	if f.replaced == nil {
 		f.replaced = map[string]string{}
 	}
 	f.replaced[id] = successorID
-	return nil
+	return true, nil
 }
 
 func (f *fakeRepository) Revoke(ctx context.Context, id string) error {

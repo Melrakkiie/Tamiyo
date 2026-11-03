@@ -73,7 +73,7 @@ func (s *Service) Rotate(ctx context.Context, plaintext string) (userID string, 
 		return "", "", err
 	}
 
-	if err := s.repo.Replace(ctx, rt.ID, successorID); err != nil {
+	if _, err := s.repo.Replace(ctx, rt.ID, successorID); err != nil {
 		return "", "", err
 	}
 
