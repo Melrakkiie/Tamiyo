@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"Melrakkiie/Tamiyo/internal/emailaddr"
 	"Melrakkiie/Tamiyo/internal/token"
 )
 
@@ -31,6 +32,7 @@ func NewService(repo Repository, users userAccounts, mailer mailer, ttl time.Dur
 // IssueAndSend mints a verification link for the user and mails it to email.
 // Registration, resend and email change all go through it.
 func (s *Service) IssueAndSend(ctx context.Context, userID, email string) error {
+	email = emailaddr.Normalize(email)
 	plaintext, err := token.GeneratePlaintext()
 	if err != nil {
 		return err
@@ -58,5 +60,6 @@ func (s *Service) Verify(ctx context.Context, plaintext string) error {
 	if err != nil {
 		return err
 	}
-	return s.users.ConfirmEmail(ctx, userID, email)
+	// Tokens issued before the case-insensitive deploy may hold capitals.
+	return s.users.ConfirmEmail(ctx, userID, emailaddr.Normalize(email))
 }

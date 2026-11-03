@@ -3,18 +3,18 @@ package emailchange
 import (
 	"context"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"Melrakkiie/Tamiyo/internal/apierr"
 	"Melrakkiie/Tamiyo/internal/auth"
+	"Melrakkiie/Tamiyo/internal/emailaddr"
 	"Melrakkiie/Tamiyo/internal/user"
 )
 
 type requestEmailChangeRequest struct {
-	CurrentPassword string `json:"current_password" binding:"required"`
-	NewEmail        string `json:"new_email" binding:"required,email"`
+	CurrentPassword string          `json:"current_password" binding:"required"`
+	NewEmail        emailaddr.Input `json:"new_email" binding:"required,email"`
 }
 
 type confirmEmailChangeRequest struct {
@@ -69,7 +69,7 @@ func (h *Handler) requestEmailChange(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	newEmail := strings.TrimSpace(req.NewEmail)
+	newEmail := string(req.NewEmail)
 
 	currentEmail, err := h.users.CheckPassword(ctx.Request.Context(), userID, req.CurrentPassword)
 	if err != nil {
@@ -80,7 +80,8 @@ func (h *Handler) requestEmailChange(ctx *gin.Context) {
 		return
 	}
 
-	if strings.EqualFold(currentEmail, newEmail) {
+	// The stored address may still hold capitals until the migration has run.
+	if emailaddr.Normalize(currentEmail) == newEmail {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": ErrSameEmail.Error()})
 		return
 	}

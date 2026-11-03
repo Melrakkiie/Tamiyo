@@ -75,7 +75,9 @@ paths:
       description: >
         Creates a user and returns an access/refresh token pair, the same
         as /auth/login. Rate-limited per client IP (shared with
-        /auth/login); see the 429 response.
+        /auth/login); see the 429 response. Emails are case-insensitive:
+        trimmed, lowercased and stored lowercased, so a case variant of a
+        registered address is a 409.
       security: []
       parameters:
         - $ref: "#/components/parameters/RefreshTokenTransport"
@@ -4870,6 +4872,7 @@ components:
         email:
           type: string
           format: email
+          description: Case-insensitive; trimmed and stored lowercased.
         password:
           type: string
           minLength: 8
@@ -4886,6 +4889,7 @@ components:
         email:
           type: string
           format: email
+          description: Case-insensitive; trimmed and compared lowercased.
         password:
           type: string
       required: [email, password]
@@ -5160,6 +5164,7 @@ components:
         new_email:
           type: string
           format: email
+          description: Case-insensitive; trimmed and compared lowercased.
       required: [current_password, new_email]
 
     ConfirmEmailRequest:
@@ -5182,6 +5187,7 @@ components:
         email:
           type: string
           format: email
+          description: Case-insensitive; trimmed and compared lowercased.
       required: [email]
 
     ResetPasswordRequest:

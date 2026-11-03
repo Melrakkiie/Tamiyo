@@ -74,7 +74,7 @@ func (r *PostgresRepository) FindByEmail(ctx context.Context, email string) (Use
 	query := `
 		SELECT id, email, password_hash, added, updated, display_name, avatar_scryfall_id, email_verified_at
 		FROM tamiyo.users
-		WHERE email = $1
+		WHERE lower(email) = $1
 	`
 
 	var row userRow

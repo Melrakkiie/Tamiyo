@@ -9,6 +9,8 @@ import (
 
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
+
+	"Melrakkiie/Tamiyo/internal/emailaddr"
 )
 
 type verificationSender interface {
@@ -48,7 +50,7 @@ func (s *Service) Register(ctx context.Context, email, password string, displayN
 	}
 
 	created, err := s.repo.Create(ctx, User{
-		Email:        email,
+		Email:        emailaddr.Normalize(email),
 		PasswordHash: string(hash),
 		DisplayName:  normalizedName,
 	})
@@ -72,7 +74,7 @@ func (s *Service) sendVerification(ctx context.Context, userID, email string) {
 }
 
 func (s *Service) Authenticate(ctx context.Context, email, password string) (User, error) {
-	u, err := s.repo.FindByEmail(ctx, email)
+	u, err := s.repo.FindByEmail(ctx, emailaddr.Normalize(email))
 	if err != nil {
 		if err == ErrNotFound {
 			return User{}, ErrInvalidCredentials
@@ -119,7 +121,7 @@ func (s *Service) DeleteAccount(ctx context.Context, userID, password string) er
 }
 
 func (s *Service) FindIDByEmail(ctx context.Context, email string) (string, error) {
-	u, err := s.repo.FindByEmail(ctx, email)
+	u, err := s.repo.FindByEmail(ctx, emailaddr.Normalize(email))
 	if err != nil {
 		return "", err
 	}
@@ -152,7 +154,7 @@ func (s *Service) CheckPassword(ctx context.Context, userID, password string) (s
 }
 
 func (s *Service) EmailTaken(ctx context.Context, email string) (bool, error) {
-	_, err := s.repo.FindByEmail(ctx, email)
+	_, err := s.repo.FindByEmail(ctx, emailaddr.Normalize(email))
 	if errors.Is(err, ErrNotFound) {
 		return false, nil
 	}
@@ -172,7 +174,7 @@ func (s *Service) ChangeEmail(ctx context.Context, userID, newEmail string) (str
 	if s.verifier == nil {
 		return "", errors.New("email verification is not configured")
 	}
-	if err := s.verifier.IssueAndSend(ctx, userID, newEmail); err != nil {
+	if err := s.verifier.IssueAndSend(ctx, userID, emailaddr.Normalize(newEmail)); err != nil {
 		return "", err
 	}
 

@@ -136,6 +136,19 @@ func TestPostgresRepository_FindByEmail_ReturnsUser(t *testing.T) {
 	assert.Equal(t, "fake-hash", result.PasswordHash)
 }
 
+// A row written with capitals by the old instance during a rolling deploy must stay reachable.
+func TestPostgresRepository_FindByEmail_FindsARowStoredWithCapitals(t *testing.T) {
+	db := getTestDB(t)
+	repo := NewPostgresRepository(db)
+	_, err := db.Exec(`INSERT INTO tamiyo.users (email, password_hash) VALUES ('Alice@Example.com', 'fake-hash')`)
+	require.NoError(t, err)
+
+	result, err := repo.FindByEmail(context.Background(), "alice@example.com")
+
+	require.NoError(t, err)
+	assert.Equal(t, "Alice@Example.com", result.Email)
+}
+
 func TestPostgresRepository_FindByEmail_ReturnsErrNotFoundWhenMissing(t *testing.T) {
 	db := getTestDB(t)
 	repo := NewPostgresRepository(db)
