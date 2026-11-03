@@ -14,6 +14,7 @@ import (
 	"Melrakkiie/Tamiyo/internal/auth"
 	"Melrakkiie/Tamiyo/internal/authcookie"
 	"Melrakkiie/Tamiyo/internal/emailaddr"
+	"Melrakkiie/Tamiyo/internal/password"
 )
 
 type registerRequest struct {
@@ -241,6 +242,11 @@ func (h *Handler) deleteMe(ctx *gin.Context) {
 func (h *Handler) register(ctx *gin.Context) {
 	var req registerRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := password.CheckLength(req.Password); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

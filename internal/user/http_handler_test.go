@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -219,6 +220,35 @@ func TestHandler_Register_ReturnsBadRequestOnShortPassword(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandler_Register_EnforcesThe72BytePasswordLimit(t *testing.T) {
+	cases := []struct {
+		name     string
+		password string
+		status   int
+	}{
+		{"72 bytes", strings.Repeat("a", 72), http.StatusCreated},
+		{"73 bytes", strings.Repeat("a", 73), http.StatusBadRequest},
+		{"40 accented characters", strings.Repeat("é", 40), http.StatusBadRequest},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			service := &fakeService{registerUser: User{ID: testUserID}}
+			router := setupRouter(service, &fakeTokenService{issuedRefreshToken: "a-refresh-token"})
+
+			body := `{"email": "alice@example.com", "password": "` + tc.password + `"}`
+			req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, tc.status, w.Code)
+			if tc.status == http.StatusBadRequest {
+				assert.Contains(t, w.Body.String(), "72 bytes")
+			}
+		})
+	}
 }
 
 func TestHandler_Register_ReturnsConflictWhenEmailAlreadyTaken(t *testing.T) {
