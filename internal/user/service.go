@@ -213,7 +213,7 @@ func (s *Service) SetAvatar(ctx context.Context, userID string, avatarScryfallID
 	return s.repo.UpdateAvatar(ctx, userID, normalized)
 }
 
-var scryfallIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 func normalizeAvatarID(avatarScryfallID *string) (*string, error) {
 	if avatarScryfallID == nil {
@@ -223,7 +223,7 @@ func normalizeAvatarID(avatarScryfallID *string) (*string, error) {
 	if normalized == "" {
 		return nil, nil
 	}
-	if !scryfallIDPattern.MatchString(normalized) {
+	if !uuidPattern.MatchString(normalized) {
 		return nil, ErrInvalidAvatar
 	}
 	return &normalized, nil
