@@ -60,7 +60,7 @@ Email addresses are case-insensitive: every email the API receives (register, lo
 
 A new password (`/auth/register`, `/auth/password`, `/auth/reset-password`) is 8 to 72 bytes long, counted as UTF-8 bytes, so an accented character counts for 2. A longer one gets `400`. Login and `current_password` are not limited.
 
-`/auth/register` and `/auth/login` are rate-limited per client IP (5 requests/minute by default) to blunt brute-force attempts.
+`/auth/register` and `/auth/login` are rate-limited per client IP (5 requests/minute by default, one sign-in budget for the two) to blunt brute-force attempts.
 
 ### Forgotten password
 
@@ -282,7 +282,7 @@ Ask to change the authenticated account's email. **Requires `Authorization: Bear
 
 ### `POST /auth/confirm-email`
 
-Confirm an email change with the token emailed to the current address. Public, so the link works from any device; rate-limited like the other public auth routes. This does not switch the email yet: the new address is not proven, so a verification email is sent to it and the account keeps its current email (still used to sign in and to recover the password) and its verified state until the link in that email is followed (`POST /auth/verify-email`). If the verification email cannot be sent, the call fails with `500` and nothing changes.
+Confirm an email change with the token emailed to the current address. Public, so the link works from any device; in the email-link rate-limit budget. This does not switch the email yet: the new address is not proven, so a verification email is sent to it and the account keeps its current email (still used to sign in and to recover the password) and its verified state until the link in that email is followed (`POST /auth/verify-email`). If the verification email cannot be sent, the call fails with `500` and nothing changes.
 
 **Body**
 
@@ -300,7 +300,7 @@ Confirm an email change with the token emailed to the current address. Public, s
 
 ### `POST /auth/verify-email`
 
-Prove control of an address with the token emailed to it, at registration, on resend or after an email change. Each token carries the address it proves: following it makes that address the account's email and marks it verified, in one step (after an email change, this is the moment the account switches to the new address). (At registration the account is still logged in right away; registering sends exactly one such email, and a failed send is logged without failing the registration). The token is single-use and valid for a day by default (`EMAIL_VERIFICATION_TOKEN_TTL_MINUTES`); the email carries a one-click link when `EMAIL_VERIFICATION_URL_TEMPLATE` is set, the raw token otherwise. Public; rate-limited like the other public auth routes.
+Prove control of an address with the token emailed to it, at registration, on resend or after an email change. Each token carries the address it proves: following it makes that address the account's email and marks it verified, in one step (after an email change, this is the moment the account switches to the new address). (At registration the account is still logged in right away; registering sends exactly one such email, and a failed send is logged without failing the registration). The token is single-use and valid for a day by default (`EMAIL_VERIFICATION_TOKEN_TTL_MINUTES`); the email carries a one-click link when `EMAIL_VERIFICATION_URL_TEMPLATE` is set, the raw token otherwise. Public; in the email-link rate-limit budget.
 
 **Body**
 
@@ -316,7 +316,7 @@ Prove control of an address with the token emailed to it, at registration, on re
 
 ### `POST /auth/verify-email/resend`
 
-Email a fresh verification link to the account's current address, for a lost email or an expired link. Requires a Bearer token; rate-limited like the other auth routes. No body. The link works like the one sent at registration (see [`POST /auth/verify-email`](#post-authverify-email)).
+Email a fresh verification link to the account's current address, for a lost email or an expired link. Requires a Bearer token; in the email-link rate-limit budget. No body. The link works like the one sent at registration (see [`POST /auth/verify-email`](#post-authverify-email)).
 
 **Response `204 No Content`**
 
@@ -363,7 +363,12 @@ Set a new password using the token from the forgot-password email. A link works 
 
 ### Rate limiting
 
-`POST /auth/register`, `POST /auth/login`, `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /auth/confirm-email`, `POST /auth/verify-email`, and `POST /auth/verify-email/resend` share a per-client-IP limit: 5 requests per 60-second window by default (`AUTH_RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_WINDOW_SECONDS`). Exceeding it returns:
+The auth routes are counted in two separate per-client-IP budgets, so failed sign-ins never block email-link actions and the reverse:
+
+- **sign-in budget:** `POST /auth/register` and `POST /auth/login`;
+- **email-link budget:** `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /auth/confirm-email`, `POST /auth/verify-email`, and `POST /auth/verify-email/resend`.
+
+Each budget allows 5 requests per 60-second window by default (`AUTH_RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_WINDOW_SECONDS`). Exceeding one returns:
 
 **Response `429 Too Many Requests`**
 ```json
@@ -1915,7 +1920,7 @@ All error responses share the same shape:
 | `401 Unauthorized` | Missing/malformed `Authorization` header, invalid or expired access token, invalid/expired/reused refresh token, invalid/expired/used password-reset token, incorrect `current_password`, or (on `/auth/login`) wrong email/password. |
 | `404 Not Found` | The resource identified by the URL doesn't exist for the authenticated account. A resource that exists but belongs to another account also returns `404`, not `403` — this avoids confirming that an ID exists at all. |
 | `409 Conflict` | Email already registered (`/auth/register`). |
-| `429 Too Many Requests` | Rate limit exceeded on `/auth/register` or `/auth/login` (see [rate limiting](#rate-limiting)). |
+| `429 Too Many Requests` | Rate limit exceeded on an auth route (sign-in or email-link budget, see [rate limiting](#rate-limiting)). |
 | `500 Internal Server Error` | Unexpected failure (database unreachable, etc). |
 | `502 Bad Gateway` | A bulk import (see [Bulk Import](#bulk-import)) couldn't reach or parse a response from the Scryfall API. Body: `{"error": "could not resolve cards against scryfall"}`. |
 
