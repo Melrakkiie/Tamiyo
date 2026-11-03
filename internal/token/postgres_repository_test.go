@@ -195,7 +195,7 @@ func TestService_Rotate_ConcurrentRotationsLeaveOneUnrevokedToken(t *testing.T) 
 	plaintext, err := service.IssueRefreshToken(context.Background(), userID)
 	require.NoError(t, err)
 
-	const callers = 8
+	const callers = 4 // below maxSuccessorHops, so every caller must succeed
 	errs := make([]error, callers)
 	var wg sync.WaitGroup
 	for i := range callers {
@@ -211,11 +211,10 @@ func TestService_Rotate_ConcurrentRotationsLeaveOneUnrevokedToken(t *testing.T) 
 	for _, e := range errs {
 		if e == nil {
 			succeeded++
-		} else {
-			assert.ErrorIs(t, e, ErrInvalid)
 		}
+		assert.NoError(t, e)
 	}
-	assert.GreaterOrEqual(t, succeeded, 1)
+	assert.Equal(t, callers, succeeded)
 
 	var unrevoked int
 	require.NoError(t, db.Get(&unrevoked, `SELECT count(*) FROM tamiyo.refresh_tokens WHERE user_id = $1 AND revoked_at IS NULL`, userID))

@@ -64,48 +64,43 @@ func (s *Service) Rotate(ctx context.Context, plaintext string) (userID string, 
 		rt = *successor
 	}
 
-	if time.Now().After(rt.ExpiresAt) {
-		return "", "", ErrInvalid
+	// A lost Replace means another refresh won the race: retry from its successor.
+	for range maxSuccessorHops {
+		if time.Now().After(rt.ExpiresAt) {
+			return "", "", ErrInvalid
+		}
+
+		newPlaintext, replaced, err := s.replaceOrDiscard(ctx, rt)
+		if err != nil {
+			return "", "", err
+		}
+		if replaced {
+			return rt.UserID, newPlaintext, nil
+		}
+
+		current, err := s.repo.FindByID(ctx, rt.ID)
+		if errors.Is(err, ErrNotFound) {
+			return "", "", ErrInvalid
+		}
+		if err != nil {
+			return "", "", err
+		}
+		successor, err := s.activeSuccessor(ctx, current)
+		if err != nil {
+			return "", "", err
+		}
+		if successor == nil {
+			return "", "", ErrInvalid
+		}
+		rt = *successor
 	}
 
-	newPlaintext, replaced, err := s.replaceWithNew(ctx, rt)
-	if err != nil {
-		return "", "", err
-	}
-	if replaced {
-		return rt.UserID, newPlaintext, nil
-	}
-
-	// Another refresh won the race: continue from its successor, once.
-	current, err := s.repo.FindByID(ctx, rt.ID)
-	if errors.Is(err, ErrNotFound) {
-		return "", "", ErrInvalid
-	}
-	if err != nil {
-		return "", "", err
-	}
-	successor, err := s.activeSuccessor(ctx, current)
-	if err != nil {
-		return "", "", err
-	}
-	if successor == nil || time.Now().After(successor.ExpiresAt) {
-		return "", "", ErrInvalid
-	}
-
-	newPlaintext, replaced, err = s.replaceWithNew(ctx, *successor)
-	if err != nil {
-		return "", "", err
-	}
-	if !replaced {
-		return "", "", ErrInvalid
-	}
-
-	return successor.UserID, newPlaintext, nil
+	return "", "", ErrInvalid
 }
 
-// replaceWithNew issues a token and links it to rt; if rt was already
+// replaceOrDiscard issues a token and links it to rt; if rt was already
 // replaced or revoked, the token just issued is revoked and replaced is false.
-func (s *Service) replaceWithNew(ctx context.Context, rt RefreshToken) (newPlaintext string, replaced bool, err error) {
+func (s *Service) replaceOrDiscard(ctx context.Context, rt RefreshToken) (newPlaintext string, replaced bool, err error) {
 	newPlaintext, newID, err := s.issue(ctx, rt.UserID)
 	if err != nil {
 		return "", false, err
