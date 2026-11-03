@@ -18,6 +18,7 @@ import (
 	"Melrakkiie/Tamiyo/_devops/database/migrations"
 	"Melrakkiie/Tamiyo/internal/auth"
 	"Melrakkiie/Tamiyo/internal/authcookie"
+	"Melrakkiie/Tamiyo/internal/bodylimit"
 	"Melrakkiie/Tamiyo/internal/bulk"
 	"Melrakkiie/Tamiyo/internal/card"
 	"Melrakkiie/Tamiyo/internal/clientip"
@@ -161,6 +162,7 @@ func main() {
 	router.Use(httplog.Recovery(logger))
 	router.Use(httplog.Middleware(logger))
 	router.Use(security.Headers())
+	router.Use(bodylimit.Middleware(10 << 20))
 	router.Use(cors.Middleware(cfg.CORSAllowedOrigins))
 
 	api := router.Group(cfg.APIBasePath)

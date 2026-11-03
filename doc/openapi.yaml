@@ -4273,7 +4273,7 @@ components:
 
   responses:
     PayloadTooLarge:
-      description: The uploaded request body is larger than 10 MB; nothing is imported
+      description: The request body is larger than 10 MB (any route, with the error "request body too large", or the upload message on the import routes); nothing is processed
       content:
         application/json:
           schema:

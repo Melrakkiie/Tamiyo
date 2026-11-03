@@ -413,6 +413,9 @@ The exchange rate used to convert dollars to euros: the European Central Bank's 
 { "usd_per_eur": 1.0876, "date": "2026-10-13" }
 ```
 
+### Request size
+Every request body is capped at 10 MB. A request declaring a larger body is refused with `413` and `{"error": "request body too large"}` before any handler runs; a body that does not declare its size is cut off at 10 MB. The upload routes keep their own `413` message.
+
 ### Partial updates
 All `PATCH` endpoints accept a partial body — only the fields you include are modified. Omitted fields are left untouched.
 
