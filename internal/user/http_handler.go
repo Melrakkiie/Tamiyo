@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"regexp"
 	"strings"
 	"time"
 
@@ -54,8 +53,6 @@ type profileResponse struct {
 	DisplayName      *string `json:"display_name"`
 	AvatarScryfallID *string `json:"avatar_scryfall_id"`
 }
-
-var userIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 type updateMeRequest struct {
 	DisplayName      optionalString `json:"display_name"`
@@ -137,7 +134,7 @@ func (h *Handler) RegisterProtectedRoutes(router gin.IRoutes) {
 
 func (h *Handler) profile(ctx *gin.Context) {
 	id := strings.ToLower(ctx.Param("id"))
-	if !userIDPattern.MatchString(id) {
+	if !uuidPattern.MatchString(id) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
 		return
 	}
