@@ -222,6 +222,32 @@ func TestParseMoxfieldDeckList_QuantityMaximum(t *testing.T) {
 	assert.Contains(t, err.Error(), "line 2")
 }
 
+func TestParseMoxfieldCollectionCSV_TotalCopiesLimit(t *testing.T) {
+	header := "Count,Tradelist Count,Name,Edition,Condition,Language,Foil,Tags,Last Modified,Collector Number,Alter,Proxy,Purchase Price\n"
+	row := func(n string) string {
+		return n + ",1,Abrade,blc,Near Mint,French,,,2025-12-22 23:25:53.763000,191,False,False,0.20\n"
+	}
+	atLimit := header + strings.Repeat(row("1000"), maxImportCopies/1000)
+
+	rows, err := parseMoxfieldCollectionCSV(strings.NewReader(atLimit))
+	require.NoError(t, err)
+	assert.Len(t, rows, maxImportCopies/1000)
+
+	_, err = parseMoxfieldCollectionCSV(strings.NewReader(atLimit + row("1")))
+	assert.ErrorIs(t, err, ErrInvalidFile)
+}
+
+func TestParseMoxfieldDeckList_TotalCopiesLimit(t *testing.T) {
+	atLimit := strings.Repeat("1000 Plains\n", maxImportCopies/1000)
+
+	lines, err := parseMoxfieldDeckList(strings.NewReader(atLimit))
+	require.NoError(t, err)
+	assert.Len(t, lines, maxImportCopies/1000)
+
+	_, err = parseMoxfieldDeckList(strings.NewReader(atLimit + "1 Plains\n"))
+	assert.ErrorIs(t, err, ErrInvalidFile)
+}
+
 func TestParseMoxfieldDeckList_RejectsEmptyFile(t *testing.T) {
 	_, err := parseMoxfieldDeckList(strings.NewReader("\n\n"))
 

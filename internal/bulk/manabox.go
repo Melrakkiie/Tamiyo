@@ -38,6 +38,7 @@ func parseManaBoxCSV(r io.Reader) ([]manaBoxRow, error) {
 	}
 
 	var rows []manaBoxRow
+	var total copyTotal
 	line := 1
 	for {
 		record, err := reader.Read()
@@ -52,6 +53,9 @@ func parseManaBoxCSV(r io.Reader) ([]manaBoxRow, error) {
 		quantity, err := strconv.Atoi(record[col["Quantity"]])
 		if err != nil || quantity < 1 || quantity > maxImportQuantity {
 			return nil, fmt.Errorf("%w: line %d: invalid Quantity %q", ErrInvalidFile, line, record[col["Quantity"]])
+		}
+		if err := total.add(quantity); err != nil {
+			return nil, err
 		}
 
 		rows = append(rows, manaBoxRow{

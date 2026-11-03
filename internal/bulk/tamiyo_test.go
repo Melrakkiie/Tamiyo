@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -210,6 +212,26 @@ func TestImportTamiyoCollection_RejectsInvalidFiles(t *testing.T) {
 			_, err := NewService(imported, &fakeStorageService{}, &fakeDeckService{}, tamiyoResolver()).ImportTamiyoCollection(context.Background(), testUserID, nil, strings.NewReader(content))
 			assert.ErrorIs(t, err, ErrInvalidFile)
 			assert.Empty(t, imported.created)
+		})
+	}
+}
+
+func TestParseTamiyoFile_TotalCopiesLimit(t *testing.T) {
+	file := func(kind string, quantities ...int) []byte {
+		cards := make([]string, len(quantities))
+		for i, quantity := range quantities {
+			cards[i] = `{"name": "Plains", "scryfall_id": "` + solRingSLD + `", "quantity": ` + strconv.Itoa(quantity) + `}`
+		}
+		return []byte(`{"tamiyo": 1, "kind": "` + kind + `", "cards": [` + strings.Join(cards, ",") + `]}`)
+	}
+	atLimit := slices.Repeat([]int{1000}, maxImportCopies/1000)
+	for _, kind := range []string{TamiyoKindCollection, TamiyoKindDeck} {
+		t.Run(kind, func(t *testing.T) {
+			_, err := parseTamiyoFile(file(kind, atLimit...))
+			require.NoError(t, err)
+
+			_, err = parseTamiyoFile(file(kind, append(atLimit, 1)...))
+			assert.ErrorIs(t, err, ErrInvalidFile)
 		})
 	}
 }

@@ -3,6 +3,7 @@ package bulk
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"Melrakkiie/Tamiyo/internal/deck"
@@ -10,7 +11,20 @@ import (
 
 const maxImportQuantity = 1000
 
+// Each copy is built in memory before the write.
+const maxImportCopies = 100000
+
 var ErrInvalidFile = errors.New("could not parse the uploaded file")
+
+type copyTotal int
+
+func (t *copyTotal) add(quantity int) error {
+	*t += copyTotal(quantity)
+	if *t > maxImportCopies {
+		return fmt.Errorf("%w: the file asks for more than %d copies", ErrInvalidFile, maxImportCopies)
+	}
+	return nil
+}
 
 var ErrTargetStorageNotFound = errors.New("target storage does not exist")
 

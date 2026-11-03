@@ -2412,7 +2412,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ImportSummary"
         "400":
-          description: id is not a UUID, or the file is missing or can't be parsed (a line with a quantity above 1000 is refused).
+          description: id is not a UUID, or the file is missing or can't be parsed (a line with a quantity above 1000, or a file asking for more than 100000 copies in total, is refused).
           content:
             application/json:
               schema:
@@ -2688,7 +2688,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ImportSummary"
         "400":
-          description: id is not a UUID, the file is missing or can't be parsed (a line with a quantity above 1000 is refused), or commander_from_first_line or include_locked_storages is invalid.
+          description: id is not a UUID, the file is missing or can't be parsed (a line with a quantity above 1000, or a file asking for more than 100000 copies in total, is refused), or commander_from_first_line or include_locked_storages is invalid.
           content:
             application/json:
               schema:
@@ -3723,7 +3723,7 @@ paths:
         "400":
           description: >
             No file field, the file couldn't be parsed (a row with a Quantity
-            above 1000 is refused), storage_id is invalid or does not reference an existing storage,
+            above 1000, or a file asking for more than 100000 copies in total, is refused), storage_id is invalid or does not reference an existing storage,
             or a storage or deck of the import was deleted while it ran.
           content:
             application/json:
@@ -3784,7 +3784,7 @@ paths:
         "400":
           description: >
             No file field, the file couldn't be parsed (a row with a Count
-            above 1000 is refused), storage_id does not reference an existing storage,
+            above 1000, or a file asking for more than 100000 copies in total, is refused), storage_id does not reference an existing storage,
             or the storage was deleted while the import ran.
           content:
             application/json:
@@ -3845,7 +3845,7 @@ paths:
         "400":
           description: >
             No file field, the list couldn't be parsed (a line with a quantity
-            above 1000 is refused), storage_id is invalid or does not reference an existing storage,
+            above 1000, or a file asking for more than 100000 copies in total, is refused), storage_id is invalid or does not reference an existing storage,
             or the storage was deleted while the import ran.
           content:
             application/json:
@@ -3956,8 +3956,8 @@ paths:
         "400":
           description: >
             No file field, the file isn't a valid Tamiyo collection or
-            storage file (a deck file or a card quantity above 1000 is
-            refused), storage_id is invalid
+            storage file (a deck file, a card quantity above 1000, or more than
+            100000 copies in total is refused), storage_id is invalid
             or does not reference an existing storage, or a storage of the
             import was deleted while it ran.
           content:
