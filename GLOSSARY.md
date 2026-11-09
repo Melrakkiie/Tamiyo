@@ -32,6 +32,20 @@ _Avoid_: Back side, verso (in code and docs), reverse
 A card the interface currently shows on its back face.
 _Avoid_: Turned card, reversed card
 
+### Storages
+
+**Storage**:
+A physical place where a user keeps copies: a binder, a box or a deckbox. A copy is in at most one storage. Shown as "rangement" in the interface.
+_Avoid_: Location, container, folder
+
+**Locked storage**:
+A storage whose copies only the decks it allows can use; locking hides the copies, it does not move them. Shown as "verrouillé" in the interface.
+_Avoid_: Private storage, reserved storage
+
+**Transfer**:
+Moving every copy of one storage into another, which leaves the first storage empty but kept. The copies stay in their decks.
+_Avoid_: Merge, move (for a whole storage)
+
 ### Decks
 
 **Deck art**:
