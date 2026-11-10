@@ -27,6 +27,8 @@ type DeckEntry struct {
 	Board           string
 	Slot            CommanderSlot
 	Price           *float64
+	PriceEUR        *float64
+	PriceUSD        *float64
 	GameChanger     bool
 
 	OwnedCardIDs []int
@@ -194,6 +196,8 @@ func ownedEntry(c DeckCard) DeckEntry {
 		Proxy:           c.Proxy,
 		Board:           c.Board,
 		Price:           c.Price,
+		PriceEUR:        c.PriceEUR,
+		PriceUSD:        c.PriceUSD,
 		GameChanger:     c.GameChanger,
 		OwnedCardIDs:    []int{c.ID},
 	}
@@ -213,6 +217,8 @@ func pendingEntry(p PendingCard, quantity int) DeckEntry {
 		Proxy:           p.Proxy,
 		Board:           p.Board,
 		Price:           p.Price,
+		PriceEUR:        p.PriceEUR,
+		PriceUSD:        p.PriceUSD,
 		GameChanger:     p.GameChanger,
 		Pending:         []PendingPart{{ID: p.ID, Quantity: quantity}},
 	}

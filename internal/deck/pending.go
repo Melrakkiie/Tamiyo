@@ -25,6 +25,8 @@ type PendingCard struct {
 	ColorIdentity   *string
 	Board           string
 	Price           *float64
+	PriceEUR        *float64
+	PriceUSD        *float64
 	GameChanger     bool
 	Added           time.Time
 
