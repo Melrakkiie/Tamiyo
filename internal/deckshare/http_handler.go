@@ -59,6 +59,7 @@ type cardResponse struct {
 	GameChanger     bool     `json:"game_changer"`
 	Board           string   `json:"board"`
 	Tags            []string `json:"tags"`
+	Price           Value    `json:"price"`
 }
 
 type sharedDeckResponse struct {
