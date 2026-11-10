@@ -68,6 +68,10 @@ _Avoid_: Main deck, mainboard, maindeck
 The number of copies in a deck's main board, owned or pending, proxies and commanders included.
 _Avoid_: Deck size, total cards
 
+**Token**:
+A token that a card of a deck's main board mentions, as listed by Scryfall; the printings of one token count as one. Mentioning is not creating: a card that only sacrifices Treasures lists the Treasure token. Shown as "Jeton" in the interface.
+_Avoid_: Generated token, pawn, marker
+
 ### Deck statistics
 
 **Total mana value**:
