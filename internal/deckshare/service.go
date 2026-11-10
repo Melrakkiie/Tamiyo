@@ -45,11 +45,10 @@ type Card struct {
 	GameChanger     bool
 	Board           string
 	Tags            []string
-	Price           Value
+	Price           CardPrice
 }
 
-// Value is the price of one copy in each currency, nil when unknown.
-type Value struct {
+type CardPrice struct {
 	EUR *float64 `json:"eur"`
 	USD *float64 `json:"usd"`
 }
@@ -130,6 +129,6 @@ func sharedCard(e deck.DeckEntry, tags []string) Card {
 		GameChanger:     e.GameChanger,
 		Board:           e.Board,
 		Tags:            tags,
-		Price:           Value{EUR: e.PriceEUR, USD: e.PriceUSD},
+		Price:           CardPrice{EUR: e.PriceEUR, USD: e.PriceUSD},
 	}
 }

@@ -45,21 +45,21 @@ type ownerResponse struct {
 }
 
 type cardResponse struct {
-	Name            string   `json:"name"`
-	ScryfallID      string   `json:"scryfall_id"`
-	SetCode         string   `json:"set_code"`
-	CollectorNumber string   `json:"collector_number"`
-	Foil            bool     `json:"foil"`
-	Quantity        int      `json:"quantity"`
-	ManaValue       float64  `json:"mana_value"`
-	Colors          *string  `json:"colors"`
-	CardType        *string  `json:"card_type"`
-	ColorIdentity   *string  `json:"color_identity"`
-	Commander       bool     `json:"commander"`
-	GameChanger     bool     `json:"game_changer"`
-	Board           string   `json:"board"`
-	Tags            []string `json:"tags"`
-	Price           Value    `json:"price"`
+	Name            string    `json:"name"`
+	ScryfallID      string    `json:"scryfall_id"`
+	SetCode         string    `json:"set_code"`
+	CollectorNumber string    `json:"collector_number"`
+	Foil            bool      `json:"foil"`
+	Quantity        int       `json:"quantity"`
+	ManaValue       float64   `json:"mana_value"`
+	Colors          *string   `json:"colors"`
+	CardType        *string   `json:"card_type"`
+	ColorIdentity   *string   `json:"color_identity"`
+	Commander       bool      `json:"commander"`
+	GameChanger     bool      `json:"game_changer"`
+	Board           string    `json:"board"`
+	Tags            []string  `json:"tags"`
+	Price           CardPrice `json:"price"`
 }
 
 type sharedDeckResponse struct {

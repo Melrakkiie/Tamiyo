@@ -5874,22 +5874,25 @@ components:
           items:
             type: string
         price:
-          type: object
-          description: >
-            Price of one copy in euros and in US dollars, each null when
-            unknown, with the fallbacks of the owner's deck cards (foil price
-            for a foil copy, the other price when missing, the dollar price
-            converted with the stored exchange rate when there is no euro
-            price). Proxies keep their price. The same for every viewer.
-          properties:
-            eur:
-              type: number
-              nullable: true
-            usd:
-              type: number
-              nullable: true
-          required: [eur, usd]
+          $ref: "#/components/schemas/CardPrice"
       required: [name, scryfall_id, set_code, collector_number, foil, quantity, mana_value, colors, card_type, color_identity, commander, game_changer, board, tags, price]
+
+    CardPrice:
+      type: object
+      description: >
+        Price of one copy in euros and in US dollars, each null when
+        unknown, with the fallbacks of the owner's deck cards (foil price
+        for a foil copy, the other price when missing, the dollar price
+        converted with the stored exchange rate when there is no euro
+        price). Proxies keep their price. The same for every viewer.
+      properties:
+        eur:
+          type: number
+          nullable: true
+        usd:
+          type: number
+          nullable: true
+      required: [eur, usd]
 
     SharedDeck:
       type: object

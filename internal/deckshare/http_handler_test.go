@@ -123,8 +123,8 @@ func TestGetSharedDeck_ExposesEachCardsPriceInBothCurrenciesNullsIncluded(t *tes
 	service := &fakeSharedService{shared: SharedDeck{
 		Deck: deck.Deck{ID: deckID, Name: "Otters", Added: time.Now(), Updated: time.Now()},
 		Cards: []Card{
-			{Name: "Island", ScryfallID: "i", Price: Value{EUR: &eur, USD: &usd}},
-			{Name: "Tamiyo", ScryfallID: "t", Price: Value{USD: &usd}},
+			{Name: "Island", ScryfallID: "i", Price: CardPrice{EUR: &eur, USD: &usd}},
+			{Name: "Tamiyo", ScryfallID: "t", Price: CardPrice{USD: &usd}},
 			{Name: "Unknown", ScryfallID: "u"},
 		},
 	}}

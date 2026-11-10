@@ -262,12 +262,13 @@ func deckCardOrderByClause(sortField string, sortDesc bool) string {
 // priceColumn reads the price of one copy in the owner's currency (price) and
 // in each currency (price_eur, price_usd), all through tamiyo.card_price.
 func priceColumn(table string) string {
-	price := func(currency string) string {
-		return `CAST(tamiyo.card_price(` + table + `.scryfall_id, ` + table + `.foil, ` + currency + `) AS float8)`
+	priceIn := func(currencyExpr string) string {
+		return `CAST(tamiyo.card_price(` + table + `.scryfall_id, ` + table + `.foil, ` + currencyExpr + `) AS float8)`
 	}
-	return price(`COALESCE((
-		SELECT pr.price_currency FROM tamiyo.user_preferences pr WHERE pr.user_id = `+table+`.user_id
-	), 'eur')`) + ` AS price, ` + price(`'eur'`) + ` AS price_eur, ` + price(`'usd'`) + ` AS price_usd`
+	ownerCurrency := `COALESCE((
+		SELECT pr.price_currency FROM tamiyo.user_preferences pr WHERE pr.user_id = ` + table + `.user_id
+	), 'eur')`
+	return priceIn(ownerCurrency) + ` AS price, ` + priceIn(`'eur'`) + ` AS price_eur, ` + priceIn(`'usd'`) + ` AS price_usd`
 }
 
 // gameChangerColumn reads the game changer flag of the row's stored printing,
