@@ -1,10 +1,15 @@
 name: Tests
 
+# A change touching only docs skips the whole workflow (no tests, no deploy).
+# doc/openapi.yaml and doc/search_cases.json are not ignored: CI lints and
+# tests them.
 on:
   push:
     branches: [main]
+    paths-ignore: ["**.md", "docs/**", "doc/*.drawio", "doc/*.png"]
   pull_request:
     branches: [main]
+    paths-ignore: ["**.md", "docs/**", "doc/*.drawio", "doc/*.png"]
 
 # A newer push on the same branch (or PR) cancels the run still in progress
 # for the previous one: no point testing or deploying an outdated commit.
