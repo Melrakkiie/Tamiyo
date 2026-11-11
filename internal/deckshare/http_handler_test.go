@@ -118,6 +118,29 @@ func get(router *gin.Engine, path string) *httptest.ResponseRecorder {
 	return w
 }
 
+func TestGetSharedDeck_ExposesEachCardsPriceInBothCurrenciesNullsIncluded(t *testing.T) {
+	eur, usd := 1.5, 3.0
+	service := &fakeSharedService{shared: SharedDeck{
+		Deck: deck.Deck{ID: deckID, Name: "Otters", Added: time.Now(), Updated: time.Now()},
+		Cards: []Card{
+			{Name: "Island", ScryfallID: "i", Price: CardPrice{EUR: &eur, USD: &usd}},
+			{Name: "Tamiyo", ScryfallID: "t", Price: CardPrice{USD: &usd}},
+			{Name: "Unknown", ScryfallID: "u"},
+		},
+	}}
+
+	w := get(setupRouter(service), "/shared/decks/"+deckID)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var got struct {
+		Cards []map[string]any `json:"cards"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+	assert.Equal(t, map[string]any{"eur": 1.5, "usd": 3.0}, got.Cards[0]["price"])
+	assert.Equal(t, map[string]any{"eur": nil, "usd": 3.0}, got.Cards[1]["price"])
+	assert.Equal(t, map[string]any{"eur": nil, "usd": nil}, got.Cards[2]["price"])
+}
+
 func TestGetSharedDeck_ReturnsDeckOwnerAndCardsWithoutAuthentication(t *testing.T) {
 	service := &fakeSharedService{shared: SharedDeck{
 		Deck:  deck.Deck{ID: deckID, Name: "Otters", Format: "commander", Visibility: deck.VisibilityUnlisted, CardCount: 4, LikesCount: 7, Added: time.Now(), Updated: time.Now()},

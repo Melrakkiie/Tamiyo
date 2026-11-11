@@ -24,6 +24,8 @@ type pendingRow struct {
 	ColorIdentity   *string   `db:"color_identity"`
 	Board           string    `db:"board"`
 	Price           *float64  `db:"price"`
+	PriceEUR        *float64  `db:"price_eur"`
+	PriceUSD        *float64  `db:"price_usd"`
 	GameChanger     bool      `db:"game_changer"`
 	Added           time.Time `db:"added"`
 
@@ -48,6 +50,8 @@ func (r pendingRow) toDomain() PendingCard {
 		ColorIdentity:   r.ColorIdentity,
 		Board:           r.Board,
 		Price:           r.Price,
+		PriceEUR:        r.PriceEUR,
+		PriceUSD:        r.PriceUSD,
 		GameChanger:     r.GameChanger,
 		Added:           r.Added,
 

@@ -45,6 +45,12 @@ type Card struct {
 	GameChanger     bool
 	Board           string
 	Tags            []string
+	Price           CardPrice
+}
+
+type CardPrice struct {
+	EUR *float64 `json:"eur"`
+	USD *float64 `json:"usd"`
 }
 
 type SharedDeck struct {
@@ -123,5 +129,6 @@ func sharedCard(e deck.DeckEntry, tags []string) Card {
 		GameChanger:     e.GameChanger,
 		Board:           e.Board,
 		Tags:            tags,
+		Price:           CardPrice{EUR: e.PriceEUR, USD: e.PriceUSD},
 	}
 }
